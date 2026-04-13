@@ -22,6 +22,7 @@ import { withRetry } from '../retryWrapper.js';
 import { scoreScribeEffort, scoreProtoEffort, scoreTraceEffort } from '../effortScorer.js';
 import { logger } from '../../../lib/logger.js';
 import { PipelineKnowledgeIngester } from '../../../services/knowledge/ingestion/PipelineKnowledgeIngester.js';
+import { incrementUsage } from '../../../services/billing/BillingService.js';
 import type { ScribeAgent, ScribeState, ScribeResult } from '../../agents/scribe/ScribeAgent.js';
 import type { ProtoAgent } from '../../agents/proto/ProtoAgent.js';
 import type { TraceAgent } from '../../agents/trace/TraceAgent.js';
@@ -820,8 +821,18 @@ export class PipelineOrchestrator {
       timestamp: new Date().toISOString(),
     });
 
-    // Auto-ingest pipeline results into knowledge base (non-blocking)
+    // Track pipeline token usage in billing (non-blocking)
     const completedPipeline = await this.store.getById(pipelineId);
+    if (completedPipeline) {
+      const pipelineMetrics = completedPipeline.metrics as unknown as Record<string, unknown> | undefined;
+      const totalTokens = (pipelineMetrics?.totalTokens as number) ?? 0;
+      if (totalTokens > 0) {
+        incrementUsage(completedPipeline.userId, totalTokens)
+          .catch(err => logger.warn({ err, pipelineId }, '[Pipeline] Usage tracking failed (non-fatal)'));
+      }
+    }
+
+    // Auto-ingest pipeline results into knowledge base (non-blocking)
     if (completedPipeline) {
       new PipelineKnowledgeIngester().ingestPipelineResults({
         pipelineId,

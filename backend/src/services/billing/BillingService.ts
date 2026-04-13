@@ -6,6 +6,7 @@
  */
 import { db } from '../../db/client.js';
 import { plans, subscriptions, usageCounters, userBillingOverrides, workspaceBillingSettings, billingNotifications } from '../../db/schema.js';
+import { logger } from '../../lib/logger.js';
 import { eq, and, sql, desc } from 'drizzle-orm';
 
 export interface UserPlan {
@@ -97,7 +98,7 @@ export async function getUserPlan(userId: string): Promise<UserPlan> {
       priceMonthly: p.priceMonthly,
     };
   } catch (err) {
-    console.warn('[Billing] getUserPlan failed (tables may not exist yet):', (err as Error).message);
+    logger.warn(`[Billing] getUserPlan failed (tables may not exist yet): ${(err as Error).message}`);
     return FREE_PLAN;
   }
 }
@@ -135,7 +136,7 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
       percentTokensUsed: plan.maxTokenBudget > 0 ? Math.round((tokensUsedThisMonth / plan.maxTokenBudget) * 100) : 0,
     };
   } catch (err) {
-    console.warn('[Billing] getUsageSummary failed:', (err as Error).message);
+    logger.warn(`[Billing] getUsageSummary failed: ${(err as Error).message}`);
     return { jobsUsedToday: 0, tokensUsedThisMonth: 0, jobsLimit: FREE_PLAN.jobsPerDay, tokensLimit: FREE_PLAN.maxTokenBudget, percentJobsUsed: 0, percentTokensUsed: 0 };
   }
 }
@@ -181,21 +182,42 @@ export async function checkUsageLimits(userId: string): Promise<LimitCheckResult
     if (jobsToday >= plan.jobsPerDay) {
       return {
         allowed: false,
-        reason: `Daily job limit reached (${plan.jobsPerDay}/${plan.jobsPerDay}). Upgrade your plan for more jobs.`,
-        code: 'BILLING_LIMIT_EXCEEDED',
+        reason: `Günlük iş limiti doldu (${plan.jobsPerDay}/${plan.jobsPerDay}). Daha fazlası için planınızı yükseltin.`,
+        code: 'BILLING_JOBS_LIMIT',
         upgradeRequired: true,
         currentUsage: { jobsToday, tokensMonth: 0 },
         limits: { jobsPerDay: plan.jobsPerDay, maxTokenBudget: plan.maxTokenBudget },
       };
     }
 
+    // Token budget check (monthly)
+    const monthKey = new Date().toISOString().slice(0, 7);
+    const [monthlyUsage] = await db
+      .select({ tokensUsed: usageCounters.tokensUsed })
+      .from(usageCounters)
+      .where(and(eq(usageCounters.userId, userId), eq(usageCounters.periodKey, monthKey), eq(usageCounters.periodType, 'monthly')))
+      .limit(1);
+
+    const tokensMonth = monthlyUsage?.tokensUsed ?? 0;
+
+    if (plan.maxTokenBudget > 0 && tokensMonth >= plan.maxTokenBudget) {
+      return {
+        allowed: false,
+        reason: `Aylık token bütçesi doldu (${tokensMonth.toLocaleString()}/${plan.maxTokenBudget.toLocaleString()}). Daha fazlası için planınızı yükseltin.`,
+        code: 'BILLING_TOKEN_LIMIT',
+        upgradeRequired: true,
+        currentUsage: { jobsToday, tokensMonth },
+        limits: { jobsPerDay: plan.jobsPerDay, maxTokenBudget: plan.maxTokenBudget },
+      };
+    }
+
     return {
       allowed: true,
-      currentUsage: { jobsToday, tokensMonth: 0 },
+      currentUsage: { jobsToday, tokensMonth },
       limits: { jobsPerDay: plan.jobsPerDay, maxTokenBudget: plan.maxTokenBudget },
     };
   } catch (err) {
-    console.warn('[Billing] checkUsageLimits failed, allowing job:', (err as Error).message);
+    logger.warn(`[Billing] checkUsageLimits failed, allowing job: ${(err as Error).message}`);
     return { allowed: true };
   }
 }
@@ -229,7 +251,7 @@ export async function incrementUsage(userId: string, tokensUsed: number = 0): Pr
     // Check soft threshold for notifications
     await checkSoftThreshold(userId);
   } catch (err) {
-    console.warn('[Billing] incrementUsage failed:', (err as Error).message);
+    logger.warn(`[Billing] incrementUsage failed: ${(err as Error).message}`);
   }
 }
 
