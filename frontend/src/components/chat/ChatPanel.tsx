@@ -158,6 +158,18 @@ export function ChatPanel({
         />
       )}
 
+      {/* Stage glow — shows colored gradient when an agent is running */}
+      {(uiState === 'scribe_running' || uiState === 'scribe_revise' || uiState === 'proto_running' || uiState === 'trace_running') && (
+        <div
+          className="h-[2px] w-full animate-glow-pulse flex-shrink-0"
+          style={{
+            background: uiState.includes('scribe') ? 'linear-gradient(90deg, transparent, #38bdf8, transparent)'
+              : uiState === 'proto_running' ? 'linear-gradient(90deg, transparent, #f59e0b, transparent)'
+              : 'linear-gradient(90deg, transparent, #a78bfa, transparent)',
+          }}
+        />
+      )}
+
       {/* Messages */}
       {isEmpty ? (
         <EmptyState variant={conversationId ? 'new-conversation' : 'no-conversation'} />

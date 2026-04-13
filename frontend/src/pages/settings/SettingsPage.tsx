@@ -163,11 +163,13 @@ export default function SettingsPage() {
         </div>
 
         <ErrorBoundary fallbackPath="/settings" fallbackLabel="Ayarlar">
-          {activeTab === 'profile' && <ProfileTab />}
-          {activeTab === 'ai-keys' && <AIKeysTab user={user} />}
-          {activeTab === 'pipeline-stats' && <PipelineStatsTab />}
-          {activeTab === 'integrity' && <IntegrityTab />}
-          {activeTab === 'integrations' && <IntegrationsTab />}
+          <div key={activeTab} className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+            {activeTab === 'profile' && <ProfileTab />}
+            {activeTab === 'ai-keys' && <AIKeysTab user={user} />}
+            {activeTab === 'pipeline-stats' && <PipelineStatsTab />}
+            {activeTab === 'integrity' && <IntegrityTab />}
+            {activeTab === 'integrations' && <IntegrationsTab />}
+          </div>
         </ErrorBoundary>
       </div>
     </div>

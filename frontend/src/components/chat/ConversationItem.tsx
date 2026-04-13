@@ -106,10 +106,10 @@ export function ConversationItem({
       <button
         onClick={onClick}
         className={cn(
-          'flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 text-left transition-colors',
+          'flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 text-left transition-all duration-150',
           isActive
-            ? 'bg-ak-primary/[0.08]'
-            : 'hover:bg-ak-surface-2/50',
+            ? 'bg-ak-primary/[0.08] border-l-2 border-ak-primary pl-2.5'
+            : 'border-l-2 border-transparent hover:bg-ak-surface-2/50 hover:scale-[1.01] hover:border-ak-border-subtle',
         )}
       >
         {/* Title row */}

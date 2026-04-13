@@ -1649,6 +1649,8 @@ export const pipelines = pgTable('pipelines', {
 }, (table) => ({
   userIdIdx: index('idx_pipelines_user_id').on(table.userId),
   stageIdx: index('idx_pipelines_stage').on(table.stage),
+  userIdCreatedIdx: index('idx_pipelines_user_created').on(table.userId, table.createdAt),
+  stageUpdatedIdx: index('idx_pipelines_stage_updated').on(table.stage, table.updatedAt),
 }));
 
 export type Pipeline = typeof pipelines.$inferSelect;
