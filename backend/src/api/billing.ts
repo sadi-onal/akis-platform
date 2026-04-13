@@ -29,6 +29,7 @@ import {
   handleWebhookEvent,
 } from '../services/billing/StripeService.js';
 import { getEnv } from '../config/env.js';
+import { logger } from '../lib/logger.js';
 
 export async function billingRoutes(fastify: FastifyInstance) {
   // GET /api/billing/plan — current user's plan and usage
@@ -210,7 +211,7 @@ export async function stripeWebhookRoutes(fastify: FastifyInstance) {
       const result = await handleWebhookEvent(rawBody, signature);
 
       if (result.handled) {
-        console.log(`[Stripe] Handled webhook: ${result.eventType}`);
+        logger.info(`[Stripe] Handled webhook: ${result.eventType}`);
       }
 
       return reply.send({ received: true });

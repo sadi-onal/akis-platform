@@ -11,6 +11,7 @@ import { db } from '../../db/client.js';
 import { jobPlans } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { runScribeSkill, type ScribeSkillName } from '../../core/contracts/ScribeSkillContracts.js';
+import { logger } from '../../lib/logger.js';
 
 /**
  * ScribeTaskContext - Input payload for ScribeAgent
@@ -646,7 +647,7 @@ export class ScribeAgent extends BaseAgent {
     }
 
     await this.traceRecorder?.emitLog('info', `Context gathering complete: ${topFiles.length} files read, ${Math.round(totalBytes / 1024)}KB analyzed`);
-    console.log(`[gatherRepoContext] Read ${topFiles.length} files for ${owner}/${repo}:${branch}`);
+    logger.debug(`[gatherRepoContext] Read ${topFiles.length} files for ${owner}/${repo}:${branch}`);
 
     return context;
   }

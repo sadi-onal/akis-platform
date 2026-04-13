@@ -9,6 +9,7 @@
  */
 
 import { and, eq, isNull, lte, or } from 'drizzle-orm';
+import { logger } from '../../lib/logger.js';
 import { db } from '../../db/client.js';
 import { knowledgeSources, type KnowledgeSource } from '../../db/schema.js';
 import type { GitHubLatestRelease, GitHubMCPService } from '../mcp/adapters/GitHubMCPService.js';
@@ -82,17 +83,17 @@ export class FreshnessScheduler {
   start(): void {
     if (this.timer) return;
 
-    console.log(
+    logger.info(
       `[FreshnessScheduler] Starting (interval=${Math.round(this.intervalMs / 60000)}m, threshold=${this.freshnessThresholdDays}d, aging=${this.agingThresholdDays}d)`
     );
 
     void this.runCheck().catch((error) => {
-      console.warn('[FreshnessScheduler] Initial check failed:', error);
+      logger.warn('[FreshnessScheduler] Initial check failed:', error);
     });
 
     this.timer = setInterval(() => {
       void this.runCheck().catch((error) => {
-        console.warn('[FreshnessScheduler] Scheduled check failed:', error);
+        logger.warn('[FreshnessScheduler] Scheduled check failed:', error);
       });
     }, this.intervalMs);
     if (this.timer.unref) {
@@ -104,7 +105,7 @@ export class FreshnessScheduler {
     if (!this.timer) return;
     clearInterval(this.timer);
     this.timer = null;
-    console.log('[FreshnessScheduler] Stopped');
+    logger.info('[FreshnessScheduler] Stopped');
   }
 
   isRunning(): boolean {
@@ -285,7 +286,7 @@ export class FreshnessScheduler {
         errorCount,
       };
 
-      console.log(
+      logger.info(
         `[FreshnessScheduler] Check complete: checked=${results.length}, stale=${staleSources}, aging=${agingSources}, unknown=${unknownSources}, errors=${errorCount}`
       );
     } finally {

@@ -5,6 +5,7 @@
  */
 import { db } from '../db/client.js';
 import { sql } from 'drizzle-orm';
+import { logger } from '../lib/logger.js';
 
 interface ColumnCheck {
   table: string;
@@ -97,7 +98,7 @@ export async function runSchemaGuard(): Promise<void> {
     const missing = await validateSchemaColumns(isDev);
     
     if (missing.length === 0) {
-      console.log('[SchemaGuard] ✓ All critical columns verified');
+      logger.info('[SchemaGuard] All critical columns verified');
     }
   } catch (error) {
     console.error('[SchemaGuard] Failed to validate schema:', error);

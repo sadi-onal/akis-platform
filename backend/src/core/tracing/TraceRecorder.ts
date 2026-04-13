@@ -7,6 +7,7 @@
 import { db } from '../../db/client.js';
 import { jobTraces, jobArtifacts, jobAiCalls, type NewJobTrace, type NewJobArtifact, type NewJobAiCall } from '../../db/schema.js';
 import { jobEventBus } from '../events/JobEventBus.js';
+import { logger } from '../../lib/logger.js';
 
 export type TraceEventType = 
   | 'step_start'
@@ -801,7 +802,7 @@ export class TraceRecorder {
     if (this.pendingAiCalls.length > 0) {
       try {
         await db.insert(jobAiCalls).values(this.pendingAiCalls);
-        console.log(`[TraceRecorder] Flushed ${this.pendingAiCalls.length} AI call records for job ${this.jobId}`);
+        logger.debug(`[TraceRecorder] Flushed ${this.pendingAiCalls.length} AI call records for job ${this.jobId}`);
         this.pendingAiCalls = [];
       } catch (error) {
         errors.push({ stage: 'aiCalls', error });

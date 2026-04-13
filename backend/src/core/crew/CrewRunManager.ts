@@ -9,6 +9,7 @@ import type {
 } from './types.js';
 import { DEFAULT_WORKER_COLORS as COLORS } from './types.js';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { logger } from '../../lib/logger.js';
 
 /**
  * CrewRunManager — Central lifecycle manager for crew runs.
@@ -72,7 +73,7 @@ export class CrewRunManager {
     }).returning();
 
     const crewRunId = crewRun.id;
-    console.log(`[CrewRunManager] Crew run created: ${crewRunId}, workers: ${workerRoles.length}`);
+    logger.info(`[CrewRunManager] Crew run created: ${crewRunId}, workers: ${workerRoles.length}`);
 
     this.eventEmitter.emitStatusChange(crewRunId, '', 'planning');
 
@@ -100,7 +101,7 @@ export class CrewRunManager {
         workerJobs.push({ jobId: job.id, role: wr.role, color: wr.color, index: i });
         this.eventEmitter.emitWorkerSpawned(crewRunId, job.id, wr.role, wr.color, i);
 
-        console.log(`[CrewRunManager] Worker spawned: ${wr.role} → ${job.id}`);
+        logger.info(`[CrewRunManager] Worker spawned: ${wr.role} → ${job.id}`);
       } catch (err) {
         console.error(`[CrewRunManager] Failed to spawn worker: ${wr.role}`, err);
         if (input.failureStrategy === 'fail_fast') {
@@ -282,7 +283,7 @@ export class CrewRunManager {
       this.eventEmitter.emitMergeCompleted(crewRunId, totalTokens, totalCostUsd);
       this.eventEmitter.emitStatusChange(crewRunId, 'merging', 'completed');
 
-      console.log(`[CrewRunManager] Crew run completed: ${crewRunId}, tokens: ${totalTokens}, cost: ${totalCostUsd}`);
+      logger.info(`[CrewRunManager] Crew run completed: ${crewRunId}, tokens: ${totalTokens}, cost: ${totalCostUsd}`);
     } catch (err) {
       console.error(`[CrewRunManager] Merge failed: ${crewRunId}`, err);
       await this.failCrewRun(crewRunId, `Merge failed: ${String(err)}`);

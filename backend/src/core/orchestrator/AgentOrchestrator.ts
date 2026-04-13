@@ -475,7 +475,7 @@ export class AgentOrchestrator {
           aiKeySource: resolution.keySource,
           aiFallbackReason: resolution.fallbackReason || null,
         }).where(eq(jobs.id, jobId));
-        console.log(`[startJob] Persisted AI resolution: provider=${resolution.provider}, model=${resolution.model}, keySource=${resolution.keySource}, fallbackReason=${resolution.fallbackReason || 'none'}`);
+        logger.debug(`[startJob] Persisted AI resolution: provider=${resolution.provider}, model=${resolution.model}, keySource=${resolution.keySource}, fallbackReason=${resolution.fallbackReason || 'none'}`);
       } catch (error) {
         console.error(`[startJob] Failed to persist AI resolution: ${error instanceof Error ? error.message : String(error)}`);
         // Non-fatal: continue execution even if resolution persistence fails
@@ -1068,7 +1068,7 @@ export class AgentOrchestrator {
     // Non-scribe WITH userId: fall through to user key resolution below,
     // so Trace/Proto can also use user-provided API keys (same as Scribe).
     if (jobType !== 'scribe' && !payload.userId) {
-      console.log(`[resolveAiServiceForJob] jobType=${jobType}, no userId, using global AIService`);
+      logger.debug(`[resolveAiServiceForJob] jobType=${jobType}, no userId, using global AIService`);
       const resolution: AIResolution = {
         provider: envConfig.provider,
         model: modelOverride || envConfig.modelDefault,
@@ -1085,7 +1085,7 @@ export class AgentOrchestrator {
 
     // If useEnvAI is explicitly set, use global AIService
     if (useEnvAI === true) {
-      console.log('[resolveAiServiceForJob] Using global AIService (useEnvAI=true)');
+      logger.debug('[resolveAiServiceForJob] Using global AIService (useEnvAI=true)');
       const resolution: AIResolution = {
         provider: envConfig.provider,
         model: modelOverride || envConfig.modelDefault,
@@ -1124,7 +1124,7 @@ export class AgentOrchestrator {
       providerResolutionReason = 'ENV_DEFAULT_NO_USER_ID';
     }
 
-    console.log(`[resolveAiServiceForJob] Provider resolution: candidate=${providerCandidate}, reason=${providerResolutionReason}, userId=${userId ? 'present' : 'missing'}, payloadProvider=${payloadProvider || 'none'}`);
+    logger.debug(`[resolveAiServiceForJob] Provider resolution: candidate=${providerCandidate}, reason=${providerResolutionReason}, userId=${userId ? 'present' : 'missing'}, payloadProvider=${payloadProvider || 'none'}`);
 
     // ========================================================================
     // KEY RESOLUTION (for chosen provider)
@@ -1140,7 +1140,7 @@ export class AgentOrchestrator {
       if (userKey) {
         apiKey = userKey.key;
         keySource = 'user';
-        console.log(`[resolveAiServiceForJob] Using user key for ${providerCandidate}`);
+        logger.debug(`[resolveAiServiceForJob] Using user key for ${providerCandidate}`);
       }
     }
 
@@ -1163,7 +1163,7 @@ export class AgentOrchestrator {
       // ENV provider must match requested provider for fallback
       const envProviderMatches = envConfig.provider === providerCandidate;
       
-      console.log(`[resolveAiServiceForJob] ENV fallback check: explicitRequest=${isExplicitPayloadRequest}, envProvider=${envConfig.provider}, requestedProvider=${providerCandidate}, envProviderMatches=${envProviderMatches}, hasEnvKey=${!!envKeyForProvider}`);
+      logger.debug(`[resolveAiServiceForJob] ENV fallback check: explicitRequest=${isExplicitPayloadRequest}, envProvider=${envConfig.provider}, requestedProvider=${providerCandidate}, envProviderMatches=${envProviderMatches}, hasEnvKey=${!!envKeyForProvider}`);
       
       if (isExplicitPayloadRequest) {
         // EXPLICIT REQUEST: Only allow env fallback if env provider MATCHES requested
@@ -1171,10 +1171,10 @@ export class AgentOrchestrator {
           apiKey = envKeyForProvider;
           keySource = 'env';
           fallbackReason = 'USER_KEY_MISSING';
-          console.log(`[resolveAiServiceForJob] Using env key for ${providerCandidate} (explicit request, env matches)`);
+          logger.debug(`[resolveAiServiceForJob] Using env key for ${providerCandidate} (explicit request, env matches)`);
         } else {
           // NO CROSS-PROVIDER FALLBACK! User asked for X, we don't have key for X.
-          console.log(`[resolveAiServiceForJob] BLOCKED: Explicit request for ${providerCandidate} but no key available. ENV provider is ${envConfig.provider} - NO cross-provider fallback.`);
+          logger.debug(`[resolveAiServiceForJob] BLOCKED: Explicit request for ${providerCandidate} but no key available. ENV provider is ${envConfig.provider} - NO cross-provider fallback.`);
         }
       } else {
         // No explicit request - allow env fallback for the resolved provider
@@ -1182,7 +1182,7 @@ export class AgentOrchestrator {
           apiKey = envKeyForProvider;
           keySource = 'env';
           fallbackReason = userId ? 'USER_KEY_MISSING' : 'NO_USER_ID';
-          console.log(`[resolveAiServiceForJob] Using env key for ${providerCandidate} (no explicit request)`);
+          logger.debug(`[resolveAiServiceForJob] Using env key for ${providerCandidate} (no explicit request)`);
         }
       }
     }
@@ -1195,7 +1195,7 @@ export class AgentOrchestrator {
     }
 
     // Log final key resolution decision
-    console.log(`[resolveAiServiceForJob] KEY DECISION: provider=${providerCandidate}, keySource=${keySource}, hasKey=true, fallbackReason=${fallbackReason || 'none'}`);
+    logger.info(`[resolveAiServiceForJob] KEY DECISION: provider=${providerCandidate}, keySource=${keySource}, hasKey=true, fallbackReason=${fallbackReason || 'none'}`);
 
     // ========================================================================
     // CREATE AI SERVICE WITH PROVIDER-CONSISTENT CONFIG
@@ -1236,7 +1236,7 @@ export class AgentOrchestrator {
       appName: env.OPENROUTER_APP_NAME,
     };
 
-    console.log(`[resolveAiServiceForJob] Creating AIService: provider=${providerCandidate}, model=${resolvedModel}, keySource=${keySource}, providerReason=${providerResolutionReason}, baseUrl=${baseUrl}`);
+    logger.debug(`[resolveAiServiceForJob] Creating AIService: provider=${providerCandidate}, model=${resolvedModel}, keySource=${keySource}, providerReason=${providerResolutionReason}, baseUrl=${baseUrl}`);
     
     const aiService = createAIService(aiConfig, observer, runtimeOptions);
     const resolution: AIResolution = {

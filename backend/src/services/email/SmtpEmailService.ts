@@ -9,6 +9,7 @@ import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js';
 import { BaseEmailService, type EmailMessage } from './EmailService.js';
+import { logger } from '../../lib/logger.js';
 
 export interface SmtpEmailConfig {
   host: string;
@@ -68,7 +69,7 @@ export class SmtpEmailService extends BaseEmailService {
     message: EmailMessage,
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const logCtx = `to=${message.to}, from=${this.from}, server=${this.diagLabel}`;
-    console.log(`[SmtpEmailService] Sending email: ${logCtx}, subject="${message.subject}"`);
+    logger.info(`[SmtpEmailService] Sending email: ${logCtx}, subject="${message.subject}"`);
 
     try {
       const info = await this.transporter.sendMail({
@@ -80,7 +81,7 @@ export class SmtpEmailService extends BaseEmailService {
         html: message.html,
       });
 
-      console.log(`[SmtpEmailService] Email sent OK: messageId=${info.messageId}, ${logCtx}`);
+      logger.info(`[SmtpEmailService] Email sent OK: messageId=${info.messageId}, ${logCtx}`);
 
       return {
         success: true,

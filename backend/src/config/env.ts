@@ -1,6 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import { logger } from '../lib/logger.js';
 
 // =============================================================================
 // ENV LOADING (Correct Precedence)
@@ -245,7 +246,7 @@ const envSchema = z
     // This allows staging deployments without user AI key encryption feature
     // A warning will be logged at startup if not configured
     if (!isTestMode && !data.AI_KEY_ENCRYPTION_KEY && isProduction) {
-      console.warn('[env] WARNING: AI_KEY_ENCRYPTION_KEY is not set. User AI key encryption will be disabled.');
+      logger.warn('[env] WARNING: AI_KEY_ENCRYPTION_KEY is not set. User AI key encryption will be disabled.');
     }
 
     // Email provider validation
@@ -475,7 +476,7 @@ export function getAIConfig(env: Env): AIConfig {
     const keyProvider = detectProviderFromKey(apiKey);
     if (keyProvider) {
       provider = keyProvider;
-      console.log(`[getAIConfig] Auto-detected provider from API key: ${provider}`);
+      logger.info(`[getAIConfig] Auto-detected provider from API key: ${provider}`);
     }
   }
   
@@ -483,7 +484,7 @@ export function getAIConfig(env: Env): AIConfig {
   if (apiKey && provider !== 'mock') {
     const keyProvider = detectProviderFromKey(apiKey);
     if (keyProvider && keyProvider !== provider) {
-      console.warn(`[getAIConfig] WARNING: AI_PROVIDER=${provider} but API key looks like ${keyProvider} key. Using ${provider} anyway.`);
+      logger.warn(`[getAIConfig] WARNING: AI_PROVIDER=${provider} but API key looks like ${keyProvider} key. Using ${provider} anyway.`);
     }
   }
   
@@ -512,7 +513,7 @@ export function getAIConfig(env: Env): AIConfig {
     
     // If model clearly belongs to wrong provider, use default
     if (modelProvider && modelProvider !== provider) {
-      console.warn(`[getAIConfig] Model "${envModel}" is for ${modelProvider}, but provider is ${provider}. Using default: ${defaultModel}`);
+      logger.warn(`[getAIConfig] Model "${envModel}" is for ${modelProvider}, but provider is ${provider}. Using default: ${defaultModel}`);
       return defaultModel;
     }
     

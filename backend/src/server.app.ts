@@ -41,6 +41,7 @@ import { devSessionPlugin } from './pipeline/api/dev-session.plugin.js';
 import { createPipelineSystem, type GitHubServiceLike } from './pipeline/core/pipeline-factory.js';
 import { createGitHubRESTAdapter, getGitHubOwnerViaREST } from './pipeline/adapters/GitHubRESTAdapter.js';
 import { pushLog } from './lib/logBuffer.js';
+import { logger } from './lib/logger.js';
 import { initPiriRAGService } from './services/rag/PiriRAGService.js';
 import { AgentOrchestrator } from './core/orchestrator/AgentOrchestrator.js';
 import { createAIService, createToolCallingClient } from './services/ai/AIService.js';
@@ -82,21 +83,21 @@ export async function buildApp() {
 
   // Log AI service configuration (without secrets)
   const configSummary = aiService.getConfigSummary();
-  console.log(`[buildApp] AI Provider: ${configSummary.provider}`);
-  console.log(`[buildApp] AI Models: default=${configSummary.models.default}, planner=${configSummary.models.planner}, validation=${configSummary.models.validation}`);
-  console.log(`[buildApp] AI Base URL: ${configSummary.baseUrl}`);
-  console.log(`[buildApp] AI API Key: ${configSummary.hasApiKey ? 'configured' : 'NOT CONFIGURED'}`);
+  logger.info(`[buildApp] AI Provider: ${configSummary.provider}`);
+  logger.info(`[buildApp] AI Models: default=${configSummary.models.default}, planner=${configSummary.models.planner}, validation=${configSummary.models.validation}`);
+  logger.info(`[buildApp] AI Base URL: ${configSummary.baseUrl}`);
+  logger.info(`[buildApp] AI API Key: ${configSummary.hasApiKey ? 'configured' : 'NOT CONFIGURED'}`);
 
   // Startup diagnostics for encryption, email, OAuth, and MCP (no secrets)
-  console.log(`[buildApp] Encryption: ${isEncryptionConfigured() ? 'configured' : 'NOT CONFIGURED — AI key save will return 503'}`);
-  console.log(`[buildApp] Email: provider=${env.EMAIL_PROVIDER}, configured=${isEmailConfigured(env.EMAIL_PROVIDER)}`);
-  console.log(`[buildApp] OAuth: google=${env.GOOGLE_OAUTH_CLIENT_ID ? 'configured' : 'NOT SET'}, github=${env.GITHUB_OAUTH_CLIENT_ID ? 'configured' : 'NOT SET'}`);
+  logger.info(`[buildApp] Encryption: ${isEncryptionConfigured() ? 'configured' : 'NOT CONFIGURED — AI key save will return 503'}`);
+  logger.info(`[buildApp] Email: provider=${env.EMAIL_PROVIDER}, configured=${isEmailConfigured(env.EMAIL_PROVIDER)}`);
+  logger.info(`[buildApp] OAuth: google=${env.GOOGLE_OAUTH_CLIENT_ID ? 'configured' : 'NOT SET'}, github=${env.GITHUB_OAUTH_CLIENT_ID ? 'configured' : 'NOT SET'}`);
   if (env.GOOGLE_OAUTH_CLIENT_ID || env.GITHUB_OAUTH_CLIENT_ID) {
-    console.log(`[buildApp] OAuth callback base: ${env.BACKEND_URL}/auth/oauth/<provider>/callback`);
+    logger.info(`[buildApp] OAuth callback base: ${env.BACKEND_URL}/auth/oauth/<provider>/callback`);
   }
-  console.log(`[buildApp] MCP: GITHUB_MCP_BASE_URL=${env.GITHUB_MCP_BASE_URL ? '(configured)' : 'NOT SET — agents requiring GitHub will fail'}`);
+  logger.info(`[buildApp] MCP: GITHUB_MCP_BASE_URL=${env.GITHUB_MCP_BASE_URL ? '(configured)' : 'NOT SET — agents requiring GitHub will fail'}`);
   if (env.EMAIL_PROVIDER === 'smtp') {
-    console.log(`[buildApp] SMTP: host=${process.env.SMTP_HOST || 'NOT SET'}, port=${process.env.SMTP_PORT || '587'}, from=${process.env.SMTP_FROM_EMAIL || 'NOT SET'}`);
+    logger.info(`[buildApp] SMTP: host=${process.env.SMTP_HOST || 'NOT SET'}, port=${process.env.SMTP_PORT || '587'}, from=${process.env.SMTP_FROM_EMAIL || 'NOT SET'}`);
   }
 
   // Phase 5.D: Create MCPTools (signature-only adapters for now)
@@ -143,12 +144,12 @@ export async function buildApp() {
     });
     setFreshnessSchedulerInstance(freshnessScheduler);
     freshnessScheduler.start();
-    console.log(
+    logger.info(
       `[buildApp] Freshness scheduler enabled (interval=${env.FRESHNESS_SCHEDULER_INTERVAL_MINUTES}m, threshold=${env.FRESHNESS_THRESHOLD_DAYS}d)`
     );
   } else {
     setFreshnessSchedulerInstance(null);
-    console.log('[buildApp] Freshness scheduler disabled');
+    logger.info('[buildApp] Freshness scheduler disabled');
   }
 
   // Phase 7.A: Enable structured logging with request-id
@@ -296,7 +297,7 @@ export async function buildApp() {
         return 'unknown';
       }
     };
-    console.log(`[buildApp] Pipeline GitHub: MCP Gateway (${env.GITHUB_MCP_BASE_URL})`);
+    logger.info(`[buildApp] Pipeline GitHub: MCP Gateway (${env.GITHUB_MCP_BASE_URL})`);
   } else if (hasRealGitHubToken) {
     // Fallback: Direct REST API — works without MCP Gateway
     pipelineGitHubService = createGitHubRESTAdapter({ token: env.GITHUB_TOKEN! });
@@ -308,7 +309,7 @@ export async function buildApp() {
         return 'unknown';
       }
     };
-    console.log('[buildApp] Pipeline GitHub: REST API (set GITHUB_MCP_BASE_URL for MCP)');
+    logger.info('[buildApp] Pipeline GitHub: REST API (set GITHUB_MCP_BASE_URL for MCP)');
   } else {
     // Option 3: No token — stub mode
     pipelineGitHubService = {
@@ -320,7 +321,7 @@ export async function buildApp() {
       async getFileContent() { return ''; },
     };
     _pipelineGetGitHubOwner = async () => 'stub-owner';
-    console.log('[buildApp] Pipeline GitHub: STUB (set GITHUB_TOKEN for real push)');
+    logger.info('[buildApp] Pipeline GitHub: STUB (set GITHUB_TOKEN for real push)');
   }
 
   // PostgreSQL pipeline store (replaces InMemoryPipelineStore)
@@ -366,10 +367,10 @@ export async function buildApp() {
       });
       devUserId = devUser?.id;
       if (devUserId) {
-        console.log(`[buildApp] Pipeline DEV_MODE: auth bypass with user ${devUserId}`);
+        logger.info(`[buildApp] Pipeline DEV_MODE: auth bypass with user ${devUserId}`);
       }
     } catch {
-      console.log('[buildApp] Pipeline DEV_MODE: could not resolve dev user, auth required');
+      logger.info('[buildApp] Pipeline DEV_MODE: could not resolve dev user, auth required');
     }
   }
   await app.register(

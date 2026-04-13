@@ -4,15 +4,16 @@
  */
 
 import { BaseEmailService, EmailMessage } from './EmailService.js';
+import { logger } from '../../lib/logger.js';
 
 export class MockEmailService extends BaseEmailService {
   async sendEmail(message: EmailMessage): Promise<{ success: boolean; messageId?: string }> {
-    console.log('[MockEmailService] Email would be sent:');
-    console.log(`  To: ${message.to}`);
-    console.log(`  Subject: ${message.subject}`);
+    logger.info('[MockEmailService] Email would be sent:');
+    logger.info(`  To: ${message.to}`);
+    logger.info(`  Subject: ${message.subject}`);
     
     if (message.text) {
-      console.log(`  Text:\n${message.text}`);
+      logger.info(`  Text:\n${message.text}`);
     }
     
     // Extract verification code from text if present (supports both EN and TR templates)
@@ -21,7 +22,7 @@ export class MockEmailService extends BaseEmailService {
     const standaloneMatch = !codeMatch ? message.text?.match(/^\s+(\d{6})\s*$/m) : null;
     const foundCode = codeMatch?.[1] ?? standaloneMatch?.[1];
     if (foundCode) {
-      console.log(`\n  ⚠️  VERIFICATION CODE: ${foundCode}\n`);
+      logger.info(`\n  VERIFICATION CODE: ${foundCode}\n`);
     }
 
     return {
