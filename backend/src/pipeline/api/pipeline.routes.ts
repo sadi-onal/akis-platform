@@ -45,6 +45,30 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
   return {
     async startPipeline(request: unknown, _reply: unknown) {
       const userId = getUserId(request);
+
+      // Non-admin users must configure their own AI API key to use the pipeline.
+      // Admins can use the platform's default API key without restrictions.
+      // Guard is best-effort — if auth lookup fails, let the pipeline proceed.
+      try {
+        const { requireAuth: _requireAuth } = await import('../../utils/auth.js');
+        const user = await _requireAuth(request as import('fastify').FastifyRequest);
+        if (user.role !== 'admin') {
+          const { getMultiProviderStatus } = await import('../../services/ai/user-ai-keys.js');
+          const keyStatus = await getMultiProviderStatus(user.id);
+          const providers = keyStatus.providers as Record<string, { configured: boolean }>;
+          const hasOwnKey = Object.values(providers).some((p) => p.configured);
+          if (!hasOwnKey) {
+            throw Object.assign(
+              new Error('Pipeline kullanmak icin Ayarlar > AI Anahtarlari sayfasindan kendi API anahtarinizi eklemelisiniz.'),
+              { statusCode: 403 },
+            );
+          }
+        }
+      } catch (err) {
+        if (err && typeof err === 'object' && 'statusCode' in err && (err as { statusCode: number }).statusCode === 403) throw err;
+        // Non-403 errors (auth lookup, DB) — proceed with pipeline start
+      }
+
       const body = StartPipelineRequestSchema.parse((request as { body: unknown }).body);
       const pipeline = await orchestrator.startPipeline(userId, {
         idea: body.idea,
