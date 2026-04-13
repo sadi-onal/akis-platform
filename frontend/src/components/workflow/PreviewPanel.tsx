@@ -31,31 +31,35 @@ function findMainFile(files: Record<string, string>): string {
   return first?.startsWith('/') ? first : `/${first || 'index.html'}`;
 }
 
+/**
+ * Convert Proto's file map to Sandpack-compatible format.
+ *
+ * Sandpack react-ts template expects /App.tsx at root level.
+ * Proto generates src/App.tsx. We need to map Proto's paths to
+ * Sandpack's expected structure so our files OVERRIDE the template defaults.
+ *
+ * Strategy:
+ * 1. If Proto has /src/App.tsx → copy it to /App.tsx (Sandpack entry)
+ * 2. If Proto has /src/main.tsx → copy it to /index.tsx (Sandpack entry)
+ * 3. Keep all original paths too (for Files tab display)
+ */
 function toSandpackFiles(raw: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw)) {
     out[key.startsWith('/') ? key : `/${key}`] = value;
   }
 
-  // Inject index.html if Proto didn't generate one — Sandpack needs it as entry
-  if (!out['/index.html']) {
-    // Find the main entry file for the script tag
-    const mainEntry = ['/src/main.tsx', '/src/main.jsx', '/src/main.ts', '/src/main.js',
-      '/src/index.tsx', '/src/index.jsx', '/src/index.ts', '/src/index.js']
-      .find(p => out[p]) ?? '/src/main.tsx';
-    out['/index.html'] = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
-<body><div id="root"></div><script type="module" src="${mainEntry}"></script></body></html>`;
+  // Map src/App.tsx → /App.tsx so it overrides Sandpack template's default App
+  const appTsx = out['/src/App.tsx'] ?? out['/src/App.jsx'];
+  const appKey = out['/src/App.tsx'] ? '/App.tsx' : out['/src/App.jsx'] ? '/App.jsx' : null;
+  if (appTsx && appKey && !out[appKey]) {
+    out[appKey] = appTsx;
   }
 
-  // If there's no main.tsx/index.tsx but there IS an App.tsx, create a main entry
-  const hasMain = ['/src/main.tsx', '/src/main.jsx', '/src/main.ts', '/src/main.js',
-    '/src/index.tsx', '/src/index.jsx'].some(p => out[p]);
-  const hasApp = out['/src/App.tsx'] || out['/src/App.jsx'];
-  if (!hasMain && hasApp) {
-    const appFile = out['/src/App.tsx'] ? './App' : './App';
-    const ext = out['/src/App.tsx'] ? 'tsx' : 'jsx';
-    out[`/src/main.${ext}`] = `import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "${appFile}";\nReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);`;
+  // Map src/index.css or src/App.css → /styles.css so Sandpack picks it up
+  const cssFile = out['/src/index.css'] ?? out['/src/App.css'] ?? out['/src/styles.css'];
+  if (cssFile && !out['/styles.css']) {
+    out['/styles.css'] = cssFile;
   }
 
   return out;
@@ -190,6 +194,11 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
     { id: 'files', label: 'Files', icon: '📁', count: files ? Object.keys(files).length : 0 },
   ];
 
+  // Sandpack template: provides runtime (React, bundler) — our files override its defaults
+  const template = analysis?.framework === 'react' ? 'react-ts' as const
+    : analysis?.framework === 'vue' ? 'vue-ts' as const
+    : 'vanilla-ts' as const;
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-ak-surface">
       {/* Tab bar */}
@@ -280,6 +289,7 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
               }
             >
               <SandpackProvider
+                template={template}
                 files={sandpackFiles}
                 theme={akisSandpackTheme}
                 options={{
@@ -289,7 +299,6 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
                   recompileDelay: 500,
                 }}
                 customSetup={{
-                  entry: findMainFile(sandpackFiles),
                   dependencies: extractDependencies(files),
                 }}
               >
