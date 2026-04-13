@@ -36,6 +36,28 @@ function toSandpackFiles(raw: Record<string, string>): Record<string, string> {
   for (const [key, value] of Object.entries(raw)) {
     out[key.startsWith('/') ? key : `/${key}`] = value;
   }
+
+  // Inject index.html if Proto didn't generate one — Sandpack needs it as entry
+  if (!out['/index.html']) {
+    // Find the main entry file for the script tag
+    const mainEntry = ['/src/main.tsx', '/src/main.jsx', '/src/main.ts', '/src/main.js',
+      '/src/index.tsx', '/src/index.jsx', '/src/index.ts', '/src/index.js']
+      .find(p => out[p]) ?? '/src/main.tsx';
+    out['/index.html'] = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+<body><div id="root"></div><script type="module" src="${mainEntry}"></script></body></html>`;
+  }
+
+  // If there's no main.tsx/index.tsx but there IS an App.tsx, create a main entry
+  const hasMain = ['/src/main.tsx', '/src/main.jsx', '/src/main.ts', '/src/main.js',
+    '/src/index.tsx', '/src/index.jsx'].some(p => out[p]);
+  const hasApp = out['/src/App.tsx'] || out['/src/App.jsx'];
+  if (!hasMain && hasApp) {
+    const appFile = out['/src/App.tsx'] ? './App' : './App';
+    const ext = out['/src/App.tsx'] ? 'tsx' : 'jsx';
+    out[`/src/main.${ext}`] = `import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "${appFile}";\nReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);`;
+  }
+
   return out;
 }
 
@@ -168,10 +190,6 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
     { id: 'files', label: 'Files', icon: '📁', count: files ? Object.keys(files).length : 0 },
   ];
 
-  const template = analysis?.framework === 'react' ? 'react-ts' as const
-    : analysis?.framework === 'vue' ? 'vue-ts' as const
-    : 'vanilla-ts' as const;
-
   return (
     <div className="flex h-full flex-col overflow-hidden bg-ak-surface">
       {/* Tab bar */}
@@ -262,7 +280,6 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
               }
             >
               <SandpackProvider
-                template={template}
                 files={sandpackFiles}
                 theme={akisSandpackTheme}
                 options={{
@@ -272,6 +289,7 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
                   recompileDelay: 500,
                 }}
                 customSetup={{
+                  entry: findMainFile(sandpackFiles),
                   dependencies: extractDependencies(files),
                 }}
               >
