@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { SandpackProvider, SandpackLayout, SandpackPreview as SandpackPreviewEmbed } from '@codesandbox/sandpack-react';
 import { cn } from '../../utils/cn';
+import { analyzePreviewCapability } from '../../utils/previewStrategy';
+import { akisSandpackTheme } from '../../utils/sandpackTheme';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
 
 type PreviewView = 'web' | 'mobile';
@@ -7,57 +10,43 @@ type PanelTab = 'preview' | 'console' | 'files';
 
 interface PreviewPanelProps {
   files: Record<string, string> | null;
-  title?: string;
   loading?: boolean;
   branch?: string;
   activities?: PipelineActivity[];
   createdFiles?: string[];
-}
-
-/** Strip leading slashes from file keys — StackBlitz expects 'src/App.tsx', not '/src/App.tsx' */
-function normalizeFiles(raw: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(raw)) {
-    const clean = key.startsWith('/') ? key.slice(1) : key;
-    out[clean] = value;
-  }
-
-  // Inject StackBlitz startCommand into package.json if missing
-  if (out['package.json']) {
-    try {
-      const pkg = JSON.parse(out['package.json']);
-      if (!pkg.stackblitz) {
-        pkg.stackblitz = {
-          installDependencies: true,
-          startCommand: pkg.scripts?.dev ? 'npm run dev'
-            : pkg.scripts?.start ? 'npm start'
-            : 'npm run dev',
-        };
-        out['package.json'] = JSON.stringify(pkg, null, 2);
-      }
-    } catch { /* preserve original */ }
-  }
-
-  return out;
+  repoUrl?: string;
 }
 
 function findMainFile(files: Record<string, string>): string {
   const priorities = [
-    'src/App.tsx', 'src/App.jsx', 'src/App.js',
-    'src/index.tsx', 'src/index.jsx', 'src/index.js',
-    'src/main.tsx', 'src/main.jsx', 'src/main.js',
-    'index.html', 'App.jsx', 'App.js',
+    '/src/App.tsx', '/src/App.jsx', '/src/App.js',
+    '/src/main.tsx', '/src/main.jsx', '/src/main.js',
+    '/src/index.tsx', '/src/index.jsx', '/src/index.js',
+    '/index.html',
   ];
   for (const p of priorities) {
     if (files[p]) return p;
   }
-  return Object.keys(files)[0] || 'index.html';
+  const first = Object.keys(files)[0];
+  return first?.startsWith('/') ? first : `/${first || 'index.html'}`;
 }
 
-function detectTemplate(files: Record<string, string>): 'node' | 'html' {
-  if (files['package.json']) return 'node';
-  if (files['index.html']) return 'html';
-  return 'node';
+function toSandpackFiles(raw: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    out[key.startsWith('/') ? key : `/${key}`] = value;
+  }
+  return out;
+}
+
+function extractDependencies(files: Record<string, string>): Record<string, string> {
+  const pkgContent = files['package.json'] ?? files['/package.json'];
+  if (!pkgContent) return {};
+  try {
+    return JSON.parse(pkgContent).dependencies ?? {};
+  } catch {
+    return {};
+  }
 }
 
 /* ── Language icon helper ─────────────────── */
@@ -107,72 +96,49 @@ function ConsoleEntry({ activity }: { activity: PipelineActivity }) {
   );
 }
 
+/* ── Not Previewable Fallback ─────────────── */
+function NotPreviewable({ reason, repoUrl }: { reason: string; repoUrl?: string }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-ak-surface-2">
+        <svg className="h-7 w-7 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
+        </svg>
+      </div>
+      <p className="max-w-sm text-sm leading-relaxed text-ak-text-secondary">{reason}</p>
+      {repoUrl && (
+        <a
+          href={repoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-lg border border-ak-primary/40 px-4 py-2 text-xs font-medium text-ak-primary hover:bg-ak-primary/10 transition-colors"
+        >
+          Projeyi GitHub'da Aç
+        </a>
+      )}
+    </div>
+  );
+}
+
 /* ── Main Component ───────────────────────── */
-export function PreviewPanel({ files, title, loading: externalLoading, branch, activities, createdFiles }: PreviewPanelProps) {
+export function PreviewPanel({ files, loading: externalLoading, branch, activities, createdFiles, repoUrl }: PreviewPanelProps) {
   const [tab, setTab] = useState<PanelTab>('preview');
   const [view, setView] = useState<PreviewView>('web');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
-  const [error, setError] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
-  const [retryKey, setRetryKey] = useState(0);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
-  // Auto-scroll console to bottom
   useEffect(() => {
     if (tab === 'console' && consoleEndRef.current) {
       consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [activities?.length, tab]);
 
-  // StackBlitz embed
-  useEffect(() => {
-    if (!files || Object.keys(files).length === 0 || !containerRef.current) return;
+  const analysis = useMemo(() => {
+    if (!files) return null;
+    return analyzePreviewCapability(files);
+  }, [files]);
 
-    const container = containerRef.current;
-    let cancelled = false;
-
-    async function loadPreview() {
-      try {
-        setStatus('loading');
-        setError(null);
-        container.innerHTML = '';
-
-        // Ensure container is mounted and visible before embedding
-        if (!container.isConnected || container.offsetParent === null) {
-          await new Promise((r) => setTimeout(r, 100));
-        }
-        if (cancelled || !container.isConnected) return;
-
-        const sdk = await import('@stackblitz/sdk');
-        if (cancelled) return;
-
-        const normalized = normalizeFiles(files!);
-        const template = detectTemplate(normalized);
-        const mainFile = findMainFile(normalized);
-
-        await sdk.default.embedProject(
-          container,
-          { title: title || 'AKIS Preview', description: 'Generated by AKIS Pipeline', template, files: normalized },
-          { openFile: mainFile, view: 'preview', hideNavigation: true, height: '100%' },
-        );
-
-        if (!cancelled) setStatus('ready');
-      } catch (err) {
-        if (!cancelled) {
-          if (import.meta.env.DEV) console.error('Preview error:', err);
-          const msg = err instanceof Error ? err.message : 'Önizleme yüklenemedi';
-          setError(msg.includes('Invalid Element') ? 'Önizleme başlatılamadı — lütfen "Tekrar Dene" butonunu kullanın.' : msg);
-          setStatus('error');
-        }
-      }
-    }
-
-    loadPreview();
-    return () => { cancelled = true; container.innerHTML = ''; };
-  }, [files, title, retryKey]);
-
-  const isLoading = externalLoading || status === 'loading';
+  const sandpackFiles = useMemo(() => files ? toSandpackFiles(files) : null, [files]);
 
   // Build file tree structure
   type FileEntry = { path: string; content: string; lines: number };
@@ -183,13 +149,14 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
     const entries = Object.entries(files).sort(([a], [b]) => a.localeCompare(b));
 
     for (const [path, content] of entries) {
-      const parts = path.split('/');
+      const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+      const parts = cleanPath.split('/');
       if (parts.length > 1) {
         const folder = parts.slice(0, -1).join('/');
         if (!folders.has(folder)) folders.set(folder, []);
-        folders.get(folder)!.push({ path, content, lines: countLines(content) });
+        folders.get(folder)!.push({ path: cleanPath, content, lines: countLines(content) });
       } else {
-        root.push({ path, content, lines: countLines(content) });
+        root.push({ path: cleanPath, content, lines: countLines(content) });
       }
     }
     return { folders, root };
@@ -200,6 +167,10 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
     { id: 'console', label: 'Console', icon: '>', count: activities?.length },
     { id: 'files', label: 'Files', icon: '📁', count: files ? Object.keys(files).length : 0 },
   ];
+
+  const template = analysis?.framework === 'react' ? 'react-ts' as const
+    : analysis?.framework === 'vue' ? 'vue-ts' as const
+    : 'vanilla-ts' as const;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-ak-surface">
@@ -234,7 +205,6 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
           ))}
         </div>
 
-        {/* View toggle — only for preview tab */}
         {tab === 'preview' && (
           <div className="mr-3 flex rounded-md border border-ak-border bg-ak-surface-2 p-0.5">
             <button
@@ -260,33 +230,16 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
       {/* ── TAB: Preview ─────────────────────── */}
       {tab === 'preview' && (
         <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-ak-bg p-2">
-          {isLoading && (
+          {externalLoading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-ak-surface gap-3">
               <div className="relative h-8 w-8">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-ak-primary border-t-transparent" />
                 <span className="absolute inset-0 flex items-center justify-center text-xs">⚡</span>
               </div>
-              <p className="text-sm font-medium text-ak-text-secondary">
-                {externalLoading ? 'Dosyalar getiriliyor...' : 'Önizleme başlatılıyor...'}
-              </p>
+              <p className="text-sm font-medium text-ak-text-secondary">Dosyalar getiriliyor...</p>
               <div className="mt-1 h-1 w-32 overflow-hidden rounded-full bg-ak-border">
-                <div className="h-full rounded-full bg-ak-primary/50" style={{ width: externalLoading ? '30%' : '60%', animation: 'pulse 2s ease-in-out infinite' }} />
+                <div className="h-full rounded-full bg-ak-primary/50" style={{ width: '30%', animation: 'pulse 2s ease-in-out infinite' }} />
               </div>
-            </div>
-          )}
-
-          {error && !isLoading && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-ak-surface gap-3 px-6 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
-                <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                </svg>
-              </div>
-              <p className="text-sm font-medium text-red-400">Önizleme yüklenemedi</p>
-              <p className="text-xs text-ak-text-tertiary">{error}</p>
-              <button onClick={() => setRetryKey(k => k + 1)} className="mt-2 rounded-lg bg-ak-primary/10 px-4 py-2 text-xs font-medium text-ak-primary hover:bg-ak-primary/20">
-                Tekrar Dene
-              </button>
             </div>
           )}
 
@@ -296,15 +249,42 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
             </div>
           )}
 
-          <div
-            className="overflow-hidden transition-all duration-300"
-            style={view === 'mobile'
-              ? { width: 390, height: 844, maxHeight: '100%', border: '8px solid var(--ak-border)', borderRadius: 32, margin: '16px auto', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }
-              : { width: '100%', height: '100%' }
-            }
-          >
-            <div ref={containerRef} className="h-full w-full" />
-          </div>
+          {files && !externalLoading && analysis?.capability === 'not-previewable' && (
+            <NotPreviewable reason={analysis.reason} repoUrl={repoUrl} />
+          )}
+
+          {files && !externalLoading && analysis?.capability === 'sandpack' && sandpackFiles && (
+            <div
+              className="overflow-hidden transition-all duration-300"
+              style={view === 'mobile'
+                ? { width: 390, height: 844, maxHeight: '100%', border: '8px solid var(--ak-border)', borderRadius: 32, margin: '16px auto', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }
+                : { width: '100%', height: '100%' }
+              }
+            >
+              <SandpackProvider
+                template={template}
+                files={sandpackFiles}
+                theme={akisSandpackTheme}
+                options={{
+                  activeFile: findMainFile(sandpackFiles),
+                  visibleFiles: Object.keys(sandpackFiles).slice(0, 8),
+                  recompileMode: 'delayed',
+                  recompileDelay: 500,
+                }}
+                customSetup={{
+                  dependencies: extractDependencies(files),
+                }}
+              >
+                <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0 }}>
+                  <SandpackPreviewEmbed
+                    style={{ height: '100%' }}
+                    showOpenInCodeSandbox={false}
+                    showRefreshButton
+                  />
+                </SandpackLayout>
+              </SandpackProvider>
+            </div>
+          )}
         </div>
       )}
 
@@ -325,7 +305,6 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
               </>
             )}
           </div>
-          {/* Console footer */}
           <div className="flex items-center justify-between border-t border-ak-border bg-ak-surface px-3 py-1.5">
             <span className="font-mono text-[10px] text-ak-text-tertiary">
               {activities?.length ?? 0} log entries
@@ -342,11 +321,9 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
       {/* ── TAB: Files ───────────────────────── */}
       {tab === 'files' && (
         <div className="flex flex-1 overflow-hidden">
-          {/* File tree sidebar */}
           <div className="w-56 flex-shrink-0 overflow-y-auto border-r border-ak-border bg-ak-surface py-1">
             {files && Object.keys(files).length > 0 ? (
               <>
-                {/* Root files */}
                 {fileTree.root?.map((f) => {
                   const icon = getFileIcon(f.path);
                   return (
@@ -364,7 +341,6 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
                     </button>
                   );
                 })}
-                {/* Folders */}
                 {fileTree.folders && [...fileTree.folders.entries()].map(([folder, folderFiles]) => (
                   <div key={folder}>
                     <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-ak-text-tertiary">
@@ -398,7 +374,6 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
             )}
           </div>
 
-          {/* File content viewer */}
           <div className="flex flex-1 flex-col overflow-hidden bg-[#0d1117]">
             {selectedFile && files?.[selectedFile] ? (
               <>
@@ -431,7 +406,7 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
       {branch && tab === 'preview' && (
         <div className="flex items-center justify-between border-t border-ak-border px-3 py-1.5">
           <span className="font-mono text-[10px] text-ak-text-tertiary">⑂ {branch}</span>
-          <span className="text-[10px] text-ak-text-tertiary">Powered by StackBlitz SDK</span>
+          <span className="text-[10px] text-ak-text-tertiary">Powered by Sandpack</span>
         </div>
       )}
     </div>

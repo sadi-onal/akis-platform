@@ -376,7 +376,7 @@ export default function ChatPage() {
     return list;
   }, [conversations, pendingConv]);
 
-  // Proto files for StackBlitz preview
+  // Proto files for Sandpack preview
   const protoFiles = useMemo(() => {
     const protoMsg = activeWorkflow?.conversation?.find(m => m.type === 'proto_result');
     if (!protoMsg?.protoResult?.files) return null;
@@ -799,7 +799,6 @@ export default function ChatPage() {
                     <Suspense fallback={<div className="flex h-full items-center justify-center bg-ak-bg text-ak-text-tertiary text-sm">Yükleniyor...</div>}>
                       <PreviewPanel
                         files={protoFiles}
-                        title={activeWorkflow?.title}
                         branch={activeWorkflow?.stages?.proto?.branch}
                         activities={pipelineActivities}
                         createdFiles={createdFiles}
