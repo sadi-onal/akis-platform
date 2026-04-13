@@ -26,10 +26,10 @@ AKIS (Adaptive Knowledge Integrity System), bir **AI Agent Workflows Engine**'di
        |
    PROTO ("Insa et")
    Onaylanan spec'ten MVP scaffold uretir
-   GitHub'a push eder (branch: proto/scaffold-{timestamp})
+   GitHub'a push eder (branch: main — direkt push, PR yok)
        |
    TRACE ("Dogrula")
-   Proto'nun push ettigi branch'teki kodu GitHub'dan okur
+   Proto'nun push ettigi main branch'teki kodu GitHub'dan okur
    O koda ozel Playwright otomasyon testleri yazar
 ```
 
