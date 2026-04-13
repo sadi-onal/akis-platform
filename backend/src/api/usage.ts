@@ -67,6 +67,31 @@ export async function usageRoutes(fastify: FastifyInstance) {
         const onDemandTokens = isOverFreeTokens ? usedTokens - FREE_TIER.tokens : 0;
         const onDemandCostUsd = isOverFreeCost ? usedCostUsd - FREE_TIER.costUsd : 0;
 
+        // Daily breakdown for the current month
+        const dailyResult = await db
+          .select({
+            day: sql<string>`TO_CHAR(${jobs.createdAt}, 'YYYY-MM-DD')`,
+            tokens: sql<number>`COALESCE(SUM(${jobs.aiTotalTokens}), 0)::int`,
+            cost: sql<string>`COALESCE(SUM(${jobs.aiEstimatedCostUsd}), 0)::numeric(12,6)`,
+            jobCount: sql<number>`COUNT(*)::int`,
+          })
+          .from(jobs)
+          .where(
+            and(
+              sql`(${jobs.payload}->>'userId')::text = ${user.id}`,
+              gte(jobs.createdAt, startOfMonth)
+            )
+          )
+          .groupBy(sql`TO_CHAR(${jobs.createdAt}, 'YYYY-MM-DD')`)
+          .orderBy(sql`TO_CHAR(${jobs.createdAt}, 'YYYY-MM-DD')`);
+
+        const daily = dailyResult.map(d => ({
+          date: d.day,
+          tokens: d.tokens,
+          cost: parseFloat(parseFloat(d.cost).toFixed(6)),
+          jobs: d.jobCount,
+        }));
+
         return reply.code(200).send({
           period: {
             start: startOfMonth.toISOString(),
@@ -99,6 +124,7 @@ export async function usageRoutes(fastify: FastifyInstance) {
             tokens: Math.min(100, (usedTokens / FREE_TIER.tokens) * 100),
             cost: Math.min(100, (usedCostUsd / FREE_TIER.costUsd) * 100),
           },
+          daily,
         });
       } catch (err: unknown) {
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {

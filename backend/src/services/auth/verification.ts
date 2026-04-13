@@ -121,15 +121,26 @@ export class VerificationService {
 
     this.failedAttempts.delete(userId);
 
-    // Update user status
-    await db
+    // Atomic status transition: only activate if still pending_verification
+    // Prevents double-activation race and ensures idempotent verification
+    const [activated] = await db
       .update(users)
       .set({
         emailVerified: true,
         status: 'active',
         updatedAt: new Date(),
       })
-      .where(eq(users.id, userId));
+      .where(and(
+        eq(users.id, userId),
+        eq(users.status, 'pending_verification'),
+      ))
+      .returning();
+
+    if (!activated) {
+      // User was already verified or status changed — still return true
+      // since the verification code itself was valid
+      logger.warn(`[Verification] Atomic status update matched 0 rows for user ${userId} (already active or status changed)`);
+    }
 
     return true;
   }

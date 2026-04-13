@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { cn } from '../../utils/cn';
 import { useAuth } from '../../contexts/AuthContext';
+import { toast } from '../ui/Toast';
 import { WizardShell } from './WizardShell';
 import { StepProfile } from './steps/StepProfile';
 import { StepGitHub } from './steps/StepGitHub';
@@ -22,7 +23,11 @@ export function ProfileSetupWizard({ onClose }: ProfileSetupWizardProps) {
       credentials: 'include',
       body: JSON.stringify({ name }),
     });
-    if (!res.ok) throw new Error('Failed');
+    if (!res.ok) {
+      toast('Profil kaydedilemedi. Tekrar deneyin.', 'error');
+      return;
+    }
+    toast('Profil kaydedildi.', 'success');
     setStep(1);
   }, []);
 
@@ -33,7 +38,11 @@ export function ProfileSetupWizard({ onClose }: ProfileSetupWizardProps) {
       credentials: 'include',
       body: JSON.stringify({ token }),
     });
-    if (!res.ok) throw new Error('Failed');
+    if (!res.ok) {
+      toast('GitHub baglantisi basarisiz.', 'error');
+      return;
+    }
+    toast('GitHub basariyla baglandi.', 'success');
   }, []);
 
   const handleAIKeySave = useCallback(async (provider: string, apiKey: string) => {
@@ -43,7 +52,11 @@ export function ProfileSetupWizard({ onClose }: ProfileSetupWizardProps) {
       credentials: 'include',
       body: JSON.stringify({ provider, apiKey }),
     });
-    if (!res.ok) throw new Error('Failed');
+    if (!res.ok) {
+      toast('AI anahtari kaydedilemedi.', 'error');
+      return;
+    }
+    toast('AI anahtari kaydedildi.', 'success');
   }, []);
 
   const handlePreferencesComplete = useCallback((locale: string) => {

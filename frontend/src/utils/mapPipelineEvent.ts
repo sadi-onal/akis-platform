@@ -74,7 +74,7 @@ export function mapStageToConversationStatus(stage: PipelineStage): Conversation
  * Maps a backend Pipeline to a ConversationListItem for the sidebar.
  */
 export function mapPipelineToConversationItem(pipeline: Pipeline): ConversationListItem {
-  const repoName = pipeline.protoConfig?.repoName ?? pipeline.title ?? 'Untitled';
+  const repoName = pipeline.protoConfig?.repoName ?? pipeline.title ?? 'Isimsiz';
   const owner = pipeline.protoOutput?.repo?.split('/')?.[0] ?? '';
 
   return {

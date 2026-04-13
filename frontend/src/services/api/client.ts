@@ -89,12 +89,77 @@ export const api = {
 
   // GET /api/usage/current-month
   getUsage: async (): Promise<{
-    usage: { totalTokens: number; estimatedCostUsd: number; jobCount: number };
+    period: { start: string; end: string };
+    usage: { inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; jobCount: number };
     freeQuota: { tokens: number; costUsd: number };
     used: { tokens: number; costUsd: number };
     remaining: { tokens: number; costUsd: number };
+    onDemand: { tokens: number; costUsd: number };
     percentUsed: { tokens: number; cost: number };
+    daily?: Array<{ date: string; tokens: number; cost: number; jobs: number }>;
   }> => {
     return httpClient.get('/api/usage/current-month');
+  },
+
+  // GET /api/billing/plan — current user plan + usage
+  getBillingPlan: async (): Promise<{
+    plan: {
+      planId: string;
+      tier: string;
+      name: string;
+      jobsPerDay: number;
+      maxTokenBudget: number;
+      maxAgents: number;
+      depthModesAllowed: string[];
+      maxOutputTokensPerJob: number;
+      passesAllowed: number;
+      priorityQueue: boolean;
+      priceMonthly: number;
+    };
+    usage: {
+      jobsToday: number;
+      tokensThisMonth: number;
+      jobsLimit: number;
+      tokenLimit: number;
+    };
+    unlimited: boolean;
+    role: string;
+  }> => {
+    return httpClient.get('/api/billing/plan');
+  },
+
+  // GET /api/billing/plans — all available plans
+  getAvailablePlans: async (): Promise<{
+    plans: Array<{
+      id: string;
+      tier: string;
+      name: string;
+      description: string | null;
+      jobsPerDay: number;
+      maxTokenBudget: number;
+      maxAgents: number;
+      depthModesAllowed: string[];
+      maxOutputTokensPerJob: number;
+      passesAllowed: number;
+      priorityQueue: boolean;
+      priceMonthly: number;
+      priceYearly: number | null;
+      isActive: boolean;
+    }>;
+  }> => {
+    return httpClient.get('/api/billing/plans');
+  },
+
+  // GET /api/billing/notifications
+  getBillingNotifications: async (): Promise<{
+    notifications: Array<{
+      id: string;
+      type: string;
+      payload: Record<string, unknown>;
+      readAt: string | null;
+      createdAt: string;
+    }>;
+  }> => {
+    return httpClient.get('/api/billing/notifications');
   },
 };

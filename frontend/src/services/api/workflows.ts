@@ -307,7 +307,7 @@ export function mapPipelineToWorkflow(pipeline: Pipeline): Workflow {
       pipeline.scribeConversation?.[0]?.type === 'user_idea' &&
       typeof (pipeline.scribeConversation[0] as Record<string, unknown>)?.content === 'string'
         ? ((pipeline.scribeConversation[0] as Record<string, unknown>).content as string).slice(0, 60)
-        : 'Untitled Workflow'
+        : 'Isimsiz Is Akisi'
     ),
     status: workflowStatus,
     currentStage: pipeline.stage,
@@ -397,6 +397,15 @@ export const workflowsApi = {
     title: string;
   }> => {
     return http.get(`/api/pipelines/${pipelineId}/files-all`);
+  },
+
+  getProtoFiles: async (pipelineId: string): Promise<Record<string, string>> => {
+    try {
+      const res = await http.get<{ files: Record<string, string> }>(`/api/pipelines/${pipelineId}/files-all`);
+      return res.files ?? {};
+    } catch {
+      return {};
+    }
   },
 
   getFileContent: async (pipelineId: string, filePath: string): Promise<{

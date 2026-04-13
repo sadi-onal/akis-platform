@@ -113,6 +113,7 @@ export default function DocsPage() {
           <select
             value={activeSection}
             onChange={(e) => setActiveSection(e.target.value as SectionId)}
+            aria-label="Bolum sec"
             className="mb-6 block w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white md:hidden"
           >
             {sections.map((s) => (

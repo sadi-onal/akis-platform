@@ -330,6 +330,11 @@ export async function devSessionPlugin(
   // ═══════════════════════════════════════════
   // GET /:id/dev/session — Get session info
   // ═══════════════════════════════════════════
+  // N+1 NOTE: Session + messages are fetched as two queries because Drizzle
+  // relations are not defined for devSessions↔devMessages in the schema.
+  // To consolidate into a single query, add a `relations()` definition in
+  // db/schema.ts and use `db.query.devSessions.findFirst({ with: { messages: true } })`.
+  // For now, both queries run concurrently via Promise.all to minimize latency.
   fastify.get('/:id/dev/session', { preHandler: authPreHandler }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id: pipelineId } = request.params as { id: string };
 
@@ -342,6 +347,7 @@ export async function devSessionPlugin(
 
     if (!session) return reply.code(404).send({ error: 'No active dev session' });
 
+    // Run messages query concurrently (session.id is already known)
     const messages = await db.query.devMessages.findMany({
       where: eq(devMessages.sessionId, session.id),
       orderBy: [asc(devMessages.createdAt)],

@@ -1121,6 +1121,12 @@ export function WorkflowChatView({ workflow, onSendMessage, onApprove, onReject,
     }
   }, [input]);
 
+  // Auto-focus textarea on mount
+  useEffect(() => {
+    const timer = setTimeout(() => textareaRef.current?.focus(), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
   const handleSend = async (text?: string) => {
     const trimmed = (text || input).trim();
     if (!trimmed || sending) return;

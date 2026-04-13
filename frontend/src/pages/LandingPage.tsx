@@ -45,12 +45,14 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/docs')}
+              aria-label="Dokumantasyon sayfasina git"
               className="text-sm text-ak-text-secondary hover:text-ak-text-primary transition-colors"
             >
               Dokumantasyon
             </button>
             <motion.button
               onClick={() => navigate('/login')}
+              aria-label="Giris yap sayfasina git"
               className="rounded-lg bg-[#07D1AF] px-4 py-2 text-sm font-semibold text-[#0A1215]"
               whileHover={reduced ? {} : { scale: 1.05 }}
               whileTap={{ scale: 0.97 }}
@@ -81,6 +83,7 @@ export default function LandingPage() {
               </p>
               <motion.button
                 onClick={() => navigate('/signup')}
+                aria-label="Ucretsiz hesap olustur"
                 className="rounded-xl bg-[#07D1AF] px-10 py-4 text-sm font-bold text-[#0A1215] shadow-lg shadow-[#07D1AF]/20"
                 whileHover={reduced ? {} : { scale: 1.05, boxShadow: '0 0 40px rgba(7,209,175,0.3)' }}
                 whileTap={{ scale: 0.97 }}

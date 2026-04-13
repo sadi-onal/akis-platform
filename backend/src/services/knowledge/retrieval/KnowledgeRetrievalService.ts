@@ -157,35 +157,35 @@ export class KnowledgeRetrievalService {
       const queryEmbedding = await embeddingService.embed(query);
       const vectorStr = `[${queryEmbedding.join(',')}]`;
 
-      // Build WHERE conditions
-      const whereClauses: string[] = ["d.status IN ('approved', 'proposed')", 'c.embedding IS NOT NULL'];
-      const params: unknown[] = [];
+      // Build WHERE conditions using parameterized sql`` tagged template
+      const conditions = [
+        sql`d.status IN ('approved', 'proposed')`,
+        sql`c.embedding IS NOT NULL`,
+      ];
 
       if (filters?.workspaceId) {
-        params.push(filters.workspaceId);
-        whereClauses.push(`d.workspace_id = $${params.length}::uuid`);
+        conditions.push(sql`d.workspace_id = ${filters.workspaceId}::uuid`);
       }
       if (filters?.projectId) {
-        params.push(filters.projectId);
-        whereClauses.push(`d.project_id = $${params.length}::uuid`);
+        conditions.push(sql`d.project_id = ${filters.projectId}::uuid`);
       }
       if (filters?.agentType) {
-        params.push(filters.agentType);
-        whereClauses.push(`d.agent_type = $${params.length}`);
+        conditions.push(sql`d.agent_type = ${filters.agentType}`);
       }
 
-      const whereClause = whereClauses.join(' AND ');
+      const whereClause = sql.join(conditions, sql` AND `);
 
       // pgvector cosine distance: <=> operator, similarity = 1 - distance
-      const results = await db.execute(sql.raw(`
+      // All interpolated values are parameterized via Drizzle's sql`` tagged template
+      const results = await db.execute(sql`
         SELECT c.id AS chunk_id, c.content, c.document_id, d.title, d.source_path, d.doc_type,
-               1 - (c.embedding <=> '${vectorStr}'::vector) AS similarity
+               1 - (c.embedding <=> ${vectorStr}::vector) AS similarity
         FROM knowledge_chunks c
         JOIN knowledge_documents d ON c.document_id = d.id
         WHERE ${whereClause}
-        ORDER BY c.embedding <=> '${vectorStr}'::vector
+        ORDER BY c.embedding <=> ${vectorStr}::vector
         LIMIT ${maxResults}
-      `));
+      `);
 
       const rows = results.rows as Array<{
         chunk_id: string; content: string; document_id: string;

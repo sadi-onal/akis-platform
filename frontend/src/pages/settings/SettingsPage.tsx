@@ -1,17 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/useI18n';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { toast } from '../../components/ui/Toast';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { api } from '../../services/api/client';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'profile' | 'ai-keys' | 'pipeline-stats' | 'integrity' | 'integrations';
+type Tab = 'profile' | 'ai-keys' | 'usage' | 'plan' | 'pipeline-stats' | 'integrity' | 'integrations';
 
 interface ProfileData {
   id: string;
@@ -127,9 +128,12 @@ function formatDate(iso: string): string {
 export default function SettingsPage() {
   const { user } = useAuth();
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab: Tab = tabParam === 'ai-keys' ? 'ai-keys'
+    : tabParam === 'usage' ? 'usage'
+    : tabParam === 'plan' ? 'plan'
     : tabParam === 'pipeline-stats' ? 'pipeline-stats'
     : tabParam === 'integrity' ? 'integrity'
     : tabParam === 'integrations' ? 'integrations'
@@ -139,17 +143,37 @@ export default function SettingsPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-ak-bg">
-      <div className="mx-auto w-full max-w-2xl px-4 py-8">
-        <h1 className="mb-1 text-lg font-semibold text-ak-text-primary">{t('settings.title')}</h1>
-        <p className="mb-5 text-xs text-ak-text-tertiary">{t('settings.subtitle')}</p>
+      {/* ── Header ─────────────────────────── */}
+      <div className="sticky top-0 z-20 border-b border-ak-border bg-ak-bg/80 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4 py-3">
+          <button
+            onClick={() => navigate('/chat')}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ak-text-secondary hover:bg-ak-surface-2 hover:text-ak-text-primary transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            {t('settings.backToChat')}
+          </button>
+          <div className="flex-1" />
+          <h1 className="text-sm font-semibold text-ak-text-primary">{t('settings.title')}</h1>
+        </div>
+      </div>
 
+      <div className="mx-auto w-full max-w-2xl px-4 py-6">
         {/* Tab bar */}
-        <div className="mb-6 flex gap-1 rounded-lg border border-ak-border bg-ak-surface p-1">
+        <div className="mb-6 flex gap-1 overflow-x-auto rounded-lg border border-ak-border bg-ak-surface p-1 scrollbar-none">
           <TabButton active={activeTab === 'profile'} onClick={() => setTab('profile')}>
             {t('settings.tab.profile')}
           </TabButton>
           <TabButton active={activeTab === 'ai-keys'} onClick={() => setTab('ai-keys')}>
             {t('settings.tab.aiKeys')}
+          </TabButton>
+          <TabButton active={activeTab === 'usage'} onClick={() => setTab('usage')}>
+            {t('settings.tab.usage')}
+          </TabButton>
+          <TabButton active={activeTab === 'plan'} onClick={() => setTab('plan')}>
+            {t('settings.tab.plan')}
           </TabButton>
           <TabButton active={activeTab === 'pipeline-stats'} onClick={() => setTab('pipeline-stats')}>
             {t('settings.tab.pipelineStats')}
@@ -166,6 +190,8 @@ export default function SettingsPage() {
           <div key={activeTab} className="animate-in fade-in slide-in-from-bottom-2 duration-200">
             {activeTab === 'profile' && <ProfileTab />}
             {activeTab === 'ai-keys' && <AIKeysTab user={user} />}
+            {activeTab === 'usage' && <UsageTab />}
+            {activeTab === 'plan' && <PlanTab />}
             {activeTab === 'pipeline-stats' && <PipelineStatsTab />}
             {activeTab === 'integrity' && <IntegrityTab />}
             {activeTab === 'integrations' && <IntegrationsTab />}
@@ -181,7 +207,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     <button
       onClick={onClick}
       className={cn(
-        'flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+        'flex-shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
         active
           ? 'bg-ak-surface-2 text-ak-text-primary shadow-sm'
           : 'text-ak-text-tertiary hover:text-ak-text-secondary',
@@ -918,60 +944,67 @@ function IntegrityTab() {
   }
 
   return (
-    <>
+    <div className="space-y-4">
+      {/* Explanation banner */}
+      <div className="rounded-xl border border-ak-primary/20 bg-ak-primary/5 p-4">
+        <p className="text-xs leading-relaxed text-ak-text-secondary">
+          <span className="font-semibold text-ak-primary">Agent Kalite Metrikleri</span> — Pipeline'larinizda calisan 3 agent'in (Scribe, Proto, Trace) performansini izleyin. Spec uyumlulugu agent ciktisinin isteklerinize ne kadar uygun oldugunu, guven trendi ise zamana gore kalite degisimini gosterir.
+        </p>
+      </div>
+
       {/* Spec Compliance */}
-      <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('integrity.compliance')}</h2>
-      <div className="mb-6 flex justify-center gap-8">
-        {(['scribe', 'proto', 'trace'] as const).map((agent) => (
-          <ComplianceCircle key={agent} label={agent} value={data.avgSpecCompliance[agent]} />
-        ))}
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+        <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.compliance')}</h2>
+        <p className="mb-4 text-[11px] text-ak-text-tertiary">Her agent'in urettigi ciktinin spec'e ne oranda uygun oldugu</p>
+        <div className="flex justify-center gap-8">
+          {(['scribe', 'proto', 'trace'] as const).map((agent) => (
+            <ComplianceCircle key={agent} label={agent} value={data.avgSpecCompliance[agent]} />
+          ))}
+        </div>
       </div>
 
       {/* Confidence Trend */}
       {data.confidenceTrend.length > 0 && (
-        <>
-          <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('integrity.confidence')}</h2>
-          <div className="mb-6 rounded-xl border border-ak-border bg-ak-surface p-4">
-            <ConfidenceChart trend={data.confidenceTrend} />
-          </div>
-        </>
+        <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+          <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.confidence')}</h2>
+          <p className="mb-3 text-[11px] text-ak-text-tertiary">Son 30 gunde her agent'in guven skorundaki degisim</p>
+          <ConfidenceChart trend={data.confidenceTrend} />
+        </div>
       )}
 
       {/* Criteria Coverage */}
       {data.criteriaStats.totalCriteria > 0 && (
-        <>
-          <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('integrity.coverage')}</h2>
-          <div className="mb-6 rounded-xl border border-ak-border bg-ak-surface p-4">
-            <div className="h-6 rounded-full bg-ak-surface-2 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all"
-                style={{ width: `${data.criteriaStats.coverageRate}%` }}
-              />
-            </div>
-            <p className="mt-2 text-xs text-ak-text-secondary text-center">
-              {data.criteriaStats.coveredCriteria}/{data.criteriaStats.totalCriteria} criteria covered ({data.criteriaStats.coverageRate}%)
-            </p>
+        <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+          <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.coverage')}</h2>
+          <p className="mb-3 text-[11px] text-ak-text-tertiary">Trace agent'in olusturdugu testlerin kabul kriterlerini kapsama orani</p>
+          <div className="h-4 rounded-full bg-ak-surface-2 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all"
+              style={{ width: `${data.criteriaStats.coverageRate}%` }}
+            />
           </div>
-        </>
+          <p className="mt-2 text-xs text-ak-text-secondary text-center">
+            {data.criteriaStats.coveredCriteria}/{data.criteriaStats.totalCriteria} kriter karsilandi ({data.criteriaStats.coverageRate}%)
+          </p>
+        </div>
       )}
 
       {/* Top Assumptions */}
       {data.assumptionStats.topAssumptions.length > 0 && (
-        <>
-          <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('integrity.assumptions')}</h2>
-          <div className="mb-6 rounded-xl border border-ak-border bg-ak-surface p-4">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ak-text-tertiary">
-              {data.assumptionStats.totalTracked} tracked ({data.assumptionStats.avgPerPipeline.toFixed(1)} avg/pipeline)
-            </p>
-            <ol className="list-decimal list-inside space-y-1">
-              {data.assumptionStats.topAssumptions.map((a, i) => (
-                <li key={i} className="text-xs text-ak-text-secondary">{a}</li>
-              ))}
-            </ol>
-          </div>
-        </>
+        <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+          <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.assumptions')}</h2>
+          <p className="mb-3 text-[11px] text-ak-text-tertiary">Agent'larin pipeline sirasinda yaptigi en sik varsayimlar</p>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ak-text-tertiary">
+            Toplam: {data.assumptionStats.totalTracked} (pipeline basina ort. {data.assumptionStats.avgPerPipeline.toFixed(1)})
+          </p>
+          <ol className="list-decimal list-inside space-y-1.5">
+            {data.assumptionStats.topAssumptions.map((a, i) => (
+              <li key={i} className="text-xs text-ak-text-secondary leading-relaxed">{a}</li>
+            ))}
+          </ol>
+        </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -1492,6 +1525,264 @@ function SlackSection() {
       >
         {t('integrations.slack.connectButton')}
       </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Usage Tab                                                          */
+/* ------------------------------------------------------------------ */
+
+function UsageTab() {
+  const { t } = useI18n();
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.getUsage>> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getUsage().then(setData).catch(() => toast('Kullanim verisi alinamadi', 'error')).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="space-y-4"><Skeleton className="h-32 w-full rounded-xl" /><Skeleton className="h-48 w-full rounded-xl" /></div>;
+
+  if (!data) return (
+    <div className="rounded-xl border border-ak-border bg-ak-surface p-8 text-center">
+      <p className="text-sm text-ak-text-tertiary">{t('settings.usage.noData')}</p>
+    </div>
+  );
+
+  const pctTokens = Math.min(100, data.percentUsed.tokens);
+  const pctCost = Math.min(100, data.percentUsed.cost);
+
+  return (
+    <div className="space-y-4">
+      {/* Period info */}
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+        <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.usage.title')}</h2>
+        <p className="mb-4 text-[11px] text-ak-text-tertiary">
+          {t('settings.usage.period')}: {new Date(data.period.start).toLocaleDateString('tr-TR')} — {new Date(data.period.end).toLocaleDateString('tr-TR')}
+        </p>
+
+        {/* Top stats */}
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          <UsageStatCard label={t('settings.usage.jobs')} value={String(data.usage.jobCount)} icon="&#9889;" color="text-yellow-400" />
+          <UsageStatCard label={t('settings.usage.tokens')} value={formatTokens(data.usage.totalTokens)} icon="&#9881;" color="text-blue-400" />
+          <UsageStatCard label={t('settings.usage.cost')} value={`$${data.usage.estimatedCostUsd.toFixed(4)}`} icon="&#36;" color="text-emerald-400" />
+        </div>
+
+        {/* Token progress bar */}
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-ak-text-secondary">{t('settings.usage.tokens')}</span>
+              <span className="text-xs font-mono text-ak-text-tertiary">{formatTokens(data.used.tokens)} / {formatTokens(data.freeQuota.tokens)}</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-ak-surface-2">
+              <div
+                className={cn('h-full rounded-full transition-all duration-500', pctTokens > 90 ? 'bg-red-500' : pctTokens > 70 ? 'bg-yellow-500' : 'bg-ak-primary')}
+                style={{ width: `${pctTokens}%` }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-ak-text-secondary">{t('settings.usage.cost')}</span>
+              <span className="text-xs font-mono text-ak-text-tertiary">${data.used.costUsd.toFixed(4)} / ${data.freeQuota.costUsd.toFixed(2)}</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-ak-surface-2">
+              <div
+                className={cn('h-full rounded-full transition-all duration-500', pctCost > 90 ? 'bg-red-500' : pctCost > 70 ? 'bg-yellow-500' : 'bg-emerald-500')}
+                style={{ width: `${pctCost}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Breakdown */}
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+        <h3 className="mb-3 text-xs font-semibold text-ak-text-primary">Detayli Dagilim</h3>
+        <div className="space-y-2">
+          <BreakdownRow label={t('settings.usage.inputTokens')} value={formatTokens(data.usage.inputTokens)} />
+          <BreakdownRow label={t('settings.usage.outputTokens')} value={formatTokens(data.usage.outputTokens)} />
+          <BreakdownRow label={t('settings.usage.freeQuota')} value={formatTokens(data.freeQuota.tokens)} accent />
+          <BreakdownRow label={t('settings.usage.remaining')} value={formatTokens(data.remaining.tokens)} accent={data.remaining.tokens > 0} warn={data.remaining.tokens === 0} />
+          {data.onDemand.tokens > 0 && (
+            <BreakdownRow label={t('settings.usage.onDemand')} value={formatTokens(data.onDemand.tokens)} warn />
+          )}
+        </div>
+      </div>
+
+      {/* Daily Activity */}
+      {data.daily && data.daily.length > 0 && (
+        <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+          <h3 className="mb-3 text-xs font-semibold text-ak-text-primary">Gunluk Aktivite</h3>
+          <DailyChart days={data.daily} />
+          <div className="mt-3 space-y-1.5">
+            {data.daily.slice().reverse().map((d) => (
+              <div key={d.date} className="flex items-center justify-between rounded-lg bg-ak-surface-2 px-3 py-1.5">
+                <span className="text-[11px] text-ak-text-secondary">{new Date(d.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}</span>
+                <div className="flex items-center gap-4">
+                  <span className="text-[10px] font-mono text-ak-text-tertiary">{d.jobs} is</span>
+                  <span className="text-[10px] font-mono text-blue-400">{formatTokens(d.tokens)}</span>
+                  <span className="text-[10px] font-mono text-emerald-400">${d.cost.toFixed(4)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DailyChart({ days }: { days: Array<{ date: string; tokens: number; cost: number; jobs: number }> }) {
+  const maxTokens = Math.max(...days.map(d => d.tokens), 1);
+  return (
+    <div className="flex items-end gap-1" style={{ height: 80 }}>
+      {days.map((d) => {
+        const h = Math.max(4, (d.tokens / maxTokens) * 100);
+        return (
+          <div key={d.date} className="group relative flex flex-1 flex-col items-center justify-end" style={{ height: '100%' }}>
+            <div
+              className="w-full rounded-t bg-ak-primary/60 hover:bg-ak-primary transition-colors cursor-default"
+              style={{ height: `${h}%`, minHeight: 4 }}
+            />
+            <span className="mt-1 text-[8px] text-ak-text-tertiary">{new Date(d.date).getDate()}</span>
+            {/* Tooltip */}
+            <div className="pointer-events-none absolute -top-10 left-1/2 z-10 hidden -translate-x-1/2 rounded bg-ak-bg px-2 py-1 text-[9px] text-ak-text-primary shadow-lg border border-ak-border group-hover:block whitespace-nowrap">
+              {formatTokens(d.tokens)} token &middot; {d.jobs} is
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function UsageStatCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
+  return (
+    <div className="rounded-lg border border-ak-border bg-ak-surface-2 p-3 text-center">
+      <span className={cn('text-lg', color)}>{icon}</span>
+      <p className="mt-1 text-base font-bold text-ak-text-primary">{value}</p>
+      <p className="text-[10px] text-ak-text-tertiary">{label}</p>
+    </div>
+  );
+}
+
+function BreakdownRow({ label, value, accent, warn }: { label: string; value: string; accent?: boolean; warn?: boolean }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-ak-surface-2 px-3 py-2">
+      <span className="text-xs text-ak-text-secondary">{label}</span>
+      <span className={cn('text-xs font-mono font-medium', warn ? 'text-red-400' : accent ? 'text-ak-primary' : 'text-ak-text-primary')}>{value}</span>
+    </div>
+  );
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Plan Tab                                                           */
+/* ------------------------------------------------------------------ */
+
+function PlanTab() {
+  const { t } = useI18n();
+  const [planData, setPlanData] = useState<Awaited<ReturnType<typeof api.getBillingPlan>> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getBillingPlan().then(setPlanData).catch(() => toast('Plan bilgisi alinamadi', 'error')).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="space-y-4"><Skeleton className="h-40 w-full rounded-xl" /><Skeleton className="h-32 w-full rounded-xl" /></div>;
+
+  if (!planData) return (
+    <div className="rounded-xl border border-ak-border bg-ak-surface p-8 text-center">
+      <p className="text-sm text-ak-text-tertiary">Plan bilgisi yuklenemedi</p>
+    </div>
+  );
+
+  const { plan, usage, unlimited, role } = planData;
+  const isAdmin = role === 'admin';
+
+  return (
+    <div className="space-y-4">
+      {/* Current plan card */}
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-ak-text-tertiary">{t('settings.plan.current')}</span>
+            <h2 className="text-xl font-bold text-ak-text-primary">{plan.name === 'Free' ? 'Ucretsiz' : plan.name}</h2>
+          </div>
+          <div className="flex flex-col items-end">
+            {plan.priceMonthly === 0 ? (
+              <span className="rounded-full bg-ak-primary/10 px-3 py-1 text-sm font-semibold text-ak-primary">{t('settings.plan.free')}</span>
+            ) : (
+              <>
+                <span className="text-lg font-bold text-ak-text-primary">${(plan.priceMonthly / 100).toFixed(0)}</span>
+                <span className="text-[10px] text-ak-text-tertiary">/ay</span>
+              </>
+            )}
+          </div>
+        </div>
+
+          {(unlimited || isAdmin) && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg bg-ak-primary/10 px-3 py-2">
+              <span className="text-sm">&#9733;</span>
+              <span className="text-xs font-medium text-ak-primary">
+                {isAdmin ? t('settings.plan.adminNote') : t('settings.plan.unlimited')}
+              </span>
+            </div>
+          )}
+
+        {/* Usage within plan */}
+        {usage && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-ak-surface-2 p-3">
+              <p className="text-[10px] text-ak-text-tertiary">Bugun</p>
+              <p className="text-sm font-bold text-ak-text-primary">{(usage as Record<string, number>).jobsUsedToday ?? usage.jobsToday ?? 0} <span className="text-[10px] font-normal text-ak-text-tertiary">/ {unlimited ? '∞' : ((usage as Record<string, number>).jobsLimit ?? plan.jobsPerDay)} is</span></p>
+            </div>
+            <div className="rounded-lg bg-ak-surface-2 p-3">
+              <p className="text-[10px] text-ak-text-tertiary">Bu Ay Token</p>
+              <p className="text-sm font-bold text-ak-text-primary">{formatTokens((usage as Record<string, number>).tokensUsedThisMonth ?? usage.tokensThisMonth ?? 0)} <span className="text-[10px] font-normal text-ak-text-tertiary">/ {unlimited ? '∞' : formatTokens((usage as Record<string, number>).tokensLimit ?? plan.maxTokenBudget)}</span></p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Plan limits */}
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+        <h3 className="mb-3 text-xs font-semibold text-ak-text-primary">Plan Limitleri</h3>
+        <div className="space-y-2">
+          <PlanLimitRow label={t('settings.plan.jobsPerDay')} value={unlimited ? '∞' : String(plan.jobsPerDay)} />
+          <PlanLimitRow label={t('settings.plan.tokenBudget')} value={unlimited ? '∞' : formatTokens(plan.maxTokenBudget)} />
+          <PlanLimitRow label={t('settings.plan.maxAgents')} value={unlimited ? '∞' : String(plan.maxAgents)} />
+          <PlanLimitRow label={t('settings.plan.depthModes')} value={plan.depthModesAllowed.join(', ')} />
+          <PlanLimitRow label={t('settings.plan.maxOutput')} value={unlimited ? '∞' : formatTokens(plan.maxOutputTokensPerJob)} />
+          <PlanLimitRow label={t('settings.plan.passes')} value={unlimited ? '∞' : String(plan.passesAllowed)} />
+          <PlanLimitRow label={t('settings.plan.priorityQueue')} value={plan.priorityQueue || unlimited ? 'Evet' : 'Hayir'} highlight={Boolean(plan.priorityQueue || unlimited)} />
+        </div>
+      </div>
+
+      {/* Upgrade placeholder */}
+      {plan.tier === 'free' && !unlimited && (
+        <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-5 text-center">
+          <p className="text-xs text-ak-text-tertiary">{t('settings.plan.upgrade')}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanLimitRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-ak-surface-2 px-3 py-2">
+      <span className="text-xs text-ak-text-secondary">{label}</span>
+      <span className={cn('text-xs font-mono font-medium', highlight ? 'text-ak-primary' : 'text-ak-text-primary')}>{value}</span>
     </div>
   );
 }

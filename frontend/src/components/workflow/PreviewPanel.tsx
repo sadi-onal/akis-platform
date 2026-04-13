@@ -49,17 +49,100 @@ function toSandpackFiles(raw: Record<string, string>): Record<string, string> {
     out[key.startsWith('/') ? key : `/${key}`] = value;
   }
 
-  // Map src/App.tsx → /App.tsx so it overrides Sandpack template's default App
-  const appTsx = out['/src/App.tsx'] ?? out['/src/App.jsx'];
-  const appKey = out['/src/App.tsx'] ? '/App.tsx' : out['/src/App.jsx'] ? '/App.jsx' : null;
-  if (appTsx && appKey && !out[appKey]) {
-    out[appKey] = appTsx;
+  // Sandpack react-ts template has a DEFAULT /App.tsx that shows "Hello world".
+  // We MUST override it with Proto's actual App component.
+  // Key: always set (no guard), so template default is replaced.
+
+  // 1. Map src/App.tsx|jsx|js → /App.tsx (ALWAYS override Sandpack template default)
+  // Critical: Sandpack react-ts template expects /App.tsx. If Proto generates .jsx,
+  // we MUST still write to /App.tsx to override the "Hello world" default.
+  let appMapped = false;
+  for (const srcPath of ['/src/App.tsx', '/src/App.jsx', '/src/App.js']) {
+    if (out[srcPath]) {
+      out['/App.tsx'] = out[srcPath];
+      appMapped = true;
+      break;
+    }
+  }
+  // Also check root-level App files (Proto might output without src/ prefix)
+  if (!appMapped) {
+    for (const rootPath of ['/App.tsx', '/App.jsx', '/App.js']) {
+      if (out[rootPath]) {
+        out['/App.tsx'] = out[rootPath];
+        appMapped = true;
+        break;
+      }
+    }
   }
 
-  // Map src/index.css or src/App.css → /styles.css so Sandpack picks it up
-  const cssFile = out['/src/index.css'] ?? out['/src/App.css'] ?? out['/src/styles.css'];
-  if (cssFile && !out['/styles.css']) {
-    out['/styles.css'] = cssFile;
+  // 2. If no App.tsx in src/, search deeper patterns
+  if (!appMapped) {
+    const appCandidates = [
+      '/src/pages/index.tsx', '/src/pages/Index.tsx', '/src/pages/Home.tsx',
+      '/src/pages/index.jsx', '/src/pages/Home.jsx',
+      '/src/components/App.tsx', '/src/components/App.jsx',
+      '/app/page.tsx', '/app/page.jsx',
+      '/src/app/App.tsx', '/src/app/App.jsx',
+    ];
+    for (const alt of appCandidates) {
+      if (out[alt]) {
+        out['/App.tsx'] = out[alt];
+        appMapped = true;
+        break;
+      }
+    }
+  }
+
+  // 3. Last resort: if still no /App.tsx, find ANY .tsx/.jsx that exports a component
+  if (!appMapped && !out['/App.tsx'] && !out['/App.jsx']) {
+    const tsxFiles = Object.keys(out).filter(k =>
+      (k.endsWith('.tsx') || k.endsWith('.jsx')) &&
+      k !== '/index.tsx' && k !== '/index.jsx' &&
+      !k.includes('main.')
+    );
+    if (tsxFiles.length === 1) {
+      out['/App.tsx'] = out[tsxFiles[0]];
+    } else {
+      // Multiple files — pick the one with 'App' or 'Home' or 'Page' in name
+      const best = tsxFiles.find(k => /\/(App|Home|Page|Main|Index)\./i.test(k));
+      if (best) out['/App.tsx'] = out[best];
+      else if (tsxFiles[0]) out['/App.tsx'] = out[tsxFiles[0]];
+    }
+  }
+
+  // 4. Map entry points: src/main.tsx → /index.tsx
+  for (const srcPath of ['/src/main.tsx', '/src/main.jsx', '/src/index.tsx', '/src/index.jsx']) {
+    if (out[srcPath]) {
+      const ext = srcPath.endsWith('x') ? 'tsx' : 'jsx';
+      out[`/index.${ext}`] = out[srcPath];
+      break;
+    }
+  }
+
+  // 5. Map ALL CSS files (not just one)
+  for (const cssPath of ['/src/index.css', '/src/App.css', '/src/styles.css', '/src/global.css']) {
+    if (out[cssPath]) {
+      const targetName = cssPath.split('/').pop()!;
+      out[`/${targetName}`] = out[cssPath];
+    }
+  }
+
+  // 6. Map src/** → /** for imports to work
+  const srcPrefixes = ['/src/components/', '/src/lib/', '/src/utils/', '/src/hooks/', '/src/types/', '/src/styles/', '/src/context/', '/src/services/'];
+  for (const [key, value] of Object.entries(out)) {
+    for (const prefix of srcPrefixes) {
+      if (key.startsWith(prefix) && !out[key.replace('/src/', '/')]) {
+        out[key.replace('/src/', '/')] = value;
+      }
+    }
+  }
+
+  // 7. Final safety net: ensure /App.tsx exists (overrides Sandpack "Hello world")
+  if (!out['/App.tsx'] && out['/App.jsx']) {
+    out['/App.tsx'] = out['/App.jsx'];
+  }
+  if (!out['/App.tsx'] && out['/App.js']) {
+    out['/App.tsx'] = out['/App.js'];
   }
 
   return out;
@@ -189,9 +272,9 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
   }, [files]);
 
   const tabItems: { id: PanelTab; label: string; icon: string; count?: number }[] = [
-    { id: 'preview', label: 'Preview', icon: '▶' },
-    { id: 'console', label: 'Console', icon: '>', count: activities?.length },
-    { id: 'files', label: 'Files', icon: '📁', count: files ? Object.keys(files).length : 0 },
+    { id: 'preview', label: 'Onizleme', icon: '▶' },
+    { id: 'console', label: 'Konsol', icon: '>', count: activities?.length },
+    { id: 'files', label: 'Dosyalar', icon: '📁', count: files ? Object.keys(files).length : 0 },
   ];
 
   // Sandpack template: provides runtime (React, bundler) — our files override its defaults
@@ -256,7 +339,7 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
 
       {/* ── TAB: Preview ─────────────────────── */}
       {tab === 'preview' && (
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-ak-bg p-2">
+        <div className="relative flex-1 overflow-hidden bg-ak-bg" style={{ minHeight: 0 }}>
           {externalLoading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-ak-surface gap-3">
               <div className="relative h-8 w-8">
@@ -282,34 +365,44 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
 
           {files && !externalLoading && analysis?.capability === 'sandpack' && sandpackFiles && (
             <div
-              className="overflow-hidden transition-all duration-300"
-              style={view === 'mobile'
-                ? { width: 390, height: 844, maxHeight: '100%', border: '8px solid var(--ak-border)', borderRadius: 32, margin: '16px auto', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }
-                : { width: '100%', height: '100%' }
-              }
+              className={cn(
+                'absolute inset-0 overflow-hidden',
+                view === 'mobile' && 'flex items-center justify-center p-4',
+              )}
             >
-              <SandpackProvider
-                template={template}
-                files={sandpackFiles}
-                theme={akisSandpackTheme}
-                options={{
-                  activeFile: findMainFile(sandpackFiles),
-                  visibleFiles: Object.keys(sandpackFiles).slice(0, 8),
-                  recompileMode: 'delayed',
-                  recompileDelay: 500,
-                }}
-                customSetup={{
-                  dependencies: extractDependencies(files),
-                }}
+              <div
+                className={cn(
+                  'h-full',
+                  view === 'mobile' ? 'w-full max-w-sm' : 'w-full',
+                )}
+                style={view === 'mobile'
+                  ? { border: '4px solid var(--ak-border)', borderRadius: 24, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }
+                  : undefined
+                }
               >
-                <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0 }}>
-                  <SandpackPreviewEmbed
-                    style={{ height: '100%' }}
-                    showOpenInCodeSandbox={false}
-                    showRefreshButton
-                  />
-                </SandpackLayout>
-              </SandpackProvider>
+                <SandpackProvider
+                  template={template}
+                  files={sandpackFiles}
+                  theme={akisSandpackTheme}
+                  options={{
+                    activeFile: findMainFile(sandpackFiles),
+                    visibleFiles: Object.keys(sandpackFiles).slice(0, 8),
+                    recompileMode: 'delayed',
+                    recompileDelay: 500,
+                  }}
+                  customSetup={{
+                    dependencies: extractDependencies(files),
+                  }}
+                >
+                  <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0 }}>
+                    <SandpackPreviewEmbed
+                      style={{ height: '100%', width: '100%' }}
+                      showOpenInCodeSandbox={false}
+                      showRefreshButton
+                    />
+                  </SandpackLayout>
+                </SandpackProvider>
+              </div>
             </div>
           )}
         </div>
@@ -334,11 +427,11 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
           </div>
           <div className="flex items-center justify-between border-t border-ak-border bg-ak-surface px-3 py-1.5">
             <span className="font-mono text-[10px] text-ak-text-tertiary">
-              {activities?.length ?? 0} log entries
+              {activities?.length ?? 0} log kaydi
             </span>
             {createdFiles && createdFiles.length > 0 && (
               <span className="font-mono text-[10px] text-green-400">
-                {createdFiles.length} files created
+                {createdFiles.length} dosya olusturuldu
               </span>
             )}
           </div>
@@ -409,7 +502,7 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
                     {getFileIcon(selectedFile).icon}
                   </span>
                   <span className="truncate font-mono text-xs text-ak-text-primary">{selectedFile}</span>
-                  <span className="ml-auto text-[10px] text-ak-text-tertiary">{countLines(files[selectedFile])} lines</span>
+                  <span className="ml-auto text-[10px] text-ak-text-tertiary">{countLines(files[selectedFile])} satir</span>
                 </div>
                 <pre className="flex-1 overflow-auto p-3 font-mono text-xs leading-relaxed text-ak-text-secondary">
                   {files[selectedFile].split('\n').map((line, i) => (
@@ -433,7 +526,7 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
       {branch && tab === 'preview' && (
         <div className="flex items-center justify-between border-t border-ak-border px-3 py-1.5">
           <span className="font-mono text-[10px] text-ak-text-tertiary">⑂ {branch}</span>
-          <span className="text-[10px] text-ak-text-tertiary">Powered by Sandpack</span>
+          <span className="text-[10px] text-ak-text-tertiary">Sandpack</span>
         </div>
       )}
     </div>
