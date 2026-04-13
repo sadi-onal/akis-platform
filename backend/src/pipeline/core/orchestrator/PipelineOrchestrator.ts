@@ -21,6 +21,7 @@ import { createActivityEmitter, emitActivity, cleanupPipelineListeners } from '.
 import { withRetry } from '../retryWrapper.js';
 import { scoreScribeEffort, scoreProtoEffort, scoreTraceEffort } from '../effortScorer.js';
 import { logger } from '../../../lib/logger.js';
+import { PipelineKnowledgeIngester } from '../../../services/knowledge/ingestion/PipelineKnowledgeIngester.js';
 import type { ScribeAgent, ScribeState, ScribeResult } from '../../agents/scribe/ScribeAgent.js';
 import type { ProtoAgent } from '../../agents/proto/ProtoAgent.js';
 import type { TraceAgent } from '../../agents/trace/TraceAgent.js';
@@ -818,6 +819,23 @@ export class PipelineOrchestrator {
       progress: 100,
       timestamp: new Date().toISOString(),
     });
+
+    // Auto-ingest pipeline results into knowledge base (non-blocking)
+    const completedPipeline = await this.store.getById(pipelineId);
+    if (completedPipeline) {
+      new PipelineKnowledgeIngester().ingestPipelineResults({
+        pipelineId,
+        userId: completedPipeline.userId,
+        spec: completedPipeline.scribeOutput?.spec,
+        specMarkdown: completedPipeline.scribeOutput?.rawMarkdown,
+        protoFiles: completedPipeline.protoOutput?.files,
+        repoName: completedPipeline.protoConfig?.repoName as string | undefined,
+        repoOwner: completedPipeline.protoOutput?.repo?.split('/')[0],
+        branch: completedPipeline.protoOutput?.branch,
+        traceTestSummary: traceResult.data.testSummary,
+        traceCoverageMatrix: traceResult.data.coverageMatrix,
+      }).catch(err => logger.warn({ err, pipelineId }, '[Pipeline] Knowledge ingestion failed (non-fatal)'));
+    }
 
     return updated;
   }

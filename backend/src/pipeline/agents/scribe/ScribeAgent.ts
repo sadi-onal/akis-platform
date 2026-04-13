@@ -34,6 +34,8 @@ export interface ScribeState {
   pipelineId?: string;
   pendingQuestionIds: string[];
   answeredQuestionIds: string[];
+  /** RAG-injected knowledge context — appended to system prompts */
+  knowledgeContext?: string;
 }
 
 export type ScribeResult =
@@ -340,7 +342,10 @@ export class ScribeAgent {
     emit?.('ai_call', 'Claude AI ile fikir analiz ediliyor...', 25);
     let responseText: string;
     try {
-      responseText = await this.ai.generateText(CLARIFICATION_SYSTEM_PROMPT, userPrompt);
+      const systemPrompt = state.knowledgeContext
+        ? `${CLARIFICATION_SYSTEM_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${state.knowledgeContext}\n--- END KNOWLEDGE ---`
+        : CLARIFICATION_SYSTEM_PROMPT;
+      responseText = await this.ai.generateText(systemPrompt, userPrompt);
     } catch {
       emit?.('error', 'AI çağrısı başarısız oldu', 0);
       return {
@@ -441,7 +446,10 @@ export class ScribeAgent {
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
       try {
-        responseText = await this.ai.generateText(SPEC_GENERATION_SYSTEM_PROMPT, userPrompt);
+        const specSystemPrompt = state.knowledgeContext
+          ? `${SPEC_GENERATION_SYSTEM_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${state.knowledgeContext}\n--- END KNOWLEDGE ---`
+          : SPEC_GENERATION_SYSTEM_PROMPT;
+        responseText = await this.ai.generateText(specSystemPrompt, userPrompt);
       } catch {
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         emit?.('error', 'Spec üretimi AI çağrısı başarısız', 0);

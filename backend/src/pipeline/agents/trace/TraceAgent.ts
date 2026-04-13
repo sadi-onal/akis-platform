@@ -205,7 +205,7 @@ export class TraceAgent {
     emit?.('analyzing', `Test stratejisi belirleniyor (${files.length} dosya)`, 30);
 
     // Step 2: Generate tests via AI (with dedicated timeout)
-    const testsResult = await this.generateTests(files, input.spec, emit);
+    const testsResult = await this.generateTests(files, input.spec, emit, input.knowledgeContext);
     if (testsResult.type === 'error') {
       emit?.('error', 'Test üretimi başarısız oldu', 0);
       return testsResult;
@@ -456,6 +456,7 @@ After pushing, respond with a JSON summary:
     files: Array<{ filePath: string; content: string }>,
     spec?: StructuredSpec,
     emit?: ReturnType<typeof createActivityEmitter>,
+    knowledgeContext?: string,
   ): Promise<
     | { type: 'output'; data: Pick<TraceOutput, 'testFiles' | 'coverageMatrix' | 'testSummary'> }
     | { type: 'error'; error: PipelineError }
@@ -474,7 +475,10 @@ After pushing, respond with a JSON summary:
         } else {
           emit?.('ai_call', 'Playwright testleri oluşturuluyor', 45, undefined, attempt);
         }
-        const aiPromise = this.ai.generateText(TEST_GENERATION_PROMPT, userPrompt);
+        const traceSystemPrompt = knowledgeContext
+          ? `${TEST_GENERATION_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
+          : TEST_GENERATION_PROMPT;
+        const aiPromise = this.ai.generateText(traceSystemPrompt, userPrompt);
         responseText = await withAiTimeout(aiPromise, AI_CALL_TIMEOUT_MS);
         emit?.('parsing', 'Yanıt işleniyor', 65);
       } catch (err) {

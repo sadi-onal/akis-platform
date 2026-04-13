@@ -87,6 +87,7 @@ export interface ProtoInput {
   baseBranch?: string;
   dryRun?: boolean;
   pipelineId?: string;
+  knowledgeContext?: string;
 }
 
 export interface ProtoOutput {
@@ -119,6 +120,7 @@ export interface TraceInput {
   dryRun?: boolean;
   pipelineId?: string;
   cucumberEnabled?: boolean;
+  knowledgeContext?: string;
 }
 
 export interface TraceOutput {

@@ -1,8 +1,9 @@
 import { db } from '../../../db/client.js';
 import { knowledgeDocuments, knowledgeChunks } from '../../../db/schema.js';
 import { eq, and, ilike, desc, sql } from 'drizzle-orm';
-import type { RetrievalResult, RetrievalOptions } from './types.js';
-import { getPiriRAGService } from '../../rag/PiriRAGService.js';
+import type { RetrievalResult, RetrievalOptions, RetrievalFilter } from './types.js';
+import { getEmbeddingService } from '../../embedding/EmbeddingService.js';
+import { logger } from '../../../lib/logger.js';
 
 const DEFAULT_MAX_RESULTS = 10;
 const DEFAULT_MAX_TOKENS = 4000;
@@ -28,7 +29,7 @@ export class KnowledgeRetrievalService {
 
     const [keywordResults, semanticResults] = await Promise.all([
       this.searchKeyword(query, { ...options, maxResults: maxResults * 2, maxTokens: maxTokens * 2 }),
-      this.searchSemantic(query, maxResults * 2),
+      this.searchSemantic(query, maxResults * 2, options.filters),
     ]);
 
     const merged = this.mergeHybridResults(
@@ -56,6 +57,10 @@ export class KnowledgeRetrievalService {
 
     if (filters.workspaceId) {
       conditions.push(eq(knowledgeDocuments.workspaceId, filters.workspaceId));
+    }
+
+    if (filters.projectId) {
+      conditions.push(eq(knowledgeDocuments.projectId, filters.projectId));
     }
 
     if (filters.agentType) {
@@ -145,33 +150,68 @@ export class KnowledgeRetrievalService {
       .orderBy(knowledgeChunks.chunkIndex);
   }
 
-  protected async searchSemantic(query: string, maxResults: number): Promise<RetrievalResult[]> {
-    const piri = getPiriRAGService();
-    if (!piri) {
+  protected async searchSemantic(query: string, maxResults: number, filters?: RetrievalFilter): Promise<RetrievalResult[]> {
+    const embeddingService = getEmbeddingService();
+    if (!embeddingService) {
+      logger.debug('[KnowledgeRetrieval] Embedding service not available, skipping semantic search');
       return [];
     }
 
     try {
-      const semantic = await piri.search(query, maxResults);
-      return semantic.results.map((item, index) => {
-        const semanticScore = this.clampScore(item.score);
-        const idBase = this.hashText(`${item.source}:${item.content.slice(0, 120)}`);
-        return {
-          documentId: `semantic:${idBase}`,
-          chunkId: `semantic:${index}:${idBase}`,
-          content: item.content,
-          score: semanticScore,
-          keywordScore: 0,
-          semanticScore,
-          retrievalMethod: 'semantic',
-          provenance: {
-            title: item.source || 'Piri Semantic Search',
-            sourcePath: item.source || undefined,
-            docType: 'semantic_external',
-          },
-        };
-      });
-    } catch {
+      const queryEmbedding = await embeddingService.embed(query);
+      const vectorStr = `[${queryEmbedding.join(',')}]`;
+
+      // Build WHERE conditions
+      const whereClauses: string[] = ["d.status IN ('approved', 'proposed')", 'c.embedding IS NOT NULL'];
+      const params: unknown[] = [];
+
+      if (filters?.workspaceId) {
+        params.push(filters.workspaceId);
+        whereClauses.push(`d.workspace_id = $${params.length}::uuid`);
+      }
+      if (filters?.projectId) {
+        params.push(filters.projectId);
+        whereClauses.push(`d.project_id = $${params.length}::uuid`);
+      }
+      if (filters?.agentType) {
+        params.push(filters.agentType);
+        whereClauses.push(`d.agent_type = $${params.length}`);
+      }
+
+      const whereClause = whereClauses.join(' AND ');
+
+      // pgvector cosine distance: <=> operator, similarity = 1 - distance
+      const results = await db.execute(sql.raw(`
+        SELECT c.id AS chunk_id, c.content, c.document_id, d.title, d.source_path, d.doc_type,
+               1 - (c.embedding <=> '${vectorStr}'::vector) AS similarity
+        FROM knowledge_chunks c
+        JOIN knowledge_documents d ON c.document_id = d.id
+        WHERE ${whereClause}
+        ORDER BY c.embedding <=> '${vectorStr}'::vector
+        LIMIT ${maxResults}
+      `));
+
+      const rows = results.rows as Array<{
+        chunk_id: string; content: string; document_id: string;
+        title: string; source_path: string | null; doc_type: string; similarity: number;
+      }>;
+
+      return rows.map(row => ({
+        documentId: row.document_id,
+        chunkId: row.chunk_id,
+        content: row.content,
+        score: this.clampScore(row.similarity),
+        keywordScore: 0,
+        semanticScore: this.clampScore(row.similarity),
+        retrievalMethod: 'semantic' as const,
+        provenance: {
+          title: row.title,
+          sourcePath: row.source_path ?? undefined,
+          docType: row.doc_type,
+        },
+      }));
+    } catch (err) {
+      logger.warn(`[KnowledgeRetrieval] Semantic search failed: ${err instanceof Error ? err.message : String(err)}`);
       return [];
     }
   }

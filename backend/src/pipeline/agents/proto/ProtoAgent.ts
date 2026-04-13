@@ -149,7 +149,7 @@ export class ProtoAgent {
     // Fallback: legacy text-generation path
     // Step 1: Generate scaffold via AI
     emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor...', 20);
-    const scaffoldResult = await this.generateScaffold(input.spec);
+    const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
       emit?.('error', 'Scaffold üretimi başarısız oldu', 0);
       return scaffoldResult;
@@ -300,7 +300,7 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
   private async executeLegacy(input: ProtoInput, emit?: ReturnType<typeof createActivityEmitter>): Promise<ProtoResult> {
     // Re-enter the legacy flow from Step 1
     emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor (fallback)...', 20);
-    const scaffoldResult = await this.generateScaffold(input.spec);
+    const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
       emit?.('error', 'Scaffold üretimi başarısız oldu', 0);
       return scaffoldResult;
@@ -347,7 +347,8 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
   // ─── Scaffold Generation ────────────────────────
 
   private async generateScaffold(
-    spec: StructuredSpec
+    spec: StructuredSpec,
+    knowledgeContext?: string,
   ): Promise<
     | { type: 'output'; data: { files: ProtoOutput['files']; setupCommands: string[]; metadata: Omit<ProtoOutput['metadata'], 'committed'> } }
     | { type: 'error'; error: PipelineError }
@@ -372,7 +373,10 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
       try {
-        responseText = await this.ai.generateText(SCAFFOLD_SYSTEM_PROMPT, userPrompt);
+        const protoSystemPrompt = knowledgeContext
+          ? `${SCAFFOLD_SYSTEM_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
+          : SCAFFOLD_SYSTEM_PROMPT;
+        responseText = await this.ai.generateText(protoSystemPrompt, userPrompt);
       } catch (err) {
         logger.error(`[Proto] Attempt ${attempt + 1}: AI call error: ${err instanceof Error ? err.message : String(err)}`);
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
