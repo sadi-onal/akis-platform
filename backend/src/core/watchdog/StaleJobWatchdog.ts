@@ -58,7 +58,7 @@ export class StaleJobWatchdog {
         logger.info(`[StaleJobWatchdog] Cleaned up ${staleJobs.length} stale job(s)`);
       }
     } catch (error) {
-      console.error('[StaleJobWatchdog] Check failed:', error instanceof Error ? error.message : String(error));
+      logger.error(`[StaleJobWatchdog] Check failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

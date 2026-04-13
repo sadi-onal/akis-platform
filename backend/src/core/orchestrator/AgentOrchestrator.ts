@@ -263,7 +263,7 @@ export class AgentOrchestrator {
         kind: 'access',
       });
     } catch (error) {
-      console.error('Failed to resolve GitHub token:', error);
+      logger.error(`Failed to resolve GitHub token: ${error}`);
       return null;
     }
   }
@@ -477,7 +477,7 @@ export class AgentOrchestrator {
         }).where(eq(jobs.id, jobId));
         logger.debug(`[startJob] Persisted AI resolution: provider=${resolution.provider}, model=${resolution.model}, keySource=${resolution.keySource}, fallbackReason=${resolution.fallbackReason || 'none'}`);
       } catch (error) {
-        console.error(`[startJob] Failed to persist AI resolution: ${error instanceof Error ? error.message : String(error)}`);
+        logger.error(`[startJob] Failed to persist AI resolution: ${error instanceof Error ? error.message : String(error)}`);
         // Non-fatal: continue execution even if resolution persistence fails
       }
       
@@ -516,7 +516,7 @@ export class AgentOrchestrator {
               'Set SCRIBE_DEV_BOOTSTRAP_GITHUB_TOKEN (or GITHUB_TOKEN) in your .env when SCRIBE_DEV_GITHUB_BOOTSTRAP=true.'
             );
           }
-          console.warn(`[DevBootstrap] Using shared GitHub token for dry-run job ${jobId}`);
+          logger.warn(`[DevBootstrap] Using shared GitHub token for dry-run job ${jobId}`);
         }
         
         if (!userGitHubToken) {
@@ -538,7 +538,7 @@ export class AgentOrchestrator {
             await db.update(jobs).set({ mcpGatewayUrl: env.GITHUB_MCP_BASE_URL }).where(eq(jobs.id, jobId));
           } catch (error) {
             // Non-critical: log but don't fail job
-            console.warn(`Failed to store MCP gateway URL for job ${jobId}:`, error);
+            logger.warn(`Failed to store MCP gateway URL for job ${jobId}: ${error}`);
           }
         } else {
           throw new MissingDependencyError(
@@ -560,7 +560,7 @@ export class AgentOrchestrator {
           await db.update(jobs).set({ mcpGatewayUrl: env.GITHUB_MCP_BASE_URL }).where(eq(jobs.id, jobId));
         } catch (error) {
           // Non-critical: log but don't fail job
-          console.warn(`Failed to store MCP gateway URL for job ${jobId}:`, error);
+          logger.warn(`Failed to store MCP gateway URL for job ${jobId}: ${error}`);
         }
       }
 
@@ -584,7 +584,7 @@ export class AgentOrchestrator {
           } catch (planError) {
             // PR-2: Planning failure is fatal - throw immediately
             const errorMessage = planError instanceof Error ? planError.message : String(planError);
-            console.error(`[AgentOrchestrator] Planning failed for job ${jobId}:`, planError);
+            logger.error(`[AgentOrchestrator] Planning failed for job ${jobId}: ${planError}`);
             // S2.0.3: Emit error event
             traceRecorder.emitError(`Planning phase failed: ${errorMessage}`, 'planning', true, 'PLANNING_FAILED');
             throw new Error(`Planning phase failed: ${errorMessage}`);
@@ -611,7 +611,7 @@ export class AgentOrchestrator {
           } catch (dbError) {
             // PR-2: DB failure during plan persistence is fatal
             const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
-            console.error(`[AgentOrchestrator] Failed to persist plan for job ${jobId}:`, dbError);
+            logger.error(`[AgentOrchestrator] Failed to persist plan for job ${jobId}: ${dbError}`);
             throw new DatabaseError(`Failed to persist plan: ${errorMessage}`, dbError);
           }
 
@@ -625,7 +625,7 @@ export class AgentOrchestrator {
             await db.insert(jobAudits).values(planAudit);
           } catch (auditError) {
             // Audit failure is non-fatal but logged
-            console.warn(`[AgentOrchestrator] Failed to write plan audit for job ${jobId}:`, auditError);
+            logger.warn(`[AgentOrchestrator] Failed to write plan audit for job ${jobId}: ${auditError}`);
           }
           
           // S2.0.3: Planning stage completed
@@ -644,7 +644,7 @@ export class AgentOrchestrator {
         try {
           await traceRecorder.flush();
         } catch (flushError) {
-          console.warn(`[AgentOrchestrator] Failed to flush traces before approval wait for job ${jobId}:`, flushError);
+          logger.warn(`[AgentOrchestrator] Failed to flush traces before approval wait for job ${jobId}: ${flushError}`);
         }
         return;
       }
@@ -673,7 +673,7 @@ export class AgentOrchestrator {
           };
           traceRecorder.emitStage('init', 'completed', `Context assembled: ${assembled.layers.length} layers, ~${assembled.totalTokens} tokens`);
         } catch (contextError) {
-          console.warn(`[AgentOrchestrator] Context assembly failed (non-blocking): ${contextError instanceof Error ? contextError.message : String(contextError)}`);
+          logger.warn(`[AgentOrchestrator] Context assembly failed (non-blocking): ${contextError instanceof Error ? contextError.message : String(contextError)}`);
           traceRecorder.emitStage('init', 'completed', 'Context assembly failed (non-blocking), proceeding without enrichment');
         }
       }
@@ -699,7 +699,7 @@ export class AgentOrchestrator {
         await db.insert(jobAudits).values(executeAudit);
       } catch (auditError) {
         // Don't fail job if audit write fails
-        console.error(`Failed to write execute audit for job ${jobId}:`, auditError);
+        logger.error(`Failed to write execute audit for job ${jobId}: ${auditError}`);
       }
 
       // Phase 5.D + Phase 10: Tool-Augmented Reflection phase (if required)
@@ -754,7 +754,7 @@ export class AgentOrchestrator {
           };
         } catch (reflectError) {
           // If reflection fails, log but don't fail job
-          console.error(`Reflection failed for job ${jobId}:`, reflectError);
+          logger.error(`Reflection failed for job ${jobId}: ${reflectError}`);
           // Continue with execution result
         }
       }
@@ -815,7 +815,7 @@ export class AgentOrchestrator {
                 },
               },
             };
-            console.warn(`Validation failed for job ${jobId}: ${validationResult.summary}`);
+            logger.warn(`Validation failed for job ${jobId}: ${validationResult.summary}`);
           } else {
             finalResult = {
               ...(finalResult && typeof finalResult === 'object' ? finalResult : { result: finalResult }),
@@ -832,7 +832,7 @@ export class AgentOrchestrator {
           }
         } catch (validationError) {
           // If validation fails, log but don't fail job (unless critical)
-          console.error(`Validation phase failed for job ${jobId}:`, validationError);
+          logger.error(`Validation phase failed for job ${jobId}: ${validationError}`);
           finalResult = {
             ...(finalResult && typeof finalResult === 'object' ? finalResult : { result: finalResult }),
             validation: {
@@ -872,7 +872,7 @@ export class AgentOrchestrator {
       try {
         await traceRecorder.flush();
       } catch (flushError) {
-        console.error(`[Orchestrator] Trace flush failed for job ${jobId}, continuing to completion:`, flushError);
+        logger.error(`[Orchestrator] Trace flush failed for job ${jobId}, continuing to completion: ${flushError}`);
       }
 
       // Persist AI metrics (best-effort)
@@ -897,7 +897,7 @@ export class AgentOrchestrator {
               .where(eq(jobs.id, jobId));
           }
         } catch (metricsError) {
-          console.warn(`[Orchestrator] Failed to persist AI metrics for job ${jobId}:`, metricsError);
+          logger.warn(`[Orchestrator] Failed to persist AI metrics for job ${jobId}: ${metricsError}`);
         }
       }
 
@@ -954,7 +954,7 @@ export class AgentOrchestrator {
         await traceRecorder.flush();
       } catch (traceError) {
         // Don't fail because trace flush failed
-        console.error(`Failed to flush traces for job ${jobId}:`, traceError);
+        logger.error(`Failed to flush traces for job ${jobId}: ${traceError}`);
       }
 
       if (aiMetrics) {
@@ -978,7 +978,7 @@ export class AgentOrchestrator {
               .where(eq(jobs.id, jobId));
           }
         } catch (metricsError) {
-          console.warn(`Failed to persist AI metrics for job ${jobId}:`, metricsError);
+          logger.warn(`Failed to persist AI metrics for job ${jobId}: ${metricsError}`);
         }
       }
       
@@ -988,7 +988,7 @@ export class AgentOrchestrator {
         await this.failJob(jobId, error);
       } catch (failError) {
         // If failJob itself fails, log but don't mask original error
-        console.error(`Failed to mark job ${jobId} as failed:`, failError);
+        logger.error(`Failed to mark job ${jobId} as failed: ${failError}`);
       }
       throw error;
     }
@@ -1190,7 +1190,7 @@ export class AgentOrchestrator {
     // FAIL if no key available for chosen provider
     if (!apiKey) {
       const errorMessage = `No API key configured for ${providerCandidate}. Please add your ${providerCandidate === 'openai' ? 'OpenAI' : 'OpenRouter'} API key in Settings > API Keys.`;
-      console.error(`[resolveAiServiceForJob] ${errorMessage}`);
+      logger.error(`[resolveAiServiceForJob] ${errorMessage}`);
       throw new MissingAIKeyError(providerCandidate, errorMessage);
     }
 
@@ -1212,7 +1212,7 @@ export class AgentOrchestrator {
       const modelProvider = detectProviderFromModel(modelOverride);
       if (modelProvider && modelProvider !== providerCandidate) {
         // Model belongs to wrong provider - use provider's default
-        console.warn(`[resolveAiServiceForJob] Model "${modelOverride}" is for ${modelProvider}, but provider is ${providerCandidate}. Using default: ${RECOMMENDED_MODELS[providerCandidate]}`);
+        logger.warn(`[resolveAiServiceForJob] Model "${modelOverride}" is for ${modelProvider}, but provider is ${providerCandidate}. Using default: ${RECOMMENDED_MODELS[providerCandidate]}`);
         resolvedModel = RECOMMENDED_MODELS[providerCandidate];
       } else {
         resolvedModel = modelOverride;
@@ -1412,7 +1412,7 @@ export class AgentOrchestrator {
       }
     } catch (qualityError) {
       // Log but don't fail job completion due to quality computation error
-      console.warn('[AgentOrchestrator] Quality score computation failed:', qualityError);
+      logger.warn(`[AgentOrchestrator] Quality score computation failed: ${qualityError}`);
     }
 
     // M2-KI-4: Run verification gates with staged rollout policy.
@@ -1508,7 +1508,7 @@ export class AgentOrchestrator {
         throw verificationError;
       }
       // Other verification failures remain best-effort.
-      console.warn('[AgentOrchestrator] Verification gate check failed:', verificationError);
+      logger.warn(`[AgentOrchestrator] Verification gate check failed: ${verificationError}`);
     }
 
     // Update database with result and quality
@@ -1546,7 +1546,7 @@ export class AgentOrchestrator {
         }
       }
     } catch (crewErr) {
-      console.warn('[AgentOrchestrator] Crew notification on complete failed:', crewErr);
+      logger.warn(`[AgentOrchestrator] Crew notification on complete failed: ${crewErr}`);
     }
   }
 
@@ -1676,7 +1676,7 @@ export class AgentOrchestrator {
         hint: error.hint,
       });
       // Safe log (no secrets) for operators
-      console.error(
+      logger.error(
         `[AgentOrchestrator] Job ${jobId} MCP connection failed [${error.correlationId}] ` +
           `code=${error.code} cause=${error.cause || 'unknown'} gateway=${error.gatewayUrl || 'unknown'}`
       );
@@ -1700,7 +1700,7 @@ export class AgentOrchestrator {
         data: error.mcpData,
       });
       // Safe log (no secrets) for operators
-      console.error(
+      logger.error(
         `[AgentOrchestrator] Job ${jobId} failed with MCP error [${error.correlationId}] ` +
           `code=${error.mcpCode} method=${error.mcpMethod}: ${error.message}`
       );
@@ -1798,7 +1798,7 @@ export class AgentOrchestrator {
         }
       }
     } catch (crewErr) {
-      console.warn('[AgentOrchestrator] Crew notification on fail failed:', crewErr);
+      logger.warn(`[AgentOrchestrator] Crew notification on fail failed: ${crewErr}`);
     }
   }
 
@@ -1853,7 +1853,7 @@ export class AgentOrchestrator {
 
     // Continue execution in background (non-blocking)
     this.continueJobExecution(jobId).catch(error => {
-      console.error(`Failed to continue job ${jobId} after approval:`, error);
+      logger.error(`Failed to continue job ${jobId} after approval: ${error}`);
     });
   }
 

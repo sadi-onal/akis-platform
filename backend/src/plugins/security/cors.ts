@@ -1,6 +1,7 @@
 import cors from '@fastify/cors';
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
+import { logger } from '../../lib/logger.js';
 
 export interface CorsPluginOptions {
   origins: string[];
@@ -33,7 +34,7 @@ export const corsPlugin = fp<CorsPluginOptions>(
 
     // Security: credentials + wildcard origin is dangerous — disable credentials if wildcard
     if (allowAll && process.env.NODE_ENV === 'production') {
-      console.warn('[CORS] Wildcard origin (*) with credentials is insecure in production. Disabling credentials.');
+      logger.warn('[CORS] Wildcard origin (*) with credentials is insecure in production. Disabling credentials.');
     }
 
     await fastify.register(cors, {

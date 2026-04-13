@@ -60,7 +60,7 @@ export class SmtpEmailService extends BaseEmailService {
       await this.transporter.verify();
       return true;
     } catch (err) {
-      console.error('[SmtpEmailService] SMTP connection verification failed:', err);
+      logger.error(`[SmtpEmailService] SMTP connection verification failed: ${err}`);
       return false;
     }
   }
@@ -89,7 +89,7 @@ export class SmtpEmailService extends BaseEmailService {
       };
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown SMTP error';
-      console.error(`[SmtpEmailService] Failed to send email: ${errMsg}, ${logCtx}`);
+      logger.error(`[SmtpEmailService] Failed to send email: ${errMsg}, ${logCtx}`);
 
       return {
         success: false,

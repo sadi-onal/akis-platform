@@ -14,6 +14,7 @@ import { cookieOpts, env } from '../lib/env.js';
 import { InviteService } from '../services/auth/invite.js';
 import type { EmailService } from '../services/email/index.js';
 import { sendError } from '../utils/errorHandler.js';
+import { logger } from '../lib/logger.js';
 
 // Validation schemas
 const CreateInviteSchema = z.object({
@@ -95,7 +96,7 @@ export async function registerInviteRoutes(
           return sendError(reply, request, 'EMAIL_ALREADY_ACTIVE', 'Bu e-posta adresi zaten aktif bir hesaba sahip');
         }
       }
-      console.error('[Invite] Failed to create invite:', error);
+      logger.error(`[Invite] Failed to create invite: ${error}`);
       return sendError(reply, request, 'INTERNAL_ERROR', 'Davet oluşturulamadı');
     }
   });

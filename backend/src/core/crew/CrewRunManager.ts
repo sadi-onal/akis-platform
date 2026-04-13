@@ -103,7 +103,7 @@ export class CrewRunManager {
 
         logger.info(`[CrewRunManager] Worker spawned: ${wr.role} → ${job.id}`);
       } catch (err) {
-        console.error(`[CrewRunManager] Failed to spawn worker: ${wr.role}`, err);
+        logger.error(`[CrewRunManager] Failed to spawn worker: ${wr.role} ${err}`);
         if (input.failureStrategy === 'fail_fast') {
           await this.failCrewRun(crewRunId, `Failed to spawn worker: ${wr.role}`);
           return crewRunId;
@@ -285,7 +285,7 @@ export class CrewRunManager {
 
       logger.info(`[CrewRunManager] Crew run completed: ${crewRunId}, tokens: ${totalTokens}, cost: ${totalCostUsd}`);
     } catch (err) {
-      console.error(`[CrewRunManager] Merge failed: ${crewRunId}`, err);
+      logger.error(`[CrewRunManager] Merge failed: ${crewRunId} ${err}`);
       await this.failCrewRun(crewRunId, `Merge failed: ${String(err)}`);
     }
   }
@@ -375,6 +375,6 @@ export class CrewRunManager {
       .where(eq(crewRuns.id, crewRunId));
 
     this.eventEmitter.emitStatusChange(crewRunId, 'running', 'failed');
-    console.error(`[CrewRunManager] Crew run failed: ${crewRunId} — ${error}`);
+    logger.error(`[CrewRunManager] Crew run failed: ${crewRunId} — ${error}`);
   }
 }

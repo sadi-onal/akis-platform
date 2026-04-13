@@ -88,12 +88,12 @@ export class FreshnessScheduler {
     );
 
     void this.runCheck().catch((error) => {
-      logger.warn('[FreshnessScheduler] Initial check failed:', error);
+      logger.warn(`[FreshnessScheduler] Initial check failed: ${error}`);
     });
 
     this.timer = setInterval(() => {
       void this.runCheck().catch((error) => {
-        logger.warn('[FreshnessScheduler] Scheduled check failed:', error);
+        logger.warn(`[FreshnessScheduler] Scheduled check failed: ${error}`);
       });
     }, this.intervalMs);
     if (this.timer.unref) {

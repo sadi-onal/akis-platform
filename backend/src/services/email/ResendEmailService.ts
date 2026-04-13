@@ -4,6 +4,7 @@
  */
 
 import { BaseEmailService, EmailMessage } from './EmailService.js';
+import { logger } from '../../lib/logger.js';
 
 export interface ResendEmailConfig {
   apiKey: string;
@@ -40,7 +41,7 @@ export class ResendEmailService extends BaseEmailService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[ResendEmailService] Failed to send email:', errorText);
+        logger.error(`[ResendEmailService] Failed to send email: ${errorText}`);
         
         return {
           success: false,
@@ -55,7 +56,7 @@ export class ResendEmailService extends BaseEmailService {
         messageId: result.id,
       };
     } catch (error) {
-      console.error('[ResendEmailService] Exception while sending email:', error);
+      logger.error(`[ResendEmailService] Exception while sending email: ${error}`);
       
       return {
         success: false,

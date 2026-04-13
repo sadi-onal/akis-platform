@@ -4,6 +4,7 @@ import { db } from '../db/client.js';
 import { agentTriggers, webhookDeliveries } from '../db/triggers-schema.js';
 import { eq, and } from 'drizzle-orm';
 import { AgentOrchestrator } from '../core/orchestrator/AgentOrchestrator.js';
+import { logger } from '../lib/logger.js';
 
 let orchestrator: AgentOrchestrator;
 
@@ -144,10 +145,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             .where(eq(agentTriggers.id, trigger.id));
 
           orchestrator.startJob(jobId).catch((err) => {
-            console.error(`[Webhook] Failed to start job ${jobId} for trigger ${trigger.id}:`, err);
+            logger.error(`[Webhook] Failed to start job ${jobId} for trigger ${trigger.id}: ${err}`);
           });
         } catch (error) {
-          console.error(`[Webhook] Failed to create job for trigger ${trigger.id}:`, error);
+          logger.error(`[Webhook] Failed to create job for trigger ${trigger.id}: ${error}`);
         }
       }
 

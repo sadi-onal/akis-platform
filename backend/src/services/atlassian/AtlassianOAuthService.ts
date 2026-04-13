@@ -14,6 +14,7 @@ import { oauthAccounts } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { getEnv } from '../../config/env.js';
 import { encryptSecret, decryptSecret } from '../../utils/crypto.js';
+import { logger } from '../../lib/logger.js';
 
 // =============================================================================
 // Types
@@ -261,7 +262,7 @@ export class AtlassianOAuthService {
         scopes: record.scopes,
       };
     } catch (error) {
-      console.error('[AtlassianOAuthService] Failed to decrypt tokens:', error);
+      logger.error(`[AtlassianOAuthService] Failed to decrypt tokens: ${error}`);
       return null;
     }
   }
@@ -297,7 +298,7 @@ export class AtlassianOAuthService {
       });
 
       if (!response.ok) {
-        console.error('[AtlassianOAuthService] Token refresh failed:', response.status);
+        logger.error(`[AtlassianOAuthService] Token refresh failed: ${response.status}`);
         // If refresh fails, clear tokens (user needs to re-authenticate)
         await this.deleteOAuth(userId);
         return null;
@@ -334,7 +335,7 @@ export class AtlassianOAuthService {
 
       return tokens.access_token;
     } catch (error) {
-      console.error('[AtlassianOAuthService] Token refresh error:', error);
+      logger.error(`[AtlassianOAuthService] Token refresh error: ${error}`);
       return null;
     }
   }

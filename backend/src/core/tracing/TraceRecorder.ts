@@ -261,7 +261,7 @@ export class TraceRecorder {
       try {
         await this.flush();
       } catch (err) {
-        console.error('[TraceRecorder] Auto-flush failed:', err);
+        logger.error(`[TraceRecorder] Auto-flush failed: ${err}`);
       }
     }
   }
@@ -783,7 +783,7 @@ export class TraceRecorder {
         this.pendingTraces = [];
       } catch (error) {
         errors.push({ stage: 'traces', error });
-        console.error(`[TraceRecorder] Failed to flush ${this.pendingTraces.length} traces for job ${this.jobId}:`, error);
+        logger.error(`[TraceRecorder] Failed to flush ${this.pendingTraces.length} traces for job ${this.jobId}: ${error}`);
       }
     }
 
@@ -794,7 +794,7 @@ export class TraceRecorder {
         this.pendingArtifacts = [];
       } catch (error) {
         errors.push({ stage: 'artifacts', error });
-        console.error(`[TraceRecorder] Failed to flush ${this.pendingArtifacts.length} artifacts for job ${this.jobId}:`, error);
+        logger.error(`[TraceRecorder] Failed to flush ${this.pendingArtifacts.length} artifacts for job ${this.jobId}: ${error}`);
       }
     }
 
@@ -806,7 +806,7 @@ export class TraceRecorder {
         this.pendingAiCalls = [];
       } catch (error) {
         errors.push({ stage: 'aiCalls', error });
-        console.error(`[TraceRecorder] Failed to flush ${this.pendingAiCalls.length} AI calls for job ${this.jobId}:`, error);
+        logger.error(`[TraceRecorder] Failed to flush ${this.pendingAiCalls.length} AI calls for job ${this.jobId}: ${error}`);
       }
     }
 

@@ -162,7 +162,7 @@ export async function billingRoutes(fastify: FastifyInstance) {
 
       return reply.send(result);
     } catch (error) {
-      console.error('[Billing] Checkout error:', error);
+      logger.error(`[Billing] Checkout error: ${error}`);
       const errorResponse = formatErrorResponse(request, error);
       return reply.code(500).send(errorResponse);
     }
@@ -182,7 +182,7 @@ export async function billingRoutes(fastify: FastifyInstance) {
 
       return reply.send({ url });
     } catch (error) {
-      console.error('[Billing] Portal error:', error);
+      logger.error(`[Billing] Portal error: ${error}`);
       const errorResponse = formatErrorResponse(request, error);
       return reply.code(500).send(errorResponse);
     }
@@ -216,7 +216,7 @@ export async function stripeWebhookRoutes(fastify: FastifyInstance) {
 
       return reply.send({ received: true });
     } catch (error) {
-      console.error('[Stripe] Webhook error:', error);
+      logger.error(`[Stripe] Webhook error: ${error}`);
       return reply.code(400).send({
         error: error instanceof Error ? error.message : 'Webhook processing failed',
       });

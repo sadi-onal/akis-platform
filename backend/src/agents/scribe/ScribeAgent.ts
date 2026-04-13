@@ -213,7 +213,7 @@ export class ScribeAgent extends BaseAgent {
       }
     } catch (error) {
       // Log but don't fail - plan persistence is not critical to execution
-      console.error('Failed to persist plan:', error);
+      logger.error(`Failed to persist plan: ${error}`);
       this.traceRecorder?.recordError('Plan persistence failed', 'PLAN_PERSIST_ERROR', {
         jobId,
         error: error instanceof Error ? error.message : String(error),

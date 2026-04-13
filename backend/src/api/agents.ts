@@ -817,7 +817,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
               if (userId) {
                 const tokensUsed = job.aiTotalTokens ?? 0;
                 incrementUsage(userId, tokensUsed).catch(err =>
-                  console.warn('[Billing] Failed to increment usage:', err)
+                  logger.warn(`[Billing] Failed to increment usage: ${err}`)
                 );
               }
             } else if (finalState === 'failed') {
@@ -946,7 +946,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }
           } catch (error) {
             // Don't fail request if plan fetch fails
-            console.error(`Failed to fetch plan for job ${params.id}:`, error);
+            logger.error(`Failed to fetch plan for job ${params.id}: ${error}`);
           }
         }
 
@@ -967,7 +967,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }));
           } catch (error) {
             // Don't fail request if audit fetch fails
-            console.error(`Failed to fetch audits for job ${params.id}:`, error);
+            logger.error(`Failed to fetch audits for job ${params.id}: ${error}`);
           }
         }
 
@@ -996,7 +996,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }));
           } catch (error) {
             // Don't fail request if trace fetch fails
-            console.error(`Failed to fetch traces for job ${params.id}:`, error);
+            logger.error(`Failed to fetch traces for job ${params.id}: ${error}`);
           }
         }
 
@@ -1023,7 +1023,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }));
           } catch (error) {
             // Don't fail request if artifacts fetch fails
-            console.error(`Failed to fetch artifacts for job ${params.id}:`, error);
+            logger.error(`Failed to fetch artifacts for job ${params.id}: ${error}`);
           }
         }
 
@@ -1067,7 +1067,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
               timestamp: row.timestamp,
             }));
           } catch (error) {
-            console.error(`Failed to fetch AI calls for job ${params.id}:`, error);
+            logger.error(`Failed to fetch AI calls for job ${params.id}: ${error}`);
           }
         }
 
@@ -1516,7 +1516,7 @@ const jobsListQuerySchema = z.object({
           await orchestrator.resumeApprovedJob(params.id);
         } catch (resumeError) {
           // Log but don't fail the approval - job is still marked approved
-          console.error(`Failed to resume job ${params.id} after approval:`, resumeError);
+          logger.error(`Failed to resume job ${params.id} after approval: ${resumeError}`);
         }
 
         return reply.code(200).send({
@@ -1877,7 +1877,7 @@ const jobsListQuerySchema = z.object({
         try {
           await orchestrator.startJob(newJobId);
         } catch (startError) {
-          console.error(`Failed to start revision job ${newJobId}:`, startError);
+          logger.error(`Failed to start revision job ${newJobId}: ${startError}`);
           // Job is still created, user can retry
         }
 

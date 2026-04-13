@@ -1,6 +1,7 @@
 import { knowledgeRetrievalService } from './retrieval/KnowledgeRetrievalService.js';
 import type { RetrievalResult, RetrievalFilter } from './retrieval/types.js';
 import { getPiriRAGService } from '../rag/PiriRAGService.js';
+import { logger } from '../../lib/logger.js';
 
 export interface ContextLayer {
   role: 'system' | 'instruction' | 'data';
@@ -135,7 +136,7 @@ export class ContextAssemblyService {
           });
           totalTokens += this.estimateTokens(piriContent);
         } catch (piriError) {
-          console.warn(`[ContextAssembly] Piri RAG query failed (non-blocking): ${piriError instanceof Error ? piriError.message : String(piriError)}`);
+          logger.warn(`[ContextAssembly] Piri RAG query failed (non-blocking): ${piriError instanceof Error ? piriError.message : String(piriError)}`);
         }
       }
     }

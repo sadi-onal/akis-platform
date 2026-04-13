@@ -7,6 +7,7 @@ import { db } from '../../db/client.js';
 import { emailVerificationTokens, users } from '../../db/schema.js';
 import { eq, and, gte, lt, isNull } from 'drizzle-orm';
 import type { EmailService } from '../email/EmailService.js';
+import { logger } from '../../lib/logger.js';
 
 export interface VerificationCodeOptions {
   ttlMinutes?: number;
@@ -97,7 +98,7 @@ export class VerificationService {
       current.count += 1;
       if (current.count >= MAX_VERIFY_ATTEMPTS) {
         current.lockedUntil = Date.now() + LOCKOUT_MS;
-        console.warn(`[Verification] User ${userId} locked out after ${MAX_VERIFY_ATTEMPTS} failed attempts`);
+        logger.warn(`[Verification] User ${userId} locked out after ${MAX_VERIFY_ATTEMPTS} failed attempts`);
       }
       this.failedAttempts.set(userId, current);
       return false;

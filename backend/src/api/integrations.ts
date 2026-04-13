@@ -42,6 +42,7 @@ import {
   oauthTokenCrypto,
   OAuthTokenCryptoError,
 } from '../services/auth/OAuthTokenCrypto.js';
+import { logger } from '../lib/logger.js';
 
 // GitHub API helper
 const mcpGateway = new McpGateway();
@@ -73,7 +74,7 @@ async function getGitHubToken(userId: string): Promise<string | null> {
         kind: 'access',
       });
     } catch (error) {
-      console.warn('[integrations] Failed to decrypt stored GitHub OAuth token:', error);
+      logger.warn(`[integrations] Failed to decrypt stored GitHub OAuth token: ${error}`);
       return null;
     }
   }
@@ -223,7 +224,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
             return reply.code(302).header('Location', errorUrl).send();
           }
 
-          console.error('[integrations] Failed to encrypt GitHub OAuth token:', error);
+          logger.error(`[integrations] Failed to encrypt GitHub OAuth token: ${error}`);
           const errorUrl = `${appPublicUrl}/dashboard/settings?tab=github&github=error&reason=token_storage_failed`;
           return reply.code(302).header('Location', errorUrl).send();
         }
@@ -651,7 +652,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         const successUrl = `${frontendUrl}/dashboard/settings?tab=github&atlassian=connected`;
         return reply.code(302).header('Location', successUrl).send();
       } catch (err: unknown) {
-        console.error('[integrations] Atlassian OAuth callback error:', err);
+        logger.error(`[integrations] Atlassian OAuth callback error: ${err}`);
         
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {
           // Session lost during callback - redirect to login
@@ -696,7 +697,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
           });
         }
         // Graceful degradation - never 500 on status check
-        console.error('[integrations] Atlassian status check failed:', err);
+        logger.error(`[integrations] Atlassian status check failed: ${err}`);
         return reply.code(200).send({
           connected: false,
           configured: atlassianOAuthService.isConfigured(),
@@ -757,7 +758,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
             }
           }
         } catch (ghErr) {
-          console.error('[integrations] GitHub status check failed:', ghErr);
+          logger.error(`[integrations] GitHub status check failed: ${ghErr}`);
           githubStatus = { 
             connected: false, 
             error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check GitHub status' }
@@ -780,7 +781,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
             confluenceAvailable: atlassianOAuthStatus.confluenceAvailable,
           };
         } catch (atlErr) {
-          console.error('[integrations] Atlassian status check failed:', atlErr);
+          logger.error(`[integrations] Atlassian status check failed: ${atlErr}`);
           atlassianStatus = {
             connected: false,
             jiraAvailable: false,
@@ -818,7 +819,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
             }
           }
         } catch (jiraErr) {
-          console.error('[integrations] Jira status check failed:', jiraErr);
+          logger.error(`[integrations] Jira status check failed: ${jiraErr}`);
           jiraStatus = { 
             connected: false, 
             error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check Jira status' }
@@ -854,7 +855,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
             }
           }
         } catch (confErr) {
-          console.error('[integrations] Confluence status check failed:', confErr);
+          logger.error(`[integrations] Confluence status check failed: ${confErr}`);
           confluenceStatus = { 
             connected: false, 
             error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check Confluence status' }
@@ -874,7 +875,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
           });
         }
         // Even if something catastrophic happens, return a degraded response
-        console.error('[integrations] All status check failed:', err);
+        logger.error(`[integrations] All status check failed: ${err}`);
         return reply.code(200).send({
           github: { connected: false, error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' } },
           atlassian: { connected: false, jiraAvailable: false, confluenceAvailable: false, error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' } },
@@ -1035,7 +1036,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         }
         // Graceful degradation: return disconnected status with error info
         // Never return 500 for status check endpoints
-        console.error('[integrations] Jira status check failed:', err);
+        logger.error(`[integrations] Jira status check failed: ${err}`);
         return reply.code(200).send({
           connected: false,
           error: {
@@ -1283,7 +1284,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         }
         // Graceful degradation: return disconnected status with error info
         // Never return 500 for status check endpoints
-        console.error('[integrations] Confluence status check failed:', err);
+        logger.error(`[integrations] Confluence status check failed: ${err}`);
         return reply.code(200).send({
           connected: false,
           error: {
