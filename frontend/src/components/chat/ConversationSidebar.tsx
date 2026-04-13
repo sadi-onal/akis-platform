@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { LOGO_MARK_SVG } from '../../theme/brand';
@@ -30,13 +30,20 @@ export function ConversationSidebar({
   const location = useLocation();
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+
+  // Debounce search input by 300ms
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations;
-    const q = search.toLowerCase();
+    const q = search.toLocaleLowerCase('tr');
     return conversations.filter(
-      (c) => c.title.toLowerCase().includes(q) || c.repoFullName.toLowerCase().includes(q),
+      (c) => c.title.toLocaleLowerCase('tr').includes(q) || c.repoFullName.toLocaleLowerCase('tr').includes(q),
     );
   }, [conversations, search]);
 
@@ -99,8 +106,8 @@ export function ConversationSidebar({
           <input
             type="text"
             data-sidebar-search
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Sohbet ara... (Ctrl+K)"
             aria-label="Sohbet ara"
             className={cn(
@@ -180,7 +187,11 @@ export function ConversationSidebar({
                     collapsed={collapsed}
                     onClick={() => navigate(`/chat/${conv.id}`)}
                     onRename={onRename ? (newTitle) => onRename(conv.id, newTitle) : undefined}
-                    onDelete={onDelete ? () => onDelete(conv.id) : undefined}
+                    onDelete={onDelete ? () => {
+                      if (window.confirm('Bu sohbeti silmek istediğinize emin misiniz?')) {
+                        onDelete(conv.id);
+                      }
+                    } : undefined}
                   />
                 ))}
               </div>
@@ -195,7 +206,11 @@ export function ConversationSidebar({
               collapsed={collapsed}
               onClick={() => navigate(`/chat/${conv.id}`)}
               onRename={onRename ? (newTitle) => onRename(conv.id, newTitle) : undefined}
-              onDelete={onDelete ? () => onDelete(conv.id) : undefined}
+              onDelete={onDelete ? () => {
+                      if (window.confirm('Bu sohbeti silmek istediğinize emin misiniz?')) {
+                        onDelete(conv.id);
+                      }
+                    } : undefined}
             />
           ))
         )}
@@ -282,7 +297,7 @@ export function ConversationSidebar({
           </button>
         ) : (
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-ak-text-tertiary">AKIS v0.2.0 · DEV</span>
+            <span className="text-[10px] text-ak-text-tertiary">AKIS v0.5.0</span>
             <button
               onClick={onToggleCollapse}
               aria-label="Daralt"

@@ -1687,7 +1687,7 @@ export const devChangeStatusEnum = pgEnum('dev_change_status', [
 
 export const devSessions = pgTable('dev_sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
-  pipelineId: uuid('pipeline_id').notNull(), // references pipelines in orchestrator's in-memory store
+  pipelineId: uuid('pipeline_id').notNull().references(() => pipelines.id, { onDelete: 'cascade' }),
 
   // Pipeline'dan miras alınan context
   repoOwner: text('repo_owner').notNull(),

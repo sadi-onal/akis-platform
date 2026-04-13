@@ -131,6 +131,16 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
     else goPrev();
   };
 
+  if (questions.length === 0) {
+    return (
+      <div className="shrink-0 px-4 pt-2">
+        <div className="mx-auto max-w-[720px] rounded-2xl border border-ak-border bg-ak-surface/85 p-4 text-center text-sm text-ak-text-tertiary">
+          Soru bulunamadı.
+        </div>
+      </div>
+    );
+  }
+
   if (!currentQ) return null;
 
   const isLast = currentIdx === total - 1;

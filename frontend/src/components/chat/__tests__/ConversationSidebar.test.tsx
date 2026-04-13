@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ConversationSidebar } from '../ConversationSidebar';
 import type { ConversationListItem } from '../../../types/chat';
 
@@ -89,6 +89,7 @@ describe('ConversationSidebar', () => {
   });
 
   it('shows "Sonuç bulunamadı." when search has no results', () => {
+    vi.useFakeTimers();
     render(
       <ConversationSidebar
         conversations={conversations}
@@ -97,10 +98,13 @@ describe('ConversationSidebar', () => {
     );
     const searchInput = screen.getByLabelText('Sohbet ara');
     fireEvent.change(searchInput, { target: { value: 'nonexistent query' } });
+    act(() => { vi.advanceTimersByTime(300); });
     expect(screen.getByText('Sonuç bulunamadı.')).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it('filters conversations by search', () => {
+    vi.useFakeTimers();
     render(
       <ConversationSidebar
         conversations={conversations}
@@ -109,8 +113,10 @@ describe('ConversationSidebar', () => {
     );
     const searchInput = screen.getByLabelText('Sohbet ara');
     fireEvent.change(searchInput, { target: { value: 'Todo' } });
+    act(() => { vi.advanceTimersByTime(300); });
     expect(screen.getByTestId('conv-Todo App')).toBeInTheDocument();
     expect(screen.queryByTestId('conv-Blog Platform')).not.toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it('calls onNewConversation on button click', () => {
@@ -177,7 +183,7 @@ describe('ConversationSidebar', () => {
         onNewConversation={vi.fn()}
       />,
     );
-    expect(screen.getByText(/AKIS v0\.2\.0/)).toBeInTheDocument();
+    expect(screen.getByText(/AKIS v0\.5\.0/)).toBeInTheDocument();
   });
 
   it('shows theme toggle button', () => {

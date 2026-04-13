@@ -479,6 +479,7 @@ function AIKeysTab({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
   };
 
   const handleDelete = async (provider: Provider) => {
+    if (!window.confirm('Bu API anahtarını silmek istediğinize emin misiniz?')) return;
     try {
       await fetch('/api/settings/ai-keys', {
         method: 'DELETE',

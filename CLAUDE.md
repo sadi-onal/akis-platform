@@ -7,7 +7,7 @@
 
 AKIS (Adaptive Knowledge Integrity System), bir **AI Agent Workflows Engine**'dir. Yazilim gelistirme surecinde "fikir → kod → test" zincirini 3 AI agent workflow'u ile otomatize eder. Ayni zamanda universite bitirme projesidir.
 
-- **Versiyon:** 0.2.0
+- **Versiyon:** 0.5.0
 - **Tez Temasi:** Knowledge Integrity & Agent Verification
 - **Ogrenci:** Omer Yasir Onal (2221221562)
 - **Danismanl:** Dr. Ogr. Uyesi Nazli Dogan

@@ -123,8 +123,8 @@ export async function pipelinePlugin(
     throw error;
   });
 
-  // POST /api/pipelines — start new pipeline
-  fastify.post('/', { preHandler: authPreHandler }, async (request: FastifyRequest, reply: FastifyReply) => {
+  // POST /api/pipelines — start new pipeline (rate-limited: 5/min per user)
+  fastify.post('/', { preHandler: authPreHandler, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request: FastifyRequest, reply: FastifyReply) => {
     const result = await routes.startPipeline(request, reply);
     return reply.code(201).send(result);
   });
