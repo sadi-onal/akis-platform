@@ -85,6 +85,7 @@ describe('ConversationSidebar', () => {
       />,
     );
     expect(screen.getByText('Henüz sohbet yok.')).toBeInTheDocument();
+    expect(screen.getByText('Yeni Sohbet Başlat')).toBeInTheDocument();
   });
 
   it('shows "Sonuç bulunamadı." when search has no results', () => {

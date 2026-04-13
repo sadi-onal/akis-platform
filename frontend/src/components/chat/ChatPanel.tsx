@@ -169,14 +169,18 @@ export function ChatPanel({
         <div ref={scrollRef} className="relative flex-1 overflow-y-auto min-h-0">
           <div className="mx-auto max-w-[720px] space-y-4 px-4 py-4">
             {messages.map((msg, i) => (
-              <ChatMessage
+              <div
                 key={`${msg.type}-${msg.timestamp ?? ''}-${i}`}
-                message={msg}
-                onApprove={onApprove}
-                onReject={onReject}
-                onRetry={onRetry}
-                onSkip={onSkip}
-              />
+                style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 80px' }}
+              >
+                <ChatMessage
+                  message={msg}
+                  onApprove={onApprove}
+                  onReject={onReject}
+                  onRetry={onRetry}
+                  onSkip={onSkip}
+                />
+              </div>
             ))}
 
             {/* Activity indicator for running agents */}

@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/useI18n';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { toast } from '../../components/ui/Toast';
+import { Skeleton } from '../../components/ui/Skeleton';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -277,7 +278,7 @@ function ProfileTab() {
   };
 
   if (loading) {
-    return <div className="rounded-xl border border-ak-border bg-ak-surface p-6 text-xs text-ak-text-tertiary text-center">{t('settings.loading')}</div>;
+    return <div className="space-y-3 rounded-xl border border-ak-border bg-ak-surface p-6"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/2" /></div>;
   }
 
   const avatarUrl = user?.email ? undefined : undefined; // no GitHub avatar on AuthUser
@@ -510,7 +511,7 @@ function AIKeysTab({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
       <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.ai.title')}</h2>
       <div className="space-y-3 mb-8">
         {loading ? (
-          <div className="rounded-xl border border-ak-border bg-ak-surface p-4 text-xs text-ak-text-tertiary">{t('settings.loading')}</div>
+          <div className="space-y-3 rounded-xl border border-ak-border bg-ak-surface p-4"><Skeleton className="h-4 w-1/4" /><Skeleton className="h-8 w-full" /><Skeleton className="h-4 w-1/3" /></div>
         ) : (
           PROVIDERS.map((p) => {
             const ps = status?.providers[p.key];
@@ -645,7 +646,7 @@ function PipelineStatsTab() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
-    return <div className="rounded-xl border border-ak-border bg-ak-surface p-6 text-xs text-ak-text-tertiary text-center">{t('settings.loading')}</div>;
+    return <div className="space-y-3 rounded-xl border border-ak-border bg-ak-surface p-6"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/2" /></div>;
   }
 
   if (error) {
@@ -893,7 +894,7 @@ function IntegrityTab() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
-    return <div className="rounded-xl border border-ak-border bg-ak-surface p-6 text-xs text-ak-text-tertiary text-center">{t('settings.loading')}</div>;
+    return <div className="space-y-3 rounded-xl border border-ak-border bg-ak-surface p-6"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/2" /></div>;
   }
 
   if (error) {
