@@ -12,6 +12,7 @@ import {
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { generateGherkinFromSpec } from '../../integrations/cucumberGenerator.js';
 import { logger } from '../../../lib/logger.js';
+import { parseAIJson } from '../../core/json-extract.js';
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { TRACE_TOOLS, createTraceToolHandlers, type TraceToolDeps } from './trace-tools.js';
@@ -494,8 +495,7 @@ After pushing, respond with a JSON summary:
 
       let parsed: unknown;
       try {
-        const extracted = this.extractJson(responseText);
-        parsed = JSON.parse(extracted);
+        parsed = parseAIJson(responseText);
       } catch (parseErr) {
         logger.warn(`[Trace] JSON parse failed (attempt ${attempt + 1}, responseLen=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
@@ -646,72 +646,8 @@ After pushing, respond with a JSON summary:
     return lines.join('\n');
   }
 
-  private extractJson(text: string): string {
-    // Strategy 1: fenced code block (also handles truncated blocks without closing ```)
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)(?:```|$)/);
-    if (fenced) {
-      const candidate = fenced[1].trim();
-      try { JSON.parse(candidate); return candidate; } catch { /* try repair */ }
-      const repaired = this.repairJson(candidate);
-      try { JSON.parse(repaired); return repaired; } catch { /* fall through */ }
-    }
-
-    // Strategy 2: brace extraction
-    const braceStart = text.indexOf('{');
-    const braceEnd = text.lastIndexOf('}');
-    if (braceStart !== -1 && braceEnd > braceStart) {
-      const candidate = text.slice(braceStart, braceEnd + 1);
-      try { JSON.parse(candidate); return candidate; } catch { /* try repair */ }
-      const repaired = this.repairJson(candidate);
-      try { JSON.parse(repaired); return repaired; } catch { /* fall through */ }
-    }
-
-    // Strategy 3: find {"testFiles" specifically
-    const testFilesIdx = text.indexOf('{"testFiles"');
-    if (testFilesIdx !== -1) {
-      const fromTestFiles = text.slice(testFilesIdx);
-      const repaired = this.repairJson(fromTestFiles);
-      try { JSON.parse(repaired); return repaired; } catch { /* fall through */ }
-    }
-
-    // Strategy 4: last resort — repair the entire text (handles truncated responses)
-    const lastResort = this.repairJson(text.trim());
-    try { JSON.parse(lastResort); return lastResort; } catch { /* fall through */ }
-
-    logger.warn(`[Trace] extractJson: all strategies failed (len=${text.length}), first 300 chars: ${text.slice(0, 300)}`);
-    return text.trim();
-  }
-
-  /** Attempt to repair truncated JSON by closing open brackets/braces */
-  private repairJson(text: string): string {
-    let s = text.trim();
-    // Remove trailing comma before repair
-    s = s.replace(/,\s*$/, '');
-
-    let openBraces = 0;
-    let openBrackets = 0;
-    let inString = false;
-    let escape = false;
-
-    for (const ch of s) {
-      if (escape) { escape = false; continue; }
-      if (ch === '\\') { escape = true; continue; }
-      if (ch === '"') { inString = !inString; continue; }
-      if (inString) continue;
-      if (ch === '{') openBraces++;
-      if (ch === '}') openBraces--;
-      if (ch === '[') openBrackets++;
-      if (ch === ']') openBrackets--;
-    }
-
-    // If we're inside a string, close it
-    if (inString) s += '"';
-    // Close open brackets then braces
-    while (openBrackets > 0) { s += ']'; openBrackets--; }
-    while (openBraces > 0) { s += '}'; openBraces--; }
-
-    return s;
-  }
+  // JSON extraction and repair are now in shared utility:
+  // import { parseAIJson, extractJsonSafe } from '../../core/json-extract.js';
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

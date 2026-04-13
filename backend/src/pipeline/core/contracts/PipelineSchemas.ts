@@ -241,6 +241,14 @@ export const StartPipelineRequestSchema = z.object({
   idea: z.string().min(10, 'Fikir en az 10 karakter olmalı').max(10000, 'Fikir en fazla 10.000 karakter olabilir'),
   context: z.string().max(5000).optional(),
   targetStack: z.string().max(200).optional(),
+  existingRepo: z
+    .object({
+      owner: z.string().min(1),
+      repo: z.string().min(1),
+      branch: z.string().min(1),
+    })
+    .optional(),
+  parentPipelineId: z.string().uuid().optional(),
   model: z.enum(['claude-sonnet-4-6', 'claude-haiku-4-5']).optional().default('claude-haiku-4-5'),
   jiraConfig: JiraConfigSchema,
 });

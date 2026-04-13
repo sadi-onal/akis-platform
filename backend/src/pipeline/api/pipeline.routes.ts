@@ -74,7 +74,8 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
         idea: body.idea,
         context: body.context,
         targetStack: body.targetStack,
-      }, body.model, body.jiraConfig);
+        existingRepo: body.existingRepo,
+      }, body.model, body.jiraConfig, body.parentPipelineId);
       return { pipeline };
     },
 

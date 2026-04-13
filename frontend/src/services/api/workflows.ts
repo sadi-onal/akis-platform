@@ -334,7 +334,14 @@ export const workflowsApi = {
     return mapPipelineToWorkflow(res.pipeline);
   },
 
-  create: async (data: { idea: string; context?: string; targetStack?: string; model?: string }): Promise<Workflow> => {
+  create: async (data: {
+    idea: string;
+    context?: string;
+    targetStack?: string;
+    model?: string;
+    existingRepo?: { owner: string; repo: string; branch: string };
+    parentPipelineId?: string;
+  }): Promise<Workflow> => {
     const res = await http.post<PipelineResponse>('/api/pipelines', data);
     return mapPipelineToWorkflow(res.pipeline);
   },

@@ -470,6 +470,10 @@ export default function ChatPage() {
   const buildFollowUpContext = useCallback((workflow: Workflow): string => {
     const parts: string[] = [];
 
+    // Signal this is a modification of an existing project
+    parts.push('ÖNEMLİ: Bu mevcut bir projenin DEVAM isteğidir. Yeni bir proje DEĞİL.');
+    parts.push('Kullanıcının mevcut projesinde değişiklik yapmak istediğini anla ve ona göre spec hazırla.');
+
     // Include original idea
     const ideaMsg = workflow.conversation?.find(m => m.role === 'user' && m.type === 'message');
     if (ideaMsg) {
@@ -491,12 +495,10 @@ export default function ChatPage() {
       }
     }
 
-    // Include proto result if available
-    if (workflow.stages.proto.branch) {
-      parts.push(`GitHub branch: ${workflow.stages.proto.branch}`);
-    }
+    // Include proto result — repo info for continuation
     if (workflow.stages.proto.repo) {
-      parts.push(`Repo: ${workflow.stages.proto.repo}`);
+      parts.push(`Mevcut repo: ${workflow.stages.proto.repo} (branch: ${workflow.stages.proto.branch ?? 'main'})`);
+      parts.push('Bu repo üzerinde çalışmaya devam edilecek — yeni repo OLUŞTURMA.');
     }
 
     return parts.join('\n');
@@ -548,8 +550,8 @@ export default function ChatPage() {
 
     if (!conversationId) return;
 
-    // If the current pipeline is in a terminal state, start a NEW pipeline
-    // with the previous pipeline's context so Scribe understands the history.
+    // If the current pipeline is in a terminal state, start a follow-up pipeline
+    // that iterates on the SAME repo (if available) with context from the previous run.
     if (isTerminalState(activeWorkflow)) {
       if (content.trim().length < 10) {
         setMessages((prev) => [...prev, {
@@ -565,7 +567,26 @@ export default function ChatPage() {
       try {
         setCreating(true);
         const context = activeWorkflow ? buildFollowUpContext(activeWorkflow) : undefined;
-        const w = await workflowsApi.create({ idea: content, context });
+
+        // Extract existing repo info for pipeline continuation
+        const protoStage = activeWorkflow?.stages?.proto;
+        const repoFull = protoStage?.repo; // "owner/repo-name"
+        let existingRepo: { owner: string; repo: string; branch: string } | undefined;
+        if (repoFull && protoStage?.branch) {
+          const [repoOwner, repoName] = repoFull.includes('/')
+            ? repoFull.split('/')
+            : ['', repoFull];
+          if (repoOwner && repoName) {
+            existingRepo = { owner: repoOwner, repo: repoName, branch: protoStage.branch };
+          }
+        }
+
+        const w = await workflowsApi.create({
+          idea: content,
+          context,
+          existingRepo,
+          parentPipelineId: activeWorkflow?.id,
+        });
         loadedIdRef.current = w.id;
         setActiveWorkflow(w);
         setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));

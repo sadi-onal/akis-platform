@@ -16,6 +16,7 @@ import {
 import type { PipelineError } from '../../core/contracts/PipelineTypes.js';
 import { isSpecMinimallyValid } from './SpecContract.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
+import { parseAIJson } from '../../core/json-extract.js';
 
 // ─── Types ────────────────────────────────────────
 
@@ -351,7 +352,7 @@ export class ScribeAgent {
     emit?.('parsing', 'AI yanıtı ayrıştırılıyor...', 65);
     let parsed: { ready: boolean; questions?: ScribeClarification['questions'] };
     try {
-      parsed = JSON.parse(this.extractJson(responseText));
+      parsed = parseAIJson(responseText);
     } catch {
       emit?.('error', 'AI yanıtı geçersiz JSON', 0);
       return {
@@ -453,7 +454,7 @@ export class ScribeAgent {
       emit?.('parsing', 'AI yanıtı yapılandırılmış formata ayrıştırılıyor...', 65);
       let rawParsed: unknown;
       try {
-        rawParsed = JSON.parse(this.extractJson(responseText));
+        rawParsed = parseAIJson(responseText);
       } catch {
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         return {
@@ -585,16 +586,6 @@ export class ScribeAgent {
     return lines.join('\n');
   }
 
-  private extractJson(text: string): string {
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenced) return fenced[1].trim();
-
-    const braceStart = text.indexOf('{');
-    const braceEnd = text.lastIndexOf('}');
-    if (braceStart !== -1 && braceEnd > braceStart) {
-      return text.slice(braceStart, braceEnd + 1);
-    }
-
-    return text.trim();
-  }
+  // JSON extraction is now in shared utility:
+  // import { parseAIJson, extractJsonSafe } from '../../core/json-extract.js';
 }

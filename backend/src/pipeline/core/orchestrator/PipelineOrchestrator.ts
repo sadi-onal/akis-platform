@@ -149,6 +149,7 @@ export class PipelineOrchestrator {
     input: ScribeInput,
     model?: string,
     jiraConfig?: { projectKey: string; enabled: boolean; epicKey?: string },
+    parentPipelineId?: string,
   ): Promise<PipelineState> {
     const pipeline = await this.store.create(userId);
 
@@ -164,6 +165,14 @@ export class PipelineOrchestrator {
     };
     if (jiraConfig) {
       updateData.jiraConfig = jiraConfig;
+    }
+    // Store existing repo info for pipeline continuation (iterate on same repo)
+    if (input.existingRepo) {
+      updateData.intermediateState = {
+        ...updateData.intermediateState,
+        existingRepo: input.existingRepo,
+        parentPipelineId,
+      };
     }
 
     const updated = await this.store.update(pipeline.id, updateData);
@@ -341,13 +350,20 @@ export class PipelineOrchestrator {
     }
     const spec = editedSpec ?? pipeline.scribeOutput!.spec;
 
+    // Pipeline continuation: if existingRepo was set during startPipeline,
+    // use the existing repo name/owner instead of creating a new one.
+    const existingRepo = pipeline.intermediateState?.existingRepo as
+      | { owner: string; repo: string; branch: string }
+      | undefined;
+    const effectiveRepoName = existingRepo?.repo ?? repoName;
+
     // Resolve per-user GitHub token and owner, validate token is still valid
     let owner: string;
     let userGitHubToken: string;
     try {
       const gh = await this.validateGitHubAccess(pipeline.userId);
       userGitHubToken = gh.token;
-      owner = gh.owner;
+      owner = existingRepo?.owner ?? gh.owner;
     } catch (err) {
       const error = createPipelineError(
         PipelineErrorCode.GITHUB_NOT_CONNECTED,
@@ -367,7 +383,7 @@ export class PipelineOrchestrator {
     const approveUpdate: Partial<PipelineStateUpdate> = {
       stage: 'proto_building',
       approvedSpec: spec,
-      protoConfig: { repoName, repoVisibility },
+      protoConfig: { repoName: effectiveRepoName, repoVisibility },
       scribeConversation: conversation,
       metrics: { ...pipeline.metrics, approvedAt: new Date() },
       error: null,
@@ -383,7 +399,7 @@ export class PipelineOrchestrator {
 
     // Create per-user GitHub adapter and run Proto + Trace in background
     const userGithubService = this.createGitHubService(userGitHubToken);
-    this.runProtoAndTrace(pipelineId, pipeline.metrics, spec, repoName, repoVisibility, owner, pipeline.model, userGithubService).catch((err) => {
+    this.runProtoAndTrace(pipelineId, pipeline.metrics, spec, effectiveRepoName, repoVisibility, owner, pipeline.model, userGithubService).catch((err) => {
       logger.error({ err, pipelineId }, '[Pipeline] Background Proto+Trace failed');
       this.failPipeline(pipelineId, 'Proto/Trace', err).catch((e) => logger.error({ err: e }, '[Pipeline] failPipeline also failed'));
     });

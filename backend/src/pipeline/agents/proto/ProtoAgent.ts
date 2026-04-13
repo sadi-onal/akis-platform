@@ -11,6 +11,7 @@ import {
 import type { PipelineError } from '../../core/contracts/PipelineTypes.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { logger } from '../../../lib/logger.js';
+import { extractJsonSafe, sanitizeJsonControlChars, repairTruncatedJson } from '../../core/json-extract.js';
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { PROTO_TOOLS, createProtoToolHandlers, type ProtoToolDeps } from './proto-tools.js';
@@ -400,31 +401,26 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
       let parsed: unknown;
       let wasRepaired = false;
       try {
-        const jsonStr = this.extractJson(responseText);
-        // First try raw parse, then try with control char sanitization
+        const jsonStr = extractJsonSafe(responseText);
         try {
           parsed = JSON.parse(jsonStr);
         } catch {
-          const sanitized = this.sanitizeJsonControlChars(jsonStr);
+          const sanitized = sanitizeJsonControlChars(jsonStr);
           parsed = JSON.parse(sanitized);
           logger.warn(`[Proto] Parsed after sanitizing control chars`);
         }
       } catch (parseErr) {
         logger.warn(`[Proto] JSON parse failed (attempt ${attempt + 1}, len=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
-        // Try to repair truncated JSON
-        const repaired = this.repairTruncatedJson(responseText);
+        const repaired = repairTruncatedJson(responseText);
         if (repaired) {
           try {
             parsed = JSON.parse(repaired);
             wasRepaired = true;
           } catch {
-            // Also try sanitized repair
             try {
-              parsed = JSON.parse(this.sanitizeJsonControlChars(repaired));
+              parsed = JSON.parse(sanitizeJsonControlChars(repaired));
               wasRepaired = true;
-            } catch {
-              // repair also failed
-            }
+            } catch { /* repair also failed */ }
           }
         }
         if (!parsed) {
@@ -647,102 +643,8 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
     ].join('\n');
   }
 
-  /**
-   * Escape raw control characters inside JSON string values.
-   * AI often outputs actual newlines/tabs instead of \n \t escape sequences.
-   */
-  private sanitizeJsonControlChars(json: string): string {
-    let result = '';
-    let inString = false;
-    for (let i = 0; i < json.length; i++) {
-      const c = json[i];
-      const code = c.charCodeAt(0);
-
-      if (c === '"' && (i === 0 || json[i - 1] !== '\\')) {
-        inString = !inString;
-        result += c;
-      } else if (inString && code < 32) {
-        if (code === 10) result += '\\n';
-        else if (code === 13) result += '\\r';
-        else if (code === 9) result += '\\t';
-        else result += `\\u${code.toString(16).padStart(4, '0')}`;
-      } else {
-        result += c;
-      }
-    }
-    return result;
-  }
-
-  private extractJson(text: string): string {
-    // If response starts with { it's already pure JSON — don't try fenced extraction
-    // (fenced regex can match backticks INSIDE JSON string values like README content)
-    const trimmed = text.trim();
-    if (trimmed.startsWith('{')) {
-      const braceEnd = trimmed.lastIndexOf('}');
-      if (braceEnd > 0) return trimmed.slice(0, braceEnd + 1);
-      return trimmed;
-    }
-
-    // Try fenced code block only when response is NOT pure JSON
-    const fenced = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (fenced) return fenced[1].trim();
-
-    const braceStart = text.indexOf('{');
-    const braceEnd = text.lastIndexOf('}');
-    if (braceStart !== -1 && braceEnd > braceStart) {
-      return text.slice(braceStart, braceEnd + 1);
-    }
-
-    return trimmed;
-  }
-
-  /**
-   * Attempt to repair truncated JSON (e.g. from max_tokens cutoff).
-   * Tries to close open strings, arrays, and objects.
-   */
-  private repairTruncatedJson(text: string): string | null {
-    // Extract the JSON portion
-    let json = this.extractJson(text);
-    if (!json.startsWith('{')) return null;
-
-    // If it already parses, return it
-    try { JSON.parse(json); return json; } catch { /* continue */ }
-
-    // Try progressively closing brackets
-    // First, close any open string
-    const quoteCount = (json.match(/(?<!\\)"/g) || []).length;
-    if (quoteCount % 2 !== 0) {
-      json += '"';
-    }
-
-    // Close arrays and objects
-    const opens: string[] = [];
-    let inString = false;
-    for (let i = 0; i < json.length; i++) {
-      const c = json[i];
-      if (c === '"' && (i === 0 || json[i - 1] !== '\\')) {
-        inString = !inString;
-        continue;
-      }
-      if (inString) continue;
-      if (c === '{' || c === '[') opens.push(c);
-      if (c === '}' || c === ']') opens.pop();
-    }
-
-    // Close in reverse
-    while (opens.length > 0) {
-      const open = opens.pop();
-      json += open === '{' ? '}' : ']';
-    }
-
-    try {
-      JSON.parse(json);
-      logger.warn(`[Proto] Repaired truncated JSON (added ${json.length - this.extractJson(text).length} closing chars)`);
-      return json;
-    } catch {
-      return null;
-    }
-  }
+  // JSON extraction, sanitization, and repair are now in shared utility:
+  // import { extractJsonSafe, sanitizeJsonControlChars, repairTruncatedJson } from '../../core/json-extract.js';
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
