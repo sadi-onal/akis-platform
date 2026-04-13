@@ -309,7 +309,8 @@ export default function ChatPage() {
   const activeStageRef = useRef(activeWorkflow?.currentStage);
   activeStageRef.current = activeWorkflow?.currentStage;
   const consecutiveErrorsRef = useRef(0);
-  const backoffRef = useRef(3000);
+  // SSE provides real-time updates — polling is a fallback, so use longer interval
+  const backoffRef = useRef(8000);
   const connectionLostRef = useRef(false);
 
   useEffect(() => {
@@ -325,7 +326,7 @@ export default function ChatPage() {
 
         // Success — reset error tracking
         consecutiveErrorsRef.current = 0;
-        backoffRef.current = 3000;
+        backoffRef.current = 8000;
         if (connectionLostRef.current) {
           connectionLostRef.current = false;
           toast('Bağlantı yeniden kuruldu.', 'success');
@@ -595,8 +596,10 @@ export default function ChatPage() {
     }
   }, [conversationId, pendingConv, activeWorkflow, isTerminalState, buildFollowUpContext, refreshWorkflow, refreshList, syncFromStage, navigate]);
 
+  const approveInFlightRef = useRef(false);
   const handleApprove = useCallback(async () => {
-    if (!conversationId || !activeWorkflow) return;
+    if (!conversationId || !activeWorkflow || approveInFlightRef.current) return;
+    approveInFlightRef.current = true;
     try {
       const cucumberEnabled = localStorage.getItem('akis_cucumber_enabled') === 'true';
       await workflowsApi.approve(
@@ -607,6 +610,7 @@ export default function ChatPage() {
       );
       await refreshWorkflow();
     } catch (e) { if (import.meta.env.DEV) console.error('Failed to approve:', e); }
+    finally { approveInFlightRef.current = false; }
   }, [conversationId, activeWorkflow, refreshWorkflow]);
 
   const handleReject = useCallback(async () => {
