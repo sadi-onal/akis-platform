@@ -67,7 +67,8 @@ export type ScribeMessageType =
   | { type: 'user_answer'; content: string }
   | { type: 'spec_draft'; content: ScribeOutput }
   | { type: 'spec_approved'; content: StructuredSpec }
-  | { type: 'spec_rejected'; content: { feedback: string } };
+  | { type: 'spec_rejected'; content: { feedback: string } }
+  | { type: 'user_note'; content: string };
 
 export interface VerificationReport {
   specCoverage: string;

@@ -339,8 +339,16 @@ export const workflowsApi = {
     return mapPipelineToWorkflow(res.pipeline);
   },
 
-  approve: async (id: string, repoName: string, repoVisibility: 'public' | 'private' = 'private'): Promise<Workflow> => {
-    const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/approve`, { repoName, repoVisibility });
+  approve: async (
+    id: string,
+    repoName: string,
+    repoVisibility: 'public' | 'private' = 'private',
+    options?: { jiraConfig?: { projectKey: string; enabled: boolean }; cucumberEnabled?: boolean },
+  ): Promise<Workflow> => {
+    const body: Record<string, unknown> = { repoName, repoVisibility };
+    if (options?.jiraConfig) body.jiraConfig = options.jiraConfig;
+    if (options?.cucumberEnabled != null) body.cucumberEnabled = options.cucumberEnabled;
+    const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/approve`, body);
     return mapPipelineToWorkflow(res.pipeline);
   },
 

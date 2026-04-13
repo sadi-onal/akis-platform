@@ -102,6 +102,7 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
     switch (msg.type) {
       case 'user_idea':
       case 'user_answer':
+      case 'user_note':
         messages.push({
           type: 'user',
           content: typeof msg.content === 'string' ? msg.content : String(msg.content ?? ''),
@@ -168,6 +169,27 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
       coverageMatrix: to.coverageMatrix,
       coveredCriteria: to.testSummary?.coveredCriteria,
       uncoveredCriteria: to.testSummary?.uncoveredCriteria,
+      timestamp: now,
+    });
+  }
+
+  // Pipeline completion card
+  if (pipeline.stage === 'completed' || pipeline.stage === 'completed_partial') {
+    const po = pipeline.protoOutput;
+    const to = pipeline.traceOutput;
+    const repoUrl = po?.repoUrl ?? '';
+    const repoName = po?.repo?.split('/')?.[1] ?? '';
+    messages.push({
+      type: 'pipeline_complete',
+      status: pipeline.stage,
+      repoUrl,
+      branch: po?.branch ?? 'main',
+      fileCount: po?.files?.length ?? 0,
+      lineCount: po?.metadata?.totalLinesOfCode ?? 0,
+      testCount: to?.testSummary?.totalTests,
+      coverage: to?.testSummary?.coveragePercentage?.toString(),
+      cloneCommand: repoUrl ? `git clone ${repoUrl}.git && cd ${repoName} && npm install && npm run dev` : '',
+      setupCommands: po?.setupCommands,
       timestamp: now,
     });
   }

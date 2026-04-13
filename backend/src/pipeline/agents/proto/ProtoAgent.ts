@@ -11,6 +11,9 @@ import {
 import type { PipelineError } from '../../core/contracts/PipelineTypes.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { logger } from '../../../lib/logger.js';
+import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
+import { runAgenticLoop } from '../../core/AgenticLoop.js';
+import { PROTO_TOOLS, createProtoToolHandlers, type ProtoToolDeps } from './proto-tools.js';
 
 // ─── Dependency Interfaces ────────────────────────
 
@@ -124,10 +127,12 @@ JSON format (respond with ONLY this, nothing else):
 export class ProtoAgent {
   private ai: ProtoAIDeps;
   private github: ProtoGitHubDeps;
+  private agenticDeps?: AgenticLoopDeps;
 
-  constructor(ai: ProtoAIDeps, github: ProtoGitHubDeps) {
+  constructor(ai: ProtoAIDeps, github: ProtoGitHubDeps, agenticDeps?: AgenticLoopDeps) {
     this.ai = ai;
     this.github = github;
+    this.agenticDeps = agenticDeps;
   }
 
   async execute(input: ProtoInput): Promise<ProtoResult> {
@@ -135,6 +140,12 @@ export class ProtoAgent {
       ? createActivityEmitter(input.pipelineId, 'proto')
       : undefined;
 
+    // Agentic path: if tool_use deps are available and not dryRun, use Claude with tools
+    if (this.agenticDeps && !input.dryRun && this.github.pushFiles) {
+      return this.executeWithTools(input, emit);
+    }
+
+    // Fallback: legacy text-generation path
     // Step 1: Generate scaffold via AI
     emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor...', 20);
     const scaffoldResult = await this.generateScaffold(input.spec);
@@ -168,27 +179,8 @@ export class ProtoAgent {
       return repoResult;
     }
 
-    // Step 3: Create feature branch (retry to handle repo init delay)
-    const branchName = `proto/scaffold-${Date.now()}`;
-    for (let branchAttempt = 0; branchAttempt < 3; branchAttempt++) {
-      try {
-        if (branchAttempt > 0) await this.delay(3000 * branchAttempt); // wait for repo init
-        await this.github.createBranch(input.owner, input.repoName, branchName);
-        break;
-      } catch (err) {
-        if (branchAttempt === 2) {
-          emit?.('error', 'Branch oluşturulamadı', 0);
-          return {
-            type: 'error',
-            error: createPipelineError(
-              PipelineErrorCode.GITHUB_API_ERROR,
-              `Branch creation failed: ${err instanceof Error ? err.message : String(err)}`
-            ),
-          };
-        }
-        logger.warn(`[Proto] Branch creation attempt ${branchAttempt + 1} failed, retrying...`);
-      }
-    }
+    // Step 3: Push files directly to main (repo is auto_init'd with main branch)
+    const branchName = 'main';
 
     // Step 4: Push files
     emit?.('github_push', `${files.length} dosya GitHub'a push ediliyor...`, 75);
@@ -198,23 +190,9 @@ export class ProtoAgent {
       return pushResult;
     }
 
-    // Step 5: Create PR
+    // Step 5: Verify scaffold integrity (PR skipped — files pushed directly to main)
     emit?.('verification', 'Scaffold bütünlüğü doğrulanıyor...', 90);
-    let prUrl: string | undefined;
-    try {
-      const pr = await this.github.createPR(
-        input.owner,
-        input.repoName,
-        `feat: initial scaffold — ${input.spec.title}`,
-        this.buildPRBody(input.spec, metadata),
-        branchName,
-        input.baseBranch ?? 'main'
-      );
-      prUrl = pr.url;
-    } catch (err) {
-      // PR failure is non-fatal — code is already pushed
-      logger.warn(`[Proto] PR creation failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
-    }
+    const prUrl: string | undefined = undefined;
 
     emit?.('complete', `Scaffold hazır: ${files.length} dosya push edildi`, 100);
     return {
@@ -227,6 +205,139 @@ export class ProtoAgent {
         files,
         prUrl,
         setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
+        metadata: { ...metadata, committed: true },
+      },
+    };
+  }
+
+  // ─── Agentic Tool-Use Execution Path ────────────
+
+  private async executeWithTools(
+    input: ProtoInput,
+    emit?: ReturnType<typeof createActivityEmitter>,
+  ): Promise<ProtoResult> {
+    emit?.('ai_call', 'Claude AI tool_use ile scaffold oluşturuluyor...', 10);
+
+    // Build tool handlers from GitHub deps
+    const toolDeps: ProtoToolDeps = {
+      createRepository: (owner, name, isPrivate) => this.github.createRepository(owner, name, isPrivate),
+      pushFiles: (owner, repo, branch, files, message) => this.github.pushFiles!(owner, repo, branch, files, message),
+    };
+    const handlers = createProtoToolHandlers(toolDeps);
+
+    const userPrompt = `Create a GitHub repository and push a working MVP scaffold.
+
+Repository: owner="${input.owner}", name="${input.repoName}", private=${input.repoVisibility === 'private'}
+
+Spec:
+- Title: ${input.spec.title}
+- Problem: ${input.spec.problemStatement}
+- User Stories: ${input.spec.userStories.slice(0, 6).map((s) => `${s.persona}: ${s.action} → ${s.benefit}`).join('\n  ')}
+- Acceptance Criteria: ${input.spec.acceptanceCriteria.slice(0, 8).map((ac) => `${ac.id}: ${ac.when} → ${ac.then}`).join('\n  ')}
+- Tech: ${input.spec.technicalConstraints?.stack || 'React + Vite'}${input.spec.technicalConstraints?.integrations?.length ? `, integrations: ${input.spec.technicalConstraints.integrations.join(', ')}` : ''}
+
+Steps:
+1. Call create_repository to create the GitHub repo
+2. Generate a working React+Vite scaffold (8-12 files, each under 80 lines)
+3. Call push_files to push ALL files to the "main" branch in one commit
+
+After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "totalLinesOfCode": N, "stackUsed": "..." }`;
+
+    try {
+      const result = await runAgenticLoop(
+        this.agenticDeps!,
+        SCAFFOLD_SYSTEM_PROMPT,
+        userPrompt,
+        PROTO_TOOLS,
+        handlers,
+        {
+          maxIterations: 10,
+          maxTokens: 16384,
+          temperature: 0,
+          onToolCall: (name, _input) => {
+            if (name === 'create_repository') emit?.('github_push', 'GitHub repo oluşturuluyor...', 30);
+            if (name === 'push_files') emit?.('github_push', 'Dosyalar push ediliyor...', 75);
+          },
+          onToolResult: (name, _result, isError) => {
+            if (isError) emit?.('error', `Tool ${name} başarısız`, 0);
+          },
+        },
+      );
+
+      // Extract files from tool calls
+      const pushCall = result.toolCalls.find((tc) => tc.name === 'push_files');
+      const files = pushCall
+        ? (pushCall.input.files as Array<{ path: string; content: string }>).map((f) => ({
+            filePath: f.path,
+            content: f.content,
+            linesOfCode: f.content.split('\n').length,
+          }))
+        : [];
+
+      const totalLOC = files.reduce((sum, f) => sum + f.linesOfCode, 0);
+
+      emit?.('complete', `Scaffold hazır: ${files.length} dosya push edildi (tool_use)`, 100);
+      return {
+        type: 'output',
+        data: {
+          ok: true,
+          branch: 'main',
+          repo: `${input.owner}/${input.repoName}`,
+          repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
+          files,
+          setupCommands: this.buildSetupCommands(input.owner, input.repoName, ['npm install', 'npm run dev']),
+          metadata: { filesCreated: files.length, totalLinesOfCode: totalLOC, stackUsed: 'React + Vite (tool_use)', committed: true },
+        },
+      };
+    } catch (err) {
+      logger.error({ err }, '[Proto] Agentic execution failed, falling back to legacy path');
+      // Fall back to legacy text-generation path
+      return this.executeLegacy(input, emit);
+    }
+  }
+
+  private async executeLegacy(input: ProtoInput, emit?: ReturnType<typeof createActivityEmitter>): Promise<ProtoResult> {
+    // Re-enter the legacy flow from Step 1
+    emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor (fallback)...', 20);
+    const scaffoldResult = await this.generateScaffold(input.spec);
+    if (scaffoldResult.type === 'error') {
+      emit?.('error', 'Scaffold üretimi başarısız oldu', 0);
+      return scaffoldResult;
+    }
+
+    const { files, setupCommands, metadata } = scaffoldResult.data;
+    emit?.('parsing', `AI yanıtından dosya yapısı çıkarıldı: ${files.length} dosya`, 55);
+
+    if (input.dryRun) {
+      return {
+        type: 'output',
+        data: {
+          ok: true, branch: 'dry-run',
+          repo: `${input.owner}/${input.repoName}`,
+          repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
+          files, setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
+          metadata: { ...metadata, committed: false },
+        },
+      };
+    }
+
+    const repoResult = await this.createRepo(input);
+    if (repoResult.type === 'error') return repoResult;
+
+    const branchName = 'main';
+    emit?.('github_push', `${files.length} dosya GitHub'a push ediliyor...`, 75);
+    const pushResult = await this.pushFiles(input.owner, input.repoName, branchName, files, emit);
+    if (pushResult.type === 'error') return pushResult;
+
+    emit?.('verification', 'Scaffold bütünlüğü doğrulanıyor...', 90);
+    emit?.('complete', `Scaffold hazır: ${files.length} dosya push edildi`, 100);
+    return {
+      type: 'output',
+      data: {
+        ok: true, branch: branchName,
+        repo: `${input.owner}/${input.repoName}`,
+        repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
+        files, setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
         metadata: { ...metadata, committed: true },
       },
     };
@@ -269,6 +380,19 @@ export class ProtoAgent {
           error: createPipelineError(
             PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
             'AI call failed after retries'
+          ),
+        };
+      }
+
+      // Guard: empty or whitespace-only AI response
+      if (!responseText || !responseText.trim()) {
+        logger.warn(`[Proto] Attempt ${attempt + 1}: AI returned empty response`);
+        if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
+        return {
+          type: 'error',
+          error: createPipelineError(
+            PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
+            'AI returned empty response after retries'
           ),
         };
       }
@@ -410,8 +534,25 @@ export class ProtoAgent {
   private sanitizeFiles(files: ProtoOutput['files']): ProtoOutput['files'] {
     return files.filter((f) => {
       const p = f.filePath;
-      if (p.includes('..') || p.startsWith('/') || p.startsWith('\\')) {
+      // Reject traversal, absolute paths, backslashes, URL-encoded variants, null bytes
+      if (
+        p.includes('..') ||
+        p.startsWith('/') ||
+        p.startsWith('\\') ||
+        p.includes('\0') ||
+        p.includes('%2e') ||
+        p.includes('%2E') ||
+        p.includes('%2f') ||
+        p.includes('%2F') ||
+        p.includes('\\\\') ||
+        /[<>:"|?*]/.test(p) // Windows reserved chars
+      ) {
         logger.warn(`[Proto] Rejected unsafe file path: ${p}`);
+        return false;
+      }
+      // Reject empty paths and paths with only dots
+      if (!p.trim() || /^\.+$/.test(p)) {
+        logger.warn(`[Proto] Rejected empty/dot-only file path: ${p}`);
         return false;
       }
       return true;

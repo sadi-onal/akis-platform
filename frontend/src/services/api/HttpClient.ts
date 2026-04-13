@@ -103,6 +103,15 @@ export class HttpClient {
           headers,
         });
 
+        // Auth expired — redirect to login (don't retry)
+        if (response.status === 401) {
+          const currentPath = window.location.pathname;
+          if (currentPath !== '/login' && currentPath !== '/signup') {
+            window.location.href = '/login';
+          }
+          throw await this.parseErrorResponse(response);
+        }
+
         // Don't retry on client errors (4xx) except 429 (rate limit)
         if (response.status >= 400 && response.status < 500 && response.status !== 429) {
           throw await this.parseErrorResponse(response);

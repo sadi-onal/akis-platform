@@ -61,17 +61,14 @@ describe('useConversationState', () => {
   // ── isInputEnabled ───────────────────────────────
 
   describe('isInputEnabled', () => {
-    const enabledStages: PipelineStage[] = ['scribe_clarifying', 'awaiting_approval', 'completed', 'cancelled'];
-    const disabledStages: PipelineStage[] = ['scribe_generating', 'proto_building', 'trace_testing', 'ci_running'];
+    const allStages: PipelineStage[] = [
+      'scribe_clarifying', 'awaiting_approval', 'completed', 'cancelled',
+      'scribe_generating', 'proto_building', 'trace_testing', 'ci_running',
+    ];
 
-    it.each(enabledStages)('is true for %s (user can type)', (stage) => {
+    it.each(allStages)('is always true for %s (user can always type)', (stage) => {
       const { result } = renderHook(() => useConversationState(stage));
       expect(result.current.isInputEnabled).toBe(true);
-    });
-
-    it.each(disabledStages)('is false for %s (agent is working)', (stage) => {
-      const { result } = renderHook(() => useConversationState(stage));
-      expect(result.current.isInputEnabled).toBe(false);
     });
 
     it('is true when no stage is set (idle)', () => {
@@ -147,7 +144,7 @@ describe('useConversationState', () => {
 
     it('shows terminal-state placeholder after completion', () => {
       const { result } = renderHook(() => useConversationState('completed'));
-      expect(result.current.inputPlaceholder).toContain('yeni fikir');
+      expect(result.current.inputPlaceholder).toContain('Projeniz hazır');
     });
   });
 
@@ -163,7 +160,7 @@ describe('useConversationState', () => {
       });
 
       expect(result.current.uiState).toBe('proto_running');
-      expect(result.current.isInputEnabled).toBe(false);
+      expect(result.current.isInputEnabled).toBe(true);
       expect(result.current.showCancelButton).toBe(true);
     });
 

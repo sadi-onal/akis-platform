@@ -26,7 +26,9 @@ const SignupStartSchema = z.object({
 
 const SignupPasswordSchema = z.object({
   userId: z.string().uuid(),
-  password: z.string().min(8).max(100),
+  password: z.string().min(8).max(100)
+    .refine((p) => /[A-Z]/.test(p), 'Sifre en az bir buyuk harf icermeli')
+    .refine((p) => /[0-9]/.test(p), 'Sifre en az bir rakam icermeli'),
 });
 
 const VerifyEmailSchema = z.object({
@@ -72,7 +74,9 @@ export async function registerMultiStepAuthRoutes(
   fastify: FastifyInstance,
   emailService: EmailService
 ) {
-  const isDevMode = process.env.DEV_MODE === 'true';
+  const rawDevMode = process.env.DEV_MODE === 'true';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isDevMode = rawDevMode && !isProduction; // DEV_MODE disabled in production for safety
   const verificationService = new VerificationService(emailService, {
     ttlMinutes: 15, // Can be made configurable
   });
@@ -431,5 +435,75 @@ export async function registerMultiStepAuthRoutes(
       .where(eq(users.id, userId));
 
     return { ok: true };
+  });
+
+  // ─── Password Reset Flow ──────────────────────────
+
+  const ForgotPasswordSchema = z.object({
+    email: z.string().email(),
+  });
+
+  const ResetPasswordSchema = z.object({
+    email: z.string().email(),
+    code: z.string().regex(/^\d{6}$/, 'Kod 6 haneli olmali'),
+    newPassword: z.string().min(8).max(100)
+      .refine((p) => /[A-Z]/.test(p), 'Sifre en az bir buyuk harf icermeli')
+      .refine((p) => /[0-9]/.test(p), 'Sifre en az bir rakam icermeli'),
+  });
+
+  fastify.post('/forgot-password', { config: { rateLimit: { max: 3, timeWindow: '1 minute' } } }, async (request, reply) => {
+    try {
+      const { email } = ForgotPasswordSchema.parse(request.body);
+
+      const user = await db.query.users.findFirst({
+        where: eq(users.email, email.toLowerCase().trim()),
+      });
+
+      // Always return success (don't leak whether email exists)
+      if (!user || user.status !== 'active') {
+        return { ok: true, message: 'Eger bu e-posta kayitliysa, sifre sifirlama kodu gonderildi.' };
+      }
+
+      // Send verification code using existing service
+      await verificationService.sendVerificationCode(user.id, user.email);
+
+      return { ok: true, userId: user.id, message: 'Sifre sifirlama kodu gonderildi.' };
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return sendError(reply, request, 'VALIDATION_ERROR', 'Gecersiz e-posta adresi');
+      }
+      return sendError(reply, request, 'INTERNAL_ERROR', 'Istek islenilemedi');
+    }
+  });
+
+  fastify.post('/reset-password', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request, reply) => {
+    try {
+      const { email, code, newPassword } = ResetPasswordSchema.parse(request.body);
+
+      const user = await db.query.users.findFirst({
+        where: eq(users.email, email.toLowerCase().trim()),
+      });
+
+      if (!user || user.status !== 'active') {
+        return sendError(reply, request, 'NOT_FOUND', 'Kullanici bulunamadi');
+      }
+
+      // Verify the code
+      const isValid = await verificationService.verifyCode(user.id, code);
+      if (!isValid) {
+        return sendError(reply, request, 'INVALID_CODE', 'Gecersiz veya suresi dolmus kod');
+      }
+
+      // Update password
+      const passwordHash = await hashPassword(newPassword);
+      await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, user.id));
+
+      return { ok: true, message: 'Sifreniz basariyla guncellendi. Giris yapabilirsiniz.' };
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return sendError(reply, request, 'VALIDATION_ERROR', err.errors.map((e) => e.message).join(', '));
+      }
+      return sendError(reply, request, 'INTERNAL_ERROR', 'Istek islenilemedi');
+    }
   });
 }

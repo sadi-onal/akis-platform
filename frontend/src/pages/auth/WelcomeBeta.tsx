@@ -22,7 +22,7 @@ export default function WelcomeBeta() {
     }
     
     clearReturnTo();
-    navigate('/dashboard', { replace: true });
+    navigate('/chat', { replace: true });
   }
 
   function handleLearnMore() {

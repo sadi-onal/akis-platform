@@ -4,6 +4,7 @@ import { profileRoutes } from './profile.js';
 import { workspaceRoutes } from './workspace.js';
 import { pipelineStatsRoutes } from './pipeline-stats.js';
 import { integrityMetricsRoutes } from './integrity-metrics.js';
+import { integrationSettingsRoutes } from './integrations.js';
 
 export async function settingsRoutes(fastify: FastifyInstance) {
   await fastify.register(aiKeysRoutes, { prefix: '/settings' });
@@ -11,4 +12,5 @@ export async function settingsRoutes(fastify: FastifyInstance) {
   await fastify.register(workspaceRoutes, { prefix: '/settings' });
   await fastify.register(pipelineStatsRoutes, { prefix: '/settings' });
   await fastify.register(integrityMetricsRoutes, { prefix: '/settings' });
+  await fastify.register(integrationSettingsRoutes, { prefix: '/settings' });
 }

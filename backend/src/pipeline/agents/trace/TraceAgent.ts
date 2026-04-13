@@ -12,6 +12,9 @@ import {
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { generateGherkinFromSpec } from '../../integrations/cucumberGenerator.js';
 import { logger } from '../../../lib/logger.js';
+import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
+import { runAgenticLoop } from '../../core/AgenticLoop.js';
+import { TRACE_TOOLS, createTraceToolHandlers, type TraceToolDeps } from './trace-tools.js';
 
 // ─── Dependency Interfaces ────────────────────────
 
@@ -156,10 +159,12 @@ If any criterion has no test coverage, add it to the "uncoveredCriteria" array i
 export class TraceAgent {
   private ai: TraceAIDeps;
   private github: TraceGitHubDeps;
+  private agenticDeps?: AgenticLoopDeps;
 
-  constructor(ai: TraceAIDeps, github: TraceGitHubDeps) {
+  constructor(ai: TraceAIDeps, github: TraceGitHubDeps, agenticDeps?: AgenticLoopDeps) {
     this.ai = ai;
     this.github = github;
+    this.agenticDeps = agenticDeps;
   }
 
   async execute(input: TraceInput): Promise<TraceResult> {
@@ -167,7 +172,16 @@ export class TraceAgent {
       ? createActivityEmitter(input.pipelineId, 'trace')
       : undefined;
 
-    // Step 1: Read codebase from GitHub
+    // Agentic path: if tool_use deps available and not dryRun, use Claude with tools
+    if (this.agenticDeps && !input.dryRun && this.github.pushFiles) {
+      try {
+        return await this.executeWithTools(input, emit);
+      } catch (err) {
+        logger.error({ err }, '[Trace] Agentic execution failed, falling back to legacy path');
+      }
+    }
+
+    // Legacy path: Step 1: Read codebase from GitHub
     emit?.('fetching', 'Kaynak dosyalar okunuyor', 10);
     const codebaseResult = await this.readCodebase(input.repoOwner, input.repo, input.branch, emit);
     if (codebaseResult.type === 'error') {
@@ -199,8 +213,8 @@ export class TraceAgent {
     const { testFiles, coverageMatrix, testSummary } = testsResult.data;
     emit?.('parsing', `${testFiles.length} test dosyası hazırlandı`, 75);
 
-    // Generate BDD/Gherkin feature files from spec
-    const gherkinResult = input.spec
+    // Generate BDD/Gherkin feature files from spec (only when Cucumber is enabled)
+    const gherkinResult = (input.cucumberEnabled && input.spec)
       ? generateGherkinFromSpec(input.spec)
       : { features: [], stepDefinitions: [] };
 
@@ -268,6 +282,98 @@ export class TraceAgent {
         prUrl,
         gherkinFeatures: gherkinResult.features,
         stepDefinitions: gherkinResult.stepDefinitions,
+      },
+    };
+  }
+
+  // ─── Agentic Tool-Use Execution Path ────────────
+
+  private async executeWithTools(
+    input: TraceInput,
+    emit?: ReturnType<typeof createActivityEmitter>,
+  ): Promise<TraceResult> {
+    emit?.('ai_call', 'Claude AI tool_use ile test yazılıyor...', 10);
+
+    const toolDeps: TraceToolDeps = {
+      listFiles: (owner, repo, branch) => this.github.listFiles(owner, repo, branch),
+      getFileContent: (owner, repo, branch, filePath) => this.github.getFileContent(owner, repo, branch, filePath),
+      pushFiles: (owner, repo, branch, files, message) => this.github.pushFiles!(owner, repo, branch, files, message),
+      createBranch: (owner, repo, branch, fromBranch) => this.github.createBranch(owner, repo, branch, fromBranch),
+    };
+    const handlers = createTraceToolHandlers(toolDeps);
+
+    const specContext = input.spec
+      ? `\nSpec:\n- Title: ${input.spec.title}\n- Acceptance Criteria:\n${input.spec.acceptanceCriteria.map((ac) => `  ${ac.id}: WHEN ${ac.when} THEN ${ac.then}`).join('\n')}`
+      : '';
+
+    const userPrompt = `Write Playwright e2e tests for the project at GitHub: ${input.repoOwner}/${input.repo} (branch: ${input.branch})
+${specContext}
+
+Steps:
+1. Call list_files to see what source files exist
+2. Call read_file for key source files (App.jsx, components, etc.) to understand the code
+3. Write comprehensive Playwright tests that verify each acceptance criterion
+4. Create a test branch "trace/tests" from main
+5. Call push_files to push test files to the test branch
+
+After pushing, respond with a JSON summary:
+{
+  "testFiles": [{"filePath": "...", "testCount": N}],
+  "coverageMatrix": {"AC-1": ["test-file.spec.ts"], ...},
+  "testSummary": {"totalTests": N, "coveragePercentage": N, "coveredCriteria": [...], "uncoveredCriteria": [...]}
+}`;
+
+    const result = await runAgenticLoop(
+      this.agenticDeps!,
+      TEST_GENERATION_PROMPT,
+      userPrompt,
+      TRACE_TOOLS,
+      handlers,
+      {
+        maxIterations: 15,
+        maxTokens: 32768,
+        temperature: 0,
+        onToolCall: (name) => {
+          if (name === 'list_files') emit?.('fetching', 'Dosya listesi okunuyor...', 20);
+          if (name === 'read_file') emit?.('fetching', 'Kaynak dosya okunuyor...', 40);
+          if (name === 'push_files') emit?.('github_push', 'Test dosyaları push ediliyor...', 80);
+        },
+      },
+    );
+
+    // Parse the final JSON summary from Claude's text response
+    try {
+      const jsonMatch = result.text.match(/\{[\s\S]*"testFiles"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as {
+          testFiles?: Array<{ filePath: string; testCount: number }>;
+          coverageMatrix?: Record<string, string[]>;
+          testSummary?: { totalTests: number; coveragePercentage: number; coveredCriteria: string[]; uncoveredCriteria: string[] };
+        };
+
+        emit?.('complete', `Testler yazıldı: ${parsed.testSummary?.totalTests ?? 0} test (tool_use)`, 100);
+        return {
+          type: 'output',
+          data: {
+            ok: true,
+            testFiles: (parsed.testFiles ?? []).map((f) => ({ filePath: f.filePath, content: '', testCount: f.testCount })),
+            coverageMatrix: parsed.coverageMatrix ?? {},
+            testSummary: parsed.testSummary ?? { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
+            branch: 'trace/tests',
+          },
+        };
+      }
+    } catch { /* fall through to default */ }
+
+    // Default: could not parse structured output
+    emit?.('complete', 'Test yazımı tamamlandı (tool_use)', 100);
+    return {
+      type: 'output',
+      data: {
+        ok: true,
+        testFiles: [],
+        coverageMatrix: {},
+        testSummary: { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
       },
     };
   }

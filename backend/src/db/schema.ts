@@ -1638,6 +1638,7 @@ export const pipelines = pgTable('pipelines', {
   protoOutput: jsonb('proto_output'),
   traceOutput: jsonb('trace_output'),
   protoConfig: jsonb('proto_config'),
+  jiraConfig: jsonb('jira_config'),
   metrics: jsonb('metrics').default({}),
   error: jsonb('error'),
   intermediateState: jsonb('intermediate_state'),

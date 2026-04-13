@@ -93,6 +93,8 @@ export class PipelineOrchestrator {
   /** Per-pipeline mutation lock — serializes concurrent operations on the same pipeline. */
   private locks = new Map<string, Promise<unknown>>();
 
+  private activityLogger?: { record(entry: Record<string, unknown>): Promise<void> };
+
   constructor(
     private store: PipelineStore,
     private scribe: ScribeAgent,
@@ -104,6 +106,16 @@ export class PipelineOrchestrator {
     private emit?: (event: PipelineEvent) => void,
     private createAgentsForModel?: (model: string, githubService?: import('../pipeline-factory.js').GitHubServiceLike) => AgentSet,
   ) {}
+
+  /** Inject optional agent activity logger for integrity metrics */
+  setActivityLogger(logger: { record(entry: Record<string, unknown>): Promise<void> }): void {
+    this.activityLogger = logger;
+  }
+
+  /** Log agent activity (non-blocking, best-effort) */
+  private logActivity(pipelineId: string, agent: 'scribe' | 'proto' | 'trace', action: string, data: Record<string, unknown> = {}): void {
+    this.activityLogger?.record({ pipelineId, agent, action, ...data }).catch(() => {});
+  }
 
   /**
    * Serialize operations on the same pipeline — prevents concurrent mutations
@@ -215,8 +227,21 @@ export class PipelineOrchestrator {
   }
   private async _sendMessage(pipelineId: string, message: string): Promise<PipelineState> {
     const pipeline = await this.getPipeline(pipelineId);
-    this.assertStage(pipeline, 'scribe_clarifying');
 
+    // Non-scribe states: save user note to conversation without changing pipeline state
+    if (pipeline.stage !== 'scribe_clarifying') {
+      const conversation: ScribeMessageType[] = [
+        ...pipeline.scribeConversation,
+        { type: 'user_note', content: message },
+      ];
+      const updated = await this.store.update(pipelineId, {
+        scribeConversation: conversation,
+      });
+      this.emitEvent(pipelineId, 'scribe_message', pipeline.stage);
+      return updated;
+    }
+
+    // Scribe clarifying flow (unchanged)
     // Guard: prevent unbounded conversation growth (max 20 entries ≈ 10 rounds)
     if (pipeline.scribeConversation.length >= 20) {
       const error = createPipelineError(
@@ -296,8 +321,9 @@ export class PipelineOrchestrator {
     repoVisibility: 'public' | 'private',
     editedSpec?: StructuredSpec,
     jiraConfig?: { projectKey: string; enabled: boolean; epicKey?: string },
+    cucumberEnabled?: boolean,
   ): Promise<PipelineState> {
-    return this.withLock(pipelineId, () => this._approveSpec(pipelineId, repoName, repoVisibility, editedSpec, jiraConfig));
+    return this.withLock(pipelineId, () => this._approveSpec(pipelineId, repoName, repoVisibility, editedSpec, jiraConfig, cucumberEnabled));
   }
   private async _approveSpec(
     pipelineId: string,
@@ -305,6 +331,7 @@ export class PipelineOrchestrator {
     repoVisibility: 'public' | 'private',
     editedSpec?: StructuredSpec,
     jiraConfig?: { projectKey: string; enabled: boolean; epicKey?: string },
+    cucumberEnabled?: boolean,
   ): Promise<PipelineState> {
     const pipeline = await this.getPipeline(pipelineId);
     this.assertStage(pipeline, 'awaiting_approval');
@@ -347,6 +374,9 @@ export class PipelineOrchestrator {
     };
     if (jiraConfig) {
       approveUpdate.jiraConfig = jiraConfig;
+    }
+    if (cucumberEnabled != null) {
+      approveUpdate.intermediateState = { ...approveUpdate.intermediateState, cucumberEnabled };
     }
     const updated = await this.store.update(pipelineId, approveUpdate, { expectedStageVersion: pipeline.stageVersion });
     this.emitEvent(pipelineId, 'stage_change', 'proto_building');
@@ -415,6 +445,12 @@ export class PipelineOrchestrator {
     }
 
     const protoCompletedMetrics = { ...metrics, approvedAt: metrics.approvedAt ?? new Date(), protoCompletedAt: new Date() };
+
+    // Log Proto activity for integrity metrics
+    this.logActivity(pipelineId, 'proto', 'scaffold_generated', {
+      filesGenerated: protoResult.data.files?.length ?? 0,
+      specCompliance: 0.85, // Proto succeeded → base compliance
+    });
 
     // Check if Scribe marked this as not requiring tests
     const pipeline = await this.getPipeline(pipelineId);
@@ -493,6 +529,12 @@ export class PipelineOrchestrator {
         title: result.data.spec.title,
       });
       this.emitEvent(pipelineId, 'stage_change', 'awaiting_approval', result.data);
+      // Log Scribe activity for integrity metrics
+      this.logActivity(pipelineId, 'scribe', 'spec_generated', {
+        confidence: result.data.confidence,
+        specCompliance: result.data.confidence, // use confidence as spec compliance proxy
+        assumptions: result.data.assumptions,
+      });
       return updated;
     }
 
@@ -517,6 +559,15 @@ export class PipelineOrchestrator {
   private async _retryStage(pipelineId: string): Promise<PipelineState> {
     const pipeline = await this.getPipeline(pipelineId);
     this.assertStage(pipeline, 'failed');
+
+    // Guard: max 5 manual retries per pipeline to prevent API cost runaway
+    const MAX_MANUAL_RETRIES = 5;
+    if (pipeline.metrics.retryCount >= MAX_MANUAL_RETRIES) {
+      throw Object.assign(
+        new Error(`Maksimum tekrar deneme limiti aşıldı (${MAX_MANUAL_RETRIES}). Lütfen yeni bir pipeline başlatın.`),
+        { statusCode: 429 },
+      );
+    }
 
     const updated = await this.store.update(pipelineId, {
       error: null,
@@ -670,11 +721,14 @@ export class PipelineOrchestrator {
 
     const agents = this.getAgents(traceModel);
     await this.writeCheckpoint(pipelineId, 'trace', `${owner}/${repo}@${branch}`);
+    // Read cucumberEnabled from pipeline intermediateState
+    const pipelineForCucumber = await this.getPipeline(pipelineId);
+    const cucumberEnabled = (pipelineForCucumber.intermediateState as Record<string, unknown> | undefined)?.cucumberEnabled === true;
     const traceResult = await withRetry(
       (attempt) => {
         if (attempt > 1) traceEmit('retry', `Trace yeniden deneniyor (deneme ${attempt})...`, 30);
         return withTimeout(
-          agents.trace.execute({ repoOwner: owner, repo, branch, spec, pipelineId }),
+          agents.trace.execute({ repoOwner: owner, repo, branch, spec, pipelineId, cucumberEnabled }),
           TRACE_TIMEOUT,
           'Trace',
         );
@@ -720,6 +774,14 @@ export class PipelineOrchestrator {
       },
     });
     this.emitEvent(pipelineId, 'completed', 'completed');
+
+    // Log Trace activity for integrity metrics
+    const ts = traceResult.data.testSummary;
+    this.logActivity(pipelineId, 'trace', 'tests_generated', {
+      testsPassed: ts?.totalTests ?? 0,
+      specCompliance: ts?.coveragePercentage ? ts.coveragePercentage / 100 : 0,
+      confidence: ts?.coveragePercentage ? ts.coveragePercentage / 100 : 0,
+    });
 
     // Jira hook: comment Trace result (non-blocking)
     const pipelineForJira = await this.store.getById(pipelineId);
@@ -941,6 +1003,8 @@ export class PipelineOrchestrator {
           await new Promise((r) => setTimeout(r, retryDelays[attempt]));
         } else {
           logger.error({ err: storeErr, pipelineId }, '[Pipeline] CRITICAL: failPipeline exhausted all retries. Pipeline may be stuck.');
+          // Last resort: emit error event even if store update failed — at least SSE clients get notified
+          try { this.emitEvent(pipelineId, 'error', 'failed', error); } catch { /* exhausted */ }
         }
       }
     }

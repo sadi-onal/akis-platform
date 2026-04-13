@@ -135,7 +135,7 @@ export default function LoginPassword() {
 
           <div className="flex justify-end">
             <Link
-              to="/auth/reset-password"
+              to="/forgot-password"
               className="text-sm text-ak-primary hover:underline"
             >
               Şifremi unuttum

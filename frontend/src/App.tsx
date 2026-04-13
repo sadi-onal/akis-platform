@@ -15,6 +15,8 @@ const SignupVerifyEmail = lazy(() => import('./pages/auth/SignupVerifyEmail'));
 const WelcomeBeta = lazy(() => import('./pages/auth/WelcomeBeta'));
 const PrivacyConsent = lazy(() => import('./pages/auth/PrivacyConsent'));
 const InviteAccept = lazy(() => import('./pages/auth/InviteAccept'));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 
 // Legal pages
 const LegalTermsPage = lazy(() => import('./pages/legal/LegalTermsPage'));
@@ -65,6 +67,8 @@ function App() {
               <Route path="password" element={<Suspense fallback={<PageLoader />}><SignupPassword /></Suspense>} />
               <Route path="verify-email" element={<Suspense fallback={<PageLoader />}><SignupVerifyEmail /></Suspense>} />
             </Route>
+            <Route path="forgot-password" element={<Suspense fallback={<PageLoader />}><ForgotPassword /></Suspense>} />
+            <Route path="reset-password" element={<Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>} />
             <Route path="auth">
               <Route path="welcome-beta" element={<Suspense fallback={<PageLoader />}><WelcomeBeta /></Suspense>} />
               <Route path="privacy-consent" element={<Suspense fallback={<PageLoader />}><PrivacyConsent /></Suspense>} />

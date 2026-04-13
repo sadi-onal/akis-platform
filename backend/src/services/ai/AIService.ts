@@ -1115,6 +1115,77 @@ class MockAIService implements AIService {
 // Factory Function
 // =============================================================================
 
+// =============================================================================
+// Tool-Calling Client (for AgenticLoop)
+// =============================================================================
+
+import type {
+  ToolDefinition,
+  AnthropicMessage,
+  AnthropicResponse,
+} from './tool-schemas.js';
+import { toAnthropicTools } from './tool-schemas.js';
+
+/**
+ * Creates a tool-calling client for the AgenticLoop.
+ * Uses the same Anthropic API credentials as AIService but calls with tools.
+ */
+export function createToolCallingClient(
+  config?: AIConfig,
+): (
+  messages: AnthropicMessage[],
+  tools: ToolDefinition[],
+  options?: { model?: string; maxTokens?: number; temperature?: number; system?: string },
+) => Promise<AnthropicResponse> {
+  const resolvedConfig = config || getAIConfig(getEnv());
+
+  return async (messages, tools, options = {}) => {
+    if (!resolvedConfig.apiKey || resolvedConfig.provider === 'mock') {
+      // Mock response for tests
+      return {
+        id: 'mock',
+        content: [{ type: 'text' as const, text: '{"mock": true}' }],
+        stop_reason: 'end_turn' as const,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      };
+    }
+
+    const model = resolveAnthropicModel(options.model ?? resolvedConfig.modelDefault);
+    const endpoint = `${resolvedConfig.baseUrl}/v1/messages`;
+
+    const body: Record<string, unknown> = {
+      model,
+      max_tokens: options.maxTokens ?? 16384,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      tools: toAnthropicTools(tools),
+      ...(options.temperature !== undefined && { temperature: options.temperature }),
+      ...(options.system && { system: options.system }),
+    };
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': resolvedConfig.apiKey!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new AIProviderError(
+        'AI_PROVIDER_ERROR',
+        `Tool-calling API error (${response.status}): ${errorText.substring(0, 200)}`,
+        resolvedConfig.provider,
+        response.status,
+      );
+    }
+
+    return (await response.json()) as AnthropicResponse;
+  };
+}
+
 /**
  * Create AIService instance based on configuration
  * Uses getAIConfig() to resolve environment variables with legacy fallbacks

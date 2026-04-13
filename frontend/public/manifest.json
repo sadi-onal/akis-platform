@@ -1,0 +1,29 @@
+{
+  "name": "AKIS Platform",
+  "short_name": "AKIS",
+  "description": "AI Agent Workflows Engine — Fikirden koda, dakikalar icinde.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#07D1AF",
+  "background_color": "#0A1215",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "lang": "tr",
+  "categories": ["developer-tools", "productivity"]
+}

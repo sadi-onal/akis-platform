@@ -33,7 +33,7 @@ describe('ErrorBoundary', () => {
         <ThrowingChild />
       </ErrorBoundary>
     );
-    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    expect(screen.getByText('Bir hata olustu')).toBeInTheDocument();
   });
 
   it('shows error description', () => {
@@ -43,7 +43,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
     expect(
-      screen.getByText(/An error occurred while rendering this page/)
+      screen.getByText(/Bu sayfa yüklenirken bir hata meydana geldi/)
     ).toBeInTheDocument();
   });
 
@@ -53,7 +53,7 @@ describe('ErrorBoundary', () => {
         <ThrowingChild />
       </ErrorBoundary>
     );
-    expect(screen.getByText('Reload Page')).toBeInTheDocument();
+    expect(screen.getByText('Sayfayi Yenile')).toBeInTheDocument();
   });
 
   it('shows Back to Dashboard link by default', () => {
@@ -62,7 +62,7 @@ describe('ErrorBoundary', () => {
         <ThrowingChild />
       </ErrorBoundary>
     );
-    const link = screen.getByText(/Back to Dashboard/);
+    const link = screen.getByText(/Dashboard sayfasina don/);
     expect(link.closest('a')?.getAttribute('href')).toBe('/dashboard');
   });
 
@@ -72,7 +72,7 @@ describe('ErrorBoundary', () => {
         <ThrowingChild />
       </ErrorBoundary>
     );
-    const link = screen.getByText(/Back to Jobs/);
+    const link = screen.getByText(/Jobs sayfasina don/);
     expect(link.closest('a')?.getAttribute('href')).toBe('/dashboard/jobs');
   });
 });

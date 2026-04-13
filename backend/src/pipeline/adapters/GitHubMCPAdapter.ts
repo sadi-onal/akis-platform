@@ -3,6 +3,7 @@
  * This allows the pipeline (Proto, Trace) to use real GitHub operations via the MCP Gateway.
  */
 import type { GitHubServiceLike } from '../core/pipeline-factory.js';
+import { logger } from '../../lib/logger.js';
 
 export interface GitHubMCPAdapterDeps {
   callToolRaw<T>(toolName: string, args: Record<string, unknown>): Promise<T>;
@@ -108,7 +109,7 @@ export function createGitHubMCPAdapter(mcp: GitHubMCPAdapterDeps): GitHubService
             owner, repo, path: dirPath || '', branch,
           });
         } catch (err) {
-          console.warn(`[MCP listFiles] Failed to read dir "${dirPath}":`, err instanceof Error ? err.message : err);
+          logger.warn(`[MCP listFiles] Failed to read dir "${dirPath}": ${err instanceof Error ? err.message : String(err)}`);
           return;
         }
 

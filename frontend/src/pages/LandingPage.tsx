@@ -1,35 +1,17 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useEffect } from 'react';
+import { LazyMotion, domAnimation, motion, useReducedMotion } from 'framer-motion';
 import { LOGO_MARK_SVG } from '../theme/brand';
-
-const STEPS = [
-  {
-    icon: '💬',
-    title: 'Fikrinizi Anlatın',
-    description: 'Scribe agent fikirlerinizi yapılandırılmış bir spec\'e çevirir. Sorular sorar, detayları netleştirir.',
-  },
-  {
-    icon: '🔨',
-    title: 'Otomatik Prototipleme',
-    description: 'Proto agent onaylanan spec\'ten çalışan bir MVP scaffold üretir ve GitHub\'a push eder.',
-  },
-  {
-    icon: '✅',
-    title: 'Otomatik Test',
-    description: 'Trace agent üretilen koda özel Playwright e2e testleri yazar ve aynı branch\'e ekler.',
-  },
-];
-
-const PROVIDERS = [
-  { name: 'Anthropic', desc: 'Claude' },
-  { name: 'OpenAI', desc: 'GPT-4o' },
-  { name: 'OpenRouter', desc: 'Multi-model' },
-];
+import { HeroSection } from '../components/landing/HeroSection';
+import { HowItWorksSection } from '../components/landing/HowItWorksSection';
+import { FeaturesSection } from '../components/landing/FeaturesSection';
+import { StatsSection } from '../components/landing/StatsSection';
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const reduced = useReducedMotion();
 
   useEffect(() => {
     if (!loading && user) {
@@ -46,98 +28,79 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-ak-bg text-ak-text-primary">
-      {/* Nav */}
-      <nav aria-label="Ana navigasyon" className="flex items-center justify-between px-6 py-4 max-w-5xl mx-auto">
-        <div className="flex items-center gap-2">
-          <img src={LOGO_MARK_SVG} alt="AKIS" className="h-8 w-8" />
-          <span className="text-lg font-extrabold tracking-tight text-[#07D1AF]">AKIS</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/docs')}
-            className="text-sm text-ak-text-secondary hover:text-ak-text-primary transition-colors"
-          >
-            Docs
-          </button>
-          <button
-            onClick={() => navigate('/login')}
-            className="rounded-lg bg-[#07D1AF] px-4 py-2 text-sm font-semibold text-[#0A1215] hover:brightness-110 transition"
-          >
-            Giriş Yap
-          </button>
-        </div>
-      </nav>
-
-      {/* Hero — fills viewport minus nav */}
-      <main>
-      <section className="flex min-h-[calc(100vh-64px)] flex-col items-center justify-center px-4 pb-16 text-center max-w-3xl mx-auto">
-        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-          Fikirden Koda,{' '}
-          <span className="text-[#07D1AF]">Dakikalar İçinde.</span>
-        </h1>
-        <p className="mt-5 max-w-xl text-lg text-ak-text-secondary leading-relaxed">
-          AI destekli agent'lar ile yazılım geliştirme sürecinizi hızlandırın.
-          Fikrinizi anlatın, AKIS spec yazarken siz onaylayın, kod ve testler otomatik oluşsun.
-        </p>
-        <div className="mt-8 flex gap-4">
-          <button
-            onClick={() => navigate('/signup')}
-            className="rounded-lg bg-[#07D1AF] px-8 py-3 text-sm font-semibold text-[#0A1215] hover:brightness-110 transition"
-          >
-            Başla
-          </button>
-          <button
-            onClick={() => navigate('/docs')}
-            className="rounded-lg border border-ak-border px-8 py-3 text-sm font-semibold text-ak-text-secondary hover:border-ak-text-secondary transition"
-          >
-            Dokümantasyon
-          </button>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section className="px-4 py-16 max-w-4xl mx-auto">
-        <h2 className="text-center text-2xl font-bold mb-12">Nasıl Çalışır?</h2>
-        <div className="grid gap-8 md:grid-cols-3">
-          {STEPS.map((step, i) => (
-            <div
-              key={i}
-              className="rounded-2xl border border-ak-border bg-ak-surface/50 p-6 text-center"
+    <LazyMotion features={domAnimation}>
+      <div className="min-h-screen bg-ak-bg text-ak-text-primary">
+        {/* Nav */}
+        <motion.nav
+          aria-label="Ana navigasyon"
+          className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 max-w-6xl mx-auto backdrop-blur-md bg-ak-bg/80 border-b border-ak-border/50"
+          initial={reduced ? {} : { opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <div className="flex items-center gap-2">
+            <img src={LOGO_MARK_SVG} alt="AKIS" className="h-8 w-8" />
+            <span className="text-lg font-extrabold tracking-tight text-[#07D1AF]">AKIS</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/docs')}
+              className="text-sm text-ak-text-secondary hover:text-ak-text-primary transition-colors"
             >
-              <div className="text-3xl mb-3">{step.icon}</div>
-              <div className="mb-1 text-xs font-medium text-[#07D1AF] uppercase tracking-wider">Adım {i + 1}</div>
-              <h3 className="text-base font-semibold mb-2">{step.title}</h3>
-              <p className="text-sm text-ak-text-secondary leading-relaxed">{step.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+              Dokumantasyon
+            </button>
+            <motion.button
+              onClick={() => navigate('/login')}
+              className="rounded-lg bg-[#07D1AF] px-4 py-2 text-sm font-semibold text-[#0A1215]"
+              whileHover={reduced ? {} : { scale: 1.05 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              Giris Yap
+            </motion.button>
+          </div>
+        </motion.nav>
 
-      {/* Providers */}
-      <section className="px-4 py-12 max-w-4xl mx-auto text-center">
-        <h2 className="text-lg font-semibold mb-6 text-ak-text-secondary">Desteklenen AI Sağlayıcılar</h2>
-        <div className="flex justify-center gap-6 flex-wrap">
-          {PROVIDERS.map((p) => (
-            <div key={p.name} className="rounded-xl border border-ak-border bg-ak-surface/30 px-6 py-3">
-              <div className="text-sm font-semibold">{p.name}</div>
-              <div className="text-xs text-ak-text-secondary">{p.desc}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+        <main>
+          <HeroSection />
+          <HowItWorksSection />
+          <StatsSection />
+          <FeaturesSection />
 
-      </main>
+          {/* CTA Section */}
+          <section className="px-4 py-24 text-center">
+            <motion.div
+              className="mx-auto max-w-md"
+              initial={reduced ? {} : { opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              <h2 className="text-2xl font-bold mb-3">Hemen Deneyin</h2>
+              <p className="text-sm text-ak-text-secondary mb-6">
+                Hesap olusturun ve ilk pipeline'inizi dakikalar icinde baslatin.
+              </p>
+              <motion.button
+                onClick={() => navigate('/signup')}
+                className="rounded-xl bg-[#07D1AF] px-10 py-4 text-sm font-bold text-[#0A1215] shadow-lg shadow-[#07D1AF]/20"
+                whileHover={reduced ? {} : { scale: 1.05, boxShadow: '0 0 40px rgba(7,209,175,0.3)' }}
+                whileTap={{ scale: 0.97 }}
+              >
+                Ucretsiz Basla
+              </motion.button>
+            </motion.div>
+          </section>
+        </main>
 
-      {/* Footer */}
-      <footer className="border-t border-ak-border px-4 py-8 text-center">
-        <p className="text-xs text-ak-text-secondary">
-          AKIS Platform — FSMVÜ Bitirme Projesi &copy; 2026
-        </p>
-        <p className="mt-1 text-xs text-ak-text-secondary/60">
-          Ömer Yasir Önal — Dr. Öğr. Üyesi Nazlı Doğan
-        </p>
-      </footer>
-    </div>
+        {/* Footer */}
+        <footer className="border-t border-ak-border px-4 py-8 text-center">
+          <p className="text-xs text-ak-text-secondary">
+            AKIS Platform — FSMVU Bitirme Projesi &copy; 2026
+          </p>
+          <p className="mt-1 text-xs text-ak-text-secondary/60">
+            Omer Yasir Onal — Dr. Ogr. Uyesi Nazli Dogan
+          </p>
+        </footer>
+      </div>
+    </LazyMotion>
   );
 }

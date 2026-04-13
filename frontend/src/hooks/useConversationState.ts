@@ -20,8 +20,6 @@ const RUNNING_STATES: ConversationUIState[] = [
   'ci_running',
 ];
 
-const TERMINAL_STAGES: PipelineStage[] = ['completed', 'completed_partial', 'failed'];
-
 export function useConversationState(initialStage?: PipelineStage): ConversationStateReturn {
   const [uiState, setUIState] = useState<ConversationUIState>(
     initialStage ? mapStageToUIState(initialStage) : 'idle',
@@ -35,20 +33,26 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
     setUIState(mapStageToUIState(stage));
   }, []);
 
-  const isInputEnabled = uiState === 'idle' || uiState === 'scribe_clarifying' || uiState === 'awaiting_approval';
+  // Chat input is ALWAYS enabled — users can send messages in any pipeline state
+  const isInputEnabled = true;
   const showCancelButton = RUNNING_STATES.includes(uiState);
   const runningAgentName = getRunningAgentName(uiState);
 
   const inputPlaceholder = useMemo(() => {
     if (uiState === 'scribe_clarifying') return 'Soruları yanıtlayın...';
     if (uiState === 'awaiting_approval') return 'Planı düzenlemek için yazın veya onaylayın...';
-    if (runningAgentName) return `${runningAgentName} çalışıyor...`;
-    // Terminal states (completed/failed) — guide user to continue or start fresh
-    if (uiState === 'idle' && currentStageRef.current && TERMINAL_STAGES.includes(currentStageRef.current)) {
-      return 'Devam etmek için yeni fikir yazın veya önceki projeyi geliştirin...';
+    if (uiState === 'scribe_running' || uiState === 'scribe_revise') return 'Scribe çalışıyor... Mesaj bırakabilirsiniz.';
+    if (uiState === 'proto_running') return 'Proto scaffold oluşturuyor... Mesaj bırakabilirsiniz.';
+    if (uiState === 'trace_running') return 'Trace test yazıyor... Mesaj bırakabilirsiniz.';
+    if (uiState === 'ci_running') return 'CI çalışıyor... Mesaj bırakabilirsiniz.';
+    // Terminal states
+    if (uiState === 'idle' && currentStageRef.current) {
+      if (currentStageRef.current === 'completed') return 'Projeniz hazır! Soru sorabilir veya not bırakabilirsiniz.';
+      if (currentStageRef.current === 'completed_partial') return 'Pipeline kısmen tamamlandı. Soru sorabilirsiniz.';
+      if (currentStageRef.current === 'failed') return 'Pipeline başarısız oldu. Detayları inceleyebilirsiniz.';
     }
     return 'Projenizi anlatın...';
-  }, [uiState, runningAgentName]);
+  }, [uiState]);
 
   return {
     uiState,

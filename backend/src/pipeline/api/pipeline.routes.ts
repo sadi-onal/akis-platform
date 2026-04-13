@@ -21,6 +21,7 @@ import {
   RejectSpecRequestSchema,
 } from '../core/contracts/PipelineSchemas.js';
 import type { PipelineOrchestrator } from '../core/orchestrator/PipelineOrchestrator.js';
+import type { PipelineState } from '../core/contracts/PipelineTypes.js';
 import { getActivities } from '../core/activityEmitter.js';
 
 export interface PipelineRoutesDeps {
@@ -30,6 +31,16 @@ export interface PipelineRoutesDeps {
 
 export function createPipelineRoutes(deps: PipelineRoutesDeps) {
   const { orchestrator, getUserId } = deps;
+
+  /** Verify the authenticated user owns this pipeline. Returns the pipeline. Throws 403 on mismatch. */
+  async function assertOwnership(request: unknown, pipelineId: string): Promise<PipelineState> {
+    const userId = getUserId(request);
+    const pipeline = await orchestrator.getStatus(pipelineId);
+    if (pipeline.userId !== userId) {
+      throw Object.assign(new Error('Bu pipeline\'a erişim yetkiniz yok'), { statusCode: 403 });
+    }
+    return pipeline;
+  }
 
   return {
     async startPipeline(request: unknown, _reply: unknown) {
@@ -51,17 +62,19 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
 
     async getStatus(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
-      const pipeline = await orchestrator.getStatus(id);
+      const pipeline = await assertOwnership(request, id);
       return { pipeline };
     },
 
     async getActivities(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
       return { activities: getActivities(id) };
     },
 
     async sendMessage(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
       const body = SendMessageRequestSchema.parse((request as { body: unknown }).body);
       const pipeline = await orchestrator.sendMessage(id, body.message);
       return { pipeline };
@@ -69,13 +82,15 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
 
     async approveSpec(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
       const body = ApproveSpecRequestSchema.parse((request as { body: unknown }).body);
-      const pipeline = await orchestrator.approveSpec(id, body.repoName, body.repoVisibility, body.spec, body.jiraConfig);
+      const pipeline = await orchestrator.approveSpec(id, body.repoName, body.repoVisibility, body.spec, body.jiraConfig, body.cucumberEnabled);
       return { pipeline };
     },
 
     async rejectSpec(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
       const body = RejectSpecRequestSchema.parse((request as { body: unknown }).body);
       const pipeline = await orchestrator.rejectSpec(id, body.feedback);
       return { pipeline };
@@ -83,25 +98,28 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
 
     async retryStage(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
       const pipeline = await orchestrator.retryStage(id);
       return { pipeline };
     },
 
     async skipTrace(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
       const pipeline = await orchestrator.skipTrace(id);
       return { pipeline };
     },
 
     async cancelPipeline(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
       const pipeline = await orchestrator.cancelPipeline(id);
       return { pipeline };
     },
 
     async getAllFiles(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
-      const pipeline = await orchestrator.getStatus(id);
+      const pipeline = await assertOwnership(request, id);
 
       const files: Record<string, string> = {};
 
@@ -144,8 +162,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
     async getFileContent(request: unknown) {
       const { id, '*': filePath } = (request as { params: { id: string; '*': string } }).params;
       if (!filePath) throw new Error('File path is required');
-
-      const pipeline = await orchestrator.getStatus(id);
+      const pipeline = await assertOwnership(request, id);
 
       // Search in proto output files
       const protoFile = pipeline.protoOutput?.files?.find(

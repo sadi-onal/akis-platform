@@ -6,6 +6,7 @@
 
 import type { JiraMCPService } from '../../services/mcp/adapters/JiraMCPService.js';
 import type { StructuredSpec } from '../core/contracts/PipelineTypes.js';
+import { logger } from '../../lib/logger.js';
 
 /** Race a promise against a timeout (ms). Rejects with descriptive error on timeout. */
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
@@ -60,14 +61,14 @@ export async function createJiraEpicFromSpec(
           // Link type may vary — non-fatal
         });
       } catch (storyErr) {
-        console.warn(`[Jira] Failed to create sub-task for story "${story.action}":`, storyErr);
+        logger.warn({ err: storyErr }, `[Jira] Failed to create sub-task for story "${story.action}"`);
       }
     }
 
-    console.log(`[Jira] Created Epic ${epic.key} with ${spec.userStories.length} stories`);
+    logger.info(`[Jira] Created Epic ${epic.key} with ${spec.userStories.length} stories`);
     return epic.key;
   } catch (err) {
-    console.warn('[Jira] Failed to create Epic from spec:', err);
+    logger.warn({ err }, '[Jira] Failed to create Epic from spec');
     return null;
   }
 }
@@ -91,9 +92,9 @@ export async function commentJiraWithProtoResult(
       lines.push(`- Pull Request: ${result.prUrl}`);
     }
     await withTimeout(jira.addComment(epicKey, lines.join('\n')), JIRA_CALL_TIMEOUT);
-    console.log(`[Jira] Commented Proto result on ${epicKey}`);
+    logger.info(`[Jira] Commented Proto result on ${epicKey}`);
   } catch (err) {
-    console.warn(`[Jira] Failed to comment Proto result on ${epicKey}:`, err);
+    logger.warn({ err }, `[Jira] Failed to comment Proto result on ${epicKey}`);
   }
 }
 
@@ -115,7 +116,7 @@ export async function commentJiraWithTraceResult(
       `- Coverage: ${result.coveragePercentage}%`,
     ];
     await withTimeout(jira.addComment(epicKey, lines.join('\n')), JIRA_CALL_TIMEOUT);
-    console.log(`[Jira] Commented Trace result on ${epicKey}`);
+    logger.info(`[Jira] Commented Trace result on ${epicKey}`);
 
     // Optionally transition to Done if all passed
     if (result.passed) {
@@ -126,14 +127,14 @@ export async function commentJiraWithTraceResult(
         );
         if (done) {
           await withTimeout(jira.transitionIssue(epicKey, done.id), JIRA_CALL_TIMEOUT);
-          console.log(`[Jira] Transitioned ${epicKey} to Done`);
+          logger.info(`[Jira] Transitioned ${epicKey} to Done`);
         }
       } catch (transErr) {
         // Transition ID varies per Jira instance — non-fatal
-        console.warn(`[Jira] Failed to transition ${epicKey} to Done:`, transErr);
+        logger.warn({ err: transErr }, `[Jira] Failed to transition ${epicKey} to Done`);
       }
     }
   } catch (err) {
-    console.warn(`[Jira] Failed to comment Trace result on ${epicKey}:`, err);
+    logger.warn({ err }, `[Jira] Failed to comment Trace result on ${epicKey}`);
   }
 }

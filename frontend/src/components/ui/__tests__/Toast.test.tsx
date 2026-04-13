@@ -28,8 +28,8 @@ describe('ToastContainer', () => {
     act(() => {
       toast('Something went wrong', 'error');
     });
-    const toastEl = screen.getByText('Something went wrong');
-    expect(toastEl.className).toContain('text-red-400');
+    const toastEl = screen.getByText('Something went wrong').closest('[role] > div') ?? screen.getByText('Something went wrong').parentElement;
+    expect(toastEl?.className).toContain('text-red-400');
   });
 
   it('applies correct variant styling for warning', () => {
@@ -37,8 +37,8 @@ describe('ToastContainer', () => {
     act(() => {
       toast('Be careful', 'warning');
     });
-    const toastEl = screen.getByText('Be careful');
-    expect(toastEl.className).toContain('text-yellow-400');
+    const toastEl = screen.getByText('Be careful').closest('[role] > div') ?? screen.getByText('Be careful').parentElement;
+    expect(toastEl?.className).toContain('text-yellow-400');
   });
 
   it('defaults to info variant', () => {
@@ -46,8 +46,8 @@ describe('ToastContainer', () => {
     act(() => {
       toast('Info message');
     });
-    const toastEl = screen.getByText('Info message');
-    expect(toastEl.className).toContain('text-blue-400');
+    const toastEl = screen.getByText('Info message').closest('[role] > div') ?? screen.getByText('Info message').parentElement;
+    expect(toastEl?.className).toContain('text-blue-400');
   });
 
   it('renders multiple toasts', () => {

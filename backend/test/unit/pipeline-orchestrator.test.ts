@@ -411,16 +411,17 @@ describe('Orchestrator — Reject spec', () => {
 // ─── Stage Validation ─────────────────────────────
 
 describe('Orchestrator — Stage validation', () => {
-  it('rejects sendMessage in wrong stage', async () => {
+  it('accepts sendMessage as user_note in non-scribe stage', async () => {
     const { orchestrator, store } = createOrchestrator();
 
     const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app' });
     await waitForStage(store, started.id, ['awaiting_approval']);
 
-    await assert.rejects(
-      () => orchestrator.sendMessage(started.id, 'hello'),
-      { message: /Invalid stage/ },
-    );
+    // sendMessage now saves user_note without changing pipeline stage
+    const result = await orchestrator.sendMessage(started.id, 'hello');
+    assert.strictEqual(result.stage, 'awaiting_approval');
+    const lastMsg = result.scribeConversation[result.scribeConversation.length - 1];
+    assert.strictEqual(lastMsg.type, 'user_note');
   });
 
   it('rejects approveSpec in wrong stage', async () => {

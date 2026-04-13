@@ -6,9 +6,9 @@ import Button from '../components/common/Button';
 const dashboardLinks = [
   { label: 'Overview', to: '/dashboard' },
   { label: 'Agents', to: '/agents' },
-  { label: 'Jobs', to: '/dashboard/jobs' },
-  { label: 'Integrations', to: '/dashboard/integrations' },
-  { label: 'Settings', to: '/dashboard/settings/profile' },
+  { label: 'Isler', to: '/dashboard/jobs' },
+  { label: 'Entegrasyonlar', to: '/dashboard/integrations' },
+  { label: 'Ayarlar', to: '/dashboard/settings/profile' },
 ];
 
 const settingsLinks = [

@@ -612,10 +612,21 @@ export async function registerOAuthRoutes(fastify: FastifyInstance, emailService
         }
         _tokenStored = true;
       } catch (_tokenErr) {
-        // Token encryption failed (AI_KEY_ENCRYPTION_KEY not set) — login still succeeds
-        logger.warn(`[OAuth] Token storage skipped (encryption key missing). Login will proceed without stored OAuth token.`);
+        // Token encryption failed — check if it's because the encryption key is missing
+        const isKeyMissing = _tokenErr instanceof OAuthTokenCryptoError &&
+          _tokenErr.code === 'OAUTH_TOKEN_ENCRYPTION_KEY_MISSING';
 
-        // Still link the OAuth account if it doesn't exist (without tokens)
+        if (isKeyMissing) {
+          // CRITICAL: Do not store tokens unencrypted. Fail the login with clear message.
+          logger.error('[OAuth] CRITICAL: AI_KEY_ENCRYPTION_KEY not configured. OAuth tokens cannot be stored securely. Login blocked.');
+          return reply.code(503).send({
+            error: 'oauth_encryption_required',
+            message: 'Sunucu yapılandırması eksik — OAuth token şifreleme anahtarı ayarlanmamış. Lütfen yöneticiyle iletişime geçin.',
+          });
+        }
+
+        // Other token storage errors — link account without tokens (non-fatal)
+        logger.warn(`[OAuth] Token storage failed (non-encryption error). Login will proceed without stored OAuth token.`);
         if (!existingOAuthAccount) {
           try {
             await db.insert(oauthAccounts).values({

@@ -138,6 +138,12 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
         setError(null);
         container.innerHTML = '';
 
+        // Ensure container is mounted and visible before embedding
+        if (!container.isConnected || container.offsetParent === null) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        if (cancelled || !container.isConnected) return;
+
         const sdk = await import('@stackblitz/sdk');
         if (cancelled) return;
 
@@ -155,7 +161,8 @@ export function PreviewPanel({ files, title, loading: externalLoading, branch, a
       } catch (err) {
         if (!cancelled) {
           if (import.meta.env.DEV) console.error('Preview error:', err);
-          setError(err instanceof Error ? err.message : 'Önizleme yüklenemedi');
+          const msg = err instanceof Error ? err.message : 'Önizleme yüklenemedi';
+          setError(msg.includes('Invalid Element') ? 'Önizleme başlatılamadı — lütfen "Tekrar Dene" butonunu kullanın.' : msg);
           setStatus('error');
         }
       }

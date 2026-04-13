@@ -55,6 +55,7 @@ function rowToState(row: typeof pipelines.$inferSelect): PipelineState {
     protoOutput: row.protoOutput as PipelineState['protoOutput'],
     traceOutput: row.traceOutput as PipelineState['traceOutput'],
     protoConfig: row.protoConfig as PipelineState['protoConfig'],
+    jiraConfig: row.jiraConfig as PipelineState['jiraConfig'],
     metrics: parseMetrics(row.metrics as Record<string, unknown> | null),
     error: row.error as PipelineState['error'],
     intermediateState: row.intermediateState as PipelineState['intermediateState'],
@@ -126,6 +127,7 @@ export class DrizzlePipelineStore implements PipelineStore {
     if (data.protoOutput !== undefined) updateData.protoOutput = data.protoOutput;
     if (data.traceOutput !== undefined) updateData.traceOutput = data.traceOutput;
     if (data.protoConfig !== undefined) updateData.protoConfig = data.protoConfig;
+    if (data.jiraConfig !== undefined) updateData.jiraConfig = data.jiraConfig;
     if (data.metrics !== undefined) updateData.metrics = data.metrics;
     if (data.error !== undefined) updateData.error = data.error;
     if (data.intermediateState !== undefined) updateData.intermediateState = data.intermediateState;

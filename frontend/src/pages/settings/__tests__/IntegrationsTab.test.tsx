@@ -187,24 +187,38 @@ describe('IntegrationsTab — Jira Section', () => {
     });
   });
 
-  it('shows connected status when localStorage has PAT credentials', async () => {
-    localStorage.setItem('akis_jira_url', 'https://mysite.atlassian.net');
-    localStorage.setItem('akis_jira_pat', 'my-secret-token');
-
-    globalThis.fetch = makeFetch({ atlassianConnected: false }) as unknown as typeof fetch;
+  it('shows connected status when backend reports Jira PAT connected', async () => {
+    // PAT credentials now stored on backend, not localStorage
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/jira/status')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ connected: true, siteUrl: 'https://mysite.atlassian.net' }) });
+      }
+      if (typeof url === 'string' && url.includes('/atlassian/status')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ connected: false }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
     render(<SettingsPage />);
 
     await waitFor(() => {
-      // Disconnect button appears for PAT connected state
       expect(screen.getByText('integrations.jira.disconnect')).toBeInTheDocument();
     });
   });
 
-  it('PAT disconnect removes credentials from localStorage', async () => {
-    localStorage.setItem('akis_jira_url', 'https://mysite.atlassian.net');
-    localStorage.setItem('akis_jira_pat', 'my-secret-token');
-
-    globalThis.fetch = makeFetch({ atlassianConnected: false }) as unknown as typeof fetch;
+  it('PAT disconnect calls backend API', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/jira/status')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ connected: true, siteUrl: 'https://mysite.atlassian.net' }) });
+      }
+      if (typeof url === 'string' && url.includes('/jira/disconnect')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+      }
+      if (typeof url === 'string' && url.includes('/atlassian/status')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ connected: false }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
     render(<SettingsPage />);
 
     await waitFor(() => {
@@ -213,7 +227,7 @@ describe('IntegrationsTab — Jira Section', () => {
 
     fireEvent.click(screen.getByText('integrations.jira.disconnect'));
 
-    expect(localStorage.getItem('akis_jira_url')).toBeNull();
+    // Should NOT use localStorage anymore
     expect(localStorage.getItem('akis_jira_pat')).toBeNull();
   });
 

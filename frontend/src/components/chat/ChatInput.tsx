@@ -39,6 +39,11 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
         e.preventDefault();
         handleSend();
       }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setValue('');
+        textareaRef.current?.blur();
+      }
     },
     [handleSend],
   );

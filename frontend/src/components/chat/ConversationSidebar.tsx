@@ -98,9 +98,10 @@ export function ConversationSidebar({
         <div className="space-y-2 px-3 pb-2">
           <input
             type="text"
+            data-sidebar-search
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Sohbet ara..."
+            placeholder="Sohbet ara... (Ctrl+K)"
             aria-label="Sohbet ara"
             className={cn(
               'w-full rounded-lg border border-ak-border bg-ak-surface-2 px-3 py-1.5 text-xs text-ak-text-primary',

@@ -377,6 +377,82 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
         </div>
       );
 
+    case 'pipeline_complete': {
+      const isPartial = message.status === 'completed_partial';
+      return (
+        <div className={cn(
+          'rounded-2xl border p-5 animate-in fade-in slide-in-from-bottom-3 duration-300',
+          isPartial ? 'border-amber-500/30 bg-amber-500/5' : 'border-ak-primary/30 bg-ak-primary/5',
+        )}>
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-lg">{isPartial ? '⚠' : '✅'}</span>
+            <span className="text-[15px] font-semibold text-ak-text-primary">
+              {isPartial ? 'Pipeline Kısmen Tamamlandı' : 'Pipeline Tamamlandı'}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-ak-text-secondary">
+            {message.repoUrl && (
+              <span className="flex items-center gap-1.5">
+                <span>📁</span>
+                <a href={message.repoUrl} target="_blank" rel="noopener noreferrer" className="text-ak-primary hover:underline font-mono text-xs">
+                  {message.repoUrl.replace('https://github.com/', '')}
+                </a>
+              </span>
+            )}
+            <span className="flex items-center gap-1.5">
+              <span>🌿</span>
+              <span className="font-mono text-xs">{message.branch}</span>
+            </span>
+            <span>{message.fileCount} dosya · {message.lineCount} satır</span>
+            {message.testCount != null && (
+              <span>🧪 {message.testCount} test{message.coverage ? ` · %${message.coverage} kapsam` : ''}</span>
+            )}
+          </div>
+
+          {message.cloneCommand && (
+            <div className="mt-3 rounded-lg bg-ak-surface-2 p-3">
+              <p className="mb-1.5 text-xs text-ak-text-tertiary">Projenize başlamak için:</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono text-ak-text-secondary break-all">{message.cloneCommand}</code>
+                <button
+                  onClick={() => navigator.clipboard.writeText(message.cloneCommand)}
+                  className="flex-shrink-0 rounded-md border border-ak-border px-2 py-1 text-xs text-ak-text-tertiary hover:text-ak-text-secondary hover:bg-ak-surface transition-colors"
+                >
+                  📋 Kopyala
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {message.repoUrl && (
+              <a
+                href={message.repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-ak-primary/20 px-3 py-1.5 text-xs font-medium text-ak-primary hover:bg-ak-primary/10 transition-colors"
+              >
+                🔗 GitHub'da Aç
+              </a>
+            )}
+            {isPartial && onRetry && (
+              <button
+                onClick={onRetry}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-ak-trace/20 px-3 py-1.5 text-xs font-medium text-ak-trace hover:bg-ak-trace/10 transition-colors"
+              >
+                🔄 Trace'i Tekrar Dene
+              </button>
+            )}
+          </div>
+
+          <p className="mt-3 text-[13px] text-ak-text-tertiary">
+            💬 Projenizle ilgili soru sorabilir veya notlarınızı bırakabilirsiniz.
+          </p>
+        </div>
+      );
+    }
+
     case 'gherkin_spec': {
       const { features, totalScenarios } = message;
       return (

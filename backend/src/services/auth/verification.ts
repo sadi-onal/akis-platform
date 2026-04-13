@@ -103,14 +103,22 @@ export class VerificationService {
       return false;
     }
 
-    // Success — clear failed attempts
-    this.failedAttempts.delete(userId);
-
-    // Mark as used
-    await db
+    // Success — atomically mark as used (prevents race condition with concurrent requests)
+    const [marked] = await db
       .update(emailVerificationTokens)
       .set({ usedAt: new Date() })
-      .where(eq(emailVerificationTokens.id, token.id));
+      .where(and(
+        eq(emailVerificationTokens.id, token.id),
+        isNull(emailVerificationTokens.usedAt),
+      ))
+      .returning();
+
+    if (!marked) {
+      // Token was consumed by a concurrent request
+      return false;
+    }
+
+    this.failedAttempts.delete(userId);
 
     // Update user status
     await db

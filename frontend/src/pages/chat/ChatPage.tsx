@@ -438,6 +438,26 @@ export default function ChatPage() {
     navigate('/chat');
   }, [navigate]);
 
+  // ─── Global Keyboard Shortcuts ────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      // Ctrl/Cmd+K → focus sidebar search
+      if (isMod && e.key === 'k') {
+        e.preventDefault();
+        const searchInput = document.querySelector<HTMLInputElement>('[data-sidebar-search]');
+        searchInput?.focus();
+      }
+      // Ctrl/Cmd+Shift+N → new conversation
+      if (isMod && e.shiftKey && e.key === 'N') {
+        e.preventDefault();
+        handleNewConversation();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleNewConversation]);
+
   /** Check if the current pipeline is in a terminal state (no further agent work possible). */
   const isTerminalState = useCallback((workflow: Workflow | null): boolean => {
     if (!workflow?.currentStage) return false;
@@ -578,7 +598,13 @@ export default function ChatPage() {
   const handleApprove = useCallback(async () => {
     if (!conversationId || !activeWorkflow) return;
     try {
-      await workflowsApi.approve(conversationId, sanitizeRepoName(activeWorkflow.title ?? 'project'), 'private');
+      const cucumberEnabled = localStorage.getItem('akis_cucumber_enabled') === 'true';
+      await workflowsApi.approve(
+        conversationId,
+        sanitizeRepoName(activeWorkflow.title ?? 'project'),
+        'private',
+        { cucumberEnabled },
+      );
       await refreshWorkflow();
     } catch (e) { if (import.meta.env.DEV) console.error('Failed to approve:', e); }
   }, [conversationId, activeWorkflow, refreshWorkflow]);

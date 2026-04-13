@@ -258,6 +258,7 @@ export const ApproveSpecRequestSchema = z.object({
     .regex(/^[a-zA-Z0-9._-]+$/, 'Repo adı geçersiz karakterler içeriyor'),
   repoVisibility: z.enum(['public', 'private']).default('private'),
   jiraConfig: JiraConfigSchema,
+  cucumberEnabled: z.boolean().optional().default(false),
 });
 
 export const RejectSpecRequestSchema = z.object({

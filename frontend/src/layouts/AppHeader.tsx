@@ -12,11 +12,11 @@ const primaryLinks = [
   { label: 'Platform', to: '/platform' },
   { label: 'Agents', to: '/agents' },
   { label: 'Integrations', to: '/integrations' },
-  { label: 'Solutions', to: '/solutions' },
-  { label: 'Pricing', to: '/pricing' },
-  { label: 'Docs', to: '/docs' },
-  { label: 'Changelog', to: '/changelog' },
-  { label: 'About', to: '/about' },
+  { label: 'Cozumler', to: '/solutions' },
+  { label: 'Fiyatlandirma', to: '/pricing' },
+  { label: 'Dokumantasyon', to: '/docs' },
+  { label: 'Degisiklikler', to: '/changelog' },
+  { label: 'Hakkinda', to: '/about' },
   { label: 'Contact', to: '/contact' },
 ];
 

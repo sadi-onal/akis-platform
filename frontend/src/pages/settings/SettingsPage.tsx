@@ -104,7 +104,7 @@ const STAGE_I18N_KEYS: Record<string, { key: string; color: string }> = {
 /* ------------------------------------------------------------------ */
 
 function formatDuration(ms: number | null): string {
-  if (ms == null) return '—';
+  if (ms == null || ms === 0) return '—';
   if (ms < 1000) return `${ms}ms`;
   const totalSec = Math.round(ms / 1000);
   if (totalSec < 60) return `${totalSec}sn`;
@@ -468,8 +468,10 @@ function AIKeysTab({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
       setEditingProvider(null);
       setApiKeyInput('');
       await fetchStatus();
+      toast('API anahtari basariyla kaydedildi', 'success');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('settings.ai.genericError'));
+      toast(e instanceof Error ? e.message : 'Anahtar kaydedilemedi', 'error');
     } finally { setSaving(false); }
   };
 
@@ -482,7 +484,9 @@ function AIKeysTab({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
         body: JSON.stringify({ provider }),
       });
       await fetchStatus();
+      toast('API anahtari silindi', 'success');
     } catch (e) {
+      toast('Anahtar silinemedi', 'error');
       if (import.meta.env.DEV) console.warn('Failed to delete AI key:', e);
     }
   };
@@ -653,7 +657,7 @@ function PipelineStatsTab() {
   return (
     <>
       {/* Stat cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3">
+      <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <StatCard label={t('settings.stats.totalPipelines')} value={String(data.totalPipelines)} />
         <StatCard label={t('settings.stats.successRate')} value={`%${data.successRate}`} accent={data.successRate >= 70} />
         <StatCard label={t('settings.stats.avgTotalDuration')} value={formatDuration(data.avgDurations.totalMs)} />
@@ -674,8 +678,8 @@ function PipelineStatsTab() {
           {t('settings.stats.empty')}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-ak-border">
-          <table className="w-full text-xs">
+        <div className="overflow-x-auto rounded-xl border border-ak-border">
+          <table className="w-full text-xs min-w-[500px]">
             <thead>
               <tr className="border-b border-ak-border bg-ak-surface">
                 <th className="px-4 py-2.5 text-left font-semibold text-ak-text-tertiary">{t('settings.stats.th.title')}</th>
@@ -781,8 +785,8 @@ function PipelineStatsTab() {
       {data.tokenUsage && data.tokenUsage.length > 0 && (
         <div className="mt-6">
           <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.stats.tokens')}</h2>
-          <div className="overflow-hidden rounded-xl border border-ak-border">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto rounded-xl border border-ak-border">
+            <table className="w-full text-xs min-w-[400px]">
               <thead>
                 <tr className="border-b border-ak-border bg-ak-surface">
                   <th className="px-4 py-2.5 text-left font-semibold text-ak-text-tertiary">Agent</th>
@@ -1220,19 +1224,27 @@ function JiraSection() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [showPatFallback, setShowPatFallback] = useState(false);
 
-  // PAT fallback state
-  const [patUrl, setPatUrl] = useState(() => localStorage.getItem('akis_jira_url') ?? '');
-  const [patToken, setPatToken] = useState(() => localStorage.getItem('akis_jira_pat') ?? '');
-  const [patStatus, setPatStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>(() =>
-    localStorage.getItem('akis_jira_url') && localStorage.getItem('akis_jira_pat') ? 'connected' : 'idle',
-  );
+  // PAT fallback state (stored securely on backend, not localStorage)
+  const [patUrl, setPatUrl] = useState('');
+  const [patToken, setPatToken] = useState('');
+  const [patStatus, setPatStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle');
   const [patError, setPatError] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/integrations/atlassian/status', { credentials: 'include' });
-      if (res.ok) setAtlStatus(await res.json());
+      const [atlRes, jiraRes] = await Promise.all([
+        fetch('/api/integrations/atlassian/status', { credentials: 'include' }).catch(() => null),
+        fetch('/api/settings/integrations/jira/status', { credentials: 'include' }).catch(() => null),
+      ]);
+      if (atlRes?.ok) setAtlStatus(await atlRes.json());
+      if (jiraRes?.ok) {
+        const jiraData = await jiraRes.json();
+        if (jiraData.connected) {
+          setPatUrl(jiraData.siteUrl ?? '');
+          setPatStatus('connected');
+        }
+      }
     } catch {
       // treat as not connected
     } finally {
@@ -1279,8 +1291,13 @@ function JiraSection() {
       });
 
       if (res.ok) {
-        localStorage.setItem('akis_jira_url', trimmedUrl);
-        localStorage.setItem('akis_jira_pat', trimmedToken);
+        // Store securely on backend instead of localStorage
+        await fetch('/api/settings/integrations/jira/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ siteUrl: trimmedUrl, email: 'user@jira', token: trimmedToken }),
+        });
         setPatStatus('connected');
       } else {
         setPatStatus('error');
@@ -1289,8 +1306,13 @@ function JiraSection() {
       }
     } catch {
       if (trimmedUrl.startsWith('https://') && trimmedToken.length >= 8) {
-        localStorage.setItem('akis_jira_url', trimmedUrl);
-        localStorage.setItem('akis_jira_pat', trimmedToken);
+        // Store securely on backend
+        await fetch('/api/settings/integrations/jira/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ siteUrl: trimmedUrl, email: 'user@jira', token: trimmedToken }),
+        }).catch(() => {});
         setPatStatus('connected');
       } else {
         setPatStatus('error');
@@ -1299,9 +1321,10 @@ function JiraSection() {
     }
   };
 
-  const handlePatDisconnect = () => {
-    localStorage.removeItem('akis_jira_url');
-    localStorage.removeItem('akis_jira_pat');
+  const handlePatDisconnect = async () => {
+    try {
+      await fetch('/api/settings/integrations/jira/disconnect', { method: 'POST', credentials: 'include' });
+    } catch { /* best-effort */ }
     setPatUrl('');
     setPatToken('');
     setPatStatus('idle');

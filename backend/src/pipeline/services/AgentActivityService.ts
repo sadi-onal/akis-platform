@@ -32,7 +32,8 @@ export class AgentActivityService {
       await this.deps.db.insert(agentActivities).values(entry);
     } catch (err) {
       // Non-fatal — don't block pipeline for audit logging
-      console.warn('[AgentActivity] Failed to record activity:', err);
+      // Non-fatal — don't block pipeline for audit logging (use console as logger may not be available)
+      if (typeof globalThis.console !== 'undefined') console.warn('[AgentActivity] Failed to record activity:', err);
     }
   }
 

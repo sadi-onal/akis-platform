@@ -98,7 +98,7 @@ describe('Proto — Scaffold generation', () => {
       assert.equal(result.data.ok, true);
       assert.equal(result.data.repo, 'testuser/my-todo-app');
       assert.ok(result.data.repoUrl.includes('github.com'));
-      assert.ok(result.data.branch.startsWith('proto/scaffold-'));
+      assert.equal(result.data.branch, 'main');
       assert.equal(result.data.files.length, 3);
       assert.ok(result.data.setupCommands.length >= 3); // clone + cd + npm install + npm run dev
       assert.equal(result.data.metadata.committed, true);
@@ -119,24 +119,18 @@ describe('Proto — Scaffold generation', () => {
     }
   });
 
-  it('creates PR with spec details', async () => {
-    let prBody = '';
+  it('pushes directly to main without creating PR', async () => {
     const ai = createMockAI(scaffoldResponse);
-    const github = createMockGitHub({
-      async createPR(_o, _r, _t, body) {
-        prBody = body;
-        return { url: 'https://github.com/testuser/my-todo-app/pull/1' };
-      },
-    });
+    const github = createMockGitHub();
     const agent = new ProtoAgent(ai, github);
 
     const result = await agent.execute(baseInput());
     assert.equal(result.type, 'output');
     if (result.type === 'output') {
-      assert.ok(result.data.prUrl?.includes('pull/1'));
+      // PR is skipped when pushing directly to main
+      assert.equal(result.data.prUrl, undefined);
+      assert.equal(result.data.branch, 'main');
     }
-    assert.ok(prBody.includes('Todo App with Google Auth'));
-    assert.ok(prBody.includes('AKIS Proto'));
   });
 });
 

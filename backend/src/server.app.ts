@@ -43,7 +43,7 @@ import { createGitHubRESTAdapter, getGitHubOwnerViaREST } from './pipeline/adapt
 import { pushLog } from './lib/logBuffer.js';
 import { initPiriRAGService } from './services/rag/PiriRAGService.js';
 import { AgentOrchestrator } from './core/orchestrator/AgentOrchestrator.js';
-import { createAIService } from './services/ai/AIService.js';
+import { createAIService, createToolCallingClient } from './services/ai/AIService.js';
 import type { MCPTools } from './services/mcp/adapters/index.js';
 import { GitHubMCPService } from './services/mcp/adapters/GitHubMCPService.js';
 import { StaleJobWatchdog } from './core/watchdog/StaleJobWatchdog.js';
@@ -349,6 +349,7 @@ export async function buildApp() {
       return null;
     },
     store: pipelineStore,
+    agenticDeps: { callWithTools: createToolCallingClient() },
   });
   // Start reconciler to recover stuck pipelines (clean shutdown via onClose)
   pipelineReconciler.start();

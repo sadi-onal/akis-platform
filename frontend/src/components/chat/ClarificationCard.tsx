@@ -149,7 +149,7 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         className={cn(
-          'relative mx-auto max-w-[720px] rounded-2xl border p-3',
+          'relative mx-auto max-w-[720px] rounded-2xl border p-4',
           'backdrop-blur-xl bg-ak-surface/85 border-ak-scribe/30',
           'shadow-lg shadow-ak-scribe/5',
           'animate-in fade-in slide-in-from-bottom-4 duration-300',
@@ -158,13 +158,13 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
         {/* Header */}
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-ak-scribe/15 text-[10px] font-bold text-ak-scribe">
+            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-ak-scribe/15 text-xs font-bold text-ak-scribe">
               S
             </span>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-ak-scribe">
+            <span className="text-xs font-semibold uppercase tracking-wider text-ak-scribe">
               Soru {currentIdx + 1}/{total}
             </span>
-            <span className="text-[10px] text-ak-text-tertiary">
+            <span className="text-[11px] text-ak-text-tertiary">
               • {answeredCount}/{total} cevaplandı
             </span>
           </div>
@@ -184,14 +184,14 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
 
         {/* Body (animated per question) */}
         <div key={currentQ.id} className={slideAnimClass}>
-          <p className="text-sm font-medium text-ak-text-primary">{currentQ.question}</p>
+          <p className="text-[15px] font-semibold text-ak-text-primary leading-snug">{currentQ.question}</p>
           {currentQ.reason && (
-            <p className="mt-1 text-[11px] text-ak-text-tertiary">{currentQ.reason}</p>
+            <p className="mt-1.5 text-[13px] text-ak-text-tertiary leading-relaxed">{currentQ.reason}</p>
           )}
 
           {/* Suggestion chips */}
           {currentQ.suggestions && currentQ.suggestions.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               {currentQ.suggestions.map((s, si) => {
                 const isSelected = currentAnswer === s && !isCustomMode;
                 return (
@@ -200,10 +200,10 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
                     type="button"
                     onClick={() => handleBadgeSelect(s)}
                     className={cn(
-                      'rounded-full border px-2.5 py-0.5 text-[11px] transition-all duration-150 cursor-pointer',
+                      'rounded-lg border px-3 py-1.5 text-[13px] transition-all duration-150 cursor-pointer text-left break-words',
                       isSelected
                         ? 'border-ak-primary bg-ak-primary/15 text-ak-primary shadow-sm shadow-ak-primary/20'
-                        : 'border-ak-border-subtle bg-ak-surface-2 text-ak-text-secondary hover:border-ak-primary/50 hover:text-ak-primary hover:scale-[1.03] active:scale-[0.97]',
+                        : 'border-ak-border-subtle bg-ak-surface-2 text-ak-text-secondary hover:border-ak-primary/50 hover:text-ak-primary hover:scale-[1.02] active:scale-[0.98]',
                     )}
                   >
                     {s}
@@ -214,7 +214,7 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
                 type="button"
                 onClick={handleCustomToggle}
                 className={cn(
-                  'rounded-full border px-2.5 py-0.5 text-[11px] transition-all duration-150 cursor-pointer',
+                  'rounded-lg border px-3 py-1.5 text-[13px] transition-all duration-150 cursor-pointer',
                   isCustomMode
                     ? 'border-ak-primary bg-ak-primary/15 text-ak-primary'
                     : 'border-dashed border-ak-border bg-transparent text-ak-text-tertiary hover:border-ak-primary/50 hover:text-ak-primary',
@@ -234,7 +234,7 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
               rows={2}
               placeholder="Cevabınızı yazın... (boş bırakılabilir)"
               className={cn(
-                'mt-2 w-full resize-none rounded-lg border bg-ak-surface-2/60 px-3 py-2 text-xs',
+                'mt-2 w-full resize-none rounded-lg border bg-ak-surface-2/60 px-3 py-2 text-sm',
                 'border-ak-border-subtle text-ak-text-primary placeholder:text-ak-text-tertiary',
                 'focus:border-ak-primary/40 focus:outline-none focus:ring-1 focus:ring-ak-primary/20',
                 'transition-colors duration-150',
@@ -291,7 +291,7 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
               type="button"
               onClick={handleSubmit}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold',
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold',
                 'bg-ak-primary text-[color:var(--ak-on-primary,#fff)]',
                 'hover:brightness-110 hover:shadow-md hover:shadow-ak-primary/30 active:brightness-95',
                 'transition-all duration-150',

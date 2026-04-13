@@ -34,10 +34,16 @@ export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
   const { user } = useAuth();
   const { t } = useI18n();
   const reduced = useReducedMotion();
-  const [showWizard, setShowWizard] = useState(() => !user?.hasSeenBetaWelcome);
+  const [showWizard, setShowWizard] = useState(() => {
+    // Check both server flag and localStorage for reliability across re-mounts
+    if (user?.hasSeenBetaWelcome) return false;
+    if (typeof window !== 'undefined' && localStorage.getItem('hasSeenBetaWelcome') === 'true') return false;
+    return true;
+  });
 
   const handleWizardComplete = useCallback(async () => {
     try {
+      localStorage.setItem('hasSeenBetaWelcome', 'true');
       await fetch('/auth/update-preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

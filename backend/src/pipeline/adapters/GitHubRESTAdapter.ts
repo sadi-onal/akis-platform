@@ -13,6 +13,7 @@
  */
 import type { GitHubServiceLike } from '../core/pipeline-factory.js';
 import { GitHubRateLimitError, GitHubAPIError } from '../core/contracts/PipelineErrors.js';
+import { logger } from '../../lib/logger.js';
 
 const GITHUB_API = 'https://api.github.com';
 
@@ -49,7 +50,7 @@ async function ghFetch<T>(
       if (res.status === 429 || remaining === '0') {
         if (attempt < MAX_RATE_LIMIT_RETRIES) {
           const waitSec = retryAfter ? Math.min(parseInt(retryAfter, 10), 60) : 10 * (attempt + 1);
-          console.warn(`[GitHub] Rate limited on ${method} ${path}, waiting ${waitSec}s (attempt ${attempt + 1})`);
+          logger.warn(`[GitHub] Rate limited on ${method} ${path}, waiting ${waitSec}s (attempt ${attempt + 1})`);
           await new Promise((r) => setTimeout(r, waitSec * 1000));
           continue;
         }

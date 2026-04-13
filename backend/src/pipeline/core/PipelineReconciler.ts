@@ -10,6 +10,7 @@
 import type { PipelineStore } from './orchestrator/PipelineOrchestrator.js';
 import type { PipelineStage } from './contracts/PipelineTypes.js';
 import { createPipelineError, PipelineErrorCode } from './contracts/PipelineErrors.js';
+import { logger } from '../../lib/logger.js';
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;    // 5 minutes
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000;   // 15 minutes
@@ -30,17 +31,17 @@ export class PipelineReconciler {
     if (this.timer) return;
     this.timer = setInterval(() => {
       this.sweep().catch((err) => {
-        console.error('[Reconciler] Sweep failed:', err);
+        logger.error({ err }, '[Reconciler] Sweep failed');
       });
     }, SWEEP_INTERVAL_MS);
-    console.log(`[Reconciler] Started (interval: ${SWEEP_INTERVAL_MS / 1000}s, threshold: ${STUCK_THRESHOLD_MS / 1000}s)`);
+    logger.info(`[Reconciler] Started (interval: ${SWEEP_INTERVAL_MS / 1000}s, threshold: ${STUCK_THRESHOLD_MS / 1000}s)`);
   }
 
   stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      console.log('[Reconciler] Stopped');
+      logger.info('[Reconciler] Stopped');
     }
   }
 
@@ -74,14 +75,14 @@ export class PipelineReconciler {
         );
         await this.store.update(p.id, { stage: 'failed', error });
         recovered++;
-        console.warn(`[Reconciler] Recovered stuck pipeline ${p.id} (was ${p.stage} for ${stuckMinutes}min)`);
+        logger.warn(`[Reconciler] Recovered stuck pipeline ${p.id} (was ${p.stage} for ${stuckMinutes}min)`);
       } catch (err) {
-        console.error(`[Reconciler] Failed to recover pipeline ${p.id}:`, err);
+        logger.error({ err, pipelineId: p.id }, '[Reconciler] Failed to recover pipeline');
       }
     }
 
     if (recovered > 0) {
-      console.log(`[Reconciler] Recovered ${recovered} stuck pipeline(s)`);
+      logger.info(`[Reconciler] Recovered ${recovered} stuck pipeline(s)`);
     }
     return recovered;
   }

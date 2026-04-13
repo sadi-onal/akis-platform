@@ -75,6 +75,19 @@ export type ChatMessage =
     }
   | { type: 'info'; content: string; timestamp: string }
   | {
+      type: 'pipeline_complete';
+      status: 'completed' | 'completed_partial';
+      repoUrl: string;
+      branch: string;
+      fileCount: number;
+      lineCount: number;
+      testCount?: number;
+      coverage?: string;
+      cloneCommand: string;
+      setupCommands?: string[];
+      timestamp: string;
+    }
+  | {
       type: 'gherkin_spec';
       features: Array<{
         featureName: string;

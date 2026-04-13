@@ -10,6 +10,8 @@ import type { ScribeAIDeps } from '../agents/scribe/ScribeAgent.js';
 import { DrizzlePipelineStore } from '../db/DrizzlePipelineStore.js';
 import { PipelineReconciler } from './PipelineReconciler.js';
 import { db } from '../../db/client.js';
+import type { AgenticLoopDeps } from './AgenticLoop.js';
+import { AgentActivityService } from '../services/AgentActivityService.js';
 
 // ─── AI Adapter ──────────────────────────────────
 // Bridges the existing AIService to agent AI deps interfaces.
@@ -120,12 +122,15 @@ export interface CreatePipelineOrchestratorOptions {
   /** Retrieves a per-user GitHub token (returns null if user has no token) */
   getGitHubToken: (userId: string) => Promise<string | null>;
   store?: PipelineStore;
+  /** Optional: tool-calling client for agentic loop (Claude API tool_use) */
+  agenticDeps?: AgenticLoopDeps;
 }
 
 export function createAgentsForModel(
   aiService: AIServiceLike,
   githubService: GitHubServiceLike,
   model?: string,
+  agenticDeps?: AgenticLoopDeps,
 ) {
   const scribeAI = createScribeAIDeps(aiService, model);
   const protoAI = createProtoAIDeps(aiService, model);
@@ -135,8 +140,8 @@ export function createAgentsForModel(
 
   return {
     scribe: new ScribeAgent(scribeAI),
-    proto: new ProtoAgent(protoAI, protoGH),
-    trace: new TraceAgent(traceAI, traceGH),
+    proto: new ProtoAgent(protoAI, protoGH, agenticDeps),
+    trace: new TraceAgent(traceAI, traceGH, agenticDeps),
   };
 }
 
@@ -155,7 +160,7 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
   // Default agents use fallback (platform token) service — used for Scribe (no GitHub needed)
   // Proto/Trace will get per-user adapters at runtime via orchestrator
   const fallbackGH = opts.fallbackGitHubService ?? opts.createGitHubService('');
-  const defaultAgents = createAgentsForModel(opts.aiService, fallbackGH);
+  const defaultAgents = createAgentsForModel(opts.aiService, fallbackGH, undefined, opts.agenticDeps);
 
   const orchestrator = new PipelineOrchestrator(
     store,
@@ -166,8 +171,12 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
     opts.getGitHubToken,
     opts.createGitHubService,
     undefined, // emit
-    (model, githubService?) => createAgentsForModel(opts.aiService, githubService ?? fallbackGH, model),
+    (model, githubService?) => createAgentsForModel(opts.aiService, githubService ?? fallbackGH, model, opts.agenticDeps),
   );
+
+  // Wire agent activity logging for integrity metrics
+  const activityService = new AgentActivityService({ db });
+  orchestrator.setActivityLogger(activityService);
 
   const reconciler = new PipelineReconciler(store);
   return { orchestrator, reconciler };

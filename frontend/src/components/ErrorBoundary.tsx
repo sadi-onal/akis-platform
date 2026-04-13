@@ -78,13 +78,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
             {/* Title */}
             <h2 className="mb-2 text-lg font-semibold text-ak-text-primary">
-              Something went wrong
+              Bir hata olustu
             </h2>
 
             {/* Message */}
             <p className="mb-6 text-sm text-ak-text-secondary">
-              An error occurred while rendering this page.
-              Please try again or contact support if the problem persists.
+              Bu sayfa yüklenirken bir hata meydana geldi.
+              Lütfen tekrar deneyin veya sorun devam ederse destek ekibiyle iletisime gecin.
             </p>
 
             {/* Actions */}
@@ -93,13 +93,13 @@ export class ErrorBoundary extends Component<Props, State> {
                 to={fallbackPath}
                 className="inline-flex items-center justify-center rounded-lg border border-ak-border bg-ak-surface px-4 py-2 text-sm font-medium text-ak-text-primary transition-colors hover:bg-ak-surface-3"
               >
-                ← Back to {fallbackLabel}
+                ← {fallbackLabel} sayfasina don
               </Link>
               <button
                 onClick={this.handleReload}
                 className="inline-flex items-center justify-center rounded-lg bg-ak-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ak-primary/80"
               >
-                Reload Page
+                Sayfayi Yenile
               </button>
             </div>
 

@@ -34,7 +34,7 @@ function formatElapsed(startIso: string, endIso: string | null): string {
   if (diff < 60) return `${diff}s`;
   const m = Math.floor(diff / 60);
   const s = diff % 60;
-  return `${m}d ${s}s`;
+  return `${m}dk ${s}sn`;
 }
 
 export function TraceProgressStepper({ activities, currentStep }: TraceProgressStepperProps) {

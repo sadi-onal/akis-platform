@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ServerResponse } from 'http';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
+import { logger } from '../../lib/logger.js';
 import { devSessions, devMessages } from '../../db/schema.js';
 import { DevAgent, type DevAIDeps } from '../agents/dev/DevAgent.js';
 import { getFileTreeViaREST, pushChangesViaREST } from '../adapters/GitHubRESTAdapter.js';
@@ -125,7 +126,7 @@ export async function devSessionPlugin(
       try {
         fileTree = await getFileTreeViaREST(githubToken, repoOwner, repoName, branch);
       } catch (err) {
-        console.error('Failed to fetch file tree:', err);
+        logger.error({ err }, 'Failed to fetch file tree');
       }
     }
 
@@ -186,7 +187,7 @@ export async function devSessionPlugin(
           githubToken, session.repoOwner, session.repoName, session.branch,
         );
       } catch (err) {
-        console.warn('Could not refresh file tree, using cached:', err);
+        logger.warn({ err }, 'Could not refresh file tree, using cached');
       }
     }
 
@@ -243,7 +244,7 @@ export async function devSessionPlugin(
 
       raw.raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
     } catch (err) {
-      console.error('DevAgent error:', err);
+      logger.error({ err }, 'DevAgent error');
       raw.raw.write(`data: ${JSON.stringify({ type: 'error', content: String(err) })}\n\n`);
     }
 
@@ -305,7 +306,7 @@ export async function devSessionPlugin(
         commitUrl: `https://github.com/${session.repoOwner}/${session.repoName}/commit/${commitSha}`,
       });
     } catch (err) {
-      console.error('GitHub push error:', err);
+      logger.error({ err }, 'GitHub push error');
       return reply.code(500).send({ error: `Push failed: ${String(err)}` });
     }
   });
