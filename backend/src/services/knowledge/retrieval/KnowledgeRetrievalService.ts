@@ -152,10 +152,6 @@ export class KnowledgeRetrievalService {
 
   protected async searchSemantic(query: string, maxResults: number, filters?: RetrievalFilter): Promise<RetrievalResult[]> {
     const embeddingService = getEmbeddingService();
-    if (!embeddingService) {
-      logger.debug('[KnowledgeRetrieval] Embedding service not available, skipping semantic search');
-      return [];
-    }
 
     try {
       const queryEmbedding = await embeddingService.embed(query);

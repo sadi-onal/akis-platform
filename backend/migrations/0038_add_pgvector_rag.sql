@@ -23,13 +23,13 @@ DO $$ BEGIN
     AND data_type = 'text'
   ) THEN
     ALTER TABLE knowledge_chunks DROP COLUMN embedding;
-    ALTER TABLE knowledge_chunks ADD COLUMN embedding vector(1536);
+    ALTER TABLE knowledge_chunks ADD COLUMN embedding vector(384);
   ELSIF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'knowledge_chunks'
     AND column_name = 'embedding'
   ) THEN
-    ALTER TABLE knowledge_chunks ADD COLUMN embedding vector(1536);
+    ALTER TABLE knowledge_chunks ADD COLUMN embedding vector(384);
   END IF;
 END $$;
 

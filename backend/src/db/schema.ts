@@ -3,7 +3,7 @@ import { relations } from 'drizzle-orm';
 
 // pgvector custom type for embedding columns (1536 dimensions for text-embedding-3-small)
 const vector1536 = customType<{ data: number[]; driverData: string }>({
-  dataType() { return 'vector(1536)'; },
+  dataType() { return 'vector(384)'; },
   toDriver(value: number[]) { return `[${value.join(',')}]`; },
   fromDriver(value: string) {
     if (typeof value === 'string') {

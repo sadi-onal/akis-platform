@@ -148,7 +148,6 @@ export class RepoDocsIngester {
   /** Generate embeddings for chunks and update DB. Best-effort — does not throw. */
   private async embedChunks(chunkIds: string[], texts: string[]): Promise<void> {
     const embeddingService = getEmbeddingService();
-    if (!embeddingService) return;
 
     try {
       const embeddings = await embeddingService.embedBatch(texts);
