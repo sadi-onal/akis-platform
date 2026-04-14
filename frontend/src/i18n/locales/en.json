@@ -790,7 +790,7 @@
   "pricing.enterprise.feature4": "Unlimited seats & API quotas",
   "pricing.enterprise.feature5": "Custom integrations & onboarding",
   "pricing.enterprise.name": "Enterprise",
-  "pricing.enterprise.period": "",
+  "pricing.enterprise.period": "custom",
   "pricing.enterprise.price": "Custom",
   "pricing.faq.a1": "Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.",
   "pricing.faq.a2": "We accept all major credit cards and PayPal. Enterprise customers can pay via invoice.",

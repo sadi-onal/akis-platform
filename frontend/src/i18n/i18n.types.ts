@@ -1189,6 +1189,9 @@ export const MESSAGE_KEYS = [
   'integrity.noData',
   'integrity.error',
 
+  // Dashboard
+  'dashboard.overview.usage.recentActivityEmpty',
+
   // DocsPage (public /docs route)
   'docsPage.nav.login',
   'docsPage.nav.docsLabel',
