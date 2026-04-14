@@ -126,16 +126,22 @@ export function ConversationItem({
               className="min-w-0 flex-1 rounded border border-ak-primary bg-ak-surface-2 px-1 py-0 text-[12px] font-medium text-ak-text-primary outline-none"
             />
           ) : (
-            <span className={cn(
-              'truncate text-[12px] font-medium',
-              isActive ? 'text-ak-primary' : 'text-ak-text-primary',
-            )}>{title}</span>
+            <span
+              className={cn(
+                'truncate text-[12px] font-medium',
+                isActive ? 'text-ak-primary' : 'text-ak-text-primary',
+              )}
+              title={title}
+            >{title}</span>
           )}
         </div>
         {/* Info row */}
         <div className="flex items-center gap-1 pl-4">
           <span className="truncate text-[10px] text-ak-text-tertiary">{repoFullName}</span>
-          <span className="ml-auto flex-shrink-0 text-[10px] text-ak-text-tertiary">
+          <span
+            className="ml-auto flex-shrink-0 text-[10px] text-ak-text-tertiary cursor-help"
+            title={new Date(lastActivity).toLocaleString('tr-TR')}
+          >
             {fileCount > 0 && `${fileCount} dosya · `}{relativeTime(lastActivity)}
           </span>
         </div>

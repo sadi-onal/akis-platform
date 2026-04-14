@@ -158,8 +158,9 @@ const ERROR_DEFINITIONS: Record<
   },
   [PipelineErrorCode.AI_KEY_MISSING]: {
     message:
-      'AI servisi yapılandırılmamış. Sistem yöneticisiyle iletişime geçin.',
+      'Pipeline calistirmak icin AI API anahtariniz gerekli. Lutfen Ayarlar > AI Anahtarlarindan ekleyin.',
     retryable: false,
+    recoveryAction: 'configure_ai_key',
   },
   [PipelineErrorCode.PIPELINE_TIMEOUT]: {
     message: 'İşlem beklenenden uzun sürdü. Pipeline duraklatıldı.',

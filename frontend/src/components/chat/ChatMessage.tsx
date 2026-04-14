@@ -72,11 +72,11 @@ function ClarificationMessage({
                 <p className="mt-1 text-xs text-ak-text-tertiary">{q.reason}</p>
               )}
               {q.suggestions && q.suggestions.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1">
+                <div className="mt-2 flex flex-wrap gap-1.5">
                   {q.suggestions.map((s, si) => (
                     <span
                       key={si}
-                      className="rounded-full bg-ak-surface-2 px-2 py-0.5 text-[11px] text-ak-text-tertiary cursor-default"
+                      className="rounded-lg border border-ak-border bg-ak-surface-2 px-3 py-1 text-xs font-medium text-ak-text-secondary"
                     >
                       {s}
                     </span>

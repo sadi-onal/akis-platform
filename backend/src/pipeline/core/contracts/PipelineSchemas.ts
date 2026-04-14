@@ -190,7 +190,7 @@ export const PipelineErrorSchema = z.object({
   message: z.string().min(1),
   technicalDetail: z.string().optional(),
   retryable: z.boolean(),
-  recoveryAction: z.enum(['retry', 'edit_spec', 'reconnect_github', 'start_over']).optional(),
+  recoveryAction: z.enum(['retry', 'edit_spec', 'reconnect_github', 'start_over', 'configure_ai_key']).optional(),
 });
 
 export const PipelineMetricsSchema = z.object({

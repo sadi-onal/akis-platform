@@ -54,7 +54,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     if (this.state.hasError) {
       const isDev = import.meta.env.DEV;
-      const errorMessage = this.state.error?.message || 'An unexpected error occurred';
+      const errorMessage = this.state.error?.message || 'Beklenmedik bir hata olustu';
 
       return (
         <div className="flex min-h-[400px] flex-col items-center justify-center p-8">
@@ -110,7 +110,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   onClick={this.toggleDetails}
                   className="text-xs text-ak-text-tertiary hover:text-ak-text-secondary transition-colors"
                 >
-                  {this.state.showDetails ? '▼' : '▶'} Technical Details (dev only)
+                  {this.state.showDetails ? '▼' : '▶'} Teknik Detaylar (gelistirici)
                 </button>
                 {this.state.showDetails && (
                   <div className="mt-3 rounded bg-ak-surface p-3 text-left">
@@ -118,7 +118,7 @@ export class ErrorBoundary extends Component<Props, State> {
                       {redactSecrets(errorMessage)}
                     </p>
                     <pre className="max-h-40 overflow-auto text-xs text-ak-text-tertiary">
-                      {redactSecrets(this.state.error?.stack || 'No stack trace available')}
+                      {redactSecrets(this.state.error?.stack || 'Stack trace mevcut degil')}
                     </pre>
                   </div>
                 )}

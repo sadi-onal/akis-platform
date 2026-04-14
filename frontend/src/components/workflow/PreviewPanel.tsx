@@ -364,44 +364,61 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
           )}
 
           {files && !externalLoading && analysis?.capability === 'sandpack' && sandpackFiles && (
-            <div
-              className={cn(
-                'absolute inset-0 overflow-hidden',
-                view === 'mobile' && 'flex items-center justify-center p-4',
-              )}
-            >
+            <div className="absolute inset-0 overflow-hidden">
+              {/* CSS override: force ALL Sandpack internal elements to fill container */}
+              <style>{`
+                .akis-sandpack-wrapper,
+                .akis-sandpack-wrapper > div,
+                .akis-sandpack-wrapper .sp-wrapper,
+                .akis-sandpack-wrapper .sp-layout,
+                .akis-sandpack-wrapper .sp-stack,
+                .akis-sandpack-wrapper .sp-preview-container,
+                .akis-sandpack-wrapper .sp-preview,
+                .akis-sandpack-wrapper .sp-preview iframe,
+                .akis-sandpack-wrapper [class*="sp-c-"] {
+                  height: 100% !important;
+                  max-height: 100% !important;
+                }
+                .akis-sandpack-wrapper .sp-layout {
+                  border: none !important;
+                  border-radius: 0 !important;
+                }
+              `}</style>
               <div
                 className={cn(
-                  'h-full',
-                  view === 'mobile' ? 'w-full max-w-sm' : 'w-full',
+                  'akis-sandpack-wrapper',
+                  view === 'mobile' ? 'mx-auto max-w-sm h-full p-3' : 'h-full w-full',
                 )}
-                style={view === 'mobile'
-                  ? { border: '4px solid var(--ak-border)', borderRadius: 24, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }
-                  : undefined
-                }
               >
-                <SandpackProvider
-                  template={template}
-                  files={sandpackFiles}
-                  theme={akisSandpackTheme}
-                  options={{
-                    activeFile: findMainFile(sandpackFiles),
-                    visibleFiles: Object.keys(sandpackFiles).slice(0, 8),
-                    recompileMode: 'delayed',
-                    recompileDelay: 500,
-                  }}
-                  customSetup={{
-                    dependencies: extractDependencies(files),
-                  }}
+                <div
+                  className="h-full w-full overflow-hidden"
+                  style={view === 'mobile'
+                    ? { border: '4px solid var(--ak-border)', borderRadius: 24, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }
+                    : undefined
+                  }
                 >
-                  <SandpackLayout style={{ height: '100%', border: 'none', borderRadius: 0 }}>
-                    <SandpackPreviewEmbed
-                      style={{ height: '100%', width: '100%' }}
-                      showOpenInCodeSandbox={false}
-                      showRefreshButton
-                    />
-                  </SandpackLayout>
-                </SandpackProvider>
+                  <SandpackProvider
+                    template={template}
+                    files={sandpackFiles}
+                    theme={akisSandpackTheme}
+                    options={{
+                      activeFile: findMainFile(sandpackFiles),
+                      visibleFiles: Object.keys(sandpackFiles).slice(0, 8),
+                      recompileMode: 'delayed',
+                      recompileDelay: 500,
+                    }}
+                    customSetup={{
+                      dependencies: extractDependencies(files),
+                    }}
+                  >
+                    <SandpackLayout>
+                      <SandpackPreviewEmbed
+                        showOpenInCodeSandbox={false}
+                        showRefreshButton
+                      />
+                    </SandpackLayout>
+                  </SandpackProvider>
+                </div>
               </div>
             </div>
           )}

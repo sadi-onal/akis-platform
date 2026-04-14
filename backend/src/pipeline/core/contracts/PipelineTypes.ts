@@ -171,7 +171,7 @@ export interface PipelineError {
   message: string;
   technicalDetail?: string;
   retryable: boolean;
-  recoveryAction?: 'retry' | 'edit_spec' | 'reconnect_github' | 'start_over';
+  recoveryAction?: 'retry' | 'edit_spec' | 'reconnect_github' | 'start_over' | 'configure_ai_key';
 }
 
 export interface PipelineMetrics {
