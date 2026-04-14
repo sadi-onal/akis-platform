@@ -116,7 +116,7 @@ export class PipelineOrchestrator {
 
   /** Log agent activity (non-blocking, best-effort) */
   private logActivity(pipelineId: string, agent: 'scribe' | 'proto' | 'trace', action: string, data: Record<string, unknown> = {}): void {
-    this.activityLogger?.record({ pipelineId, agent, action, ...data }).catch(() => {});
+    this.activityLogger?.record({ pipelineId, agent, action, ...data }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
   }
 
   /**
@@ -213,6 +213,8 @@ export class PipelineOrchestrator {
         ).catch((err) => {
           logger.error({ err, pipelineId: pipeline.id }, '[Pipeline] Background iteration Proto+Trace failed');
           this.failPipeline(pipeline.id, 'Proto', err).catch((e) => logger.error({ err: e }, '[Pipeline] failPipeline also failed'));
+        }).finally(() => {
+          cleanupPipelineListeners(pipeline.id);
         });
 
         return updated;
@@ -674,7 +676,7 @@ export class PipelineOrchestrator {
         repo: protoResult.data.repo,
         prUrl: protoResult.data.prUrl,
         filesCreated: protoResult.data.metadata.filesCreated,
-      }).catch(() => {});
+      }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
     }
 
     // Abort if pipeline was cancelled before Trace starts
@@ -876,7 +878,7 @@ export class PipelineOrchestrator {
 
       // Jira hook: create Epic from spec (non-blocking, failures are swallowed)
       if (pipelineForJira?.jiraConfig?.enabled && pipelineForJira.jiraConfig.projectKey) {
-        this.runJiraEpicCreation(pipelineId, pipelineForJira.userId, pipelineForJira.jiraConfig.projectKey, result.data.spec).catch(() => {});
+        this.runJiraEpicCreation(pipelineId, pipelineForJira.userId, pipelineForJira.jiraConfig.projectKey, result.data.spec).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
       }
 
       return updated;
@@ -982,7 +984,7 @@ export class PipelineOrchestrator {
         totalTests: traceResult.data.testSummary.totalTests,
         coveragePercentage: traceResult.data.testSummary.coveragePercentage,
         passed: traceResult.data.ok,
-      }).catch(() => {});
+      }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
     }
 
     // Pipeline tamamlanma sinyali

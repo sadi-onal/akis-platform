@@ -101,16 +101,27 @@ export async function registerMultiStepAuthRoutes(
     }
 
     // Create user in pending state (no password yet)
-    const [created] = await db
-      .insert(users)
-      .values({
-        name: `${body.firstName} ${body.lastName}`,
-        email,
-        passwordHash: '', // Will be set in next step
-        status: 'pending_verification',
-        emailVerified: false,
-      })
-      .returning();
+    // Use try-catch to handle race condition where two concurrent requests
+    // pass the email check but only one can insert (unique constraint)
+    let created: typeof users.$inferSelect;
+    try {
+      const [row] = await db
+        .insert(users)
+        .values({
+          name: `${body.firstName} ${body.lastName}`,
+          email,
+          passwordHash: '', // Will be set in next step
+          status: 'pending_verification',
+          emailVerified: false,
+        })
+        .returning();
+      created = row;
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
+        return sendError(reply, request, 'EMAIL_IN_USE', 'Email already registered');
+      }
+      throw err;
+    }
 
     // Send verification code
     try {
