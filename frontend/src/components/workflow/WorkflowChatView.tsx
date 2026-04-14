@@ -752,7 +752,7 @@ function ThinkingIndicator({ agentName, hasUserAnswered, sseActivities, sseConne
         )}
       </div>
       <div className="pl-9">
-        <div className="rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+        <div className="rounded-lg border border-ak-border bg-ak-surface overflow-hidden">
           {/* Progress bar (SSE only) */}
           {hasSSE && sseProgress !== undefined && sseProgress > 0 && (
             <div className="h-0.5 w-full bg-ak-border-subtle">
@@ -769,7 +769,7 @@ function ThinkingIndicator({ agentName, hasUserAnswered, sseActivities, sseConne
           {/* Toggle header */}
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-gray-100"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-ak-surface-2"
           >
             <span className="flex gap-1">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-ak-text-tertiary animate-thinking" />
