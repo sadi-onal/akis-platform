@@ -249,6 +249,8 @@ export const StartPipelineRequestSchema = z.object({
     })
     .optional(),
   parentPipelineId: z.string().uuid().optional(),
+  /** When true, skip Scribe and jump directly to Proto (iteration on existing project) */
+  skipScribe: z.boolean().optional().default(false),
   model: z.enum(['claude-sonnet-4-6', 'claude-haiku-4-5']).optional().default('claude-haiku-4-5'),
   jiraConfig: JiraConfigSchema,
 });

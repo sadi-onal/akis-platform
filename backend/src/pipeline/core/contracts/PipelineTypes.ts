@@ -88,6 +88,10 @@ export interface ProtoInput {
   dryRun?: boolean;
   pipelineId?: string;
   knowledgeContext?: string;
+  /** Iteration mode: user's follow-up request (e.g. "fix the second input field") */
+  iterationRequest?: string;
+  /** Iteration mode: existing files read from GitHub to modify instead of building from scratch */
+  existingFiles?: Array<{ path: string; content: string }>;
 }
 
 export interface ProtoOutput {

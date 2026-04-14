@@ -176,6 +176,11 @@ export class ProtoAgent {
       ? createActivityEmitter(input.pipelineId, 'proto')
       : undefined;
 
+    // ─── Iteration Mode: modify existing code instead of building from scratch ───
+    if (input.iterationRequest && input.existingFiles?.length) {
+      return this.executeIteration(input, emit);
+    }
+
     // Agentic path: if tool_use deps are available and not dryRun, use Claude with tools
     if (this.agenticDeps && !input.dryRun && this.github.pushFiles) {
       return this.executeWithTools(input, emit);
@@ -242,6 +247,117 @@ export class ProtoAgent {
         prUrl,
         setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
         metadata: { ...metadata, committed: true },
+      },
+    };
+  }
+
+  // ─── Iteration Mode: Modify existing code ────────────
+
+  private async executeIteration(
+    input: ProtoInput,
+    emit?: ReturnType<typeof createActivityEmitter>,
+  ): Promise<ProtoResult> {
+    emit?.('ai_call', 'Mevcut kod analiz ediliyor ve değişiklikler uygulanıyor...', 20);
+
+    const existingFilesContext = input.existingFiles!
+      .map(f => `--- ${f.path} ---\n${f.content}`)
+      .join('\n\n');
+
+    const iterationPrompt = `You are Proto, an iteration specialist. You have an EXISTING codebase and the user wants a SPECIFIC CHANGE.
+
+ORIGINAL SPEC (for context):
+Title: ${input.spec.title}
+Problem: ${input.spec.problemStatement}
+Features: ${input.spec.userStories.map(s => `${s.persona}: ${s.action} → ${s.benefit}`).join('\n')}
+
+USER'S CHANGE REQUEST:
+"${input.iterationRequest}"
+
+EXISTING CODEBASE (these files are ALREADY in the GitHub repo):
+${existingFilesContext}
+
+RULES:
+- Output ALL files (modified + unchanged). The output REPLACES the entire repo.
+- Focus on the user's specific request. Do NOT rebuild the app from scratch.
+- Keep the existing architecture, styling, and patterns intact.
+- Only modify files that need changes to fulfill the request.
+- For unchanged files, return them AS-IS (exact same content).
+- UI text stays in Turkish.
+- No console.log/console.warn. No comments unless critical.
+
+JSON format (respond with ONLY this, nothing else):
+{"files":[{"filePath":"...","content":"...","linesOfCode":N}],"setupCommands":["npm install","npm run dev"],"metadata":{"filesCreated":N,"totalLinesOfCode":N,"stackUsed":"..."},"verificationReport":{"specCoverage":"...","integrityIssues":[],"missingDependencies":[],"unresolvedImports":[],"confidenceScore":0.9}}`;
+
+    let raw: string;
+    try {
+      raw = await this.ai.generateText(
+        'You are Proto, an iteration specialist. Output ONLY valid JSON. No markdown, no explanations.',
+        iterationPrompt,
+      );
+    } catch (err) {
+      return {
+        type: 'error',
+        error: createPipelineError(
+          PipelineErrorCode.AI_PROVIDER_ERROR,
+          `İterasyon AI çağrısı başarısız: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      };
+    }
+
+    emit?.('parsing', 'AI yanıtı ayrıştırılıyor...', 55);
+
+    const sanitized = sanitizeJsonControlChars(raw);
+    let jsonStr: string | null = extractJsonSafe(sanitized);
+    if (!jsonStr) {
+      const repaired = repairTruncatedJson(sanitized);
+      if (repaired) jsonStr = repaired;
+    }
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      if (jsonStr) parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+    } catch { /* invalid JSON */ }
+    const parsedFiles = (parsed?.files ?? []) as Array<{ filePath: string; content: string; linesOfCode?: number }>;
+    if (!parsedFiles?.length) {
+      return {
+        type: 'error',
+        error: createPipelineError(
+          PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
+          'İterasyon sonucu ayrıştırılamadı veya dosya üretilmedi',
+        ),
+      };
+    }
+
+    const files = parsedFiles.map((f) => ({
+      filePath: f.filePath,
+      content: f.content,
+      linesOfCode: f.linesOfCode ?? f.content.split('\n').length,
+    }));
+
+    // Push updated files to GitHub
+    emit?.('github_push', `${files.length} dosya güncelleniyor...`, 75);
+    const pushResult = await this.pushFiles(input.owner, input.repoName, 'main', files, emit);
+    if (pushResult.type === 'error') {
+      emit?.('error', 'Güncellenmiş dosyalar push edilemedi', 0);
+      return pushResult;
+    }
+
+    emit?.('complete', `İterasyon tamamlandı: ${files.length} dosya güncellendi`, 100);
+
+    return {
+      type: 'output',
+      data: {
+        ok: true,
+        branch: 'main',
+        repo: `${input.owner}/${input.repoName}`,
+        repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
+        files,
+        setupCommands: (parsed?.setupCommands as string[] | undefined) ?? ['npm install', 'npm run dev'],
+        metadata: {
+          filesCreated: files.length,
+          totalLinesOfCode: files.reduce((sum: number, f: { linesOfCode: number }) => sum + f.linesOfCode, 0),
+          stackUsed: (parsed?.metadata as Record<string, unknown> | undefined)?.stackUsed as string ?? 'iteration',
+          committed: true,
+        },
       },
     };
   }

@@ -612,17 +612,33 @@ export default function ChatPage() {
           }
         }
 
+        // Iteration mode: skip Scribe when we have an existing repo
+        const skipScribe = !!existingRepo;
+
         const w = await workflowsApi.create({
           idea: content,
           context,
           existingRepo,
           parentPipelineId: activeWorkflow?.id,
+          skipScribe,
         });
         loadedIdRef.current = w.id;
         setActiveWorkflow(w);
-        setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
+        // Append iteration status message to existing conversation
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: 'agent' as const,
+            agent: 'proto' as const,
+            content: skipScribe
+              ? 'Mevcut kod okunuyor ve değişiklikler uygulanıyor...'
+              : 'Yeni proje planlanıyor...',
+            timestamp: new Date().toISOString(),
+          },
+        ]);
         syncFromStage(w.currentStage ?? 'completed');
         refreshList();
+        // Replace URL silently — user stays in same conversation view
         navigate(`/chat/${w.id}`, { replace: true });
       } catch (e) {
         const errorMsg = localizeError(e);

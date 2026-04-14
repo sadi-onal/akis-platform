@@ -152,6 +152,7 @@ export class PipelineOrchestrator {
     model?: string,
     jiraConfig?: { projectKey: string; enabled: boolean; epicKey?: string },
     parentPipelineId?: string,
+    skipScribe?: boolean,
   ): Promise<PipelineState> {
     const pipeline = await this.store.create(userId);
 
@@ -175,6 +176,49 @@ export class PipelineOrchestrator {
         existingRepo: input.existingRepo,
         parentPipelineId,
       };
+    }
+
+    // ─── Iteration Mode: skip Scribe, jump directly to Proto ───
+    if (skipScribe && parentPipelineId && input.existingRepo) {
+      // Fetch parent pipeline to get the original approved spec
+      const parentPipeline = await this.store.getById(parentPipelineId);
+      if (parentPipeline?.approvedSpec) {
+        updateData.stage = 'proto_building';
+        updateData.approvedSpec = parentPipeline.approvedSpec;
+        updateData.intermediateState = {
+          ...updateData.intermediateState,
+          existingRepo: input.existingRepo,
+          parentPipelineId,
+          iterationRequest: input.idea, // The user's fix/change request
+        };
+        updateData.metrics = {
+          ...updateData.metrics,
+          startedAt: new Date(),
+          approvedAt: new Date(),
+          clarificationRounds: 0,
+          retryCount: 0,
+        } as PipelineMetrics;
+
+        const updated = await this.store.update(pipeline.id, updateData);
+        this.emitEvent(pipeline.id, 'stage_change', 'proto_building');
+
+        // Run Proto+Trace in background with iteration context
+        this.runIterationProtoAndTrace(
+          pipeline.id,
+          updated.metrics!,
+          parentPipeline.approvedSpec,
+          input.existingRepo,
+          input.idea,
+          model,
+        ).catch((err) => {
+          logger.error({ err, pipelineId: pipeline.id }, '[Pipeline] Background iteration Proto+Trace failed');
+          this.failPipeline(pipeline.id, 'Proto', err).catch((e) => logger.error({ err: e }, '[Pipeline] failPipeline also failed'));
+        });
+
+        return updated;
+      }
+      // If parent spec not found, fall through to normal Scribe flow
+      logger.warn({ parentPipelineId, pipelineId: pipeline.id }, '[Pipeline] skipScribe requested but parent spec not found, falling back to Scribe');
     }
 
     const updated = await this.store.update(pipeline.id, updateData);
@@ -407,6 +451,136 @@ export class PipelineOrchestrator {
     });
 
     return updated;
+  }
+
+  // ─── Iteration Mode: Proto reads existing code and modifies ────────
+
+  private async runIterationProtoAndTrace(
+    pipelineId: string,
+    metrics: PipelineMetrics,
+    originalSpec: StructuredSpec,
+    existingRepo: { owner: string; repo: string; branch: string },
+    iterationRequest: string,
+    model?: string,
+  ): Promise<void> {
+    const protoEmit = createActivityEmitter(pipelineId, 'proto');
+    protoEmit('start', 'Mevcut kod okunuyor...', 5);
+
+    // Resolve GitHub access
+    const pipeline = await this.getPipeline(pipelineId);
+    let userGitHubToken: string;
+    try {
+      const gh = await this.validateGitHubAccess(pipeline.userId);
+      userGitHubToken = gh.token;
+    } catch (err) {
+      const error = createPipelineError(
+        PipelineErrorCode.GITHUB_NOT_CONNECTED,
+        `GitHub bağlantısı bulunamadı: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await this.store.update(pipelineId, { stage: 'failed', error });
+      this.emitEvent(pipelineId, 'error', 'failed', error);
+      return;
+    }
+
+    // Read existing files from GitHub
+    const userGithubService = this.createGitHubService(userGitHubToken);
+    let existingFiles: Array<{ path: string; content: string }> = [];
+    try {
+      protoEmit('progress', `${existingRepo.owner}/${existingRepo.repo} deposundan dosyalar okunuyor...`, 15);
+      existingFiles = await this.readRepoFiles(userGithubService, existingRepo.owner, existingRepo.repo, existingRepo.branch);
+      protoEmit('progress', `${existingFiles.length} dosya okundu, değişiklikler uygulanıyor...`, 25);
+    } catch (err) {
+      logger.warn({ err, pipelineId }, '[Pipeline] Failed to read existing files, Proto will build from scratch');
+      protoEmit('progress', 'Mevcut dosyalar okunamadı, sıfırdan oluşturuluyor...', 25);
+    }
+
+    const protoModel = model ?? 'claude-sonnet-4-6'; // Use stronger model for iterations
+    const agents = userGithubService
+      ? (this.createAgentsForModel?.(protoModel, userGithubService) ?? this.getAgents(protoModel))
+      : this.getAgents(protoModel);
+
+    await this.writeCheckpoint(pipelineId, 'proto', `İterasyon: ${iterationRequest.slice(0, 80)}`);
+    const protoResult = await withRetry(
+      (attempt) => {
+        if (attempt > 1) protoEmit('retry', `Proto yeniden deneniyor (deneme ${attempt})...`, 30);
+        return withTimeout(
+          agents.proto.execute({
+            spec: originalSpec,
+            repoName: existingRepo.repo,
+            repoVisibility: 'private',
+            owner: existingRepo.owner,
+            pipelineId,
+            iterationRequest,
+            existingFiles,
+          }),
+          STAGE_TIMEOUT,
+          'Proto',
+        );
+      },
+      {
+        maxAttempts: 3,
+        onError: (err, attempt) =>
+          logger.warn({ err, attempt }, '[Pipeline] Iteration Proto attempt failed'),
+      },
+    );
+
+    if (await this.isCancelled(pipelineId)) return;
+
+    if (protoResult.type === 'error') {
+      await this.store.update(pipelineId, { stage: 'failed', error: protoResult.error });
+      this.emitEvent(pipelineId, 'error', 'failed', protoResult.error);
+      return;
+    }
+
+    const protoCompletedMetrics = { ...metrics, protoCompletedAt: new Date() };
+    this.logActivity(pipelineId, 'proto', 'iteration_applied', {
+      filesGenerated: protoResult.data.files?.length ?? 0,
+      iterationRequest: iterationRequest.slice(0, 200),
+    });
+
+    // For iterations, skip Trace by default (direct fix) → completed
+    await this.store.update(pipelineId, {
+      protoOutput: protoResult.data,
+      stage: 'completed',
+      metrics: { ...protoCompletedMetrics, traceCompletedAt: new Date(), totalDurationMs: Date.now() - toEpoch(protoCompletedMetrics.startedAt) },
+    });
+    this.emitEvent(pipelineId, 'stage_change', 'completed');
+
+    // Knowledge ingestion handled by caller if needed
+  }
+
+  /** Read source files from a GitHub repo (for iteration mode) */
+  private async readRepoFiles(
+    githubService: import('../pipeline-factory.js').GitHubServiceLike,
+    owner: string,
+    repo: string,
+    branch: string,
+  ): Promise<Array<{ path: string; content: string }>> {
+    const filePaths = await githubService.listFiles(owner, repo, branch);
+    if (!filePaths?.length) return [];
+
+    // Filter to source files only (skip node_modules, .git, images, etc.)
+    const sourceExtensions = ['.html', '.css', '.js', '.ts', '.tsx', '.jsx', '.json', '.md', '.py', '.rb', '.go', '.rs', '.vue', '.svelte'];
+    const ignorePaths = ['node_modules/', '.git/', 'dist/', 'build/', '.next/', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'];
+    const sourceFiles = filePaths.filter((p: string) =>
+      sourceExtensions.some(ext => p.endsWith(ext)) &&
+      !ignorePaths.some(ignore => p.includes(ignore)),
+    );
+
+    // Read up to 30 files (context limit)
+    const filesToRead = sourceFiles.slice(0, 30);
+    const results: Array<{ path: string; content: string }> = [];
+
+    for (const filePath of filesToRead) {
+      try {
+        const content = await githubService.getFileContent(owner, repo, branch, filePath);
+        if (content) results.push({ path: filePath, content });
+      } catch {
+        // Skip unreadable files
+      }
+    }
+
+    return results;
   }
 
   // ─── Background Proto + Trace Runner ────────

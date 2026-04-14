@@ -341,6 +341,7 @@ export const workflowsApi = {
     model?: string;
     existingRepo?: { owner: string; repo: string; branch: string };
     parentPipelineId?: string;
+    skipScribe?: boolean;
   }): Promise<Workflow> => {
     const res = await http.post<PipelineResponse>('/api/pipelines', data);
     return mapPipelineToWorkflow(res.pipeline);
