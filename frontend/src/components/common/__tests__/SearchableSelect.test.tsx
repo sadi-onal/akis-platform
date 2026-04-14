@@ -34,10 +34,10 @@ describe('SearchableSelect', () => {
       <SearchableSelect label="Model" options={options} value="" onChange={() => {}} />
     );
     // Click the dropdown button
-    const button = screen.getByText('Select...');
+    const button = screen.getByText('Seç...');
     fireEvent.click(button);
     // Search input should appear
-    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Ara...')).toBeInTheDocument();
     // Options should be visible
     expect(screen.getByText('GPT-4o Mini')).toBeInTheDocument();
   });
@@ -47,7 +47,7 @@ describe('SearchableSelect', () => {
     render(
       <SearchableSelect label="Model" options={options} value="" onChange={onChange} />
     );
-    fireEvent.click(screen.getByText('Select...'));
+    fireEvent.click(screen.getByText('Seç...'));
     fireEvent.click(screen.getByText('O3 Mini'));
     expect(onChange).toHaveBeenCalledWith('o3-mini');
   });
@@ -56,9 +56,9 @@ describe('SearchableSelect', () => {
     render(
       <SearchableSelect label="Model" options={options} value="" onChange={() => {}} />
     );
-    fireEvent.click(screen.getByText('Select...'));
+    fireEvent.click(screen.getByText('Seç...'));
 
-    const searchInput = screen.getByPlaceholderText('Search...');
+    const searchInput = screen.getByPlaceholderText('Ara...');
     fireEvent.change(searchInput, { target: { value: 'mini' } });
 
     // GPT-4o Mini and O3 Mini should match, GPT-4o alone should not
@@ -77,17 +77,17 @@ describe('SearchableSelect', () => {
     render(
       <SearchableSelect label="Model" options={options} value="" onChange={() => {}} />
     );
-    fireEvent.click(screen.getByText('Select...'));
-    const searchInput = screen.getByPlaceholderText('Search...');
+    fireEvent.click(screen.getByText('Seç...'));
+    const searchInput = screen.getByPlaceholderText('Ara...');
     fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
-    expect(screen.getByText('No matches found')).toBeInTheDocument();
+    expect(screen.getByText('Eslesme bulunamadi')).toBeInTheDocument();
   });
 
   it('shows custom empty message when no options and no search', () => {
     render(
       <SearchableSelect label="Model" options={[]} value="" onChange={() => {}} emptyMessage="No models configured" />
     );
-    fireEvent.click(screen.getByText('Select...'));
+    fireEvent.click(screen.getByText('Seç...'));
     expect(screen.getByText('No models configured')).toBeInTheDocument();
   });
 
@@ -118,7 +118,7 @@ describe('SearchableSelect', () => {
     );
     // The dropdown toggle button should be disabled
     const buttons = screen.getAllByRole('button');
-    const triggerButton = buttons.find((b) => b.textContent?.includes('Select'));
+    const triggerButton = buttons.find((b) => b.textContent?.includes('Seç'));
     expect(triggerButton).toBeDisabled();
   });
 
@@ -130,7 +130,7 @@ describe('SearchableSelect', () => {
     // Click "Type manually"
     fireEvent.click(screen.getByText('Type manually'));
     // Should show text input with manual placeholder
-    const input = screen.getByPlaceholderText('Or type manually...');
+    const input = screen.getByPlaceholderText('Veya manuel olarak yazin...');
     expect(input).toBeInTheDocument();
 
     // Type a value
@@ -143,10 +143,10 @@ describe('SearchableSelect', () => {
       <SearchableSelect label="Model" options={options} value="" onChange={() => {}} />
     );
     fireEvent.click(screen.getByText('Type manually'));
-    expect(screen.getByPlaceholderText('Or type manually...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Veya manuel olarak yazin...')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Select from list'));
-    expect(screen.getByText('Select...')).toBeInTheDocument();
+    expect(screen.getByText('Seç...')).toBeInTheDocument();
   });
 
   it('hides manual input toggle when allowManualInput is false', () => {

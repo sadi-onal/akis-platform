@@ -43,6 +43,7 @@ vi.mock('../../../components/ErrorBoundary', () => ({
 
 vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams('tab=profile'), vi.fn()],
+  useNavigate: () => vi.fn(),
 }));
 
 // ---------- Helpers ----------

@@ -5,11 +5,11 @@ import { Badge, StatusBadge } from '../Badge';
 describe('Badge', () => {
   const states = ['pending', 'running', 'completed', 'failed', 'awaiting_approval'] as const;
   const expectedLabels: Record<string, string> = {
-    pending: 'Pending',
-    running: 'Running',
-    completed: 'Completed',
-    failed: 'Failed',
-    awaiting_approval: 'Awaiting Approval',
+    pending: 'Bekliyor',
+    running: 'Calisiyor',
+    completed: 'Tamamlandi',
+    failed: 'Basarisiz',
+    awaiting_approval: 'Onay Bekliyor',
   };
 
   for (const state of states) {
