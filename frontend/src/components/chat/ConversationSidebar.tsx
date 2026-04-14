@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { LOGO_MARK_SVG } from '../../theme/brand';
 import type { ConversationListItem } from '../../types/chat';
@@ -83,8 +83,8 @@ export function ConversationSidebar({
       style={{ width: collapsed ? 64 : 280 }}
     >
       {/* Logo */}
-      <a
-        href="/"
+      <Link
+        to="/"
         className={cn(
           'flex items-center pt-4 pb-3 cursor-pointer hover:opacity-80 transition-opacity',
           collapsed ? 'justify-center px-2' : 'px-5',
@@ -102,7 +102,7 @@ export function ConversationSidebar({
             </div>
           </div>
         )}
-      </a>
+      </Link>
 
       {/* Search + New */}
       {!collapsed && (

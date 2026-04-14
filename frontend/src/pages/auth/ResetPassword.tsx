@@ -23,13 +23,14 @@ export default function ResetPassword() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email: email.trim(), code, newPassword: password }),
+      const { HttpClient } = await import('../../services/api/HttpClient');
+      const { getApiBaseUrl } = await import('../../services/api/config');
+      const httpClient = new HttpClient(getApiBaseUrl());
+      const data = await httpClient.post<{ ok: boolean; error?: { message: string } }>('/auth/reset-password', {
+        email: email.trim(),
+        code,
+        newPassword: password,
       });
-      const data = await res.json();
       if (data.ok) {
         setSuccess(true);
       } else {

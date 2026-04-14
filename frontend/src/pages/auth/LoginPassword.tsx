@@ -23,9 +23,16 @@ export default function LoginPassword() {
       navigate('/login');
       return;
     }
-    const data = JSON.parse(storedData);
-    setEmail(data.email);
-    setUserId(data.userId);
+    try {
+      const data = JSON.parse(storedData);
+      if (!data?.email || !data?.userId) throw new Error('invalid');
+      setEmail(data.email);
+      setUserId(data.userId);
+    } catch {
+      sessionStorage.removeItem('akis_login_data');
+      navigate('/login');
+      return;
+    }
   }, [navigate]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

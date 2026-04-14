@@ -9,6 +9,9 @@ const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
   useLocation: () => ({ pathname: '/chat' }),
+  Link: ({ to, children, ...props }: { to: string; children: React.ReactNode; [key: string]: unknown }) => (
+    <a href={to} {...props}>{children}</a>
+  ),
 }));
 
 vi.mock('../../../contexts/AuthContext', () => ({
