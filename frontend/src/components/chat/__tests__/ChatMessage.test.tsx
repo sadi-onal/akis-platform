@@ -78,6 +78,34 @@ describe('ChatMessage — agent', () => {
     render(<ChatMessage message={msg} />);
     expect(screen.getByText('S')).toBeInTheDocument();
   });
+
+  it('has a copy button with title "Kopyala"', () => {
+    const msg: ChatMessageType = { type: 'agent', agent: 'scribe', content: 'Copy me', timestamp: TS };
+    render(<ChatMessage message={msg} />);
+    const copyBtn = screen.getByTitle('Kopyala');
+    expect(copyBtn).toBeInTheDocument();
+    expect(copyBtn.tagName).toBe('BUTTON');
+  });
+
+  it('calls navigator.clipboard.writeText when copy button is clicked', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const msg: ChatMessageType = { type: 'agent', agent: 'proto', content: 'Code snippet here', timestamp: TS };
+    render(<ChatMessage message={msg} />);
+    fireEvent.click(screen.getByTitle('Kopyala'));
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(writeText).toHaveBeenCalledWith('Code snippet here');
+  });
+
+  it('copy button is inside the agent message group container', () => {
+    const msg: ChatMessageType = { type: 'agent', agent: 'trace', content: 'Test output', timestamp: TS };
+    const { container } = render(<ChatMessage message={msg} />);
+    const group = container.querySelector('.group');
+    expect(group).toBeInTheDocument();
+    const copyBtn = group?.querySelector('button[title="Kopyala"]');
+    expect(copyBtn).toBeInTheDocument();
+  });
 });
 
 // ─── 3. Clarification message ────────────────────────────────────────────────
