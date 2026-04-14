@@ -46,9 +46,10 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
     async startPipeline(request: unknown, _reply: unknown) {
       const userId = getUserId(request);
 
-      // Non-admin users must configure their own AI API key to use the pipeline.
-      // Admins can use the platform's default API key without restrictions.
-      // Guard is best-effort — if auth lookup fails, let the pipeline proceed.
+      // ── Auth + Usage Limit Guard ─────────────────────────────────────
+      // Admins: unlimited, no restrictions
+      // Users WITH own API key: unlimited pipelines (they pay their own API costs)
+      // Users WITHOUT own API key: limited to FREE_PLAN.jobsPerDay/day (uses platform key)
       try {
         const { requireAuth: _requireAuth } = await import('../../utils/auth.js');
         const user = await _requireAuth(request as import('fastify').FastifyRequest);
@@ -57,19 +58,39 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
           const keyStatus = await getMultiProviderStatus(user.id);
           const providers = keyStatus.providers as Record<string, { configured: boolean }>;
           const hasOwnKey = Object.values(providers).some((p) => p.configured);
+
           if (!hasOwnKey) {
-            throw Object.assign(
-              new Error('Pipeline kullanmak icin Ayarlar > AI Anahtarlari sayfasindan kendi API anahtarinizi eklemelisiniz.'),
-              { statusCode: 403 },
-            );
+            // No own key → enforce daily limit (uses platform's API key)
+            const { checkUsageLimits } = await import('../../services/billing/BillingService.js');
+            const limitCheck = await checkUsageLimits(user.id);
+            if (!limitCheck.allowed) {
+              throw Object.assign(
+                new Error(limitCheck.reason || 'Gunluk pipeline limitinize ulastiniz (3/3). Kendi AI anahtarinizi eklerseniz sinirsiz kullanabilirsiniz.'),
+                { statusCode: 429, code: limitCheck.code || 'DAILY_LIMIT_EXCEEDED' },
+              );
+            }
           }
+          // hasOwnKey = true → no limit check, user pays their own API costs
         }
       } catch (err) {
-        if (err && typeof err === 'object' && 'statusCode' in err && (err as { statusCode: number }).statusCode === 403) throw err;
-        // Non-403 errors (auth lookup, DB) — proceed with pipeline start
+        if (err && typeof err === 'object' && 'statusCode' in err) {
+          const status = (err as { statusCode: number }).statusCode;
+          if (status === 403 || status === 429) throw err;
+        }
+        // Non-403/429 errors (auth lookup, DB) — proceed with pipeline start
       }
 
       const body = StartPipelineRequestSchema.parse((request as { body: unknown }).body);
+
+      // Increment daily usage counter BEFORE starting pipeline
+      // (prevents bypass by starting many pipelines simultaneously)
+      try {
+        const { incrementUsage: _incr } = await import('../../services/billing/BillingService.js');
+        await _incr(userId, 0);
+      } catch {
+        // Non-blocking — if counter fails, pipeline still starts
+      }
+
       const pipeline = await orchestrator.startPipeline(userId, {
         idea: body.idea,
         context: body.context,

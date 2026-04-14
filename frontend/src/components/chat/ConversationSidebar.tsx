@@ -83,10 +83,14 @@ export function ConversationSidebar({
       style={{ width: collapsed ? 64 : 280 }}
     >
       {/* Logo */}
-      <div className={cn(
-        'flex items-center pt-4 pb-3',
-        collapsed ? 'justify-center px-2' : 'px-5',
-      )}>
+      <a
+        href="/"
+        className={cn(
+          'flex items-center pt-4 pb-3 cursor-pointer hover:opacity-80 transition-opacity',
+          collapsed ? 'justify-center px-2' : 'px-5',
+        )}
+        title="Ana Sayfa"
+      >
         {collapsed ? (
           <img src={LOGO_MARK_SVG} alt="AKIS" className="h-8 w-8 object-contain" />
         ) : (
@@ -98,7 +102,7 @@ export function ConversationSidebar({
             </div>
           </div>
         )}
-      </div>
+      </a>
 
       {/* Search + New */}
       {!collapsed && (
