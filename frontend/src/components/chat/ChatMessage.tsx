@@ -2,6 +2,52 @@ import { cn } from '../../utils/cn';
 import type { ChatMessage as ChatMessageType, AgentName } from '../../types/chat';
 import { PlanCard } from './PlanCard';
 
+/** Lightweight inline markdown renderer — no external deps, handles code blocks, bold, inline code */
+function SimpleMarkdown({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  let key = 0;
+
+  // Split by fenced code blocks first
+  const segments = text.split(/(```[\s\S]*?```)/g);
+  for (const seg of segments) {
+    if (seg.startsWith('```')) {
+      const match = seg.match(/^```(\w*)\n?([\s\S]*?)```$/);
+      const lang = match?.[1] || '';
+      const code = match?.[2]?.trimEnd() || seg.slice(3, -3);
+      parts.push(
+        <pre key={key++} className="my-2 overflow-x-auto rounded-lg bg-ak-surface-2 p-3 text-xs font-mono text-ak-text-primary">
+          {lang && <span className="mb-1 block text-[10px] font-semibold uppercase text-ak-text-tertiary">{lang}</span>}
+          <code>{code}</code>
+        </pre>
+      );
+    } else {
+      // Process inline markdown
+      const lines = seg.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        const nodes: React.ReactNode[] = [];
+        // Replace **bold** and `inline code`
+        const inlineRegex = /(\*\*(.+?)\*\*|`([^`]+)`)/g;
+        let lastIdx = 0;
+        let m: RegExpExecArray | null;
+        while ((m = inlineRegex.exec(line)) !== null) {
+          if (m.index > lastIdx) nodes.push(line.slice(lastIdx, m.index));
+          if (m[2]) nodes.push(<strong key={key++} className="font-semibold text-ak-text-primary">{m[2]}</strong>);
+          else if (m[3]) nodes.push(<code key={key++} className="rounded bg-ak-surface-2 px-1 py-0.5 text-xs font-mono">{m[3]}</code>);
+          lastIdx = m.index + m[0].length;
+        }
+        if (lastIdx < line.length) nodes.push(line.slice(lastIdx));
+        if (nodes.length === 0 && line === '') {
+          parts.push(<br key={key++} />);
+        } else {
+          parts.push(<span key={key++}>{nodes}{i < lines.length - 1 ? '\n' : ''}</span>);
+        }
+      }
+    }
+  }
+  return <div className="whitespace-pre-wrap text-sm text-ak-text-secondary">{parts}</div>;
+}
+
 interface ChatMessageProps {
   message: ChatMessageType;
   onApprove?: () => void;
@@ -123,7 +169,7 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
                 </svg>
               </button>
             </div>
-            <p className="whitespace-pre-wrap text-sm text-ak-text-secondary">{message.content}</p>
+            <SimpleMarkdown text={message.content} />
           </div>
         </div>
       );
