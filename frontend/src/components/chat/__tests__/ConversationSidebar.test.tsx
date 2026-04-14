@@ -183,7 +183,7 @@ describe('ConversationSidebar', () => {
         onNewConversation={vi.fn()}
       />,
     );
-    expect(screen.getByText(/AKIS v0\.5\.3/)).toBeInTheDocument();
+    expect(screen.getByText(/AKIS v0\.6\.0/)).toBeInTheDocument();
   });
 
   it('shows theme toggle button', () => {

@@ -297,7 +297,7 @@ export function ConversationSidebar({
           </button>
         ) : (
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-ak-text-tertiary">AKIS v0.5.3</span>
+            <span className="text-[10px] text-ak-text-tertiary">AKIS v0.6.0</span>
             <button
               onClick={onToggleCollapse}
               aria-label="Daralt"
