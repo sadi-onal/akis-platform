@@ -125,7 +125,7 @@ export function FloatingActivityToast({
           {/* Dismiss button */}
           <button
             onClick={handleDismiss}
-            className="absolute top-1.5 right-2.5 text-gray-400 hover:text-gray-600 transition-colors text-sm leading-none"
+            className="absolute top-1.5 right-2.5 text-ak-text-tertiary hover:text-ak-text-secondary transition-colors text-sm leading-none"
             aria-label="Kapat"
           >
             &times;
@@ -155,10 +155,10 @@ export function FloatingActivityToast({
               {label}
             </span>
 
-            <span className="text-gray-400 text-[13px]">&middot;</span>
+            <span className="text-ak-text-tertiary text-[13px]">&middot;</span>
 
             {/* Message */}
-            <span className="text-[13px] text-gray-600 truncate flex-1">
+            <span className="text-[13px] text-ak-text-secondary truncate flex-1">
               {message}
             </span>
           </div>

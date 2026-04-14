@@ -427,7 +427,7 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
 
       {/* ── TAB: Console ─────────────────────── */}
       {tab === 'console' && (
-        <div className="flex flex-1 flex-col overflow-hidden bg-[#0d1117]">
+        <div className="flex flex-1 flex-col overflow-hidden bg-ak-bg">
           <div className="flex-1 overflow-y-auto py-2">
             {(!activities || activities.length === 0) ? (
               <div className="flex h-full items-center justify-center">
@@ -511,7 +511,7 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
             )}
           </div>
 
-          <div className="flex flex-1 flex-col overflow-hidden bg-[#0d1117]">
+          <div className="flex flex-1 flex-col overflow-hidden bg-ak-bg">
             {selectedFile && files?.[selectedFile] ? (
               <>
                 <div className="flex items-center gap-2 border-b border-ak-border bg-ak-surface px-3 py-1.5">

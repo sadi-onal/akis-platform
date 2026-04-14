@@ -82,16 +82,51 @@ RULES:
 - Use a SINGLE src/App.css for all styles — NO inline styles
 - index.html must have <div id="root"></div> and module script tag
 - package.json: "type": "module", react + react-dom + vite + @vitejs/plugin-react
-- No comments in code. No test files. No CI/CD.
+- No comments in code. No test files. No CI/CD. No console.log/console.warn/console.error.
 - README.md in Turkish with: project description, setup steps, features list.
 - Code in English, UI text in Turkish.
 
+TURKISH UI TEXT (MANDATORY):
+- ALL user-facing text must be in Turkish: button labels, headings, placeholders, error messages, empty states, tooltips
+- Examples: "Kaydet" not "Save", "Ara..." not "Search...", "Yükleniyor..." not "Loading..."
+- Form placeholders: "Adınızı girin", "E-posta adresiniz", "Şifrenizi girin"
+- Error messages: "Bu alan zorunludur", "Geçersiz e-posta adresi", "Bir hata oluştu"
+- Empty states: "Henüz veri yok", "Sonuç bulunamadı"
+- Navigation: "Ana Sayfa", "Ayarlar", "Profil", "Çıkış"
+- Actions: "Ekle", "Düzenle", "Sil", "İptal", "Onayla", "Gönder"
+
+RESPONSIVE DESIGN (MOBILE-FIRST):
+- Use Tailwind-style responsive utility classes: base styles for mobile, sm: for tablet, lg: for desktop
+- Container: max-w-7xl mx-auto px-4 sm:px-6 lg:px-8
+- Grid layouts: grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4
+- Typography: text-sm sm:text-base for body, text-xl sm:text-2xl lg:text-3xl for headings
+- Navigation: mobile hamburger menu or bottom nav, desktop horizontal nav
+- Cards/lists must stack vertically on mobile, grid on desktop
+- Touch targets minimum 44px height on interactive elements
+- If NOT using Tailwind: use CSS media queries with mobile-first breakpoints (min-width: 640px, 768px, 1024px)
+
+SANDPACK PREVIEW COMPATIBILITY:
+- The output renders in Sandpack (browser-based bundler). Keep imports simple and standard.
+- src/App.jsx (or src/App.tsx) MUST be the main component — it is the Sandpack entry point.
+- src/main.jsx MUST import and render <App /> from './App' — this maps to Sandpack's index.
+- CSS: import './App.css' in App.jsx. Sandpack maps src/App.css to /App.css automatically.
+- Do NOT use path aliases (@/, ~/) — use relative imports only (./components/X).
+- Do NOT use dynamic imports, lazy loading, or React.lazy — Sandpack does not support code splitting.
+- Do NOT import from node_modules paths directly — only use package names (e.g., 'react' not './node_modules/react').
+- All component imports must use relative paths from the file's location.
+
 CODE QUALITY REQUIREMENTS:
-- Every component must have proper imports
+- Every component must have proper imports — no unused imports, no missing imports
 - CSS/styles must be included (inline or separate file)
 - README.md must include: project description, setup instructions, tech stack, features list
-- package.json must have correct "scripts" (dev, build, start)
+- package.json must have correct "scripts" (dev, build, preview)
 - index.html must reference the correct entry point
+- Use semantic HTML elements: <nav>, <main>, <section>, <article>, <header>, <footer>
+- Add aria-label on icon-only buttons and interactive elements without visible text
+- Form inputs must have associated <label> elements
+- Handle empty/loading/error states in components — never leave a component that can break on null/undefined
+- Use try/catch for JSON.parse, fetch calls, and localStorage access
+- Props must have sensible defaults or early returns for missing data
 
 BEFORE returning your output, perform VERIFICATION:
 

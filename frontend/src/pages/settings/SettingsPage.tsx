@@ -98,7 +98,7 @@ const STAGE_I18N_KEYS: Record<string, { key: string; color: string }> = {
   completed: { key: 'pipeline.stage.completed', color: 'text-emerald-400 bg-emerald-400/10' },
   completed_partial: { key: 'pipeline.stage.completedPartial', color: 'text-emerald-300 bg-emerald-300/10' },
   failed: { key: 'pipeline.stage.failed', color: 'text-red-400 bg-red-400/10' },
-  cancelled: { key: 'pipeline.stage.cancelled', color: 'text-gray-400 bg-gray-400/10' },
+  cancelled: { key: 'pipeline.stage.cancelled', color: 'text-ak-text-tertiary bg-ak-surface-2/50' },
 };
 
 /* ------------------------------------------------------------------ */
@@ -726,7 +726,7 @@ function PipelineStatsTab() {
               {data.recentPipelines.map((p) => {
                 const stageInfo = STAGE_I18N_KEYS[p.stage];
                 const stageText = stageInfo ? t(stageInfo.key as Parameters<typeof t>[0]) : p.stage;
-                const stageColor = stageInfo?.color ?? 'text-gray-400 bg-gray-400/10';
+                const stageColor = stageInfo?.color ?? 'text-ak-text-tertiary bg-ak-surface-2/50';
                 return (
                   <tr key={p.id} className="border-b border-ak-border/50 bg-ak-surface/50 last:border-b-0">
                     <td className="px-4 py-2.5 text-ak-text-primary font-medium truncate max-w-[200px]">

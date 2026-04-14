@@ -195,7 +195,7 @@ function SpecBlock({
       {/* Collapsed header — always visible */}
       <button
         onClick={() => setSpecExpanded(!specExpanded)}
-        className="flex w-full items-center justify-between gap-2 p-4 text-left transition-colors hover:bg-gray-50"
+        className="flex w-full items-center justify-between gap-2 p-4 text-left transition-colors hover:bg-ak-surface-2"
       >
         <div className="flex items-center gap-2">
           <svg

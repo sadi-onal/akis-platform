@@ -119,7 +119,7 @@ export function ConversationSidebar({
           <button
             onClick={onNewConversation}
             className={cn(
-              'flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-xs font-medium text-ak-text-secondary',
+              'flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ak-border px-3 py-2 text-xs font-medium text-ak-text-secondary',
               'hover:border-emerald-400 hover:text-ak-primary hover:bg-ak-surface-2/50 transition-colors',
             )}
           >
@@ -136,7 +136,7 @@ export function ConversationSidebar({
           <button
             onClick={onNewConversation}
             aria-label="Yeni Sohbet"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-dashed border-gray-300 text-ak-text-secondary hover:border-emerald-400 hover:text-ak-primary transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-dashed border-ak-border text-ak-text-secondary hover:border-emerald-400 hover:text-ak-primary transition-colors"
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
