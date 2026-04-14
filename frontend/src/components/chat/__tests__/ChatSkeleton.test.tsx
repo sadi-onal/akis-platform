@@ -22,10 +22,10 @@ describe('ChatSkeleton', () => {
     expect(agentGroups.length).toBe(2);
   });
 
-  it('renders user message skeleton (right-aligned)', () => {
+  it('renders user message skeletons (right-aligned)', () => {
     const { container } = render(<ChatSkeleton />);
     const rightAligned = container.querySelectorAll('.flex.justify-end');
-    expect(rightAligned.length).toBe(1);
+    expect(rightAligned.length).toBe(2);
   });
 
   it('has fade-in animation', () => {
