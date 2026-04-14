@@ -313,17 +313,18 @@ export async function buildApp() {
     };
     logger.info('[buildApp] Pipeline GitHub: REST API (set GITHUB_MCP_BASE_URL for MCP)');
   } else {
-    // Option 3: No token — stub mode
+    // Option 3: No token — fail-hard mode (no silent stubs)
+    const noTokenError = () => { throw new Error('GitHub token yapilandirilmamis. Pipeline calistirmak icin GITHUB_TOKEN veya GitHub OAuth baglantisi gereklidir.'); };
     pipelineGitHubService = {
-      async createRepository(_o: string, name: string) { return { url: `https://github.com/stub/${name}` }; },
-      async createBranch() {},
-      async commitFile() {},
-      async createPR() { return { url: '' }; },
-      async listFiles() { return [] as string[]; },
-      async getFileContent() { return ''; },
+      async createRepository() { noTokenError(); return { url: '' }; },
+      async createBranch() { noTokenError(); },
+      async commitFile() { noTokenError(); },
+      async createPR() { noTokenError(); return { url: '' }; },
+      async listFiles() { noTokenError(); return []; },
+      async getFileContent() { noTokenError(); return ''; },
     };
-    _pipelineGetGitHubOwner = async () => 'stub-owner';
-    logger.info('[buildApp] Pipeline GitHub: STUB (set GITHUB_TOKEN for real push)');
+    _pipelineGetGitHubOwner = async () => { noTokenError(); return ''; };
+    logger.warn('[buildApp] Pipeline GitHub: NOT CONFIGURED (GITHUB_TOKEN or OAuth required)');
   }
 
   // PostgreSQL pipeline store (replaces InMemoryPipelineStore)

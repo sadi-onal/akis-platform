@@ -106,13 +106,22 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
     case 'agent': {
       const c = AGENT_COLORS[message.agent];
       return (
-        <div className="flex gap-2.5 animate-in fade-in slide-in-from-left-2 duration-200">
+        <div className="group flex gap-2.5 animate-in fade-in slide-in-from-left-2 duration-200">
           <AgentAvatar agent={message.agent} />
           <div className="min-w-0 flex-1">
             <div className="mb-0.5 flex items-center gap-2">
               <span className={cn('text-xs font-semibold', c.text)}>{c.label}</span>
               <span className="text-[10px] text-ak-text-tertiary">{formatTime(message.timestamp)}</span>
               <JiraBadge epicKey={message.jiraEpicKey} />
+              <button
+                onClick={() => navigator.clipboard.writeText(message.content)}
+                title="Kopyala"
+                className="ml-auto rounded p-1 text-ak-text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ak-surface-2 hover:text-ak-primary"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
             </div>
             <p className="whitespace-pre-wrap text-sm text-ak-text-secondary">{message.content}</p>
           </div>

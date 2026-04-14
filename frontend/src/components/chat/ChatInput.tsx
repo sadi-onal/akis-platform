@@ -106,6 +106,11 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
           </button>
         )}
       </div>
+      <div className="mx-auto mt-1 hidden max-w-[720px] items-center justify-center gap-3 text-[10px] text-ak-text-tertiary sm:flex">
+        <span><kbd className="rounded bg-ak-surface-2 px-1 py-0.5 font-mono text-[9px]">⏎</kbd> Gonder</span>
+        <span><kbd className="rounded bg-ak-surface-2 px-1 py-0.5 font-mono text-[9px]">⇧⏎</kbd> Yeni satir</span>
+        <span><kbd className="rounded bg-ak-surface-2 px-1 py-0.5 font-mono text-[9px]">Esc</kbd> Temizle</span>
+      </div>
     </div>
   );
 }
