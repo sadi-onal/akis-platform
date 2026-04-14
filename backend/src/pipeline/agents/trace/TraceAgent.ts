@@ -127,6 +127,31 @@ Output Format — respond ONLY with valid JSON:
 
 Also generate a playwright.config.ts file in the testFiles array.
 
+Playwright Best Practices:
+- PREFER semantic locators in this order: getByRole() > getByText() > getByTestId() > getByLabel() > CSS selectors (last resort)
+- Use getByRole('button', { name: 'Submit' }) instead of page.locator('button.submit')
+- Use getByText('expected text') for verifying visible content
+- Use data-testid attributes only when semantic locators are ambiguous
+- ALWAYS use web-first assertions: expect(locator).toBeVisible(), toHaveText(), toContainText(), toHaveValue()
+- NEVER use manual waitForTimeout() — use expect(locator).toBeVisible() or page.waitForURL() instead
+- Use await expect(page).toHaveURL(/pattern/) for navigation assertions
+- Add descriptive messages to assertions: expect(btn).toBeVisible({ message: 'Login button should appear after page load' })
+
+Turkish UI Text Handling:
+- The target application may use Turkish UI labels (e.g. "Giriş Yap", "Kayıt Ol", "Gönder", "Ayarlar")
+- Match visible text EXACTLY as it appears in the source code — do not translate Turkish labels to English in selectors
+- Use getByText() or getByRole() with the Turkish label: getByRole('button', { name: 'Giriş Yap' })
+- If i18n keys are present in code, use the resolved Turkish text for assertions, not the key
+- Test file names and describe/it blocks should be in English, but text matchers must use the actual UI language
+
+Test Reliability:
+- Structure tests: test.describe('Feature', () => { test('should do X', async ({ page }) => { ... }) })
+- Use beforeEach for common navigation: test.beforeEach(async ({ page }) => { await page.goto('/'); })
+- Avoid brittle selectors: NO nth-child(), NO deeply nested CSS paths, NO auto-generated class names
+- Use page.waitForLoadState('networkidle') only when necessary — prefer waiting for specific elements
+- For forms: fill then assert, e.g. await input.fill('test'); await expect(input).toHaveValue('test')
+- For async operations: await expect(successMsg).toBeVisible({ timeout: 10_000 })
+
 Rules:
 - Write ONLY end-to-end tests (no unit tests)
 - Do NOT run the tests — only write them
@@ -134,7 +159,7 @@ Rules:
 - Use TypeScript for all test files
 - Use descriptive test names in English
 - Use test.describe blocks to group related tests
-- Include proper expect assertions
+- Include proper expect assertions with descriptive failure messages
 - temperature=0
 
 AFTER generating Playwright test files, perform TRACEABILITY CHECK:
