@@ -570,8 +570,8 @@ export default function ChatPage() {
 
     // ─── Iteration Mode: completed pipeline + protoOutput → create follow-up pipeline in same chat ───
     const isTerminal = activeWorkflow?.currentStage === 'completed' || activeWorkflow?.currentStage === 'completed_partial';
-    const protoRepo = activeWorkflow?.stages.proto?.result?.repo;
-    const protoBranch = activeWorkflow?.stages.proto?.result?.branch;
+    const protoRepo = activeWorkflow?.stages.proto?.repo;
+    const protoBranch = activeWorkflow?.stages.proto?.branch;
 
     if (isTerminal && protoRepo && protoBranch) {
       const [repoOwner, repoName] = protoRepo.split('/');
