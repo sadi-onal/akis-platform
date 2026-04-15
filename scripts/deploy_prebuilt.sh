@@ -538,9 +538,10 @@ if [ "$CONFIRM" = true ]; then
     /tmp/frontend-dist-$$.tar.gz "${SSH_USER}@${SSH_HOST}:/tmp/frontend-dist.tar.gz"
 
   ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" \
-    "mkdir -p /opt/akis/frontend && \
-     rm -rf /opt/akis/frontend/* && \
-     tar -xzf /tmp/frontend-dist.tar.gz -C /opt/akis/frontend && \
+    "sudo rm -rf /opt/akis/frontend && \
+     sudo mkdir -p /opt/akis/frontend && \
+     sudo tar -xzf /tmp/frontend-dist.tar.gz -C /opt/akis/frontend && \
+     sudo chown -R ${SSH_USER}:${SSH_USER} /opt/akis/frontend && \
      rm /tmp/frontend-dist.tar.gz"
 
   rm /tmp/frontend-dist-$$.tar.gz
