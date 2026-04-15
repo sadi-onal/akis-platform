@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../utils/cn';
 import { LOGO_MARK_SVG } from '../theme/brand';
@@ -50,16 +50,39 @@ function useSections(): Section[] {
   );
 }
 
+/** Render inline markdown: **bold**, `code`, [link](url) */
+function renderInline(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  // Regex matches **bold**, `code`, or [text](url) — in order of priority
+  const re = /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+    if (match[1] != null) {
+      parts.push(<strong key={`b${key++}`} className="font-semibold text-white">{match[1]}</strong>);
+    } else if (match[2] != null) {
+      parts.push(<code key={`c${key++}`} className="rounded bg-ak-surface-2 px-1.5 py-0.5 text-xs font-mono text-[#07D1AF]">{match[2]}</code>);
+    } else if (match[3] != null && match[4] != null) {
+      parts.push(<a key={`a${key++}`} href={match[4]} className="text-[#07D1AF] underline hover:brightness-125" target="_blank" rel="noopener noreferrer">{match[3]}</a>);
+    }
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length > 0 ? parts : [text];
+}
+
 function renderMarkdown(md: string) {
   return md.split('\n').map((line, i) => {
-    if (line.startsWith('### ')) return <h3 key={i} className="mt-5 mb-2 text-base font-semibold text-white">{line.slice(4)}</h3>;
-    if (line.startsWith('## ')) return <h2 key={i} className="mt-6 mb-3 text-xl font-bold text-white">{line.slice(3)}</h2>;
+    if (line.startsWith('### ')) return <h3 key={i} className="mt-5 mb-2 text-base font-semibold text-white">{renderInline(line.slice(4))}</h3>;
+    if (line.startsWith('## ')) return <h2 key={i} className="mt-6 mb-3 text-xl font-bold text-white">{renderInline(line.slice(3))}</h2>;
     if (line.startsWith('```')) return <div key={i} className="my-1" />;
-    if (line.startsWith('- ')) return <li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-disc">{line.slice(2)}</li>;
-    if (/^\d+\. /.test(line)) return <li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-decimal">{line.replace(/^\d+\. /, '')}</li>;
+    if (line.startsWith('- ')) return <li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-disc">{renderInline(line.slice(2))}</li>;
+    if (/^\d+\. /.test(line)) return <li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-decimal">{renderInline(line.replace(/^\d+\. /, ''))}</li>;
     if (line.trim() === '') return <div key={i} className="h-2" />;
     if (line.startsWith('`') && line.endsWith('`')) return <code key={i} className="block rounded bg-ak-surface-2 px-3 py-1.5 text-xs font-mono text-[#07D1AF]">{line.slice(1, -1)}</code>;
-    return <p key={i} className="text-sm text-gray-300 leading-relaxed">{line}</p>;
+    return <p key={i} className="text-sm text-gray-300 leading-relaxed">{renderInline(line)}</p>;
   });
 }
 
