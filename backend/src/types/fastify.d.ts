@@ -14,8 +14,10 @@ declare module 'fastify' {
     method: string;
     url: string;
     routeOptions?: { url?: string };
+    routerPath?: string;
     cookies?: Record<string, string>;
     authSessionId?: string | null;
+    user?: { id: string; [key: string]: unknown };
     raw: import('http').IncomingMessage;
   }
 
@@ -32,6 +34,7 @@ declare module 'fastify' {
     setAuthCookie(sessionId: string): FastifyReply;
     clearAuthCookie(): FastifyReply;
     raw: import('http').ServerResponse;
+    hijack(): void;
   }
 
   export type FastifyHandler = (

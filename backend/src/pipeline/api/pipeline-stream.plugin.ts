@@ -108,7 +108,6 @@ export async function pipelineStreamPlugin(
     reqRaw.raw.on('close', cleanup);
 
     // Tell Fastify we're handling the response ourselves
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (reply as any).hijack();
+    reply.hijack();
   });
 }

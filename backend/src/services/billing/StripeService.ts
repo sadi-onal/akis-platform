@@ -184,10 +184,8 @@ export async function handleWebhookEvent(
         .set({
           status,
           cancelAtPeriodEnd: sub.cancel_at_period_end,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          currentPeriodStart: new Date((sub as any).current_period_start * 1000),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          currentPeriodEnd: new Date((sub as any).current_period_end * 1000),
+          currentPeriodStart: new Date(((sub as unknown as Record<string, number>).current_period_start) * 1000),
+          currentPeriodEnd: new Date(((sub as unknown as Record<string, number>).current_period_end) * 1000),
           updatedAt: new Date(),
         })
         .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));

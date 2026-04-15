@@ -190,9 +190,7 @@ export async function buildApp() {
 
   app.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     const duration = reply.elapsedTime! / 1000;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const req = request as any;
-    const route: string = req.routeOptions?.url ?? req.routerPath ?? request.url.split('?')[0];
+    const route: string = request.routeOptions?.url ?? request.routerPath ?? request.url.split('?')[0];
     metrics.httpDuration.observe(
       {
         method: request.method,
@@ -451,10 +449,8 @@ export async function buildApp() {
     const statusCode = getStatusCodeForError(envelope.error.code as ErrorCode);
 
     if (statusCode >= 500 && app.log) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const req = request as any;
-      const route = req.routeOptions?.url ?? req.routerPath ?? request.url.split('?')[0];
-      const userId = req.user?.id ?? null;
+      const route = request.routeOptions?.url ?? request.routerPath ?? request.url.split('?')[0];
+      const userId = request.user?.id ?? null;
       app.log.error({
         err: error,
         requestId: request.id,
