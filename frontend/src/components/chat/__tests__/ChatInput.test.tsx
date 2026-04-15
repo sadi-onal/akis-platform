@@ -32,7 +32,7 @@ describe('ChatInput', () => {
     fireEvent.change(textarea, { target: { value: '  my idea  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Gönder' }));
     expect(onSend).toHaveBeenCalledOnce();
-    expect(onSend).toHaveBeenCalledWith('my idea');
+    expect(onSend).toHaveBeenCalledWith('my idea', undefined);
   });
 
   it('calls onSend on Enter key', () => {
@@ -42,7 +42,7 @@ describe('ChatInput', () => {
     fireEvent.change(textarea, { target: { value: 'test message' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     expect(onSend).toHaveBeenCalledOnce();
-    expect(onSend).toHaveBeenCalledWith('test message');
+    expect(onSend).toHaveBeenCalledWith('test message', undefined);
   });
 
   it('Shift+Enter does NOT trigger send', () => {
@@ -83,18 +83,17 @@ describe('ChatInput', () => {
 
   // ─── Keyboard hint text ────────────────────────────────────────────────────
 
-  it('renders keyboard hint labels (Gonder, Yeni satir, Temizle)', () => {
+  it('renders keyboard hint labels (Gonder, Yeni satir)', () => {
     render(<ChatInput onSend={vi.fn()} />);
     expect(screen.getByText('Gonder')).toBeInTheDocument();
     expect(screen.getByText('Yeni satir')).toBeInTheDocument();
-    expect(screen.getByText('Temizle')).toBeInTheDocument();
   });
 
   it('renders keyboard shortcut symbols in hints', () => {
     const { container } = render(<ChatInput onSend={vi.fn()} />);
     const kbds = container.querySelectorAll('kbd');
-    // Expect 3 kbd elements: Enter, Shift+Enter, Esc
-    expect(kbds.length).toBe(3);
+    // Expect 2 kbd elements: Enter, Shift+Enter
+    expect(kbds.length).toBe(2);
   });
 
   // ─── Escape key clears input ──────────────────────────────────────────────

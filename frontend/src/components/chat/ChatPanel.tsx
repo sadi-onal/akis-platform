@@ -35,7 +35,7 @@ interface ChatPanelProps {
   isInputEnabled: boolean;
   showCancelButton: boolean;
   inputPlaceholder: string;
-  onSend: (message: string) => void;
+  onSend: (message: string, attachments?: import('./ChatInput').ChatAttachment[]) => void;
   onCancel: () => void;
   onApprove: () => void;
   onReject: () => void;
