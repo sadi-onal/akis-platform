@@ -208,7 +208,7 @@ export class TraceAgent {
     }
 
     // Legacy path: Step 1: Read codebase from GitHub
-    emit?.('fetching', 'Kaynak dosyalar okunuyor', 10);
+    emit?.('fetching', 'Scaffold branch\'inden kaynak dosyalar alınıyor...', 15);
     const codebaseResult = await this.readCodebase(input.repoOwner, input.repo, input.branch, emit);
     if (codebaseResult.type === 'error') {
       emit?.('error', 'Kod tabanı okunamadı', 0);
@@ -230,6 +230,8 @@ export class TraceAgent {
     emit?.('analyzing', `Test stratejisi belirleniyor (${files.length} dosya)`, 30);
 
     // Step 2: Generate tests via AI (with dedicated timeout)
+    const totalChars = files.reduce((sum, f) => sum + f.content.length, 0);
+    emit?.('ai_call', `Claude AI ile Playwright testleri oluşturuluyor (${files.length} dosya, ${Math.round(totalChars / 1024)}KB)...`, 45);
     const testsResult = await this.generateTests(files, input.spec, emit, input.knowledgeContext);
     if (testsResult.type === 'error') {
       emit?.('error', 'Test üretimi başarısız oldu', 0);
@@ -450,7 +452,7 @@ After pushing, respond with a JSON summary:
         return { type: 'output', data: contents };
       } catch (err) {
         if (attempt < RETRY_CONFIG.maxRetries) {
-          emit?.('retry', 'Bağlantı yeniden kuruluyor', 10, undefined, attempt + 1);
+          emit?.('retry', `Dosya okuma yeniden deneniyor (${attempt + 1})...`, 15, undefined, attempt + 1);
           await this.delay(RETRY_CONFIG.backoffDelays[attempt]);
           continue;
         }
@@ -495,22 +497,18 @@ After pushing, respond with a JSON summary:
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
       try {
-        if (attempt === 0) {
-          emit?.('ai_call', 'Playwright testleri oluşturuluyor', 45);
-        } else {
-          emit?.('ai_call', 'Playwright testleri oluşturuluyor', 45, undefined, attempt);
-        }
+        emit?.('ai_call', `AI çağrısı yapılıyor (deneme ${attempt + 1})...`, 45 + attempt * 5);
         const traceSystemPrompt = knowledgeContext
           ? `${TEST_GENERATION_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
           : TEST_GENERATION_PROMPT;
         const aiPromise = this.ai.generateText(traceSystemPrompt, userPrompt);
         responseText = await withAiTimeout(aiPromise, AI_CALL_TIMEOUT_MS);
-        emit?.('parsing', 'Yanıt işleniyor', 65);
+        emit?.('parsing', 'AI yanıtı alındı, ayrıştırılıyor...', 65);
       } catch (err) {
         const isTimeout = err instanceof Error && err.message.includes('timed out');
         if (isTimeout) {
           logger.warn(`[Trace] AI call timed out after ${AI_CALL_TIMEOUT_MS / 1000}s (attempt ${attempt + 1})`);
-          emit?.('retry', 'Yeniden deneniyor', 40, undefined, attempt + 1);
+          emit?.('retry', `AI yanıt vermedi, tekrar deneniyor...`, 40, undefined, attempt + 1);
         }
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         return {

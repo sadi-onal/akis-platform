@@ -289,6 +289,7 @@ Desteklenen provider'lar: `anthropic`, `openai`, `openrouter`, `mock`
 - Level 3: CriticAgent, FixLoop, Validator, Explainability, SecurityGate, LearningService
 - Level 4: Orchestrator entegrasyonu — FixLoop auto-trigger, SecurityGate regression check, LearningService recording
 
+
 ## Deployment
 
 - **Production:** `akisflow.com` — OCI x86_64, Docker Compose + Caddy
