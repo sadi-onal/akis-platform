@@ -82,23 +82,23 @@ export function TraceProgressStepper({ activities, currentStep }: TraceProgressS
           const isPending = !isStarted;
 
           const icon = isErrored && isCurrent ? (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500/20 text-red-400">
-              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500/20 text-red-400 transition-all duration-300">
+              <svg className="h-2.5 w-2.5 animate-scale-in" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </span>
           ) : isDone ? (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-ak-primary/20 text-ak-primary">
-              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-ak-primary/20 text-ak-primary transition-all duration-300">
+              <svg className="h-2.5 w-2.5 animate-scale-in" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </span>
           ) : isCurrent ? (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-ak-trace/20">
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-ak-trace/20 transition-all duration-300 animate-border-glow border border-ak-trace/30">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ak-trace" />
             </span>
           ) : (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full border border-ak-border-subtle">
+            <span className="flex h-4 w-4 items-center justify-center rounded-full border border-ak-border-subtle transition-all duration-300">
               <span className="h-1 w-1 rounded-full bg-ak-text-tertiary/40" />
             </span>
           );

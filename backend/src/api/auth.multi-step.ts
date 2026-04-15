@@ -14,6 +14,7 @@ import { cookieOpts, env } from '../lib/env.js';
 import { VerificationService } from '../services/auth/verification.js';
 import type { EmailService } from '../services/email/index.js';
 import { sendError } from '../utils/errorHandler.js';
+import { logger } from '../lib/logger.js';
 
 type User = typeof users.$inferSelect;
 
@@ -100,22 +101,33 @@ export async function registerMultiStepAuthRoutes(
     }
 
     // Create user in pending state (no password yet)
-    const [created] = await db
-      .insert(users)
-      .values({
-        name: `${body.firstName} ${body.lastName}`,
-        email,
-        passwordHash: '', // Will be set in next step
-        status: 'pending_verification',
-        emailVerified: false,
-      })
-      .returning();
+    // Use try-catch to handle race condition where two concurrent requests
+    // pass the email check but only one can insert (unique constraint)
+    let created: typeof users.$inferSelect;
+    try {
+      const [row] = await db
+        .insert(users)
+        .values({
+          name: `${body.firstName} ${body.lastName}`,
+          email,
+          passwordHash: '', // Will be set in next step
+          status: 'pending_verification',
+          emailVerified: false,
+        })
+        .returning();
+      created = row;
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
+        return sendError(reply, request, 'EMAIL_IN_USE', 'Email already registered');
+      }
+      throw err;
+    }
 
     // Send verification code
     try {
       await verificationService.sendVerificationCode(created.id, email, created.name);
     } catch (error) {
-      console.error('[Auth] Failed to send verification email:', error);
+      logger.error(`[Auth] Failed to send verification email: ${error}`);
 
       if (error instanceof Error && error.message === 'TOO_MANY_ATTEMPTS') {
         return sendError(reply, request, 'RATE_LIMITED', 'Too many verification attempts. Please wait 15 minutes.');
@@ -125,7 +137,7 @@ export async function registerMultiStepAuthRoutes(
       try {
         await db.delete(users).where(eq(users.id, created.id));
       } catch (cleanupError) {
-        console.error('[Auth] Failed to rollback user after email delivery failure:', cleanupError);
+        logger.error(`[Auth] Failed to rollback user after email delivery failure: ${cleanupError}`);
       }
 
       return sendError(
@@ -245,7 +257,7 @@ export async function registerMultiStepAuthRoutes(
 
       // Send welcome email (fire-and-forget — don't block verification)
       emailService.sendWelcomeEmail(user.email, user.name ?? undefined).catch((err) => {
-        console.error('[Auth] Failed to send welcome email:', err);
+        logger.error(`[Auth] Failed to send welcome email: ${err}`);
       });
 
       return {
@@ -256,7 +268,7 @@ export async function registerMultiStepAuthRoutes(
       if (error instanceof Error && error.message === 'VERIFICATION_LOCKED') {
         return sendError(reply, request, 'RATE_LIMITED', 'Too many failed attempts. Please try again in 30 minutes.', undefined, 429);
       }
-      console.error('[Auth] Verification error:', error);
+      logger.error(`[Auth] Verification error: ${error}`);
       return sendError(reply, request, 'INTERNAL_ERROR', 'Failed to verify email');
     }
   });
@@ -289,7 +301,7 @@ export async function registerMultiStepAuthRoutes(
         return sendError(reply, request, 'RATE_LIMITED', 'Too many attempts. Please wait 15 minutes.');
       }
 
-      console.error('[Auth] Failed to resend code:', error);
+      logger.error(`[Auth] Failed to resend code: ${error}`);
       return sendError(reply, request, 'INTERNAL_ERROR', 'Failed to send verification code');
     }
   });

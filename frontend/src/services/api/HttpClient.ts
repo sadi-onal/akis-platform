@@ -106,7 +106,9 @@ export class HttpClient {
         // Auth expired — redirect to login (don't retry)
         if (response.status === 401) {
           const currentPath = window.location.pathname;
-          if (currentPath !== '/login' && currentPath !== '/signup') {
+          const authPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/'];
+          const isOnAuthPage = authPaths.some(p => currentPath.startsWith(p));
+          if (!isOnAuthPage) {
             window.location.href = '/login';
           }
           throw await this.parseErrorResponse(response);

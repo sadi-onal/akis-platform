@@ -11,6 +11,7 @@ import {
 import type { PipelineError } from '../../core/contracts/PipelineTypes.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { logger } from '../../../lib/logger.js';
+import { extractJsonSafe, sanitizeJsonControlChars, repairTruncatedJson } from '../../core/json-extract.js';
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { PROTO_TOOLS, createProtoToolHandlers, type ProtoToolDeps } from './proto-tools.js';
@@ -81,16 +82,51 @@ RULES:
 - Use a SINGLE src/App.css for all styles — NO inline styles
 - index.html must have <div id="root"></div> and module script tag
 - package.json: "type": "module", react + react-dom + vite + @vitejs/plugin-react
-- No comments in code. No test files. No CI/CD.
+- No comments in code. No test files. No CI/CD. No console.log/console.warn/console.error.
 - README.md in Turkish with: project description, setup steps, features list.
 - Code in English, UI text in Turkish.
 
+TURKISH UI TEXT (MANDATORY):
+- ALL user-facing text must be in Turkish: button labels, headings, placeholders, error messages, empty states, tooltips
+- Examples: "Kaydet" not "Save", "Ara..." not "Search...", "Yükleniyor..." not "Loading..."
+- Form placeholders: "Adınızı girin", "E-posta adresiniz", "Şifrenizi girin"
+- Error messages: "Bu alan zorunludur", "Geçersiz e-posta adresi", "Bir hata oluştu"
+- Empty states: "Henüz veri yok", "Sonuç bulunamadı"
+- Navigation: "Ana Sayfa", "Ayarlar", "Profil", "Çıkış"
+- Actions: "Ekle", "Düzenle", "Sil", "İptal", "Onayla", "Gönder"
+
+RESPONSIVE DESIGN (MOBILE-FIRST):
+- Use Tailwind-style responsive utility classes: base styles for mobile, sm: for tablet, lg: for desktop
+- Container: max-w-7xl mx-auto px-4 sm:px-6 lg:px-8
+- Grid layouts: grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4
+- Typography: text-sm sm:text-base for body, text-xl sm:text-2xl lg:text-3xl for headings
+- Navigation: mobile hamburger menu or bottom nav, desktop horizontal nav
+- Cards/lists must stack vertically on mobile, grid on desktop
+- Touch targets minimum 44px height on interactive elements
+- If NOT using Tailwind: use CSS media queries with mobile-first breakpoints (min-width: 640px, 768px, 1024px)
+
+SANDPACK PREVIEW COMPATIBILITY:
+- The output renders in Sandpack (browser-based bundler). Keep imports simple and standard.
+- src/App.jsx (or src/App.tsx) MUST be the main component — it is the Sandpack entry point.
+- src/main.jsx MUST import and render <App /> from './App' — this maps to Sandpack's index.
+- CSS: import './App.css' in App.jsx. Sandpack maps src/App.css to /App.css automatically.
+- Do NOT use path aliases (@/, ~/) — use relative imports only (./components/X).
+- Do NOT use dynamic imports, lazy loading, or React.lazy — Sandpack does not support code splitting.
+- Do NOT import from node_modules paths directly — only use package names (e.g., 'react' not './node_modules/react').
+- All component imports must use relative paths from the file's location.
+
 CODE QUALITY REQUIREMENTS:
-- Every component must have proper imports
+- Every component must have proper imports — no unused imports, no missing imports
 - CSS/styles must be included (inline or separate file)
 - README.md must include: project description, setup instructions, tech stack, features list
-- package.json must have correct "scripts" (dev, build, start)
+- package.json must have correct "scripts" (dev, build, preview)
 - index.html must reference the correct entry point
+- Use semantic HTML elements: <nav>, <main>, <section>, <article>, <header>, <footer>
+- Add aria-label on icon-only buttons and interactive elements without visible text
+- Form inputs must have associated <label> elements
+- Handle empty/loading/error states in components — never leave a component that can break on null/undefined
+- Use try/catch for JSON.parse, fetch calls, and localStorage access
+- Props must have sensible defaults or early returns for missing data
 
 BEFORE returning your output, perform VERIFICATION:
 
@@ -140,6 +176,11 @@ export class ProtoAgent {
       ? createActivityEmitter(input.pipelineId, 'proto')
       : undefined;
 
+    // ─── Iteration Mode: modify existing code instead of building from scratch ───
+    if (input.iterationRequest && input.existingFiles?.length) {
+      return this.executeIteration(input, emit);
+    }
+
     // Agentic path: if tool_use deps are available and not dryRun, use Claude with tools
     if (this.agenticDeps && !input.dryRun && this.github.pushFiles) {
       return this.executeWithTools(input, emit);
@@ -148,7 +189,7 @@ export class ProtoAgent {
     // Fallback: legacy text-generation path
     // Step 1: Generate scaffold via AI
     emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor...', 20);
-    const scaffoldResult = await this.generateScaffold(input.spec);
+    const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
       emit?.('error', 'Scaffold üretimi başarısız oldu', 0);
       return scaffoldResult;
@@ -206,6 +247,117 @@ export class ProtoAgent {
         prUrl,
         setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
         metadata: { ...metadata, committed: true },
+      },
+    };
+  }
+
+  // ─── Iteration Mode: Modify existing code ────────────
+
+  private async executeIteration(
+    input: ProtoInput,
+    emit?: ReturnType<typeof createActivityEmitter>,
+  ): Promise<ProtoResult> {
+    emit?.('ai_call', 'Mevcut kod analiz ediliyor ve değişiklikler uygulanıyor...', 20);
+
+    const existingFilesContext = input.existingFiles!
+      .map(f => `--- ${f.path} ---\n${f.content}`)
+      .join('\n\n');
+
+    const iterationPrompt = `You are Proto, an iteration specialist. You have an EXISTING codebase and the user wants a SPECIFIC CHANGE.
+
+ORIGINAL SPEC (for context):
+Title: ${input.spec.title}
+Problem: ${input.spec.problemStatement}
+Features: ${input.spec.userStories.map(s => `${s.persona}: ${s.action} → ${s.benefit}`).join('\n')}
+
+USER'S CHANGE REQUEST:
+"${input.iterationRequest}"
+
+EXISTING CODEBASE (these files are ALREADY in the GitHub repo):
+${existingFilesContext}
+
+RULES:
+- Output ALL files (modified + unchanged). The output REPLACES the entire repo.
+- Focus on the user's specific request. Do NOT rebuild the app from scratch.
+- Keep the existing architecture, styling, and patterns intact.
+- Only modify files that need changes to fulfill the request.
+- For unchanged files, return them AS-IS (exact same content).
+- UI text stays in Turkish.
+- No console.log/console.warn. No comments unless critical.
+
+JSON format (respond with ONLY this, nothing else):
+{"files":[{"filePath":"...","content":"...","linesOfCode":N}],"setupCommands":["npm install","npm run dev"],"metadata":{"filesCreated":N,"totalLinesOfCode":N,"stackUsed":"..."},"verificationReport":{"specCoverage":"...","integrityIssues":[],"missingDependencies":[],"unresolvedImports":[],"confidenceScore":0.9}}`;
+
+    let raw: string;
+    try {
+      raw = await this.ai.generateText(
+        'You are Proto, an iteration specialist. Output ONLY valid JSON. No markdown, no explanations.',
+        iterationPrompt,
+      );
+    } catch (err) {
+      return {
+        type: 'error',
+        error: createPipelineError(
+          PipelineErrorCode.AI_PROVIDER_ERROR,
+          `İterasyon AI çağrısı başarısız: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      };
+    }
+
+    emit?.('parsing', 'AI yanıtı ayrıştırılıyor...', 55);
+
+    const sanitized = sanitizeJsonControlChars(raw);
+    let jsonStr: string | null = extractJsonSafe(sanitized);
+    if (!jsonStr) {
+      const repaired = repairTruncatedJson(sanitized);
+      if (repaired) jsonStr = repaired;
+    }
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      if (jsonStr) parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+    } catch { /* invalid JSON */ }
+    const parsedFiles = (parsed?.files ?? []) as Array<{ filePath: string; content: string; linesOfCode?: number }>;
+    if (!parsedFiles?.length) {
+      return {
+        type: 'error',
+        error: createPipelineError(
+          PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
+          'İterasyon sonucu ayrıştırılamadı veya dosya üretilmedi',
+        ),
+      };
+    }
+
+    const files = parsedFiles.map((f) => ({
+      filePath: f.filePath,
+      content: f.content,
+      linesOfCode: f.linesOfCode ?? f.content.split('\n').length,
+    }));
+
+    // Push updated files to GitHub
+    emit?.('github_push', `${files.length} dosya güncelleniyor...`, 75);
+    const pushResult = await this.pushFiles(input.owner, input.repoName, 'main', files, emit);
+    if (pushResult.type === 'error') {
+      emit?.('error', 'Güncellenmiş dosyalar push edilemedi', 0);
+      return pushResult;
+    }
+
+    emit?.('complete', `İterasyon tamamlandı: ${files.length} dosya güncellendi`, 100);
+
+    return {
+      type: 'output',
+      data: {
+        ok: true,
+        branch: 'main',
+        repo: `${input.owner}/${input.repoName}`,
+        repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
+        files,
+        setupCommands: (parsed?.setupCommands as string[] | undefined) ?? ['npm install', 'npm run dev'],
+        metadata: {
+          filesCreated: files.length,
+          totalLinesOfCode: files.reduce((sum: number, f: { linesOfCode: number }) => sum + f.linesOfCode, 0),
+          stackUsed: (parsed?.metadata as Record<string, unknown> | undefined)?.stackUsed as string ?? 'iteration',
+          committed: true,
+        },
       },
     };
   }
@@ -299,7 +451,7 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
   private async executeLegacy(input: ProtoInput, emit?: ReturnType<typeof createActivityEmitter>): Promise<ProtoResult> {
     // Re-enter the legacy flow from Step 1
     emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor (fallback)...', 20);
-    const scaffoldResult = await this.generateScaffold(input.spec);
+    const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
       emit?.('error', 'Scaffold üretimi başarısız oldu', 0);
       return scaffoldResult;
@@ -346,7 +498,8 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
   // ─── Scaffold Generation ────────────────────────
 
   private async generateScaffold(
-    spec: StructuredSpec
+    spec: StructuredSpec,
+    knowledgeContext?: string,
   ): Promise<
     | { type: 'output'; data: { files: ProtoOutput['files']; setupCommands: string[]; metadata: Omit<ProtoOutput['metadata'], 'committed'> } }
     | { type: 'error'; error: PipelineError }
@@ -371,7 +524,10 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
       try {
-        responseText = await this.ai.generateText(SCAFFOLD_SYSTEM_PROMPT, userPrompt);
+        const protoSystemPrompt = knowledgeContext
+          ? `${SCAFFOLD_SYSTEM_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
+          : SCAFFOLD_SYSTEM_PROMPT;
+        responseText = await this.ai.generateText(protoSystemPrompt, userPrompt);
       } catch (err) {
         logger.error(`[Proto] Attempt ${attempt + 1}: AI call error: ${err instanceof Error ? err.message : String(err)}`);
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
@@ -400,31 +556,26 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
       let parsed: unknown;
       let wasRepaired = false;
       try {
-        const jsonStr = this.extractJson(responseText);
-        // First try raw parse, then try with control char sanitization
+        const jsonStr = extractJsonSafe(responseText);
         try {
           parsed = JSON.parse(jsonStr);
         } catch {
-          const sanitized = this.sanitizeJsonControlChars(jsonStr);
+          const sanitized = sanitizeJsonControlChars(jsonStr);
           parsed = JSON.parse(sanitized);
           logger.warn(`[Proto] Parsed after sanitizing control chars`);
         }
       } catch (parseErr) {
         logger.warn(`[Proto] JSON parse failed (attempt ${attempt + 1}, len=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
-        // Try to repair truncated JSON
-        const repaired = this.repairTruncatedJson(responseText);
+        const repaired = repairTruncatedJson(responseText);
         if (repaired) {
           try {
             parsed = JSON.parse(repaired);
             wasRepaired = true;
           } catch {
-            // Also try sanitized repair
             try {
-              parsed = JSON.parse(this.sanitizeJsonControlChars(repaired));
+              parsed = JSON.parse(sanitizeJsonControlChars(repaired));
               wasRepaired = true;
-            } catch {
-              // repair also failed
-            }
+            } catch { /* repair also failed */ }
           }
         }
         if (!parsed) {
@@ -647,102 +798,8 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
     ].join('\n');
   }
 
-  /**
-   * Escape raw control characters inside JSON string values.
-   * AI often outputs actual newlines/tabs instead of \n \t escape sequences.
-   */
-  private sanitizeJsonControlChars(json: string): string {
-    let result = '';
-    let inString = false;
-    for (let i = 0; i < json.length; i++) {
-      const c = json[i];
-      const code = c.charCodeAt(0);
-
-      if (c === '"' && (i === 0 || json[i - 1] !== '\\')) {
-        inString = !inString;
-        result += c;
-      } else if (inString && code < 32) {
-        if (code === 10) result += '\\n';
-        else if (code === 13) result += '\\r';
-        else if (code === 9) result += '\\t';
-        else result += `\\u${code.toString(16).padStart(4, '0')}`;
-      } else {
-        result += c;
-      }
-    }
-    return result;
-  }
-
-  private extractJson(text: string): string {
-    // If response starts with { it's already pure JSON — don't try fenced extraction
-    // (fenced regex can match backticks INSIDE JSON string values like README content)
-    const trimmed = text.trim();
-    if (trimmed.startsWith('{')) {
-      const braceEnd = trimmed.lastIndexOf('}');
-      if (braceEnd > 0) return trimmed.slice(0, braceEnd + 1);
-      return trimmed;
-    }
-
-    // Try fenced code block only when response is NOT pure JSON
-    const fenced = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (fenced) return fenced[1].trim();
-
-    const braceStart = text.indexOf('{');
-    const braceEnd = text.lastIndexOf('}');
-    if (braceStart !== -1 && braceEnd > braceStart) {
-      return text.slice(braceStart, braceEnd + 1);
-    }
-
-    return trimmed;
-  }
-
-  /**
-   * Attempt to repair truncated JSON (e.g. from max_tokens cutoff).
-   * Tries to close open strings, arrays, and objects.
-   */
-  private repairTruncatedJson(text: string): string | null {
-    // Extract the JSON portion
-    let json = this.extractJson(text);
-    if (!json.startsWith('{')) return null;
-
-    // If it already parses, return it
-    try { JSON.parse(json); return json; } catch { /* continue */ }
-
-    // Try progressively closing brackets
-    // First, close any open string
-    const quoteCount = (json.match(/(?<!\\)"/g) || []).length;
-    if (quoteCount % 2 !== 0) {
-      json += '"';
-    }
-
-    // Close arrays and objects
-    const opens: string[] = [];
-    let inString = false;
-    for (let i = 0; i < json.length; i++) {
-      const c = json[i];
-      if (c === '"' && (i === 0 || json[i - 1] !== '\\')) {
-        inString = !inString;
-        continue;
-      }
-      if (inString) continue;
-      if (c === '{' || c === '[') opens.push(c);
-      if (c === '}' || c === ']') opens.pop();
-    }
-
-    // Close in reverse
-    while (opens.length > 0) {
-      const open = opens.pop();
-      json += open === '{' ? '}' : ']';
-    }
-
-    try {
-      JSON.parse(json);
-      logger.warn(`[Proto] Repaired truncated JSON (added ${json.length - this.extractJson(text).length} closing chars)`);
-      return json;
-    } catch {
-      return null;
-    }
-  }
+  // JSON extraction, sanitization, and repair are now in shared utility:
+  // import { extractJsonSafe, sanitizeJsonControlChars, repairTruncatedJson } from '../../core/json-extract.js';
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

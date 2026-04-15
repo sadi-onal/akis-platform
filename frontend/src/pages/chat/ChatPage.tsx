@@ -17,7 +17,21 @@ import type { Workflow, WorkflowStatus, ConversationMessage, StructuredSpec } fr
 import type { UserFriendlyPlan } from '../../types/plan';
 import type { PipelineStage } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
+import { RepoSelector, type RepoMode, type SelectedRepo } from '../../components/chat/RepoSelector';
+import type { RepoContext } from '../../services/api/github';
 import { LOGO_MARK_SVG } from '../../theme/brand';
+
+function localizeError(e: unknown): string {
+  if (e instanceof Error) {
+    const m = e.message.toLowerCase();
+    if (m.includes('rate limit') || m.includes('usage limit')) return 'API limiti asildi. Lutfen daha sonra tekrar deneyin.';
+    if (m.includes('unauthorized') || m.includes('401')) return 'Oturum suresi doldu. Tekrar giris yapin.';
+    if (m.includes('network') || m.includes('fetch') || m.includes('failed to fetch')) return 'Baglanti hatasi. Internet baglantinizi kontrol edin.';
+    if (m.includes('timeout')) return 'Istek zaman asimina ugradi. Tekrar deneyin.';
+    return e.message;
+  }
+  return 'Beklenmeyen bir hata olustu.';
+}
 
 const PreviewPanel = lazy(() => import('../../components/workflow/PreviewPanel').then(m => ({ default: m.PreviewPanel })));
 
@@ -59,9 +73,9 @@ function workflowToListItem(w: Workflow): ConversationListItem {
   };
   return {
     id: w.id,
-    title: w.title || 'Untitled',
+    title: w.title || 'Isimsiz',
     repoFullName: w.stages.proto.repo ?? w.title ?? '',
-    repoShortName: w.title || 'Untitled',
+    repoShortName: w.title || 'Isimsiz',
     status: statusMap[w.status] ?? 'idle',
     fileCount: w.stages.proto.files?.length ?? 0,
     lastActivity: w.updatedAt ?? w.createdAt,
@@ -200,6 +214,14 @@ export default function ChatPage() {
   });
   // Pending new conversation — created locally, pipeline not yet started on backend
   const [pendingConv, setPendingConv] = useState<{ displayName: string } | null>(null);
+  // Trace toggle — off by default
+  const [traceEnabled, setTraceEnabled] = useState(false);
+  // Repo selector state
+  const [repoMode, setRepoMode] = useState<RepoMode>('new');
+  const [selectedRepo, setSelectedRepo] = useState<SelectedRepo | null>(null);
+  const [repoContext, setRepoContext] = useState<RepoContext | null>(null);
+  // Key source badge state
+  const [keySourceBadge, setKeySourceBadge] = useState<{ source: 'akis' | 'own'; jobsRemaining: number; jobsLimit: number } | null>(null);
   const [showProfileWizard, setShowProfileWizard] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   // Resizable preview panel (percentage of container width, 30-70%)
@@ -271,6 +293,20 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => { refreshList(); }, [refreshList]);
+
+  // Fetch key source badge (once on mount)
+  useEffect(() => {
+    fetch('/api/settings/ai-keys/status', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        const source: 'akis' | 'own' = data.keySource ?? 'akis';
+        const jobsUsed = data.usage?.jobsUsedToday ?? 0;
+        const jobsLimit = data.usage?.jobsLimit ?? 3;
+        setKeySourceBadge({ source, jobsRemaining: Math.max(0, jobsLimit - jobsUsed), jobsLimit });
+      })
+      .catch(() => { /* best-effort */ });
+  }, []);
 
   // Load active conversation — keep old content visible until new data arrives
   useEffect(() => {
@@ -376,17 +412,36 @@ export default function ChatPage() {
     return list;
   }, [conversations, pendingConv]);
 
-  // Proto files for StackBlitz preview
+  // Proto files for Sandpack preview
+  const [protoFilesFromApi, setProtoFilesFromApi] = useState<Record<string, string> | null>(null);
   const protoFiles = useMemo(() => {
-    const protoMsg = activeWorkflow?.conversation?.find(m => m.type === 'proto_result');
-    if (!protoMsg?.protoResult?.files) return null;
-    const files: Record<string, string> = {};
-    for (const f of protoMsg.protoResult.files) {
-      const path = f.path ?? f.name;
-      if (path && f.content) files[path] = f.content;
+    // Method 1: Extract from conversation messages (has file content embedded)
+    if (activeWorkflow?.conversation) {
+      for (const m of activeWorkflow.conversation) {
+        if (m.type === 'proto_result' && m.protoResult?.files) {
+          const files: Record<string, string> = {};
+          for (const f of m.protoResult.files) {
+            const path = f.path ?? f.name;
+            if (path && f.content) files[path] = f.content;
+          }
+          if (Object.keys(files).length > 0) return files;
+        }
+      }
     }
-    return Object.keys(files).length > 0 ? files : null;
-  }, [activeWorkflow]);
+    // Method 2: Use files fetched directly from API
+    return protoFilesFromApi;
+  }, [activeWorkflow, protoFilesFromApi]);
+
+  // Fetch proto files from API when pipeline is completed but conversation doesn't have them
+  useEffect(() => {
+    if (protoFiles || !conversationId) return;
+    const stage = activeWorkflow?.currentStage;
+    if (stage === 'completed' || stage === 'completed_partial' || stage === 'trace_testing') {
+      workflowsApi.getProtoFiles(conversationId).then((res) => {
+        if (res && Object.keys(res).length > 0) setProtoFilesFromApi(res);
+      }).catch(() => { /* ignore */ });
+    }
+  }, [conversationId, activeWorkflow?.currentStage, protoFiles]);
 
   // Chat mode (Plan/Act/Ask/Review)
   const chatMode = useMemo(() => mapStageToMode(activeWorkflow?.currentStage), [activeWorkflow?.currentStage]);
@@ -459,49 +514,6 @@ export default function ChatPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleNewConversation]);
 
-  /** Check if the current pipeline is in a terminal state (no further agent work possible). */
-  const isTerminalState = useCallback((workflow: Workflow | null): boolean => {
-    if (!workflow?.currentStage) return false;
-    const terminalStages: PipelineStage[] = ['completed', 'completed_partial', 'failed', 'cancelled'];
-    return terminalStages.includes(workflow.currentStage);
-  }, []);
-
-  /** Build a context summary from a completed pipeline for follow-up conversations. */
-  const buildFollowUpContext = useCallback((workflow: Workflow): string => {
-    const parts: string[] = [];
-
-    // Include original idea
-    const ideaMsg = workflow.conversation?.find(m => m.role === 'user' && m.type === 'message');
-    if (ideaMsg) {
-      parts.push(`Önceki proje fikri: ${ideaMsg.content}`);
-    }
-
-    // Include spec summary if available
-    const specMsg = workflow.conversation?.find(m => m.type === 'spec' && m.spec);
-    if (specMsg?.spec) {
-      parts.push(`Önceki spec başlığı: ${specMsg.spec.title ?? 'Belirtilmedi'}`);
-      parts.push(`Problem: ${specMsg.spec.problemStatement}`);
-      if (specMsg.spec.userStories?.length) {
-        const stories = specMsg.spec.userStories.map(s => s.action || s.iWant || '').filter(Boolean);
-        parts.push(`Özellikler: ${stories.join(', ')}`);
-      }
-      const tc = specMsg.spec.technicalConstraints;
-      if (tc && typeof tc === 'object' && !Array.isArray(tc) && tc.stack) {
-        parts.push(`Tech stack: ${tc.stack}`);
-      }
-    }
-
-    // Include proto result if available
-    if (workflow.stages.proto.branch) {
-      parts.push(`GitHub branch: ${workflow.stages.proto.branch}`);
-    }
-    if (workflow.stages.proto.repo) {
-      parts.push(`Repo: ${workflow.stages.proto.repo}`);
-    }
-
-    return parts.join('\n');
-  }, []);
-
   const handleSend = useCallback(async (content: string) => {
     const userMsg: ChatMessage = { type: 'user', content, timestamp: new Date().toISOString() };
     setMessages((prev) => [...prev, userMsg]);
@@ -522,8 +534,16 @@ export default function ChatPage() {
 
       try {
         setCreating(true);
-        const w = await workflowsApi.create({ idea: content });
+        const w = await workflowsApi.create({
+          idea: content,
+          traceEnabled,
+          existingRepo: selectedRepo ?? undefined,
+        });
         setPendingConv(null);
+        // Reset repo selector state after pipeline creation
+        setRepoMode('new');
+        setSelectedRepo(null);
+        setRepoContext(null);
         loadedIdRef.current = w.id;
         setActiveWorkflow(w);
         setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
@@ -531,8 +551,8 @@ export default function ChatPage() {
         refreshList();
         navigate(`/chat/${w.id}`, { replace: true });
       } catch (e) {
-        if (import.meta.env.DEV) console.error('Failed to create pipeline:', e);
-        const errorMsg = e instanceof Error ? e.message : 'Pipeline oluşturulamadı.';
+        const errorMsg = localizeError(e);
+        toast(errorMsg, 'error');
         setMessages((prev) => [...prev, {
           type: 'error',
           agent: 'system',
@@ -548,53 +568,48 @@ export default function ChatPage() {
 
     if (!conversationId) return;
 
-    // If the current pipeline is in a terminal state, start a NEW pipeline
-    // with the previous pipeline's context so Scribe understands the history.
-    if (isTerminalState(activeWorkflow)) {
-      if (content.trim().length < 10) {
-        setMessages((prev) => [...prev, {
-          type: 'error',
-          agent: 'system',
-          message: 'Fikrinizi en az 10 karakter ile açıklayın.',
-          retryable: false,
-          timestamp: new Date().toISOString(),
-        }]);
+    // ─── Iteration Mode: completed pipeline + protoOutput → create follow-up pipeline in same chat ───
+    const isTerminal = activeWorkflow?.currentStage === 'completed' || activeWorkflow?.currentStage === 'completed_partial';
+    const protoRepo = activeWorkflow?.stages.proto?.repo;
+    const protoBranch = activeWorkflow?.stages.proto?.branch;
+
+    if (isTerminal && protoRepo && protoBranch) {
+      const [repoOwner, repoName] = protoRepo.split('/');
+      if (repoOwner && repoName) {
+        try {
+          setCreating(true);
+          const w = await workflowsApi.create({
+            idea: content,
+            traceEnabled,
+            existingRepo: { owner: repoOwner, repo: repoName, branch: protoBranch },
+            parentPipelineId: conversationId,
+            skipScribe: true,
+          });
+          loadedIdRef.current = w.id;
+          setActiveWorkflow(w);
+          setMessages((prev) => [...prev, ...conversationToChatMessages(w.conversation ?? [], w.currentStage)]);
+          syncFromStage(w.currentStage ?? 'completed');
+          refreshList();
+          navigate(`/chat/${w.id}`, { replace: true });
+        } catch (e) {
+          toast(localizeError(e), 'error');
+        } finally {
+          setCreating(false);
+        }
         return;
       }
-
-      try {
-        setCreating(true);
-        const context = activeWorkflow ? buildFollowUpContext(activeWorkflow) : undefined;
-        const w = await workflowsApi.create({ idea: content, context });
-        loadedIdRef.current = w.id;
-        setActiveWorkflow(w);
-        setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
-        syncFromStage(w.currentStage ?? 'completed');
-        refreshList();
-        navigate(`/chat/${w.id}`, { replace: true });
-      } catch (e) {
-        if (import.meta.env.DEV) console.error('Failed to create follow-up pipeline:', e);
-        const errorMsg = e instanceof Error ? e.message : 'Pipeline oluşturulamadı.';
-        setMessages((prev) => [...prev, {
-          type: 'error',
-          agent: 'system',
-          message: errorMsg,
-          retryable: true,
-          timestamp: new Date().toISOString(),
-        }]);
-      } finally {
-        setCreating(false);
-      }
-      return;
     }
 
+    // Send message to the existing pipeline — works for ALL stages including terminal ones.
+    // Backend saves it as a user_note (terminal) or processes it as a Scribe answer (clarifying).
     try {
       await workflowsApi.sendMessage(conversationId, content);
       await refreshWorkflow();
+      refreshList();
     } catch (e) {
       if (import.meta.env.DEV) console.error('Failed to send:', e);
     }
-  }, [conversationId, pendingConv, activeWorkflow, isTerminalState, buildFollowUpContext, refreshWorkflow, refreshList, syncFromStage, navigate]);
+  }, [conversationId, pendingConv, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, repoMode, creating]);
 
   const approveInFlightRef = useRef(false);
   const handleApprove = useCallback(async () => {
@@ -609,32 +624,33 @@ export default function ChatPage() {
         { cucumberEnabled },
       );
       await refreshWorkflow();
-    } catch (e) { if (import.meta.env.DEV) console.error('Failed to approve:', e); }
+      toast('Spec onaylandi, Proto baslatiliyor...', 'success');
+    } catch (e) { toast(localizeError(e), 'error'); }
     finally { approveInFlightRef.current = false; }
   }, [conversationId, activeWorkflow, refreshWorkflow]);
 
   const handleReject = useCallback(async () => {
     if (!conversationId) return;
-    try { await workflowsApi.reject(conversationId); await refreshWorkflow(); }
-    catch (e) { if (import.meta.env.DEV) console.error('Failed to reject:', e); }
+    try { await workflowsApi.reject(conversationId); await refreshWorkflow(); toast('Spec reddedildi.', 'info'); }
+    catch (e) { toast(localizeError(e), 'error'); }
   }, [conversationId, refreshWorkflow]);
 
   const handleCancel = useCallback(async () => {
     if (!conversationId) return;
-    try { await workflowsApi.cancel(conversationId); await refreshWorkflow(); }
-    catch (e) { if (import.meta.env.DEV) console.error('Failed to cancel:', e); }
+    try { await workflowsApi.cancel(conversationId); await refreshWorkflow(); toast('Pipeline iptal edildi.', 'info'); }
+    catch (e) { toast(localizeError(e), 'error'); }
   }, [conversationId, refreshWorkflow]);
 
   const handleRetry = useCallback(async () => {
     if (!conversationId) return;
-    try { await workflowsApi.retry(conversationId); await refreshWorkflow(); }
-    catch (e) { if (import.meta.env.DEV) console.error('Failed to retry:', e); }
+    try { await workflowsApi.retry(conversationId); await refreshWorkflow(); toast('Yeniden deneniyor...', 'info'); }
+    catch (e) { toast(localizeError(e), 'error'); }
   }, [conversationId, refreshWorkflow]);
 
   const handleSkip = useCallback(async () => {
     if (!conversationId) return;
-    try { await workflowsApi.skipTrace(conversationId); await refreshWorkflow(); }
-    catch (e) { if (import.meta.env.DEV) console.error('Failed to skip:', e); }
+    try { await workflowsApi.skipTrace(conversationId); await refreshWorkflow(); toast('Trace atlandi.', 'info'); }
+    catch (e) { toast(localizeError(e), 'error'); }
   }, [conversationId, refreshWorkflow]);
 
   return (
@@ -704,7 +720,7 @@ export default function ChatPage() {
             {/* Chat panel — takes remaining width */}
             <div
               className="min-w-0 flex-1 flex flex-col min-h-0"
-              style={showPreview && protoFiles ? { flexBasis: `${100 - previewWidth}%`, flexGrow: 0, flexShrink: 0 } : undefined}
+              style={showPreview ? { flexBasis: `${100 - previewWidth}%`, flexGrow: 0, flexShrink: 0 } : undefined}
             >
               <ErrorBoundary>
                 <ChatPanel
@@ -721,7 +737,11 @@ export default function ChatPage() {
                   uiState={uiState}
                   isInputEnabled={pendingConv ? !creating : (creating ? false : isInputEnabled)}
                   showCancelButton={showCancelButton}
-                  inputPlaceholder={pendingConv ? 'Projenizi anlatın...' : inputPlaceholder}
+                  inputPlaceholder={pendingConv
+                    ? (repoMode === 'existing' && selectedRepo
+                      ? 'Bu repoda ne degistirmek istiyorsunuz...'
+                      : 'Projenizi anlatın...')
+                    : inputPlaceholder}
                   onSend={handleSend}
                   onCancel={handleCancel}
                   onApprove={handleApprove}
@@ -733,12 +753,25 @@ export default function ChatPage() {
                   currentStep={currentStep}
                   activities={pipelineActivities}
                   createdFiles={createdFiles}
+                  traceEnabled={traceEnabled}
+                  onTraceToggle={pendingConv ? setTraceEnabled : undefined}
+                  repoSelectorSlot={pendingConv ? (
+                    <RepoSelector
+                      mode={repoMode}
+                      onModeChange={setRepoMode}
+                      selectedRepo={selectedRepo}
+                      onRepoSelect={setSelectedRepo}
+                      repoContext={repoContext}
+                      onRepoContextChange={setRepoContext}
+                    />
+                  ) : undefined}
+                  keySourceBadge={pendingConv ? keySourceBadge : null}
                 />
               </ErrorBoundary>
             </div>
 
             {/* Resizable preview panel with drag handle */}
-            {showPreview && (protoFiles || isRunning) && (
+            {showPreview && (
               <>
                 {/* Drag handle — desktop only */}
                 <div
@@ -778,7 +811,6 @@ export default function ChatPage() {
                     <Suspense fallback={<div className="flex h-full items-center justify-center bg-ak-bg text-ak-text-tertiary text-sm">Yükleniyor...</div>}>
                       <PreviewPanel
                         files={protoFiles}
-                        title={activeWorkflow?.title}
                         branch={activeWorkflow?.stages?.proto?.branch}
                         activities={pipelineActivities}
                         createdFiles={createdFiles}

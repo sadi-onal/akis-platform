@@ -131,6 +131,16 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
     else goPrev();
   };
 
+  if (questions.length === 0) {
+    return (
+      <div className="shrink-0 px-4 pt-2">
+        <div className="mx-auto max-w-[720px] rounded-2xl border border-ak-border bg-ak-surface/85 p-4 text-center text-sm text-ak-text-tertiary">
+          Soru bulunamadı.
+        </div>
+      </div>
+    );
+  }
+
   if (!currentQ) return null;
 
   const isLast = currentIdx === total - 1;
@@ -200,12 +210,17 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
                     type="button"
                     onClick={() => handleBadgeSelect(s)}
                     className={cn(
-                      'rounded-lg border px-3 py-1.5 text-[13px] transition-all duration-150 cursor-pointer text-left break-words',
+                      'flex items-center gap-2 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all duration-150 cursor-pointer text-left break-words',
                       isSelected
-                        ? 'border-ak-primary bg-ak-primary/15 text-ak-primary shadow-sm shadow-ak-primary/20'
-                        : 'border-ak-border-subtle bg-ak-surface-2 text-ak-text-secondary hover:border-ak-primary/50 hover:text-ak-primary hover:scale-[1.02] active:scale-[0.98]',
+                        ? 'border-ak-primary bg-ak-primary/15 text-ak-primary shadow-md shadow-ak-primary/20'
+                        : 'border-ak-border bg-ak-surface-2/80 text-ak-text-primary hover:border-ak-primary hover:bg-ak-primary/5 hover:scale-[1.02] active:scale-[0.98]',
                     )}
                   >
+                    {isSelected && (
+                      <svg className="h-4 w-4 flex-shrink-0 text-ak-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
                     {s}
                   </button>
                 );
@@ -214,10 +229,10 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
                 type="button"
                 onClick={handleCustomToggle}
                 className={cn(
-                  'rounded-lg border px-3 py-1.5 text-[13px] transition-all duration-150 cursor-pointer',
+                  'flex items-center gap-2 rounded-xl border-2 border-dashed px-4 py-2.5 text-sm font-medium transition-all duration-150 cursor-pointer',
                   isCustomMode
                     ? 'border-ak-primary bg-ak-primary/15 text-ak-primary'
-                    : 'border-dashed border-ak-border bg-transparent text-ak-text-tertiary hover:border-ak-primary/50 hover:text-ak-primary',
+                    : 'border-ak-border-subtle bg-transparent text-ak-text-tertiary hover:border-ak-primary hover:text-ak-primary',
                 )}
               >
                 ✏ Kendi cevabım

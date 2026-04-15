@@ -15,6 +15,7 @@ import { getEnv, getAIConfig } from '../config/env.js';
 import { generateScribeBranchName } from '../utils/branchNaming.js';
 import { incrementUsage } from '../services/billing/BillingService.js';
 import { generateQualitySuggestions, type QualityResult, type QualityInput } from '../services/quality/index.js';
+import { logger } from '../lib/logger.js';
 
 const MAX_ACTIVE_RUNS_PER_USER = 3;
 
@@ -467,7 +468,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
           const payloadObj = body.payload as Record<string, unknown> | undefined;
           const frontendProvider = payloadObj?.aiProvider as 'openai' | 'openrouter' | undefined;
           
-          console.log(`[agents.ts] Frontend sent aiProvider: ${frontendProvider || 'none'}`);
+          logger.debug(`[agents.ts] Frontend sent aiProvider: ${frontendProvider || 'none'}`);
           
           // Load env config for fallback only
           const aiConfig = getAIConfig(getEnv());
@@ -479,7 +480,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
                           (aiConfig.provider === 'openrouter' || aiConfig.provider === 'openai') && 
                           aiConfig.apiKey;
           
-          console.log(`[agents.ts] useEnvAI=${useEnvAI}, envProvider=${aiConfig.provider}, hasEnvKey=${!!aiConfig.apiKey}`);
+          logger.debug(`[agents.ts] useEnvAI=${useEnvAI}, envProvider=${aiConfig.provider}, hasEnvKey=${!!aiConfig.apiKey}`);
           
           if (!useEnvAI && !frontendProvider) {
             // No env AI and no frontend provider - check if user has any key configured
@@ -503,7 +504,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
                                payloadObj?.model as string | undefined || 
                                payloadObj?.llmModelOverride as string | undefined;
           
-          console.log(`[agents.ts] Frontend sent model: ${frontendModel || 'none'} (checked modelId, model, llmModelOverride)`);
+          logger.debug(`[agents.ts] Frontend sent model: ${frontendModel || 'none'} (checked modelId, model, llmModelOverride)`);
           
           // Helper to detect provider from model ID
           const detectModelProvider = (model: string): 'openai' | 'openrouter' | 'unknown' => {
@@ -523,7 +524,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             
             // If no explicit provider from frontend, infer from model
             if (!frontendProvider && detectedModelProvider !== 'unknown') {
-              console.log(`[agents.ts] Inferring provider from model: ${detectedModelProvider}`);
+              logger.debug(`[agents.ts] Inferring provider from model: ${detectedModelProvider}`);
             }
             
             // Validate provider-model compatibility
@@ -532,7 +533,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
                 throw new Error(`Model "${frontendModel}" is an OpenRouter model and cannot be used with OpenAI provider. Please select an OpenAI model (e.g., gpt-4o-mini) or switch to OpenRouter provider.`);
               }
               // OpenRouter can proxy OpenAI models, so just log
-              console.log(`[agents.ts] Note: Using ${detectedModelProvider} model "${frontendModel}" with ${frontendProvider} provider`);
+              logger.debug(`[agents.ts] Note: Using ${detectedModelProvider} model "${frontendModel}" with ${frontendProvider} provider`);
             }
           }
 
@@ -656,7 +657,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
               }
               
               // Model is incompatible - use provider's default and log
-              console.log(`[agents.ts] Model "${requestedModel}" (${modelProvider}) incompatible with ${provider}, using default: ${RECOMMENDED_MODELS[provider]}`);
+              logger.debug(`[agents.ts] Model "${requestedModel}" (${modelProvider}) incompatible with ${provider}, using default: ${RECOMMENDED_MODELS[provider]}`);
               return RECOMMENDED_MODELS[provider];
             };
             
@@ -668,7 +669,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
               // Ensure model is compatible with provider
               aiModel = getProviderSafeModel(frontendProvider, modelOverride);
               
-              console.log(`[agents.ts] Using frontend provider: ${aiProvider}, model: ${aiModel}`);
+              logger.debug(`[agents.ts] Using frontend provider: ${aiProvider}, model: ${aiModel}`);
             } else if (useEnvAI) {
               // No frontend provider, use env-based AI configuration
               const envProvider = aiConfig.provider === 'openai' || aiConfig.provider === 'openrouter' 
@@ -676,7 +677,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
                 : 'openrouter';
               aiProvider = envProvider;
               aiModel = getProviderSafeModel(envProvider, modelOverride || aiConfig.modelDefault);
-              console.log(`[agents.ts] Using ENV provider: ${aiProvider}, model: ${aiModel}`);
+              logger.debug(`[agents.ts] Using ENV provider: ${aiProvider}, model: ${aiModel}`);
             } else {
               // No frontend provider, no env - infer from model if possible
               if (modelOverride) {
@@ -684,18 +685,18 @@ export async function agentsRoutes(fastify: FastifyInstance) {
                 if (inferredProvider !== 'unknown') {
                   aiProvider = inferredProvider;
                   aiModel = modelOverride;
-                  console.log(`[agents.ts] Inferred provider from model: ${aiProvider}, model: ${aiModel}`);
+                  logger.debug(`[agents.ts] Inferred provider from model: ${aiProvider}, model: ${aiModel}`);
                 } else {
                   // Can't infer - let orchestrator resolve
                   aiProvider = undefined;
                   aiModel = modelOverride;
-                  console.log(`[agents.ts] Deferring to orchestrator, model: ${aiModel}`);
+                  logger.debug(`[agents.ts] Deferring to orchestrator, model: ${aiModel}`);
                 }
               } else {
                 // No model override - let orchestrator resolve
                 aiProvider = undefined;
                 aiModel = allowlist[0] || 'gpt-4o-mini';
-                console.log(`[agents.ts] Deferring to orchestrator, model: ${aiModel}`);
+                logger.debug(`[agents.ts] Deferring to orchestrator, model: ${aiModel}`);
               }
             }
             
@@ -707,8 +708,8 @@ export async function agentsRoutes(fastify: FastifyInstance) {
               aiProvider: aiProvider, // This is now frontend's choice, not overwritten
             };
             
-            console.log(`[agents.ts] Final enrichedPayload.aiProvider: ${(enrichedPayload as Record<string, unknown>).aiProvider}`);
-            console.log(`[agents.ts] Final enrichedPayload.llmModelOverride: ${(enrichedPayload as Record<string, unknown>).llmModelOverride}`);
+            logger.debug(`[agents.ts] Final enrichedPayload.aiProvider: ${(enrichedPayload as Record<string, unknown>).aiProvider}`);
+            logger.debug(`[agents.ts] Final enrichedPayload.llmModelOverride: ${(enrichedPayload as Record<string, unknown>).llmModelOverride}`);
           }
         }
 
@@ -816,7 +817,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
               if (userId) {
                 const tokensUsed = job.aiTotalTokens ?? 0;
                 incrementUsage(userId, tokensUsed).catch(err =>
-                  console.warn('[Billing] Failed to increment usage:', err)
+                  logger.warn(`[Billing] Failed to increment usage: ${err}`)
                 );
               }
             } else if (finalState === 'failed') {
@@ -945,7 +946,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }
           } catch (error) {
             // Don't fail request if plan fetch fails
-            console.error(`Failed to fetch plan for job ${params.id}:`, error);
+            logger.error(`Failed to fetch plan for job ${params.id}: ${error}`);
           }
         }
 
@@ -966,7 +967,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }));
           } catch (error) {
             // Don't fail request if audit fetch fails
-            console.error(`Failed to fetch audits for job ${params.id}:`, error);
+            logger.error(`Failed to fetch audits for job ${params.id}: ${error}`);
           }
         }
 
@@ -995,7 +996,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }));
           } catch (error) {
             // Don't fail request if trace fetch fails
-            console.error(`Failed to fetch traces for job ${params.id}:`, error);
+            logger.error(`Failed to fetch traces for job ${params.id}: ${error}`);
           }
         }
 
@@ -1022,7 +1023,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }));
           } catch (error) {
             // Don't fail request if artifacts fetch fails
-            console.error(`Failed to fetch artifacts for job ${params.id}:`, error);
+            logger.error(`Failed to fetch artifacts for job ${params.id}: ${error}`);
           }
         }
 
@@ -1066,7 +1067,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
               timestamp: row.timestamp,
             }));
           } catch (error) {
-            console.error(`Failed to fetch AI calls for job ${params.id}:`, error);
+            logger.error(`Failed to fetch AI calls for job ${params.id}: ${error}`);
           }
         }
 
@@ -1515,7 +1516,7 @@ const jobsListQuerySchema = z.object({
           await orchestrator.resumeApprovedJob(params.id);
         } catch (resumeError) {
           // Log but don't fail the approval - job is still marked approved
-          console.error(`Failed to resume job ${params.id} after approval:`, resumeError);
+          logger.error(`Failed to resume job ${params.id} after approval: ${resumeError}`);
         }
 
         return reply.code(200).send({
@@ -1876,7 +1877,7 @@ const jobsListQuerySchema = z.object({
         try {
           await orchestrator.startJob(newJobId);
         } catch (startError) {
-          console.error(`Failed to start revision job ${newJobId}:`, startError);
+          logger.error(`Failed to start revision job ${newJobId}: ${startError}`);
           // Job is still created, user can retry
         }
 

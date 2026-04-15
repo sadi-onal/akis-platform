@@ -37,9 +37,17 @@ export default function SignupPassword() {
       return;
     }
 
-    // Validate minimum length
+    // Validate password strength
     if (password.length < 8) {
       setError('Şifre en az 8 karakter olmalıdır');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError('Şifre en az 1 büyük harf içermelidir');
+      return;
+    }
+    if (!/\d/.test(password)) {
+      setError('Şifre en az 1 rakam içermelidir');
       return;
     }
 

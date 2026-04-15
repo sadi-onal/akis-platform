@@ -7,6 +7,7 @@ import { db } from '../../db/client.js';
 import { emailVerificationTokens, users } from '../../db/schema.js';
 import { eq, and, gte, lt, isNull } from 'drizzle-orm';
 import type { EmailService } from '../email/EmailService.js';
+import { logger } from '../../lib/logger.js';
 
 export interface VerificationCodeOptions {
   ttlMinutes?: number;
@@ -97,7 +98,7 @@ export class VerificationService {
       current.count += 1;
       if (current.count >= MAX_VERIFY_ATTEMPTS) {
         current.lockedUntil = Date.now() + LOCKOUT_MS;
-        console.warn(`[Verification] User ${userId} locked out after ${MAX_VERIFY_ATTEMPTS} failed attempts`);
+        logger.warn(`[Verification] User ${userId} locked out after ${MAX_VERIFY_ATTEMPTS} failed attempts`);
       }
       this.failedAttempts.set(userId, current);
       return false;
@@ -120,15 +121,26 @@ export class VerificationService {
 
     this.failedAttempts.delete(userId);
 
-    // Update user status
-    await db
+    // Atomic status transition: only activate if still pending_verification
+    // Prevents double-activation race and ensures idempotent verification
+    const [activated] = await db
       .update(users)
       .set({
         emailVerified: true,
         status: 'active',
         updatedAt: new Date(),
       })
-      .where(eq(users.id, userId));
+      .where(and(
+        eq(users.id, userId),
+        eq(users.status, 'pending_verification'),
+      ))
+      .returning();
+
+    if (!activated) {
+      // User was already verified or status changed — still return true
+      // since the verification code itself was valid
+      logger.warn(`[Verification] Atomic status update matched 0 rows for user ${userId} (already active or status changed)`);
+    }
 
     return true;
   }

@@ -13,6 +13,7 @@ import { FlakyTestManager, type FlakySummary } from '../../services/trace/FlakyT
 import { computeFlowCoverage, type FlowCoverageSummary } from './FlowCoverage.js';
 import { analyzeEdgeCaseCoverage, type EdgeCaseCoverageSummary } from './EdgeCaseCatalog.js';
 import { computeRiskWeightedCoverage, type RiskWeightedCoverageSummary } from './RiskModel.js';
+import { logger } from '../../lib/logger.js';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -610,7 +611,7 @@ export class TraceAgent extends BaseAgent {
           },
         };
       } catch (githubError) {
-        console.error(`[TraceAgent] GitHub operations failed:`, githubError);
+        logger.error(`[TraceAgent] GitHub operations failed: ${githubError}`);
         this.emitLog('GitHub commit failed, returning artifacts inline', {
           error: githubError instanceof Error ? githubError.message : String(githubError),
         });

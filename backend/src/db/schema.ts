@@ -1,5 +1,18 @@
-import { pgTable, uuid, varchar, jsonb, timestamp, pgEnum, text, index, boolean, integer, uniqueIndex, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, jsonb, timestamp, pgEnum, text, index, boolean, integer, uniqueIndex, numeric, customType } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+
+// pgvector custom type for embedding columns (1536 dimensions for text-embedding-3-small)
+const vector1536 = customType<{ data: number[]; driverData: string }>({
+  dataType() { return 'vector(384)'; },
+  toDriver(value: number[]) { return `[${value.join(',')}]`; },
+  fromDriver(value: string) {
+    if (typeof value === 'string') {
+      const clean = value.startsWith('[') ? value : `[${value}]`;
+      return JSON.parse(clean);
+    }
+    return value as unknown as number[];
+  },
+});
 
 export const jobStateEnum = pgEnum('job_state', ['pending', 'running', 'completed', 'failed', 'awaiting_approval']);
 
@@ -1442,6 +1455,7 @@ export const knowledgeDocTypeEnum = pgEnum('knowledge_doc_type', ['repo_doc', 'j
 export const knowledgeDocuments = pgTable('knowledge_documents', {
   id: uuid('id').defaultRandom().primaryKey(),
   workspaceId: uuid('workspace_id'),
+  projectId: uuid('project_id'),
   title: varchar('title', { length: 500 }).notNull(),
   content: text('content').notNull(),
   docType: knowledgeDocTypeEnum('doc_type').notNull(),
@@ -1455,6 +1469,7 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   workspaceIdx: index('idx_knowledge_documents_workspace').on(table.workspaceId),
+  projectIdx: index('idx_knowledge_documents_project').on(table.projectId),
   statusIdx: index('idx_knowledge_documents_status').on(table.status),
   docTypeIdx: index('idx_knowledge_documents_doc_type').on(table.docType),
   agentTypeIdx: index('idx_knowledge_documents_agent_type').on(table.agentType),
@@ -1468,12 +1483,14 @@ export const knowledgeChunks = pgTable('knowledge_chunks', {
   documentId: uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
   chunkIndex: integer('chunk_index').notNull(),
   content: text('content').notNull(),
-  embedding: text('embedding'),
+  embedding: vector1536('embedding'),
   tokenCount: integer('token_count'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   documentIdx: index('idx_knowledge_chunks_document').on(table.documentId),
   chunkIndexIdx: index('idx_knowledge_chunks_chunk_index').on(table.documentId, table.chunkIndex),
+  // HNSW index for cosine similarity is created via raw SQL migration
+  // (Drizzle doesn't support pgvector index syntax natively)
 }));
 
 export type KnowledgeChunk = typeof knowledgeChunks.$inferSelect;
@@ -1622,8 +1639,9 @@ export type NewFeedback = typeof feedback.$inferInsert;
 // ============================================================================
 
 export const pipelineStageEnum = pgEnum('pipeline_stage', [
-  'scribe_clarifying', 'scribe_generating', 'awaiting_approval',
-  'proto_building', 'trace_testing', 'ci_running',
+  'scribe_clarifying', 'scribe_generating', 'critic_reviewing_spec',
+  'awaiting_approval', 'proto_building', 'critic_reviewing_code',
+  'trace_testing', 'fix_loop_iteration', 'ci_running',
   'completed', 'completed_partial', 'failed', 'cancelled',
 ]);
 
@@ -1637,6 +1655,8 @@ export const pipelines = pgTable('pipelines', {
   approvedSpec: jsonb('approved_spec'),
   protoOutput: jsonb('proto_output'),
   traceOutput: jsonb('trace_output'),
+  traceEnabled: boolean('trace_enabled').default(false).notNull(),
+  repoContext: jsonb('repo_context'),
   protoConfig: jsonb('proto_config'),
   jiraConfig: jsonb('jira_config'),
   metrics: jsonb('metrics').default({}),
@@ -1649,6 +1669,8 @@ export const pipelines = pgTable('pipelines', {
 }, (table) => ({
   userIdIdx: index('idx_pipelines_user_id').on(table.userId),
   stageIdx: index('idx_pipelines_stage').on(table.stage),
+  userIdCreatedIdx: index('idx_pipelines_user_created').on(table.userId, table.createdAt),
+  stageUpdatedIdx: index('idx_pipelines_stage_updated').on(table.stage, table.updatedAt),
 }));
 
 export type Pipeline = typeof pipelines.$inferSelect;
@@ -1668,7 +1690,7 @@ export const devChangeStatusEnum = pgEnum('dev_change_status', [
 
 export const devSessions = pgTable('dev_sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
-  pipelineId: uuid('pipeline_id').notNull(), // references pipelines in orchestrator's in-memory store
+  pipelineId: uuid('pipeline_id').notNull().references(() => pipelines.id, { onDelete: 'cascade' }),
 
   // Pipeline'dan miras alınan context
   repoOwner: text('repo_owner').notNull(),

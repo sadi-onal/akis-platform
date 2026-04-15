@@ -58,7 +58,7 @@ function renderMarkdown(md: string) {
     if (line.startsWith('- ')) return <li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-disc">{line.slice(2)}</li>;
     if (/^\d+\. /.test(line)) return <li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-decimal">{line.replace(/^\d+\. /, '')}</li>;
     if (line.trim() === '') return <div key={i} className="h-2" />;
-    if (line.startsWith('`') && line.endsWith('`')) return <code key={i} className="block rounded bg-gray-800 px-3 py-1.5 text-xs font-mono text-[#07D1AF]">{line.slice(1, -1)}</code>;
+    if (line.startsWith('`') && line.endsWith('`')) return <code key={i} className="block rounded bg-ak-surface-2 px-3 py-1.5 text-xs font-mono text-[#07D1AF]">{line.slice(1, -1)}</code>;
     return <p key={i} className="text-sm text-gray-300 leading-relaxed">{line}</p>;
   });
 }
@@ -76,7 +76,7 @@ export default function DocsPage() {
         <button onClick={() => navigate('/')} className="flex items-center gap-2 hover:opacity-80 transition">
           <img src={LOGO_MARK_SVG} alt="AKIS" className="h-7 w-7" />
           <span className="text-base font-extrabold tracking-tight text-[#07D1AF]">AKIS</span>
-          <span className="text-xs text-gray-500 ml-1">{t('docsPage.nav.docsLabel')}</span>
+          <span className="text-xs text-ak-text-secondary ml-1">{t('docsPage.nav.docsLabel')}</span>
         </button>
         <button
           onClick={() => navigate('/login')}
@@ -98,7 +98,7 @@ export default function DocsPage() {
                   'block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors',
                   activeSection === s.id
                     ? 'bg-[#07D1AF]/10 text-[#07D1AF] font-medium'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
+                    : 'text-ak-text-tertiary hover:text-white hover:bg-ak-surface-2/50',
                 )}
               >
                 {s.title}
@@ -113,7 +113,8 @@ export default function DocsPage() {
           <select
             value={activeSection}
             onChange={(e) => setActiveSection(e.target.value as SectionId)}
-            className="mb-6 block w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white md:hidden"
+            aria-label="Bolum sec"
+            className="mb-6 block w-full rounded-lg border border-ak-border bg-ak-surface px-3 py-2 text-sm text-white md:hidden"
           >
             {sections.map((s) => (
               <option key={s.id} value={s.id}>{s.title}</option>

@@ -1,5 +1,6 @@
 import { desc, eq } from 'drizzle-orm';
 import { agentActivities, type AgentActivityInsert, type AgentActivitySelect } from '../db/agent-activity-schema.js';
+import { logger } from '../../lib/logger.js';
 
 export interface AgentActivityDeps {
   db: {
@@ -33,7 +34,7 @@ export class AgentActivityService {
     } catch (err) {
       // Non-fatal — don't block pipeline for audit logging
       // Non-fatal — don't block pipeline for audit logging (use console as logger may not be available)
-      if (typeof globalThis.console !== 'undefined') console.warn('[AgentActivity] Failed to record activity:', err);
+      if (typeof globalThis.console !== 'undefined') logger.warn(`[AgentActivity] Failed to record activity: ${err}`);
     }
   }
 

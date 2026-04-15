@@ -29,6 +29,7 @@ import {
   handleWebhookEvent,
 } from '../services/billing/StripeService.js';
 import { getEnv } from '../config/env.js';
+import { logger } from '../lib/logger.js';
 
 export async function billingRoutes(fastify: FastifyInstance) {
   // GET /api/billing/plan — current user's plan and usage
@@ -161,7 +162,7 @@ export async function billingRoutes(fastify: FastifyInstance) {
 
       return reply.send(result);
     } catch (error) {
-      console.error('[Billing] Checkout error:', error);
+      logger.error(`[Billing] Checkout error: ${error}`);
       const errorResponse = formatErrorResponse(request, error);
       return reply.code(500).send(errorResponse);
     }
@@ -181,7 +182,7 @@ export async function billingRoutes(fastify: FastifyInstance) {
 
       return reply.send({ url });
     } catch (error) {
-      console.error('[Billing] Portal error:', error);
+      logger.error(`[Billing] Portal error: ${error}`);
       const errorResponse = formatErrorResponse(request, error);
       return reply.code(500).send(errorResponse);
     }
@@ -210,12 +211,12 @@ export async function stripeWebhookRoutes(fastify: FastifyInstance) {
       const result = await handleWebhookEvent(rawBody, signature);
 
       if (result.handled) {
-        console.log(`[Stripe] Handled webhook: ${result.eventType}`);
+        logger.info(`[Stripe] Handled webhook: ${result.eventType}`);
       }
 
       return reply.send({ received: true });
     } catch (error) {
-      console.error('[Stripe] Webhook error:', error);
+      logger.error(`[Stripe] Webhook error: ${error}`);
       return reply.code(400).send({
         error: error instanceof Error ? error.message : 'Webhook processing failed',
       });

@@ -32,7 +32,7 @@ describe('ChatInput', () => {
     fireEvent.change(textarea, { target: { value: '  my idea  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Gönder' }));
     expect(onSend).toHaveBeenCalledOnce();
-    expect(onSend).toHaveBeenCalledWith('my idea');
+    expect(onSend).toHaveBeenCalledWith('my idea', undefined);
   });
 
   it('calls onSend on Enter key', () => {
@@ -42,7 +42,7 @@ describe('ChatInput', () => {
     fireEvent.change(textarea, { target: { value: 'test message' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     expect(onSend).toHaveBeenCalledOnce();
-    expect(onSend).toHaveBeenCalledWith('test message');
+    expect(onSend).toHaveBeenCalledWith('test message', undefined);
   });
 
   it('Shift+Enter does NOT trigger send', () => {
@@ -79,5 +79,50 @@ describe('ChatInput', () => {
     render(<ChatInput onSend={vi.fn()} disabled />);
     const textarea = screen.getByRole('textbox');
     expect(textarea.className).toContain('cursor-not-allowed');
+  });
+
+  // ─── Keyboard hint text ────────────────────────────────────────────────────
+
+  it('renders keyboard hint labels (Gonder, Yeni satir)', () => {
+    render(<ChatInput onSend={vi.fn()} />);
+    expect(screen.getByText('Gonder')).toBeInTheDocument();
+    expect(screen.getByText('Yeni satir')).toBeInTheDocument();
+  });
+
+  it('renders keyboard shortcut symbols in hints', () => {
+    const { container } = render(<ChatInput onSend={vi.fn()} />);
+    const kbds = container.querySelectorAll('kbd');
+    // Expect 2 kbd elements: Enter, Shift+Enter
+    expect(kbds.length).toBe(2);
+  });
+
+  // ─── Escape key clears input ──────────────────────────────────────────────
+
+  it('Escape key clears the input text', () => {
+    render(<ChatInput onSend={vi.fn()} />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'some draft text' } });
+    expect(textarea).toHaveValue('some draft text');
+    fireEvent.keyDown(textarea, { key: 'Escape' });
+    expect(textarea).toHaveValue('');
+  });
+
+  it('Escape key does not trigger send', () => {
+    const onSend = vi.fn();
+    render(<ChatInput onSend={onSend} />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'test message' } });
+    fireEvent.keyDown(textarea, { key: 'Escape' });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  // ─── Enter with empty input does not send ─────────────────────────────────
+
+  it('Enter on empty input does not trigger send', () => {
+    const onSend = vi.fn();
+    render(<ChatInput onSend={onSend} />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    expect(onSend).not.toHaveBeenCalled();
   });
 });

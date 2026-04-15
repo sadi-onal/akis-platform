@@ -9,6 +9,7 @@ import {
   upsertUserAiKey,
   type AIKeyProvider,
 } from '../../services/ai/user-ai-keys.js';
+import { getUserPlan, getUsageSummary } from '../../services/billing/BillingService.js';
 import { sendError } from '../../utils/errorHandler.js';
 
 const providerSchema = z.enum(['anthropic', 'openai', 'openrouter']);
@@ -82,8 +83,39 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const user = await requireAuth(request);
-        const status = await getMultiProviderStatus(user.id);
-        return reply.code(200).send(status);
+        const [status, plan, usage] = await Promise.all([
+          getMultiProviderStatus(user.id),
+          getUserPlan(user.id),
+          getUsageSummary(user.id),
+        ]);
+
+        // Determine effective key source: 'own' if user has a configured key for their active provider, else 'akis'
+        const activeProviderKey = status.activeProvider;
+        const hasOwnKey = activeProviderKey
+          ? (status.providers as Record<string, { configured: boolean }>)[activeProviderKey]?.configured === true
+          : false;
+        const keySource: 'akis' | 'own' = hasOwnKey ? 'own' : 'akis';
+
+        // Check if user's plan allows own keys (Free plan = no)
+        const canUseOwnKey = plan.tier !== 'free';
+
+        return reply.code(200).send({
+          ...status,
+          keySource,
+          canUseOwnKey,
+          plan: {
+            tier: plan.tier,
+            name: plan.name,
+            jobsPerDay: plan.jobsPerDay,
+            maxTokenBudget: plan.maxTokenBudget,
+          },
+          usage: {
+            jobsUsedToday: usage.jobsUsedToday,
+            tokensUsedThisMonth: usage.tokensUsedThisMonth,
+            jobsLimit: usage.jobsLimit,
+            tokensLimit: usage.tokensLimit,
+          },
+        });
       } catch (err: unknown) {
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {
           return sendError(reply, request, 'UNAUTHORIZED', 'Authentication required');

@@ -1,5 +1,6 @@
 export interface RetrievalFilter {
   workspaceId?: string;
+  projectId?: string;
   agentType?: string;
   docType?: 'repo_doc' | 'job_artifact' | 'manual';
   status?: 'proposed' | 'approved' | 'deprecated';

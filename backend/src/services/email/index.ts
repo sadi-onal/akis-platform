@@ -4,6 +4,7 @@
  */
 
 import { EmailService } from './EmailService.js';
+import { logger } from '../../lib/logger.js';
 import { MockEmailService } from './MockEmailService.js';
 import { ResendEmailService } from './ResendEmailService.js';
 import { SmtpEmailService, isSmtpConfigured } from './SmtpEmailService.js';
@@ -49,13 +50,13 @@ export function isEmailConfigured(provider: string): boolean {
 export function createEmailService(config: EmailServiceFactoryConfig): EmailService {
   // Always use mock in test environment
   if (process.env.NODE_ENV === 'test') {
-    console.log('[EmailService] Using MockEmailService (test environment)');
+    logger.info('[EmailService] Using MockEmailService (test environment)');
     return new MockEmailService();
   }
 
   // Use mock if explicitly requested
   if (config.provider === 'mock') {
-    console.log('[EmailService] Using MockEmailService (configured)');
+    logger.info('[EmailService] Using MockEmailService (configured)');
     return new MockEmailService();
   }
 
@@ -69,7 +70,7 @@ export function createEmailService(config: EmailServiceFactoryConfig): EmailServ
       );
     }
 
-    console.log(`[EmailService] Using SmtpEmailService (host=${config.smtpHost}, port=${config.smtpPort ?? 587})`);
+    logger.info(`[EmailService] Using SmtpEmailService (host=${config.smtpHost}, port=${config.smtpPort ?? 587})`);
     const service = new SmtpEmailService({
       host: config.smtpHost,
       port: config.smtpPort ?? 587,
@@ -99,7 +100,7 @@ export function createEmailService(config: EmailServiceFactoryConfig): EmailServ
       );
     }
 
-    console.log('[EmailService] Using ResendEmailService');
+    logger.info('[EmailService] Using ResendEmailService');
     return new ResendEmailService({
       apiKey: config.apiKey,
       fromEmail: config.fromEmail,

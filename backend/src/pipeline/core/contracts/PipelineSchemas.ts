@@ -190,7 +190,7 @@ export const PipelineErrorSchema = z.object({
   message: z.string().min(1),
   technicalDetail: z.string().optional(),
   retryable: z.boolean(),
-  recoveryAction: z.enum(['retry', 'edit_spec', 'reconnect_github', 'start_over']).optional(),
+  recoveryAction: z.enum(['retry', 'edit_spec', 'reconnect_github', 'start_over', 'configure_ai_key']).optional(),
 });
 
 export const PipelineMetricsSchema = z.object({
@@ -203,6 +203,9 @@ export const PipelineMetricsSchema = z.object({
   clarificationRounds: z.number().int().min(0).max(3),
   retryCount: z.number().int().min(0),
   estimatedCost: z.number().min(0).optional(),
+  inputTokens: z.number().int().min(0).optional(),
+  outputTokens: z.number().int().min(0).optional(),
+  totalTokens: z.number().int().min(0).optional(),
 });
 
 export const JiraConfigSchema = z.object({
@@ -241,6 +244,18 @@ export const StartPipelineRequestSchema = z.object({
   idea: z.string().min(10, 'Fikir en az 10 karakter olmalı').max(10000, 'Fikir en fazla 10.000 karakter olabilir'),
   context: z.string().max(5000).optional(),
   targetStack: z.string().max(200).optional(),
+  existingRepo: z
+    .object({
+      owner: z.string().min(1),
+      repo: z.string().min(1),
+      branch: z.string().min(1),
+    })
+    .optional(),
+  parentPipelineId: z.string().uuid().optional(),
+  /** When true, skip Scribe and jump directly to Proto (iteration on existing project) */
+  skipScribe: z.boolean().optional().default(false),
+  /** When true, run Trace (test generation) after Proto. Default: false (skip Trace). */
+  traceEnabled: z.boolean().optional().default(false),
   model: z.enum(['claude-sonnet-4-6', 'claude-haiku-4-5']).optional().default('claude-haiku-4-5'),
   jiraConfig: JiraConfigSchema,
 });

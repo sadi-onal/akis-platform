@@ -46,35 +46,62 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
     async startPipeline(request: unknown, _reply: unknown) {
       const userId = getUserId(request);
 
-      // Non-admin users must configure their own AI API key to use the pipeline.
-      // Admins can use the platform's default API key without restrictions.
-      // Guard is best-effort — if auth lookup fails, let the pipeline proceed.
+      // ── Auth + Usage Limit Guard ─────────────────────────────────────
+      // Admins: unlimited, no restrictions
+      // Users using own API key (active provider has configured key): relaxed limits (daily job limit still applies)
+      // Users using AKIS built-in key: full plan limits (daily jobs + monthly token budget)
       try {
         const { requireAuth: _requireAuth } = await import('../../utils/auth.js');
         const user = await _requireAuth(request as import('fastify').FastifyRequest);
         if (user.role !== 'admin') {
           const { getMultiProviderStatus } = await import('../../services/ai/user-ai-keys.js');
           const keyStatus = await getMultiProviderStatus(user.id);
+
+          // Determine if user is actively using their own key
+          const activeProvider = keyStatus.activeProvider;
           const providers = keyStatus.providers as Record<string, { configured: boolean }>;
-          const hasOwnKey = Object.values(providers).some((p) => p.configured);
-          if (!hasOwnKey) {
-            throw Object.assign(
-              new Error('Pipeline kullanmak icin Ayarlar > AI Anahtarlari sayfasindan kendi API anahtarinizi eklemelisiniz.'),
-              { statusCode: 403 },
-            );
+          const isUsingOwnKey = activeProvider
+            ? providers[activeProvider]?.configured === true
+            : false;
+
+          if (!isUsingOwnKey) {
+            // Using AKIS built-in key → enforce full plan limits (daily + token budget)
+            const { checkUsageLimits } = await import('../../services/billing/BillingService.js');
+            const limitCheck = await checkUsageLimits(user.id);
+            if (!limitCheck.allowed) {
+              throw Object.assign(
+                new Error(limitCheck.reason || 'Gunluk pipeline limitinize ulastiniz (3/3). Kendi AI anahtarinizi eklerseniz sinirsiz kullanabilirsiniz.'),
+                { statusCode: 429, code: limitCheck.code || 'DAILY_LIMIT_EXCEEDED' },
+              );
+            }
           }
+          // isUsingOwnKey = true → skip token budget check, but daily job limit still tracked via incrementUsage
         }
       } catch (err) {
-        if (err && typeof err === 'object' && 'statusCode' in err && (err as { statusCode: number }).statusCode === 403) throw err;
-        // Non-403 errors (auth lookup, DB) — proceed with pipeline start
+        if (err && typeof err === 'object' && 'statusCode' in err) {
+          const status = (err as { statusCode: number }).statusCode;
+          if (status === 403 || status === 429) throw err;
+        }
+        // Non-403/429 errors (auth lookup, DB) — proceed with pipeline start
       }
 
       const body = StartPipelineRequestSchema.parse((request as { body: unknown }).body);
+
+      // Increment daily usage counter BEFORE starting pipeline
+      // (prevents bypass by starting many pipelines simultaneously)
+      try {
+        const { incrementUsage: _incr } = await import('../../services/billing/BillingService.js');
+        await _incr(userId, 0);
+      } catch {
+        // Non-blocking — if counter fails, pipeline still starts
+      }
+
       const pipeline = await orchestrator.startPipeline(userId, {
         idea: body.idea,
         context: body.context,
         targetStack: body.targetStack,
-      }, body.model, body.jiraConfig);
+        existingRepo: body.existingRepo,
+      }, body.model, body.jiraConfig, body.parentPipelineId, body.skipScribe, body.traceEnabled);
       return { pipeline };
     },
 
@@ -134,6 +161,47 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       return { pipeline };
     },
 
+    async toggleTrace(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const { enabled } = (request as { body: { enabled: boolean } }).body;
+      if (typeof enabled !== 'boolean') {
+        throw Object.assign(new Error('enabled field must be a boolean'), { statusCode: 400 });
+      }
+      const pipeline = await orchestrator.toggleTrace(id, enabled);
+      return { pipeline };
+    },
+
+    /** Level 4: Get pipeline explanation (explainability interface) */
+    async getExplanation(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const explainability = orchestrator.getExplainability();
+      const explanation = explainability.getExplanation(id);
+      return { explanation };
+    },
+
+    /** Level 4: Configure adaptive autonomy — auto-approve threshold */
+    async setAutoApprove(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const body = (request as { body: { enabled?: boolean; threshold?: number } }).body;
+
+      const enabled = typeof body.enabled === 'boolean' ? body.enabled : undefined;
+      const threshold = typeof body.threshold === 'number' ? body.threshold : undefined;
+
+      if (threshold !== undefined && (threshold < 50 || threshold > 100)) {
+        throw Object.assign(new Error('threshold must be between 50 and 100'), { statusCode: 400 });
+      }
+
+      const update: Record<string, unknown> = {};
+      if (enabled !== undefined) update.autoApproveEnabled = enabled;
+      if (threshold !== undefined) update.autoApproveThreshold = threshold;
+
+      const pipeline = await orchestrator.updatePipelineConfig(id, update);
+      return { pipeline };
+    },
+
     async cancelPipeline(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
@@ -181,6 +249,14 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const trimmed = title.trim().slice(0, 200);
       const pipeline = await orchestrator.updateTitle(id, userId, trimmed);
       return { pipeline };
+    },
+
+    async getMetrics(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const metricsService = orchestrator.getMetricsService();
+      const runMetrics = metricsService.getRunMetrics(id);
+      return { metrics: runMetrics ?? null, summary: metricsService.getSummary() };
     },
 
     async getFileContent(request: unknown) {

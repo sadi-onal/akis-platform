@@ -107,7 +107,7 @@ export const TR = {
   // Preview
   previewLoading: 'Önizleme başlatılıyor...',
   previewFetchingFiles: 'Proto dosyaları çekiliyor',
-  stackblitzLoading: 'StackBlitz WebContainer yükleniyor',
+  sandpackLoading: 'Sandpack önizleme başlatılıyor',
   previewFailed: 'Önizleme yüklenemedi',
   retry: 'Tekrar Dene',
   noFilesYet: 'Henüz dosya yok. Proto tamamlandığında preview burada görünecek.',

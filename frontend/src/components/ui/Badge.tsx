@@ -13,34 +13,34 @@ const stateStyles: Record<
   pending: {
     container: "bg-ak-surface text-ak-text-secondary",
     dot: "bg-ak-text-secondary",
-    label: "Pending",
+    label: "Bekliyor",
   },
   running: {
     container: "bg-ak-primary/10 text-ak-primary",
     dot: "bg-ak-primary animate-pulse",
-    label: "Running",
+    label: "Calisiyor",
   },
   completed: {
     container: "bg-green-500/10 text-green-400",
     dot: "bg-green-400",
-    label: "Completed",
+    label: "Tamamlandi",
   },
   failed: {
     container: "bg-red-500/10 text-red-400",
     dot: "bg-red-400",
-    label: "Failed",
+    label: "Basarisiz",
   },
   awaiting_approval: {
     container: "bg-yellow-500/10 text-yellow-400",
     dot: "bg-yellow-500",
-    label: "Awaiting Approval",
+    label: "Onay Bekliyor",
   },
 };
 
 const defaultStyle = {
   container: "bg-ak-surface text-ak-text-secondary",
   dot: "bg-ak-text-secondary",
-  label: "Unknown",
+  label: "Bilinmiyor",
 };
 
 export function Badge({ state }: BadgeProps) {

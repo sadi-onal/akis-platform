@@ -52,8 +52,8 @@ export function WelcomeWizard({ onComplete }: WelcomeWizardProps) {
     >
       {/* Background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-ak-primary/8 blur-blob animate-blob-drift" />
-        <div className="absolute -bottom-20 -right-20 h-80 w-80 rounded-full bg-ak-primary/5 blur-blob animate-blob-drift-alt" />
+        <div className={cn('absolute -top-20 -left-20 h-72 w-72 rounded-full bg-ak-primary/8 blur-blob', !reduced && 'animate-blob-drift')} />
+        <div className={cn('absolute -bottom-20 -right-20 h-80 w-80 rounded-full bg-ak-primary/5 blur-blob', !reduced && 'animate-blob-drift-alt')} />
       </div>
 
       <div className="relative z-10 w-full max-w-md px-6">

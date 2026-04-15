@@ -12,6 +12,7 @@ import {
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { generateGherkinFromSpec } from '../../integrations/cucumberGenerator.js';
 import { logger } from '../../../lib/logger.js';
+import { parseAIJson } from '../../core/json-extract.js';
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { TRACE_TOOLS, createTraceToolHandlers, type TraceToolDeps } from './trace-tools.js';
@@ -126,6 +127,31 @@ Output Format — respond ONLY with valid JSON:
 
 Also generate a playwright.config.ts file in the testFiles array.
 
+Playwright Best Practices:
+- PREFER semantic locators in this order: getByRole() > getByText() > getByTestId() > getByLabel() > CSS selectors (last resort)
+- Use getByRole('button', { name: 'Submit' }) instead of page.locator('button.submit')
+- Use getByText('expected text') for verifying visible content
+- Use data-testid attributes only when semantic locators are ambiguous
+- ALWAYS use web-first assertions: expect(locator).toBeVisible(), toHaveText(), toContainText(), toHaveValue()
+- NEVER use manual waitForTimeout() — use expect(locator).toBeVisible() or page.waitForURL() instead
+- Use await expect(page).toHaveURL(/pattern/) for navigation assertions
+- Add descriptive messages to assertions: expect(btn).toBeVisible({ message: 'Login button should appear after page load' })
+
+Turkish UI Text Handling:
+- The target application may use Turkish UI labels (e.g. "Giriş Yap", "Kayıt Ol", "Gönder", "Ayarlar")
+- Match visible text EXACTLY as it appears in the source code — do not translate Turkish labels to English in selectors
+- Use getByText() or getByRole() with the Turkish label: getByRole('button', { name: 'Giriş Yap' })
+- If i18n keys are present in code, use the resolved Turkish text for assertions, not the key
+- Test file names and describe/it blocks should be in English, but text matchers must use the actual UI language
+
+Test Reliability:
+- Structure tests: test.describe('Feature', () => { test('should do X', async ({ page }) => { ... }) })
+- Use beforeEach for common navigation: test.beforeEach(async ({ page }) => { await page.goto('/'); })
+- Avoid brittle selectors: NO nth-child(), NO deeply nested CSS paths, NO auto-generated class names
+- Use page.waitForLoadState('networkidle') only when necessary — prefer waiting for specific elements
+- For forms: fill then assert, e.g. await input.fill('test'); await expect(input).toHaveValue('test')
+- For async operations: await expect(successMsg).toBeVisible({ timeout: 10_000 })
+
 Rules:
 - Write ONLY end-to-end tests (no unit tests)
 - Do NOT run the tests — only write them
@@ -133,7 +159,7 @@ Rules:
 - Use TypeScript for all test files
 - Use descriptive test names in English
 - Use test.describe blocks to group related tests
-- Include proper expect assertions
+- Include proper expect assertions with descriptive failure messages
 - temperature=0
 
 AFTER generating Playwright test files, perform TRACEABILITY CHECK:
@@ -204,7 +230,7 @@ export class TraceAgent {
     emit?.('analyzing', `Test stratejisi belirleniyor (${files.length} dosya)`, 30);
 
     // Step 2: Generate tests via AI (with dedicated timeout)
-    const testsResult = await this.generateTests(files, input.spec, emit);
+    const testsResult = await this.generateTests(files, input.spec, emit, input.knowledgeContext);
     if (testsResult.type === 'error') {
       emit?.('error', 'Test üretimi başarısız oldu', 0);
       return testsResult;
@@ -455,6 +481,7 @@ After pushing, respond with a JSON summary:
     files: Array<{ filePath: string; content: string }>,
     spec?: StructuredSpec,
     emit?: ReturnType<typeof createActivityEmitter>,
+    knowledgeContext?: string,
   ): Promise<
     | { type: 'output'; data: Pick<TraceOutput, 'testFiles' | 'coverageMatrix' | 'testSummary'> }
     | { type: 'error'; error: PipelineError }
@@ -473,7 +500,10 @@ After pushing, respond with a JSON summary:
         } else {
           emit?.('ai_call', 'Playwright testleri oluşturuluyor', 45, undefined, attempt);
         }
-        const aiPromise = this.ai.generateText(TEST_GENERATION_PROMPT, userPrompt);
+        const traceSystemPrompt = knowledgeContext
+          ? `${TEST_GENERATION_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
+          : TEST_GENERATION_PROMPT;
+        const aiPromise = this.ai.generateText(traceSystemPrompt, userPrompt);
         responseText = await withAiTimeout(aiPromise, AI_CALL_TIMEOUT_MS);
         emit?.('parsing', 'Yanıt işleniyor', 65);
       } catch (err) {
@@ -494,8 +524,7 @@ After pushing, respond with a JSON summary:
 
       let parsed: unknown;
       try {
-        const extracted = this.extractJson(responseText);
-        parsed = JSON.parse(extracted);
+        parsed = parseAIJson(responseText);
       } catch (parseErr) {
         logger.warn(`[Trace] JSON parse failed (attempt ${attempt + 1}, responseLen=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
@@ -646,72 +675,8 @@ After pushing, respond with a JSON summary:
     return lines.join('\n');
   }
 
-  private extractJson(text: string): string {
-    // Strategy 1: fenced code block (also handles truncated blocks without closing ```)
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)(?:```|$)/);
-    if (fenced) {
-      const candidate = fenced[1].trim();
-      try { JSON.parse(candidate); return candidate; } catch { /* try repair */ }
-      const repaired = this.repairJson(candidate);
-      try { JSON.parse(repaired); return repaired; } catch { /* fall through */ }
-    }
-
-    // Strategy 2: brace extraction
-    const braceStart = text.indexOf('{');
-    const braceEnd = text.lastIndexOf('}');
-    if (braceStart !== -1 && braceEnd > braceStart) {
-      const candidate = text.slice(braceStart, braceEnd + 1);
-      try { JSON.parse(candidate); return candidate; } catch { /* try repair */ }
-      const repaired = this.repairJson(candidate);
-      try { JSON.parse(repaired); return repaired; } catch { /* fall through */ }
-    }
-
-    // Strategy 3: find {"testFiles" specifically
-    const testFilesIdx = text.indexOf('{"testFiles"');
-    if (testFilesIdx !== -1) {
-      const fromTestFiles = text.slice(testFilesIdx);
-      const repaired = this.repairJson(fromTestFiles);
-      try { JSON.parse(repaired); return repaired; } catch { /* fall through */ }
-    }
-
-    // Strategy 4: last resort — repair the entire text (handles truncated responses)
-    const lastResort = this.repairJson(text.trim());
-    try { JSON.parse(lastResort); return lastResort; } catch { /* fall through */ }
-
-    logger.warn(`[Trace] extractJson: all strategies failed (len=${text.length}), first 300 chars: ${text.slice(0, 300)}`);
-    return text.trim();
-  }
-
-  /** Attempt to repair truncated JSON by closing open brackets/braces */
-  private repairJson(text: string): string {
-    let s = text.trim();
-    // Remove trailing comma before repair
-    s = s.replace(/,\s*$/, '');
-
-    let openBraces = 0;
-    let openBrackets = 0;
-    let inString = false;
-    let escape = false;
-
-    for (const ch of s) {
-      if (escape) { escape = false; continue; }
-      if (ch === '\\') { escape = true; continue; }
-      if (ch === '"') { inString = !inString; continue; }
-      if (inString) continue;
-      if (ch === '{') openBraces++;
-      if (ch === '}') openBraces--;
-      if (ch === '[') openBrackets++;
-      if (ch === ']') openBrackets--;
-    }
-
-    // If we're inside a string, close it
-    if (inString) s += '"';
-    // Close open brackets then braces
-    while (openBrackets > 0) { s += ']'; openBrackets--; }
-    while (openBraces > 0) { s += '}'; openBraces--; }
-
-    return s;
-  }
+  // JSON extraction and repair are now in shared utility:
+  // import { parseAIJson, extractJsonSafe } from '../../core/json-extract.js';
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,0 +1,14 @@
+## AGENT B — FIX LOOP SERVICE RAPORU
+- Durum: TAMAMLANDI
+- Olusturulan dosyalar:
+  - `backend/src/pipeline/core/fix-loop/FixLoopTypes.ts`
+  - `backend/src/pipeline/core/fix-loop/FixLoopService.ts`
+  - `backend/src/pipeline/core/fix-loop/__tests__/FixLoopService.test.ts`
+- Test sonuclari: 10/10 passing
+- Typecheck: PASS
+- Notlar:
+  - Callback-based design (RunProtoFn, RunTraceFn) — orchestrator integration ready
+  - Temperature escalation: 0 → 0.1 → 0.2 (configurable)
+  - Per-iteration timeout shared between Proto and Trace
+  - Test pass criteria: traceOutput.ok === true AND uncoveredCriteria.length === 0
+  - Uses node:test runner (project standard)

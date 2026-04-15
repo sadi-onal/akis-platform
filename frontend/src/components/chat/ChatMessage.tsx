@@ -2,6 +2,52 @@ import { cn } from '../../utils/cn';
 import type { ChatMessage as ChatMessageType, AgentName } from '../../types/chat';
 import { PlanCard } from './PlanCard';
 
+/** Lightweight inline markdown renderer — no external deps, handles code blocks, bold, inline code */
+function SimpleMarkdown({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  let key = 0;
+
+  // Split by fenced code blocks first
+  const segments = text.split(/(```[\s\S]*?```)/g);
+  for (const seg of segments) {
+    if (seg.startsWith('```')) {
+      const match = seg.match(/^```(\w*)\n?([\s\S]*?)```$/);
+      const lang = match?.[1] || '';
+      const code = match?.[2]?.trimEnd() || seg.slice(3, -3);
+      parts.push(
+        <pre key={key++} className="my-2 overflow-x-auto rounded-lg bg-ak-surface-2 p-3 text-xs font-mono text-ak-text-primary">
+          {lang && <span className="mb-1 block text-[10px] font-semibold uppercase text-ak-text-tertiary">{lang}</span>}
+          <code>{code}</code>
+        </pre>
+      );
+    } else {
+      // Process inline markdown
+      const lines = seg.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const nodes: React.ReactNode[] = [];
+        // Replace **bold** and `inline code`
+        const inlineRegex = /(\*\*(.+?)\*\*|`([^`]+)`)/g;
+        let lastIdx = 0;
+        let m: RegExpExecArray | null;
+        while ((m = inlineRegex.exec(line)) !== null) {
+          if (m.index > lastIdx) nodes.push(line.slice(lastIdx, m.index));
+          if (m[2]) nodes.push(<strong key={key++} className="font-semibold text-ak-text-primary">{m[2]}</strong>);
+          else if (m[3]) nodes.push(<code key={key++} className="rounded bg-ak-surface-2 px-1 py-0.5 text-xs font-mono">{m[3]}</code>);
+          lastIdx = m.index + m[0].length;
+        }
+        if (lastIdx < line.length) nodes.push(line.slice(lastIdx));
+        if (nodes.length === 0 && line === '') {
+          parts.push(<br key={key++} />);
+        } else {
+          parts.push(<span key={key++}>{nodes}{i < lines.length - 1 ? '\n' : ''}</span>);
+        }
+      }
+    }
+  }
+  return <div className="whitespace-pre-wrap text-sm text-ak-text-secondary">{parts}</div>;
+}
+
 interface ChatMessageProps {
   message: ChatMessageType;
   onApprove?: () => void;
@@ -72,11 +118,11 @@ function ClarificationMessage({
                 <p className="mt-1 text-xs text-ak-text-tertiary">{q.reason}</p>
               )}
               {q.suggestions && q.suggestions.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1">
+                <div className="mt-2 flex flex-wrap gap-1.5">
                   {q.suggestions.map((s, si) => (
                     <span
                       key={si}
-                      className="rounded-full bg-ak-surface-2 px-2 py-0.5 text-[11px] text-ak-text-tertiary cursor-default"
+                      className="rounded-lg border border-ak-border bg-ak-surface-2 px-3 py-1 text-xs font-medium text-ak-text-secondary"
                     >
                       {s}
                     </span>
@@ -106,15 +152,24 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
     case 'agent': {
       const c = AGENT_COLORS[message.agent];
       return (
-        <div className="flex gap-2.5 animate-in fade-in slide-in-from-left-2 duration-200">
+        <div className="group flex gap-2.5 animate-in fade-in slide-in-from-left-2 duration-200">
           <AgentAvatar agent={message.agent} />
           <div className="min-w-0 flex-1">
             <div className="mb-0.5 flex items-center gap-2">
               <span className={cn('text-xs font-semibold', c.text)}>{c.label}</span>
               <span className="text-[10px] text-ak-text-tertiary">{formatTime(message.timestamp)}</span>
               <JiraBadge epicKey={message.jiraEpicKey} />
+              <button
+                onClick={() => navigator.clipboard.writeText(message.content)}
+                title="Kopyala"
+                className="ml-auto rounded p-1 text-ak-text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ak-surface-2 hover:text-ak-primary"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
             </div>
-            <p className="whitespace-pre-wrap text-sm text-ak-text-secondary">{message.content}</p>
+            <SimpleMarkdown text={message.content} />
           </div>
         </div>
       );
@@ -449,6 +504,60 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
           <p className="mt-3 text-[13px] text-ak-text-tertiary">
             💬 Projenizle ilgili soru sorabilir veya notlarınızı bırakabilirsiniz.
           </p>
+        </div>
+      );
+    }
+
+    case 'critic_review': {
+      const isSpec = message.reviewType === 'spec_review';
+      const scoreColor = message.score >= 75 ? 'text-green-400' : message.score >= 50 ? 'text-amber-400' : 'text-red-400';
+      const scoreBg = message.score >= 75 ? 'bg-green-500/10 border-green-500/20' : message.score >= 50 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-red-500/10 border-red-500/20';
+      const SEVERITY_COLORS: Record<string, string> = {
+        critical: 'text-red-400 bg-red-500/10',
+        major: 'text-amber-400 bg-amber-500/10',
+        minor: 'text-blue-400 bg-blue-500/10',
+        info: 'text-ak-text-tertiary bg-ak-surface-2',
+      };
+      return (
+        <div className={cn('rounded-xl border p-4 animate-in fade-in slide-in-from-left-2 duration-200', scoreBg)}>
+          <div className="mb-2 flex items-center gap-2 flex-wrap">
+            <span className="text-lg">{isSpec ? '📋' : '🔍'}</span>
+            <span className="text-sm font-semibold text-ak-text-primary">
+              {isSpec ? 'Spec İncelemesi' : 'Kod İncelemesi'}
+            </span>
+            <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', scoreColor, scoreBg)}>
+              {message.score}/100
+            </span>
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', message.approved ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400')}>
+              {message.approved ? 'Onaylandı' : 'Reddedildi'}
+            </span>
+          </div>
+          {message.summary && (
+            <p className="mb-3 text-xs text-ak-text-secondary">{message.summary}</p>
+          )}
+          {message.findings.length > 0 && (
+            <details className="group">
+              <summary className="cursor-pointer text-xs font-medium text-ak-text-secondary hover:text-ak-text-primary transition-colors">
+                {message.findings.length} bulgu
+              </summary>
+              <div className="mt-2 space-y-1.5">
+                {message.findings.map((f, i) => (
+                  <div key={i} className="rounded-lg border border-ak-border-subtle bg-ak-surface/60 p-2">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold', SEVERITY_COLORS[f.severity] ?? SEVERITY_COLORS.info)}>
+                        {f.severity}
+                      </span>
+                      <span className="text-[10px] text-ak-text-tertiary">{f.category}</span>
+                    </div>
+                    <p className="text-xs text-ak-text-primary">{f.description}</p>
+                    {f.suggestion && (
+                      <p className="mt-0.5 text-[11px] text-ak-text-tertiary">💡 {f.suggestion}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       );
     }

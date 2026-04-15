@@ -60,6 +60,7 @@ export async function pipelineStreamPlugin(
     );
 
     let cleaned = false;
+    let paused = false;
     const cleanup = () => {
       if (cleaned) return;
       cleaned = true;
@@ -69,8 +70,13 @@ export async function pipelineStreamPlugin(
     };
 
     const onActivity = (activity: PipelineActivity) => {
+      if (paused) return; // backpressure — skip while buffer is full
       try {
-        raw.raw.write(`data: ${JSON.stringify(activity)}\n\n`);
+        const ok = raw.raw.write(`data: ${JSON.stringify(activity)}\n\n`);
+        if (!ok) {
+          paused = true;
+          raw.raw.once('drain', () => { paused = false; });
+        }
       } catch {
         // Client disconnected — clean up listener + timers
         cleanup();
@@ -81,8 +87,13 @@ export async function pipelineStreamPlugin(
 
     // Heartbeat every 15s to keep connection alive
     const heartbeat = setInterval(() => {
+      if (paused) return; // skip heartbeat while backpressured
       try {
-        raw.raw.write(`: heartbeat\n\n`);
+        const ok = raw.raw.write(`: heartbeat\n\n`);
+        if (!ok) {
+          paused = true;
+          raw.raw.once('drain', () => { paused = false; });
+        }
       } catch {
         cleanup();
       }

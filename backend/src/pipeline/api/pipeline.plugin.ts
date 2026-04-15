@@ -123,8 +123,8 @@ export async function pipelinePlugin(
     throw error;
   });
 
-  // POST /api/pipelines — start new pipeline
-  fastify.post('/', { preHandler: authPreHandler }, async (request: FastifyRequest, reply: FastifyReply) => {
+  // POST /api/pipelines — start new pipeline (rate-limited: 5/min per user)
+  fastify.post('/', { preHandler: authPreHandler, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request: FastifyRequest, reply: FastifyReply) => {
     const result = await routes.startPipeline(request, reply);
     return reply.code(201).send(result);
   });
@@ -190,6 +190,16 @@ export async function pipelinePlugin(
     },
   });
 
+  // PATCH /api/pipelines/:id/trace-toggle — toggle trace enabled/disabled
+  fastify.route({
+    method: 'PATCH',
+    url: '/:id/trace-toggle',
+    preHandler: [authPreHandler, ownershipPreHandler],
+    handler: async (request: FastifyRequest) => {
+      return routes.toggleTrace(request);
+    },
+  });
+
   // DELETE /api/pipelines/:id — cancel pipeline
   fastify.route({
     method: 'DELETE',
@@ -198,6 +208,11 @@ export async function pipelinePlugin(
     handler: async (request: FastifyRequest) => {
       return routes.cancelPipeline(request);
     },
+  });
+
+  // GET /api/pipelines/:id/metrics — get pipeline run metrics (Level 3)
+  fastify.get('/:id/metrics', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
+    return routes.getMetrics(request);
   });
 
   // GET /api/pipelines/:id/files-all — get all file contents for StackBlitz embed

@@ -7,7 +7,7 @@
 
 AKIS (Adaptive Knowledge Integrity System), bir **AI Agent Workflows Engine**'dir. Yazilim gelistirme surecinde "fikir → kod → test" zincirini 3 AI agent workflow'u ile otomatize eder. Ayni zamanda universite bitirme projesidir.
 
-- **Versiyon:** 0.2.0
+- **Versiyon:** 0.5.0
 - **Tez Temasi:** Knowledge Integrity & Agent Verification
 - **Ogrenci:** Omer Yasir Onal (2221221562)
 - **Danismanl:** Dr. Ogr. Uyesi Nazli Dogan
@@ -26,10 +26,10 @@ AKIS (Adaptive Knowledge Integrity System), bir **AI Agent Workflows Engine**'di
        |
    PROTO ("Insa et")
    Onaylanan spec'ten MVP scaffold uretir
-   GitHub'a push eder (branch: proto/scaffold-{timestamp})
+   GitHub'a push eder (branch: main — direkt push, PR yok)
        |
    TRACE ("Dogrula")
-   Proto'nun push ettigi branch'teki kodu GitHub'dan okur
+   Proto'nun push ettigi main branch'teki kodu GitHub'dan okur
    O koda ozel Playwright otomasyon testleri yazar
 ```
 
@@ -280,6 +280,14 @@ Desteklenen provider'lar: `anthropic`, `openai`, `openrouter`, `mock`
 - "Liquid-glass / frosted surfaces" temasi
 - Tema degiskenleri: `--ak-bg`, `--ak-surface`, `--ak-surface-2`, `--ak-primary`
 - Marka renkleri: bg `#0A1215`, primary accent `#07D1AF` (teal), danger `#FF6B6B`
+
+## Vizyon & Strateji
+
+- Ozet: `docs/plans/AKIS_VISION.md`
+- Bilimsel temeller: TRiSM (Gartner), Reflexion/Self-Refine (NeurIPS 2023), METR 2025, McKinsey 2026
+- Kultur ilkesi: "AI uretir, AI denetler, insan karar verir"
+- Level 3: CriticAgent, FixLoop, Validator, Explainability, SecurityGate, LearningService
+- Level 4: Orchestrator entegrasyonu — FixLoop auto-trigger, SecurityGate regression check, LearningService recording
 
 ## Deployment
 

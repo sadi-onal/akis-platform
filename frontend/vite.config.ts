@@ -30,10 +30,33 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify('0.2.0'),
   },
   build: {
+    // Sandpack + CodeMirror are lazy-loaded vendor chunks; suppress warnings for them
+    chunkSizeWarningLimit: 550,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+        manualChunks(id) {
+          // React core
+          if (id.includes('node_modules/react-dom/') ||
+              id.includes('node_modules/react/') ||
+              id.includes('node_modules/react-router-dom/') ||
+              id.includes('node_modules/react-router/') ||
+              id.includes('node_modules/@remix-run/')) {
+            return 'vendor-react';
+          }
+          // Sandpack (code preview) — lazy-loaded via PreviewPanel
+          if (id.includes('node_modules/@codesandbox/')) {
+            return 'vendor-sandpack';
+          }
+          // Framer Motion — used by LandingPage + animations
+          if (id.includes('node_modules/framer-motion/') ||
+              id.includes('node_modules/motion/')) {
+            return 'vendor-ui';
+          }
+          // CodeMirror — used by CodeEditor (lazy)
+          if (id.includes('node_modules/@codemirror/') ||
+              id.includes('node_modules/@lezer/')) {
+            return 'vendor-codemirror';
+          }
         },
       },
     },

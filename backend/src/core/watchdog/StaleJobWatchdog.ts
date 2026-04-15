@@ -1,6 +1,7 @@
 import { db } from '../../db/client.js';
 import { jobs } from '../../db/schema.js';
 import { eq, and, lt } from 'drizzle-orm';
+import { logger } from '../../lib/logger.js';
 
 const CHECK_INTERVAL_MS = 60_000;
 const STALE_THRESHOLD_MINUTES = 15;
@@ -10,7 +11,7 @@ export class StaleJobWatchdog {
 
   start(): void {
     if (this.timer) return;
-    console.log('[StaleJobWatchdog] Started, checking every 60s for jobs stale > 15min');
+    logger.info('[StaleJobWatchdog] Started, checking every 60s for jobs stale > 15min');
     this.timer = setInterval(() => this.check(), CHECK_INTERVAL_MS);
     if (this.timer.unref) {
       this.timer.unref();
@@ -21,7 +22,7 @@ export class StaleJobWatchdog {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      console.log('[StaleJobWatchdog] Stopped');
+      logger.info('[StaleJobWatchdog] Stopped');
     }
   }
 
@@ -40,7 +41,7 @@ export class StaleJobWatchdog {
         );
 
       for (const stale of staleJobs) {
-        console.warn(`[StaleJobWatchdog] Marking stale job ${stale.id} (type=${stale.type}, lastUpdate=${stale.updatedAt.toISOString()})`);
+        logger.warn(`[StaleJobWatchdog] Marking stale job ${stale.id} (type=${stale.type}, lastUpdate=${stale.updatedAt.toISOString()})`);
         await db
           .update(jobs)
           .set({
@@ -54,10 +55,10 @@ export class StaleJobWatchdog {
       }
 
       if (staleJobs.length > 0) {
-        console.log(`[StaleJobWatchdog] Cleaned up ${staleJobs.length} stale job(s)`);
+        logger.info(`[StaleJobWatchdog] Cleaned up ${staleJobs.length} stale job(s)`);
       }
     } catch (error) {
-      console.error('[StaleJobWatchdog] Check failed:', error instanceof Error ? error.message : String(error));
+      logger.error(`[StaleJobWatchdog] Check failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

@@ -29,18 +29,18 @@ interface SearchableSelectProps {
 
 export default function SearchableSelect({
   label,
-  placeholder = 'Select...',
+  placeholder = 'Seç...',
   options,
   value,
   onChange,
   onSearch,
   loading = false,
   error = null,
-  emptyMessage = 'No options available',
+  emptyMessage = 'Secenek yok',
   disabled = false,
   description,
   allowManualInput = true,
-  manualInputPlaceholder = 'Or type manually...',
+  manualInputPlaceholder = 'Veya manuel olarak yazin...',
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -200,8 +200,8 @@ export default function SearchableSelect({
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search..."
-                  aria-label="Search options"
+                  placeholder="Ara..."
+                  aria-label="Secenekleri ara"
                   className="w-full rounded-lg border border-ak-border/50 bg-ak-bg/50 px-3 py-1.5 text-sm text-ak-text-primary placeholder-ak-text-secondary/50 focus:border-ak-primary focus:outline-none focus:ring-1 focus:ring-ak-primary/50"
                   autoFocus
                 />
@@ -211,7 +211,7 @@ export default function SearchableSelect({
               <div className="max-h-60 overflow-y-auto" role="listbox" aria-label={label}>
                 {filteredOptions.length === 0 ? (
                   <div className="px-3 py-4 text-center text-sm text-ak-text-secondary">
-                    {searchQuery ? 'No matches found' : emptyMessage}
+                    {searchQuery ? 'Eslesme bulunamadi' : emptyMessage}
                   </div>
                 ) : (
                   filteredOptions.map(option => (

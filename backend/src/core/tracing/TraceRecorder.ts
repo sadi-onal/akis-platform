@@ -7,6 +7,7 @@
 import { db } from '../../db/client.js';
 import { jobTraces, jobArtifacts, jobAiCalls, type NewJobTrace, type NewJobArtifact, type NewJobAiCall } from '../../db/schema.js';
 import { jobEventBus } from '../events/JobEventBus.js';
+import { logger } from '../../lib/logger.js';
 
 export type TraceEventType = 
   | 'step_start'
@@ -260,7 +261,7 @@ export class TraceRecorder {
       try {
         await this.flush();
       } catch (err) {
-        console.error('[TraceRecorder] Auto-flush failed:', err);
+        logger.error(`[TraceRecorder] Auto-flush failed: ${err}`);
       }
     }
   }
@@ -782,7 +783,7 @@ export class TraceRecorder {
         this.pendingTraces = [];
       } catch (error) {
         errors.push({ stage: 'traces', error });
-        console.error(`[TraceRecorder] Failed to flush ${this.pendingTraces.length} traces for job ${this.jobId}:`, error);
+        logger.error(`[TraceRecorder] Failed to flush ${this.pendingTraces.length} traces for job ${this.jobId}: ${error}`);
       }
     }
 
@@ -793,7 +794,7 @@ export class TraceRecorder {
         this.pendingArtifacts = [];
       } catch (error) {
         errors.push({ stage: 'artifacts', error });
-        console.error(`[TraceRecorder] Failed to flush ${this.pendingArtifacts.length} artifacts for job ${this.jobId}:`, error);
+        logger.error(`[TraceRecorder] Failed to flush ${this.pendingArtifacts.length} artifacts for job ${this.jobId}: ${error}`);
       }
     }
 
@@ -801,11 +802,11 @@ export class TraceRecorder {
     if (this.pendingAiCalls.length > 0) {
       try {
         await db.insert(jobAiCalls).values(this.pendingAiCalls);
-        console.log(`[TraceRecorder] Flushed ${this.pendingAiCalls.length} AI call records for job ${this.jobId}`);
+        logger.debug(`[TraceRecorder] Flushed ${this.pendingAiCalls.length} AI call records for job ${this.jobId}`);
         this.pendingAiCalls = [];
       } catch (error) {
         errors.push({ stage: 'aiCalls', error });
-        console.error(`[TraceRecorder] Failed to flush ${this.pendingAiCalls.length} AI calls for job ${this.jobId}:`, error);
+        logger.error(`[TraceRecorder] Failed to flush ${this.pendingAiCalls.length} AI calls for job ${this.jobId}: ${error}`);
       }
     }
 

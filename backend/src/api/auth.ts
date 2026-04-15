@@ -96,24 +96,34 @@ export async function authRoutes(fastify: FastifyInstance) {
   // DEPRECATED: Single-step signup (kept for backwards compatibility)
   fastify.post('/signup', async (request, reply) => {
     const body = SignupSchema.parse(request.body);
+    const email = body.email.toLowerCase();
+    const passwordHash = await hashPassword(body.password);
 
-    const existing = await db.query.users.findFirst({
-      where: eq(users.email, body.email.toLowerCase()),
+    // Wrap in transaction to prevent TOCTOU race between email-exists check and insert
+    const created = await db.transaction(async (tx) => {
+      const existing = await tx.query.users.findFirst({
+        where: eq(users.email, email),
+      });
+
+      if (existing) {
+        return null;
+      }
+
+      const [inserted] = await tx
+        .insert(users)
+        .values({
+          name: body.name,
+          email,
+          passwordHash,
+        })
+        .returning();
+
+      return inserted;
     });
 
-    if (existing) {
+    if (!created) {
       return sendError(reply, request, 'EMAIL_IN_USE', 'Email in use');
     }
-
-    const passwordHash = await hashPassword(body.password);
-    const [created] = await db
-      .insert(users)
-      .values({
-        name: body.name,
-        email: body.email.toLowerCase(),
-        passwordHash,
-      })
-      .returning();
 
     const jwt = await sign({ sub: created.id, email: created.email, name: created.name });
     reply.setCookie(env.AUTH_COOKIE_NAME, jwt, cookieOpts);

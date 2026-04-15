@@ -6,9 +6,12 @@
 export type PipelineStage =
   | 'scribe_clarifying'
   | 'scribe_generating'
+  | 'critic_reviewing_spec'
   | 'awaiting_approval'
   | 'proto_building'
+  | 'critic_reviewing_code'
   | 'trace_testing'
+  | 'fix_loop_iteration'
   | 'ci_running'
   | 'completed'
   | 'completed_partial'
@@ -144,11 +147,29 @@ export interface PipelineMetrics {
   retryCount: number;
 }
 
+export interface CriticFinding {
+  severity: 'critical' | 'major' | 'minor' | 'info';
+  category: string;
+  description: string;
+  suggestion: string;
+  location?: string;
+}
+
+export interface CriticReviewOutput {
+  approved: boolean;
+  overallScore: number;
+  findings: CriticFinding[];
+  summary: string;
+  reviewType: 'spec_review' | 'code_review';
+  iteration: number;
+}
+
 export interface Pipeline {
   id: string;
   userId: string;
   stage: PipelineStage;
   title?: string;
+  traceEnabled: boolean;
   scribeConversation: ScribeMessageType[];
   scribeOutput?: ScribeOutput;
   approvedSpec?: StructuredSpec;
@@ -157,6 +178,11 @@ export interface Pipeline {
   protoConfig?: { repoName: string; repoVisibility: 'public' | 'private' };
   metrics: PipelineMetrics;
   error?: PipelineError;
+  intermediateState?: {
+    criticSpecOutput?: CriticReviewOutput;
+    criticCodeOutput?: CriticReviewOutput;
+    [key: string]: unknown;
+  };
   createdAt: string;
   updatedAt: string;
 }

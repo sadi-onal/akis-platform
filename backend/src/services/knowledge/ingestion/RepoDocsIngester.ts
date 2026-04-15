@@ -4,6 +4,8 @@ import { eq, and } from 'drizzle-orm';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createHash } from 'crypto';
+import { getEmbeddingService } from '../../embedding/EmbeddingService.js';
+import { logger } from '../../../lib/logger.js';
 
 const CHUNK_SIZE = 1500;
 const CHUNK_OVERLAP = 200;
@@ -128,7 +130,8 @@ export class RepoDocsIngester {
       }));
 
       if (chunkInserts.length > 0) {
-        await db.insert(knowledgeChunks).values(chunkInserts);
+        const inserted = await db.insert(knowledgeChunks).values(chunkInserts).returning({ id: knowledgeChunks.id });
+        await this.embedChunks(inserted.map(r => r.id), chunks);
       }
 
       return {
@@ -139,6 +142,23 @@ export class RepoDocsIngester {
       };
     } catch {
       return null;
+    }
+  }
+
+  /** Generate embeddings for chunks and update DB. Best-effort — does not throw. */
+  private async embedChunks(chunkIds: string[], texts: string[]): Promise<void> {
+    const embeddingService = getEmbeddingService();
+
+    try {
+      const embeddings = await embeddingService.embedBatch(texts);
+      for (let i = 0; i < chunkIds.length; i++) {
+        await db.update(knowledgeChunks)
+          .set({ embedding: embeddings[i] })
+          .where(eq(knowledgeChunks.id, chunkIds[i]));
+      }
+      logger.info(`[RepoDocsIngester] Embedded ${chunkIds.length} chunks`);
+    } catch (err) {
+      logger.warn(`[RepoDocsIngester] Embedding failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

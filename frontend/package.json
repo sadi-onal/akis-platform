@@ -1,7 +1,7 @@
 {
   "name": "akis-frontend",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.6.0",
   "description": "AKIS Platform Frontend — React 19 SPA with chat-centric AI agent interface",
   "author": "Ömer Yasir Önal <omeryasironal@gmail.com>",
   "repository": {
@@ -34,7 +34,7 @@
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.40.0",
-    "@stackblitz/sdk": "^1.11.0",
+    "@codesandbox/sandpack-react": "^2.20.0",
     "@tailwindcss/typography": "^0.5.19",
     "framer-motion": "^12.38.0",
     "react": "^19.1.1",

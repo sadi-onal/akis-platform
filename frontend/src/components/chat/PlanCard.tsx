@@ -118,7 +118,7 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
                       <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-md bg-ak-primary/15 text-[10px] font-semibold text-ak-primary">
                         {i + 1}
                       </span>
-                      <span className="truncate text-xs font-semibold text-ak-text-primary">{f.name}</span>
+                      <span className="text-xs font-semibold leading-snug text-ak-text-primary">{f.name}</span>
                     </div>
                     {f.description && (
                       <p className="mt-1 text-[11px] text-ak-text-tertiary">{f.description}</p>
