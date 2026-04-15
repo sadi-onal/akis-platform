@@ -1,27 +1,38 @@
 /**
  * Engineer Rental Mode Fastify plugin — mounts all /api/engineer routes.
- * Follows the pattern from dev-session.plugin.ts.
+ * Wires TaskDiscoveryService + SessionManager into route handlers.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { createEngineerRoutes } from './engineer.routes.js';
+import { TaskDiscoveryService } from '../core/task-discovery/index.js';
+import { SessionManager, SessionNotFoundError } from '../core/session/index.js';
+import type { AIServiceLike, GitHubServiceLike } from '../core/pipeline-factory.js';
 
 export interface EngineerPluginOptions {
   requireAuth: (request: FastifyRequest) => Promise<{ id: string }>;
   devUserId?: string;
-  // TODO: Inject TaskDiscoveryService and SessionManager when available
+  aiService: AIServiceLike;
+  githubService: GitHubServiceLike;
 }
 
 export async function engineerPlugin(
   fastify: FastifyInstance,
   opts: EngineerPluginOptions,
 ) {
-  const { requireAuth, devUserId } = opts;
+  const { requireAuth, devUserId, aiService, githubService } = opts;
   const isDevMode = process.env.DEV_MODE === 'true';
+
+  // Create real service instances
+  const taskDiscovery = new TaskDiscoveryService({ aiService });
+  const sessionManager = new SessionManager();
 
   const routes = createEngineerRoutes({
     getUserId: (request: unknown) => {
       return ((request as Record<string, unknown>).__engineerUserId as string) ?? '';
     },
+    taskDiscovery,
+    sessionManager,
+    githubService,
   });
 
   // Auth preHandler — dev mode bypass or real auth
@@ -43,54 +54,50 @@ export async function engineerPlugin(
         requestId: request.id,
       });
     }
+    if (error instanceof SessionNotFoundError) {
+      return reply.code(404).send({
+        error: { code: 'SESSION_NOT_FOUND', message: error.message },
+        requestId: request.id,
+      });
+    }
     // Delegate to parent error handler
     throw error;
   });
 
   // ─── Task Discovery ────────────────────────────────
-  // POST /api/engineer/discover
   fastify.post('/discover', { preHandler: authPreHandler }, async (request) => {
     return routes.discover(request);
   });
 
   // ─── Session CRUD ──────────────────────────────────
-  // POST /api/engineer/session
   fastify.post('/session', { preHandler: authPreHandler }, async (request) => {
-    const result = await routes.createSession(request);
-    return result;
+    return routes.createSession(request);
   });
 
-  // POST /api/engineer/session/:id/start
   fastify.post('/session/:id/start', { preHandler: authPreHandler }, async (request) => {
     return routes.startSession(request);
   });
 
-  // GET /api/engineer/session/:id
   fastify.get('/session/:id', { preHandler: authPreHandler }, async (request) => {
     return routes.getSession(request);
   });
 
-  // GET /api/engineer/session/:id/progress
   fastify.get('/session/:id/progress', { preHandler: authPreHandler }, async (request) => {
     return routes.getProgress(request);
   });
 
-  // POST /api/engineer/session/:id/pause
   fastify.post('/session/:id/pause', { preHandler: authPreHandler }, async (request) => {
     return routes.pauseSession(request);
   });
 
-  // POST /api/engineer/session/:id/resume
   fastify.post('/session/:id/resume', { preHandler: authPreHandler }, async (request) => {
     return routes.resumeSession(request);
   });
 
-  // POST /api/engineer/session/:id/cancel
   fastify.post('/session/:id/cancel', { preHandler: authPreHandler }, async (request) => {
     return routes.cancelSession(request);
   });
 
-  // GET /api/engineer/session/:id/report
   fastify.get('/session/:id/report', { preHandler: authPreHandler }, async (request) => {
     return routes.getReport(request);
   });

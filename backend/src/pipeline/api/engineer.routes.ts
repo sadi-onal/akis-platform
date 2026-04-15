@@ -1,21 +1,30 @@
 /**
- * Engineer Rental Mode routes — stub implementations.
+ * Engineer Rental Mode routes — wired to real TaskDiscoveryService + SessionManager.
  *
  * Routes:
- *   POST   /api/engineer/discover         → Discover tasks in a repo
- *   POST   /api/engineer/session          → Create engineer session
+ *   POST   /api/engineer/discover            → Discover tasks in a repo
+ *   POST   /api/engineer/session             → Create engineer session
  *   POST   /api/engineer/session/:id/start   → Start session timer
  *   GET    /api/engineer/session/:id         → Get session status
  *   GET    /api/engineer/session/:id/progress → Get current progress
- *   POST   /api/engineer/session/:id/pause    → Pause session
- *   POST   /api/engineer/session/:id/resume   → Resume session
- *   POST   /api/engineer/session/:id/cancel   → Cancel session
- *   GET    /api/engineer/session/:id/report   → Final session report
+ *   POST   /api/engineer/session/:id/pause   → Pause session
+ *   POST   /api/engineer/session/:id/resume  → Resume session
+ *   POST   /api/engineer/session/:id/cancel  → Cancel session
+ *   GET    /api/engineer/session/:id/report  → Final session report
  */
 
-import { randomUUID } from 'node:crypto';
+import type { TaskDiscoveryService } from '../core/task-discovery/index.js';
+import type { DiscoveredTask as RealDiscoveredTask } from '../core/task-discovery/index.js';
+import {
+  SessionManager,
+  SessionNotFoundError,
+  SessionValidationError,
+  SessionStateError,
+} from '../core/session/index.js';
+import type { SelectedTask, EngineerSession as RealSession } from '../core/session/index.js';
+import type { GitHubServiceLike } from '../core/pipeline-factory.js';
 
-// ─── Request/Response Types ──────────────────────────────
+// ─── Request Types ──────────────────────────────────
 
 export interface DiscoverBody {
   owner: string;
@@ -30,7 +39,9 @@ export interface CreateSessionBody {
   timeBudgetMinutes: number;
 }
 
-export interface DiscoveredTask {
+// ─── Response Types (API contract for frontend) ─────
+
+export interface DiscoveredTaskResponse {
   id: string;
   title: string;
   description: string;
@@ -38,289 +49,311 @@ export interface DiscoveredTask {
   estimatedMinutes: number;
   complexity: 1 | 2 | 3;
   affectedFiles: string[];
+  priority: string;
 }
 
-export type SessionStatus =
-  | 'created'
-  | 'running'
-  | 'paused'
-  | 'completed'
-  | 'cancelled';
+export type SessionStatusResponse =
+  | 'created' | 'running' | 'paused' | 'completed' | 'cancelled' | 'expired';
 
-export interface EngineerSession {
+export interface SessionTaskResponse {
+  id: string;
+  title: string;
+  category: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'skipped';
+  criticScore: number | null;
+  timeSpentSeconds: number;
+}
+
+export interface SessionResponse {
   id: string;
   owner: string;
   repo: string;
-  status: SessionStatus;
-  tasks: SessionTask[];
+  status: SessionStatusResponse;
+  tasks: SessionTaskResponse[];
   timeBudgetMinutes: number;
   timeRemainingSeconds: number;
   startedAt: string | null;
   createdAt: string;
 }
 
-export interface SessionTask {
-  id: string;
-  title: string;
-  category: DiscoveredTask['category'];
-  status: 'queued' | 'in_progress' | 'completed' | 'failed';
-  criticScore: number | null;
-  timeSpentSeconds: number;
-}
-
-export interface SessionProgress {
+export interface SessionProgressResponse {
   sessionId: string;
-  status: SessionStatus;
-  currentTask: SessionTask | null;
-  completedTasks: SessionTask[];
-  queuedTasks: SessionTask[];
+  status: SessionStatusResponse;
+  currentTask: SessionTaskResponse | null;
+  completedTasks: SessionTaskResponse[];
+  queuedTasks: SessionTaskResponse[];
   timeRemainingSeconds: number;
   elapsedSeconds: number;
 }
 
-export interface SessionReport {
+export interface SessionReportResponse {
   sessionId: string;
   owner: string;
   repo: string;
-  status: 'completed' | 'cancelled';
-  tasks: Array<SessionTask & { description: string }>;
+  status: 'completed' | 'cancelled' | 'expired';
+  tasks: Array<SessionTaskResponse & { description: string }>;
   totalTimeSeconds: number;
   totalCost: number;
   prUrl: string | null;
   completedAt: string;
 }
 
-// ─── Route Deps ──────────────────────────────────────────
+// ─── Route Dependencies ─────────────────────────────
 
 export interface EngineerRouteDeps {
   getUserId: (request: unknown) => string;
-  // TODO: Wire TaskDiscoveryService when available
-  // TODO: Wire SessionManager when available
+  taskDiscovery: TaskDiscoveryService;
+  sessionManager: SessionManager;
+  githubService: GitHubServiceLike;
 }
 
-// ─── Mock Data ───────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────
 
-const MOCK_TASKS: DiscoveredTask[] = [
-  {
-    id: 'task-001',
-    title: 'Hata: Login formu bos email kabul ediyor',
-    description: 'Login formunda email alani bos birakildiginda form submit ediliyor. Frontend validasyonu eksik.',
-    category: 'bug',
-    estimatedMinutes: 15,
-    complexity: 1,
-    affectedFiles: ['src/pages/auth/LoginEmail.tsx', 'src/utils/validation.ts'],
-  },
-  {
-    id: 'task-002',
-    title: 'Ozellik: Dark mode toggle eklenmesi',
-    description: 'Kullanici ayarlarindan dark/light mode secenegi. Tailwind class-based dark mode kullanilacak.',
-    category: 'feature',
-    estimatedMinutes: 45,
-    complexity: 2,
-    affectedFiles: ['src/App.tsx', 'src/components/AppShell.tsx', 'src/contexts/ThemeContext.tsx'],
-  },
-  {
-    id: 'task-003',
-    title: 'Dokumantasyon: API endpoint\'leri icin JSDoc eklenmesi',
-    description: 'Backend route handler\'lari icin eksik JSDoc yorumlari eklenmeli.',
-    category: 'docs',
-    estimatedMinutes: 20,
-    complexity: 1,
-    affectedFiles: ['src/api/auth.ts', 'src/api/github.ts', 'src/api/settings/index.ts'],
-  },
-  {
-    id: 'task-004',
-    title: 'Guvenlik: Rate limiting eksik endpoint\'ler',
-    description: 'Bazi API endpoint\'lerinde rate limiting uygulanmamis. Brute-force saldiri riski.',
-    category: 'security',
-    estimatedMinutes: 30,
-    complexity: 2,
-    affectedFiles: ['src/api/auth.ts', 'src/middleware/rateLimiter.ts'],
-  },
-  {
-    id: 'task-005',
-    title: 'Test: Settings sayfasi icin unit testler',
-    description: 'SettingsPage component\'i icin birim testleri yazilmali. Mevcut coverage %0.',
-    category: 'test',
-    estimatedMinutes: 35,
-    complexity: 2,
-    affectedFiles: ['src/pages/settings/SettingsPage.test.tsx'],
-  },
-  {
-    id: 'task-006',
-    title: 'Refactor: HttpClient retry mantigi basitlestirme',
-    description: 'HttpClient\'taki retry mantigi karmisik — ayri bir RetryPolicy sinifina cikarilmali.',
-    category: 'refactor',
-    estimatedMinutes: 25,
-    complexity: 3,
-    affectedFiles: ['src/services/api/HttpClient.ts', 'src/services/api/RetryPolicy.ts'],
-  },
-  {
-    id: 'task-007',
-    title: 'Hata: Mobil gorunumde sidebar tasma',
-    description: 'Kucuk ekranlarda sidebar icerigi container disina tasiyor. Responsive duzeltme gerekli.',
-    category: 'bug',
-    estimatedMinutes: 20,
-    complexity: 1,
-    affectedFiles: ['src/components/Sidebar.tsx', 'src/styles/sidebar.css'],
-  },
-];
+function complexityToNumber(c: string): 1 | 2 | 3 {
+  if (c === 'simple') return 1;
+  if (c === 'complex') return 3;
+  return 2; // 'moderate' or default
+}
 
-// In-memory session store (stub — will be replaced by DB)
-const sessions = new Map<string, EngineerSession>();
+function mapDiscoveredTask(t: RealDiscoveredTask): DiscoveredTaskResponse {
+  return {
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    category: t.category,
+    estimatedMinutes: t.estimatedMinutes,
+    complexity: complexityToNumber(t.complexity),
+    affectedFiles: t.affectedFiles,
+    priority: t.priority,
+  };
+}
 
-// ─── Route Creators ──────────────────────────────────────
+// Keep a local cache of discovered tasks per user for session creation
+const discoveredTasksCache = new Map<string, RealDiscoveredTask[]>();
+
+function mapSessionToResponse(session: RealSession, timeRemainingSeconds: number): SessionResponse {
+  return {
+    id: session.id,
+    owner: session.owner,
+    repo: session.repo,
+    status: session.status,
+    tasks: session.selectedTasks.map((t) => ({
+      id: t.taskId,
+      title: t.title,
+      category: t.category,
+      status: t.status === 'running' ? 'running' as const : t.status,
+      criticScore: session.completedTasks.find((c) => c.taskId === t.taskId)?.criticScore ?? null,
+      timeSpentSeconds: (() => {
+        const completed = session.completedTasks.find((c) => c.taskId === t.taskId);
+        if (!completed) return 0;
+        return Math.floor((completed.completedAt.getTime() - completed.startedAt.getTime()) / 1000);
+      })(),
+    })),
+    timeBudgetMinutes: session.timeBudgetMinutes,
+    timeRemainingSeconds: Math.floor(timeRemainingSeconds * 60),
+    startedAt: session.startedAt?.toISOString() ?? null,
+    createdAt: session.startedAt?.toISOString() ?? new Date().toISOString(),
+  };
+}
+
+function httpError(message: string, statusCode: number): Error {
+  return Object.assign(new Error(message), { statusCode });
+}
+
+// ─── Route Creators ─────────────────────────────────
 
 export function createEngineerRoutes(deps: EngineerRouteDeps) {
-  const { getUserId } = deps;
+  const { getUserId, taskDiscovery, sessionManager, githubService } = deps;
 
   return {
     /** POST /discover — Analyze repo and discover tasks */
     async discover(request: unknown) {
-      getUserId(request); // auth check
+      const userId = getUserId(request);
       const body = (request as { body: DiscoverBody }).body;
 
       if (!body.owner || !body.repo) {
-        throw Object.assign(new Error('owner ve repo alanlari zorunludur'), { statusCode: 400 });
+        throw httpError('owner ve repo alanlari zorunludur', 400);
       }
 
-      // TODO: Replace with real TaskDiscoveryService.discover(owner, repo, hint)
-      // For now return mock tasks, optionally filtered by hint
-      let tasks = [...MOCK_TASKS];
-      if (body.hint) {
-        const hint = body.hint.toLowerCase();
-        tasks = tasks.filter(
-          (t) =>
-            t.title.toLowerCase().includes(hint) ||
-            t.description.toLowerCase().includes(hint) ||
-            t.category === hint,
+      // Fetch repo file listing via GitHub
+      let files: Array<{ path: string; content?: string }> = [];
+      let readme: string | undefined;
+      let packageJson: Record<string, unknown> | undefined;
+
+      try {
+        const filePaths = await githubService.listFiles(body.owner, body.repo, 'main');
+        files = filePaths.map((p) => ({ path: p }));
+
+        // Fetch README if it exists
+        const readmePath = filePaths.find((p) =>
+          p.toLowerCase() === 'readme.md' || p.toLowerCase() === 'readme.txt',
         );
+        if (readmePath) {
+          try {
+            readme = await githubService.getFileContent(body.owner, body.repo, 'main', readmePath);
+          } catch { /* ignore */ }
+        }
+
+        // Fetch package.json if it exists
+        const pkgPath = filePaths.find((p) => p === 'package.json');
+        if (pkgPath) {
+          try {
+            const raw = await githubService.getFileContent(body.owner, body.repo, 'main', pkgPath);
+            packageJson = JSON.parse(raw) as Record<string, unknown>;
+          } catch { /* ignore */ }
+        }
+      } catch {
+        // If GitHub is not configured or fails, use empty context
+        files = [];
       }
+
+      const result = await taskDiscovery.discoverTasks({
+        repoContext: { owner: body.owner, repo: body.repo, files, readme, packageJson },
+        userHint: body.hint,
+        maxTasks: 10,
+      });
+
+      // Cache tasks for session creation
+      const cacheKey = `${userId}:${body.owner}/${body.repo}`;
+      discoveredTasksCache.set(cacheKey, result.tasks);
 
       return {
         owner: body.owner,
         repo: body.repo,
-        tasks,
+        tasks: result.tasks.map(mapDiscoveredTask),
+        repoHealth: result.repoHealth,
+        suggestedPlan: result.suggestedPlan,
         analyzedAt: new Date().toISOString(),
       };
     },
 
     /** POST /session — Create a new engineer session */
     async createSession(request: unknown) {
-      getUserId(request);
+      const userId = getUserId(request);
       const body = (request as { body: CreateSessionBody }).body;
 
       if (!body.owner || !body.repo) {
-        throw Object.assign(new Error('owner ve repo alanlari zorunludur'), { statusCode: 400 });
+        throw httpError('owner ve repo alanlari zorunludur', 400);
       }
       if (!body.selectedTaskIds?.length) {
-        throw Object.assign(new Error('En az bir gorev secilmelidir'), { statusCode: 400 });
+        throw httpError('En az bir gorev secilmelidir', 400);
       }
       if (body.selectedTaskIds.length > 5) {
-        throw Object.assign(new Error('En fazla 5 gorev secilebilir'), { statusCode: 400 });
-      }
-      if (!body.timeBudgetMinutes || body.timeBudgetMinutes < 1) {
-        throw Object.assign(new Error('Zaman butcesi en az 1 dakika olmalidir'), { statusCode: 400 });
+        throw httpError('En fazla 5 gorev secilebilir', 400);
       }
 
-      // TODO: Replace with real SessionManager.create(...)
-      const sessionId = randomUUID();
-      const selectedTasks: SessionTask[] = body.selectedTaskIds.map((taskId) => {
-        const mock = MOCK_TASKS.find((t) => t.id === taskId);
+      // Look up discovered tasks from cache
+      const cacheKey = `${userId}:${body.owner}/${body.repo}`;
+      const cachedTasks = discoveredTasksCache.get(cacheKey) ?? [];
+
+      const selectedTasks: SelectedTask[] = body.selectedTaskIds.map((taskId) => {
+        const discovered = cachedTasks.find((t) => t.id === taskId);
         return {
-          id: taskId,
-          title: mock?.title ?? `Gorev ${taskId}`,
-          category: mock?.category ?? 'feature',
+          taskId,
+          title: discovered?.title ?? `Gorev ${taskId}`,
+          category: discovered?.category ?? 'feature',
+          estimatedMinutes: discovered?.estimatedMinutes ?? 15,
           status: 'queued' as const,
-          criticScore: null,
-          timeSpentSeconds: 0,
         };
       });
 
-      const session: EngineerSession = {
-        id: sessionId,
-        owner: body.owner,
-        repo: body.repo,
-        status: 'created',
-        tasks: selectedTasks,
-        timeBudgetMinutes: body.timeBudgetMinutes,
-        timeRemainingSeconds: body.timeBudgetMinutes * 60,
-        startedAt: null,
-        createdAt: new Date().toISOString(),
-      };
+      try {
+        const session = sessionManager.createSession({
+          userId,
+          owner: body.owner,
+          repo: body.repo,
+          tasks: selectedTasks,
+          timeBudgetMinutes: body.timeBudgetMinutes,
+        });
 
-      sessions.set(sessionId, session);
-      return { session };
+        const timeInfo = sessionManager.getTimeRemaining(session.id);
+        return { session: mapSessionToResponse(session, timeInfo.minutes) };
+      } catch (err) {
+        if (err instanceof SessionValidationError) {
+          throw httpError(err.message, 400);
+        }
+        throw err;
+      }
     },
 
     /** POST /session/:id/start — Start session timer */
     async startSession(request: unknown) {
       getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
-      const session = sessions.get(id);
 
-      if (!session) {
-        throw Object.assign(new Error('Oturum bulunamadi'), { statusCode: 404 });
+      try {
+        const session = sessionManager.startSession(id);
+        const timeInfo = sessionManager.getTimeRemaining(id);
+        return { session: mapSessionToResponse(session, timeInfo.minutes) };
+      } catch (err) {
+        if (err instanceof SessionNotFoundError) throw httpError('Oturum bulunamadi', 404);
+        if (err instanceof SessionStateError) throw httpError(err.message, 400);
+        throw err;
       }
-      if (session.status !== 'created' && session.status !== 'paused') {
-        throw Object.assign(new Error('Oturum baslatilabilir durumda degil'), { statusCode: 400 });
-      }
-
-      // TODO: Replace with real SessionManager.start(id) — starts timer + agent work
-      session.status = 'running';
-      session.startedAt = session.startedAt ?? new Date().toISOString();
-
-      // Mark the first queued task as in_progress
-      const nextTask = session.tasks.find((t) => t.status === 'queued');
-      if (nextTask) {
-        nextTask.status = 'in_progress';
-      }
-
-      return { session };
     },
 
     /** GET /session/:id — Get session status */
     async getSession(request: unknown) {
       getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
-      const session = sessions.get(id);
 
-      if (!session) {
-        throw Object.assign(new Error('Oturum bulunamadi'), { statusCode: 404 });
-      }
+      const session = sessionManager.getSession(id);
+      if (!session) throw httpError('Oturum bulunamadi', 404);
 
-      return { session };
+      const timeInfo = sessionManager.getTimeRemaining(id);
+      return { session: mapSessionToResponse(session, timeInfo.minutes) };
     },
 
     /** GET /session/:id/progress — Current task + time remaining */
     async getProgress(request: unknown) {
       getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
-      const session = sessions.get(id);
 
-      if (!session) {
-        throw Object.assign(new Error('Oturum bulunamadi'), { statusCode: 404 });
-      }
+      const session = sessionManager.getSession(id);
+      if (!session) throw httpError('Oturum bulunamadi', 404);
 
-      // TODO: Replace with real SessionManager.getProgress(id) — computes from running timer
-      const currentTask = session.tasks.find((t) => t.status === 'in_progress') ?? null;
-      const completedTasks = session.tasks.filter((t) => t.status === 'completed');
-      const queuedTasks = session.tasks.filter((t) => t.status === 'queued');
+      const currentTask = sessionManager.getCurrentTask(id);
+      const timeInfo = sessionManager.getTimeRemaining(id);
 
-      // Simulate time passage for demo
-      const elapsedSeconds = session.startedAt
-        ? Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000)
-        : 0;
-      const timeRemainingSeconds = Math.max(0, session.timeBudgetMinutes * 60 - elapsedSeconds);
+      const completedTasks = session.selectedTasks.filter((t) => t.status === 'completed');
+      const queuedTasks = session.selectedTasks.filter((t) => t.status === 'queued');
 
-      const progress: SessionProgress = {
+      const elapsedMinutes = session.elapsedMinutes;
+      const timeRemainingSeconds = Math.floor(timeInfo.minutes * 60);
+
+      const progress: SessionProgressResponse = {
         sessionId: id,
         status: session.status,
-        currentTask,
-        completedTasks,
-        queuedTasks,
+        currentTask: currentTask ? {
+          id: currentTask.taskId,
+          title: currentTask.title,
+          category: currentTask.category,
+          status: 'running',
+          criticScore: null,
+          timeSpentSeconds: 0,
+        } : null,
+        completedTasks: completedTasks.map((t) => ({
+          id: t.taskId,
+          title: t.title,
+          category: t.category,
+          status: 'completed' as const,
+          criticScore: session.completedTasks.find((c) => c.taskId === t.taskId)?.criticScore ?? null,
+          timeSpentSeconds: (() => {
+            const c = session.completedTasks.find((ct) => ct.taskId === t.taskId);
+            if (!c) return 0;
+            return Math.floor((c.completedAt.getTime() - c.startedAt.getTime()) / 1000);
+          })(),
+        })),
+        queuedTasks: queuedTasks.map((t) => ({
+          id: t.taskId,
+          title: t.title,
+          category: t.category,
+          status: 'queued' as const,
+          criticScore: null,
+          timeSpentSeconds: 0,
+        })),
         timeRemainingSeconds,
-        elapsedSeconds,
+        elapsedSeconds: Math.floor(elapsedMinutes * 60),
       };
 
       return { progress };
@@ -330,101 +363,90 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
     async pauseSession(request: unknown) {
       getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
-      const session = sessions.get(id);
 
-      if (!session) {
-        throw Object.assign(new Error('Oturum bulunamadi'), { statusCode: 404 });
+      try {
+        const session = sessionManager.pauseSession(id);
+        const timeInfo = sessionManager.getTimeRemaining(id);
+        return { session: mapSessionToResponse(session, timeInfo.minutes) };
+      } catch (err) {
+        if (err instanceof SessionNotFoundError) throw httpError('Oturum bulunamadi', 404);
+        if (err instanceof SessionStateError) throw httpError(err.message, 400);
+        throw err;
       }
-      if (session.status !== 'running') {
-        throw Object.assign(new Error('Sadece calisan oturumlar duraklatilabilir'), { statusCode: 400 });
-      }
-
-      // TODO: Replace with real SessionManager.pause(id)
-      session.status = 'paused';
-      return { session };
     },
 
     /** POST /session/:id/resume — Resume session */
     async resumeSession(request: unknown) {
       getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
-      const session = sessions.get(id);
 
-      if (!session) {
-        throw Object.assign(new Error('Oturum bulunamadi'), { statusCode: 404 });
+      try {
+        const session = sessionManager.resumeSession(id);
+        const timeInfo = sessionManager.getTimeRemaining(id);
+        return { session: mapSessionToResponse(session, timeInfo.minutes) };
+      } catch (err) {
+        if (err instanceof SessionNotFoundError) throw httpError('Oturum bulunamadi', 404);
+        if (err instanceof SessionStateError) throw httpError(err.message, 400);
+        throw err;
       }
-      if (session.status !== 'paused') {
-        throw Object.assign(new Error('Sadece duraklatilmis oturumlar devam ettirilebilir'), { statusCode: 400 });
-      }
-
-      // TODO: Replace with real SessionManager.resume(id)
-      session.status = 'running';
-      return { session };
     },
 
     /** POST /session/:id/cancel — Cancel session */
     async cancelSession(request: unknown) {
       getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
-      const session = sessions.get(id);
 
-      if (!session) {
-        throw Object.assign(new Error('Oturum bulunamadi'), { statusCode: 404 });
+      try {
+        const summary = sessionManager.endSession(id);
+        return {
+          session: {
+            id: summary.sessionId,
+            status: summary.status,
+            totalTasks: summary.totalTasks,
+            completedTasks: summary.completedTasks,
+            skippedTasks: summary.skippedTasks,
+            totalTimeMinutes: Math.round(summary.totalTimeMinutes * 100) / 100,
+            totalCost: Math.round(summary.totalCost * 100) / 100,
+          },
+        };
+      } catch (err) {
+        if (err instanceof SessionNotFoundError) throw httpError('Oturum bulunamadi', 404);
+        throw err;
       }
-      if (session.status === 'completed' || session.status === 'cancelled') {
-        throw Object.assign(new Error('Tamamlanmis veya iptal edilmis oturumlar tekrar iptal edilemez'), { statusCode: 400 });
-      }
-
-      // TODO: Replace with real SessionManager.cancel(id)
-      session.status = 'cancelled';
-      return { session };
     },
 
     /** GET /session/:id/report — Final session report */
     async getReport(request: unknown) {
       getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
-      const session = sessions.get(id);
 
-      if (!session) {
-        throw Object.assign(new Error('Oturum bulunamadi'), { statusCode: 404 });
-      }
+      const session = sessionManager.getSession(id);
+      if (!session) throw httpError('Oturum bulunamadi', 404);
 
-      // TODO: Replace with real SessionManager.getReport(id) — generates from DB records
-      // For now, simulate a completed report with mock critic scores
-      const tasks = session.tasks.map((t) => {
-        const mock = MOCK_TASKS.find((m) => m.id === t.id);
-        return {
-          ...t,
-          description: mock?.description ?? '',
-          status: session.status === 'completed' ? ('completed' as const) : t.status,
-          criticScore: session.status === 'completed' ? Math.floor(70 + Math.random() * 30) : t.criticScore,
-          timeSpentSeconds: session.status === 'completed'
-            ? (mock?.estimatedMinutes ?? 10) * 60
-            : t.timeSpentSeconds,
-        };
-      });
+      const budget = sessionManager.checkBudget(id);
 
-      const totalTimeSeconds = tasks.reduce((sum, t) => sum + t.timeSpentSeconds, 0);
-      const costPerMinute = session.timeBudgetMinutes <= 30
-        ? 0.50 / 30
-        : session.timeBudgetMinutes <= 60
-          ? 1.00 / 60
-          : session.timeBudgetMinutes <= 120
-            ? 2.00 / 120
-            : 3.00 / 180;
-
-      const report: SessionReport = {
+      const report: SessionReportResponse = {
         sessionId: id,
         owner: session.owner,
         repo: session.repo,
-        status: session.status === 'cancelled' ? 'cancelled' : 'completed',
-        tasks,
-        totalTimeSeconds,
-        totalCost: Math.round(session.timeBudgetMinutes * costPerMinute * 100) / 100,
-        prUrl: session.status === 'completed'
-          ? `https://github.com/${session.owner}/${session.repo}/pull/42`
-          : null,
+        status: session.status === 'expired' ? 'completed' : (session.status as 'completed' | 'cancelled'),
+        tasks: session.selectedTasks.map((t) => {
+          const completed = session.completedTasks.find((c) => c.taskId === t.taskId);
+          return {
+            id: t.taskId,
+            title: t.title,
+            category: t.category,
+            description: '',
+            status: t.status,
+            criticScore: completed?.criticScore ?? null,
+            timeSpentSeconds: completed
+              ? Math.floor((completed.completedAt.getTime() - completed.startedAt.getTime()) / 1000)
+              : 0,
+          };
+        }),
+        totalTimeSeconds: Math.floor(session.elapsedMinutes * 60),
+        totalCost: Math.round(budget.actualCost * 100) / 100,
+        prUrl: session.prUrl ?? null,
         completedAt: new Date().toISOString(),
       };
 

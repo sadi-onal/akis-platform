@@ -403,7 +403,12 @@ export async function buildApp() {
 
   // Engineer Rental Mode routes
   await app.register(
-    async (instance) => engineerPlugin(instance, { requireAuth, devUserId }),
+    async (instance) => engineerPlugin(instance, {
+      requireAuth,
+      devUserId,
+      aiService,
+      githubService: pipelineGitHubService,
+    }),
     { prefix: '/api/engineer' },
   );
 
