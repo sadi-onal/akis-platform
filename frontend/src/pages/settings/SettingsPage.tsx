@@ -1414,8 +1414,14 @@ function JiraSection() {
     setLoading(true);
     try {
       const [atlRes, jiraRes] = await Promise.all([
-        fetch('/api/integrations/atlassian/status', { credentials: 'include' }).catch(() => null),
-        fetch('/api/settings/integrations/jira/status', { credentials: 'include' }).catch(() => null),
+        fetch('/api/integrations/atlassian/status', { credentials: 'include' }).catch((err) => {
+          if (import.meta.env.DEV) console.warn('[Settings] Atlassian status fetch failed:', err);
+          return null;
+        }),
+        fetch('/api/settings/integrations/jira/status', { credentials: 'include' }).catch((err) => {
+          if (import.meta.env.DEV) console.warn('[Settings] Jira status fetch failed:', err);
+          return null;
+        }),
       ]);
       if (atlRes?.ok) setAtlStatus(await atlRes.json());
       if (jiraRes?.ok) {
@@ -1492,7 +1498,9 @@ function JiraSection() {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ siteUrl: trimmedUrl, email: 'user@jira', token: trimmedToken }),
-        }).catch(() => {});
+        }).catch((err) => {
+          if (import.meta.env.DEV) console.warn('[Settings] Jira connect save failed:', err);
+        });
         setPatStatus('connected');
       } else {
         setPatStatus('error');

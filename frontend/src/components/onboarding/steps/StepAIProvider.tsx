@@ -25,7 +25,9 @@ export function StepAIProvider({ onSave, onSkip }: StepAIProviderProps) {
       .then(data => {
         if (data?.activeProvider) setActiveProvider(data.activeProvider);
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (import.meta.env.DEV) console.warn('[StepAIProvider] AI key status check failed:', err);
+      });
   }, []);
 
   const handleSave = async () => {

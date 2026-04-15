@@ -53,7 +53,7 @@ describe('ErrorBoundary', () => {
         <ThrowingChild />
       </ErrorBoundary>
     );
-    expect(screen.getByText('Sayfayi Yenile')).toBeInTheDocument();
+    expect(screen.getByText('Sayfayı Yenile')).toBeInTheDocument();
   });
 
   it('shows Back to Dashboard link by default', () => {
@@ -62,7 +62,7 @@ describe('ErrorBoundary', () => {
         <ThrowingChild />
       </ErrorBoundary>
     );
-    const link = screen.getByText(/Dashboard sayfasina don/);
+    const link = screen.getByText(/Dashboard sayfasına dön/);
     expect(link.closest('a')?.getAttribute('href')).toBe('/dashboard');
   });
 
@@ -72,7 +72,7 @@ describe('ErrorBoundary', () => {
         <ThrowingChild />
       </ErrorBoundary>
     );
-    const link = screen.getByText(/Jobs sayfasina don/);
+    const link = screen.getByText(/Jobs sayfasına dön/);
     expect(link.closest('a')?.getAttribute('href')).toBe('/dashboard/jobs');
   });
 });

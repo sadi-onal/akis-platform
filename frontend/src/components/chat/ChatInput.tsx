@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type DragEvent, type ChangeEvent } from 'react';
 import { cn } from '../../utils/cn';
+import { toast } from '../ui/Toast';
 
 export interface ChatAttachment {
   id: string;
@@ -54,10 +55,24 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
   const addFiles = useCallback((files: FileList | File[]) => {
     const fileArray = Array.from(files);
     const newAttachments: ChatAttachment[] = [];
+    const acceptedExtensions = ACCEPT_TYPES.split(',');
 
     for (const file of fileArray) {
-      if (attachments.length + newAttachments.length >= MAX_FILES) break;
-      if (file.size > MAX_FILE_SIZE) continue;
+      if (attachments.length + newAttachments.length >= MAX_FILES) {
+        toast('Maksimum 5 dosya yüklenebilir.', 'error');
+        break;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        toast(`Dosya çok büyük: ${file.name}. Maksimum dosya boyutu 10MB.`, 'error');
+        continue;
+      }
+
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      const isAccepted = file.type.startsWith('image/') || acceptedExtensions.includes(file.type) || acceptedExtensions.includes(ext);
+      if (!isAccepted) {
+        toast(`Desteklenmeyen dosya türü: ${file.name}`, 'error');
+        continue;
+      }
 
       const isImage = file.type.startsWith('image/');
       const attachment: ChatAttachment = {
@@ -194,7 +209,7 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
                 <button
                   onClick={() => removeAttachment(att.id)}
                   className="ml-0.5 rounded-full p-0.5 text-ak-text-tertiary opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
-                  aria-label="Eki kaldır"
+                  aria-label={`${att.file.name} ekini kaldır`}
                 >
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -235,6 +250,7 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled || attachments.length >= MAX_FILES}
               title="Dosya ekle"
+              aria-label="Dosya ekle"
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-lg',
                 'text-ak-text-tertiary hover:bg-ak-surface-2 hover:text-ak-text-secondary',
@@ -271,6 +287,7 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
               }}
               disabled={disabled || attachments.length >= MAX_FILES}
               title="Resim ekle"
+              aria-label="Resim ekle"
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-lg',
                 'text-ak-text-tertiary hover:bg-ak-surface-2 hover:text-ak-text-secondary',

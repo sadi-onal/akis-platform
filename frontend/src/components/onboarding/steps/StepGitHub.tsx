@@ -23,7 +23,9 @@ export function StepGitHub({ onConnect, onSkip }: StepGitHubProps) {
           setUsername(data.username);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (import.meta.env.DEV) console.warn('[StepGitHub] GitHub status check failed:', err);
+      });
   }, []);
 
   const handlePATConnect = async () => {

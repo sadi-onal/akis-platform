@@ -162,6 +162,7 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
               <button
                 onClick={() => navigator.clipboard.writeText(message.content)}
                 title="Kopyala"
+                aria-label="Mesajı kopyala"
                 className="ml-auto rounded p-1 text-ak-text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ak-surface-2 hover:text-ak-primary"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -472,6 +473,7 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
                 <code className="flex-1 text-xs font-mono text-ak-text-secondary break-all">{message.cloneCommand}</code>
                 <button
                   onClick={() => navigator.clipboard.writeText(message.cloneCommand)}
+                  aria-label="Komutu kopyala"
                   className="flex-shrink-0 rounded-md border border-ak-border px-2 py-1 text-xs text-ak-text-tertiary hover:text-ak-text-secondary hover:bg-ak-surface transition-colors"
                 >
                   📋 Kopyala

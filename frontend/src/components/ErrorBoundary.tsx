@@ -93,13 +93,13 @@ export class ErrorBoundary extends Component<Props, State> {
                 to={fallbackPath}
                 className="inline-flex items-center justify-center rounded-lg border border-ak-border bg-ak-surface px-4 py-2 text-sm font-medium text-ak-text-primary transition-colors hover:bg-ak-surface-3"
               >
-                ← {fallbackLabel} sayfasina don
+                ← {fallbackLabel} sayfasına dön
               </Link>
               <button
                 onClick={this.handleReload}
                 className="inline-flex items-center justify-center rounded-lg bg-ak-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ak-primary/80"
               >
-                Sayfayi Yenile
+                Sayfayı Yenile
               </button>
             </div>
 
@@ -108,9 +108,10 @@ export class ErrorBoundary extends Component<Props, State> {
               <div className="mt-6 border-t border-ak-border pt-4">
                 <button
                   onClick={this.toggleDetails}
+                  aria-expanded={this.state.showDetails}
                   className="text-xs text-ak-text-tertiary hover:text-ak-text-secondary transition-colors"
                 >
-                  {this.state.showDetails ? '▼' : '▶'} Teknik Detaylar (gelistirici)
+                  <span aria-hidden="true">{this.state.showDetails ? '▼' : '▶'}</span> Teknik Detaylar (geliştirici)
                 </button>
                 {this.state.showDetails && (
                   <div className="mt-3 rounded bg-ak-surface p-3 text-left">
