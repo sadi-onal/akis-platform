@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useEffect } from 'react';
-import { LazyMotion, domAnimation, motion, useReducedMotion } from 'framer-motion';
+import { LazyMotion, domMax, motion, useReducedMotion } from 'framer-motion';
 import { LOGO_MARK_SVG } from '../theme/brand';
 import { HeroSection } from '../components/landing/HeroSection';
 import { HowItWorksSection } from '../components/landing/HowItWorksSection';
@@ -28,7 +28,7 @@ export default function LandingPage() {
   }
 
   return (
-    <LazyMotion features={domAnimation}>
+    <LazyMotion features={domMax}>
       <div className="min-h-screen bg-ak-bg text-ak-text-primary">
         {/* Nav */}
         <motion.nav
