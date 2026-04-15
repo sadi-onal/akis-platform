@@ -497,7 +497,11 @@ After pushing, respond with a JSON summary:
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
       try {
-        emit?.('ai_call', `AI çağrısı yapılıyor (deneme ${attempt + 1})...`, 45 + attempt * 5);
+        if (attempt === 0) {
+          emit?.('ai_call', `Playwright testleri oluşturuluyor (deneme ${attempt + 1})...`, 45);
+        } else {
+          emit?.('ai_call', `Playwright testleri oluşturuluyor (deneme ${attempt + 1})...`, 45, undefined, attempt);
+        }
         const traceSystemPrompt = knowledgeContext
           ? `${TEST_GENERATION_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
           : TEST_GENERATION_PROMPT;
