@@ -281,6 +281,14 @@ Desteklenen provider'lar: `anthropic`, `openai`, `openrouter`, `mock`
 - Tema degiskenleri: `--ak-bg`, `--ak-surface`, `--ak-surface-2`, `--ak-primary`
 - Marka renkleri: bg `#0A1215`, primary accent `#07D1AF` (teal), danger `#FF6B6B`
 
+## Vizyon & Strateji
+
+- Ozet: `docs/plans/AKIS_VISION.md`
+- Bilimsel temeller: TRiSM (Gartner), Reflexion/Self-Refine (NeurIPS 2023), METR 2025, McKinsey 2026
+- Kultur ilkesi: "AI uretir, AI denetler, insan karar verir"
+- Level 3: CriticAgent, FixLoop, Validator, Explainability, SecurityGate, LearningService
+- Level 4: Orchestrator entegrasyonu — FixLoop auto-trigger, SecurityGate regression check, LearningService recording
+
 ## Deployment
 
 - **Production:** `akisflow.com` — OCI x86_64, Docker Compose + Caddy

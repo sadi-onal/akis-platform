@@ -1324,6 +1324,64 @@ export class PipelineOrchestrator {
       traceEmit('error', isAiTimeout
         ? 'AI servisi yanıt vermedi — test üretimi atlandı'
         : `Test üretimi başarısız: ${traceResult.error.message}`, 0);
+
+      // ─── Level 3: FixLoop auto-trigger on Trace failure ───
+      const currentPipelineForFix = await this.store.getById(pipelineId);
+      const protoOutput = currentPipelineForFix?.protoOutput;
+      if (protoOutput && spec && !isAiTimeout) {
+        logger.info({ pipelineId }, '[Pipeline] Trace failed — triggering FixLoop');
+        await this.store.update(pipelineId, { stage: 'fix_loop_iteration' });
+        this.emitEvent(pipelineId, 'stage_change', 'fix_loop_iteration');
+        this.metricsService.startStage(pipelineId, 'fix_loop');
+
+        const fixResult = await this.fixLoopService.runFixLoop(
+          spec,
+          async (_s, feedback) => {
+            const fixAgents = this.getAgents(model);
+            const protoRes = await fixAgents.proto.execute({
+              spec, repoName: repo, repoVisibility: 'private', owner, pipelineId,
+              knowledgeContext: feedback ? `\n--- FIX LOOP FEEDBACK ---\n${feedback}\n--- END FEEDBACK ---` : undefined,
+            });
+            if (protoRes.type === 'error') throw new Error(protoRes.error.message);
+            return protoRes.data;
+          },
+          async (protoOut) => {
+            // SecurityGate regression check before trace
+            const secScan = this.securityGate.scan(protoOut.files.map(f => ({ path: f.filePath, content: f.content })));
+            const prevScan = (currentPipelineForFix?.intermediateState as Record<string, unknown> | undefined)?.lastSecurityScan as import('../security-gate/SecurityGateTypes.js').SecurityScanResult | undefined;
+            const gateDecision = this.securityGate.evaluate(secScan, prevScan);
+            if (!gateDecision.allowed) {
+              logger.warn({ pipelineId, reason: gateDecision.reason }, '[Pipeline] SecurityGate blocked fix iteration');
+              throw new Error(`SecurityGate: ${gateDecision.reason}`);
+            }
+
+            const fixAgents = this.getAgents(model);
+            const traceRes = await fixAgents.trace.execute({ repoOwner: owner, repo, branch, spec, pipelineId });
+            if (traceRes.type === 'error') throw new Error(traceRes.error.message);
+            return traceRes.data;
+          },
+        );
+
+        this.metricsService.endStage(pipelineId, 'fix_loop', fixResult.success, {
+          iterationCount: fixResult.totalIterations,
+          terminationReason: fixResult.terminationReason,
+        });
+
+        if (fixResult.success && fixResult.finalTraceOutput) {
+          const updated = await this.store.update(pipelineId, {
+            stage: 'completed',
+            protoOutput: fixResult.finalProtoOutput ?? protoOutput,
+            traceOutput: fixResult.finalTraceOutput,
+            metrics: { ...metrics, protoCompletedAt: metrics.protoCompletedAt ?? new Date(), traceCompletedAt: new Date(), totalDurationMs: Date.now() - toEpoch(metrics.startedAt) },
+          });
+          this.emitEvent(pipelineId, 'completed', 'completed');
+          // Record learning
+          this.learningService.recordOutcome(pipelineId, 'fix_loop', { success: true, duration: Date.now() - toEpoch(metrics.startedAt), score: fixResult.totalIterations });
+          return updated;
+        }
+        logger.info({ pipelineId, reason: fixResult.terminationReason }, '[Pipeline] FixLoop failed — falling through to completed_partial');
+      }
+
       // Graceful degradation — completed_partial (keep error visible for UI)
       const updated = await this.store.update(pipelineId, {
         stage: 'completed_partial',
@@ -1335,6 +1393,8 @@ export class PipelineOrchestrator {
         },
       });
       this.emitEvent(pipelineId, 'completed', 'completed_partial');
+      // Record learning for failed trace
+      this.learningService.recordOutcome(pipelineId, 'trace', { success: false, errorType: traceResult.error.code, duration: Date.now() - toEpoch(metrics.startedAt) });
       return updated;
     }
 
@@ -1356,6 +1416,13 @@ export class PipelineOrchestrator {
       testsPassed: ts?.totalTests ?? 0,
       specCompliance: ts?.coveragePercentage ? ts.coveragePercentage / 100 : 0,
       confidence: ts?.coveragePercentage ? ts.coveragePercentage / 100 : 0,
+    });
+
+    // Record learning for successful pipeline
+    this.learningService.recordOutcome(pipelineId, 'trace', {
+      success: true,
+      duration: Date.now() - toEpoch(metrics.startedAt),
+      score: ts?.coveragePercentage ?? 0,
     });
 
     // Jira hook: comment Trace result (non-blocking)

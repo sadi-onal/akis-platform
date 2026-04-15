@@ -450,7 +450,7 @@ describe('Pipeline edge cases — Retry on failed state', () => {
     assert.equal(retried.stage, 'scribe_clarifying');
   });
 
-  it('retry Trace failure transitions to trace_testing then completes', async () => {
+  it('retry Trace failure — FixLoop auto-heals to completed', async () => {
     let traceCallCount = 0;
     const trace = createMockTrace({
       execute: async () => {
@@ -462,24 +462,14 @@ describe('Pipeline edge cases — Retry on failed state', () => {
       },
     });
     const store = new InMemoryStore();
-    // Use a proto that succeeds then trace that fails first time
     const { orchestrator } = createOrchestrator({ store, trace });
 
     const started = await orchestrator.startPipeline('user-1', { idea: 'Edge retry trace' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
     await orchestrator.approveSpec(started.id, 'my-app', 'private');
 
-    // Trace error causes completed_partial (graceful degradation)
-    await waitForStage(store, started.id, ['completed_partial']);
-
-    // Force to failed for retry test (since completed_partial is terminal,
-    // we need to force the state for this edge case)
-    await store.forceStage(started.id, 'failed', {
-      error: { code: 'TRACE_TEST_GENERATION_FAILED', message: 'Fail', retryable: true },
-    } as Partial<PipelineState>);
-
-    await orchestrator.retryStage(started.id);
-    const completed = await waitForStage(store, started.id, ['completed']);
+    // FixLoop auto-triggers on Trace failure → trace succeeds on 2nd call → completed
+    const completed = await waitForStage(store, started.id, ['completed', 'completed_partial']);
     assert.equal(completed.stage, 'completed');
     assert.ok(completed.traceOutput);
   });
