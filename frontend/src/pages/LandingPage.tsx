@@ -34,8 +34,8 @@ export default function LandingPage() {
         <motion.nav
           aria-label="Ana navigasyon"
           className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 max-w-6xl mx-auto backdrop-blur-md bg-ak-bg/80 border-b border-ak-border/50"
-          initial={reduced ? {} : { opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={reduced ? {} : { y: -10 }}
+          animate={{ y: 0 }}
           transition={{ duration: 0.4 }}
         >
           <div className="flex items-center gap-2">
@@ -72,8 +72,8 @@ export default function LandingPage() {
           <section className="px-4 py-24 text-center">
             <motion.div
               className="mx-auto max-w-md"
-              initial={reduced ? {} : { opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={reduced ? {} : { y: 20 }}
+              whileInView={{ y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5 }}
             >

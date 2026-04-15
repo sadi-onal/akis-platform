@@ -40,8 +40,8 @@ const STEPS = [
 ];
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 40 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' as const } },
+  hidden: { y: 40 },
+  visible: { y: 0, transition: { duration: 0.6, ease: 'easeOut' as const } },
 };
 
 export function HowItWorksSection() {
@@ -51,8 +51,8 @@ export function HowItWorksSection() {
     <section className="relative px-4 py-24 max-w-5xl mx-auto">
       <motion.h2
         className="text-center text-3xl font-bold mb-4"
-        initial={reduced ? {} : { opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
+        initial={reduced ? {} : { y: 20 }}
+        whileInView={{ y: 0 }}
         viewport={{ once: true, amount: 0.5 }}
         transition={{ duration: 0.5 }}
       >
@@ -60,8 +60,6 @@ export function HowItWorksSection() {
       </motion.h2>
       <motion.p
         className="text-center text-ak-text-secondary mb-16 max-w-lg mx-auto"
-        initial={reduced ? {} : { opacity: 0 }}
-        whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
         transition={{ delay: 0.2, duration: 0.5 }}
       >
@@ -107,8 +105,8 @@ export function HowItWorksSection() {
               <div className="hidden md:block absolute -right-3 top-1/2 -translate-y-1/2 z-10">
                 <motion.svg
                   width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  initial={reduced ? {} : { opacity: 0, x: -5 }}
-                  whileInView={{ opacity: 0.4, x: 0 }}
+                  initial={reduced ? {} : { x: -5 }}
+                  whileInView={{ x: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: 0.5 + i * 0.2 }}
                 >

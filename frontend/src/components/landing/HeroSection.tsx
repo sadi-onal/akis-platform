@@ -11,8 +11,8 @@ const containerVariants = {
 };
 
 const wordVariants = {
-  hidden: { opacity: 0, y: 20, filter: 'blur(8px)' },
-  visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: 'easeOut' as const } },
+  hidden: { y: 20, filter: 'blur(8px)' },
+  visible: { y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: 'easeOut' as const } },
 };
 
 export function HeroSection() {
@@ -40,8 +40,8 @@ export function HeroSection() {
         src={LOGO_MARK_SVG}
         alt="AKIS"
         className="relative z-10 mb-8 h-20 w-20 object-contain"
-        initial={reduced ? {} : { opacity: 0, scale: 0.5 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={reduced ? {} : { scale: 0.5 }}
+        animate={{ scale: 1 }}
         transition={{ duration: 0.6, ease: 'easeOut' as const }}
       />
 
@@ -68,8 +68,8 @@ export function HeroSection() {
       {/* Subtitle */}
       <motion.p
         className="relative z-10 mt-6 max-w-xl text-lg text-ak-text-primary leading-relaxed"
-        initial={reduced ? {} : { opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={reduced ? {} : { y: 15 }}
+        animate={{ y: 0 }}
         transition={{ duration: 0.5, delay: 0.8 }}
       >
         AI destekli agent'lar ile yazılım geliştirme sürecinizi hızlandırın.
@@ -79,8 +79,6 @@ export function HeroSection() {
       {/* Pipeline mini-flow */}
       <motion.div
         className="relative z-10 mt-8 flex items-center gap-3 text-sm"
-        initial={reduced ? {} : { opacity: 0 }}
-        animate={{ opacity: 1 }}
         transition={{ delay: 1.1, duration: 0.5 }}
       >
         {['Scribe', 'Proto', 'Trace'].map((agent, i) => (
@@ -91,8 +89,8 @@ export function HeroSection() {
               background: i === 0 ? 'rgba(59,130,246,0.12)' : i === 1 ? 'rgba(245,158,11,0.12)' : 'rgba(139,92,246,0.12)',
               color: i === 0 ? '#3b82f6' : i === 1 ? '#f59e0b' : '#8b5cf6',
             }}
-            initial={reduced ? {} : { opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={reduced ? {} : { x: -10 }}
+            animate={{ x: 0 }}
             transition={{ delay: 1.2 + i * 0.15, duration: 0.4 }}
           >
             {agent}
@@ -103,8 +101,8 @@ export function HeroSection() {
       {/* CTA buttons */}
       <motion.div
         className="relative z-10 mt-10 flex flex-wrap justify-center gap-4"
-        initial={reduced ? {} : { opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={reduced ? {} : { y: 15 }}
+        animate={{ y: 0 }}
         transition={{ delay: 1.5, duration: 0.5 }}
       >
         <motion.button

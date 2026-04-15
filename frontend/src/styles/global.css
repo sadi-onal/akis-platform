@@ -110,13 +110,6 @@ a {
   color: var(--accent, var(--ak-primary));
 }
 
-/* Fallback: ensure landing page content visible if framer-motion animations fail */
-@keyframes ak-reveal-fallback {
-  to { opacity: 1 !important; transform: none !important; filter: none !important; }
-}
-main h1, main h2, main h3, main p, main div, main button, main section {
-  animation: ak-reveal-fallback 0.3s ease-out 2.5s both;
-}
 
 ::selection {
   background-color: var(--accent, var(--ak-primary-soft));

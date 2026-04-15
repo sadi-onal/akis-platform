@@ -44,8 +44,8 @@ export function StatsSection() {
             <motion.div
               key={stat.label}
               className="text-center"
-              initial={reduced ? {} : { opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={reduced ? {} : { y: 20 }}
+              whileInView={{ y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1, duration: 0.5 }}
             >
