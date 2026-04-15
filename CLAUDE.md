@@ -1,4 +1,4 @@
-# AKIS Platform v0.2.0 — Claude Code Guide
+# AKIS Platform v0.6.5 — Claude Code Guide
 
 > **Bu dosya bu projedeki TUM Claude oturumlari icin birincil referanstir.**
 > **Her oturumda ILK bu dosyayi oku, sonra calismaya basla.**
@@ -7,7 +7,7 @@
 
 AKIS (Adaptive Knowledge Integrity System), bir **AI Agent Workflows Engine**'dir. Yazilim gelistirme surecinde "fikir → kod → test" zincirini 3 AI agent workflow'u ile otomatize eder. Ayni zamanda universite bitirme projesidir.
 
-- **Versiyon:** 0.5.0
+- **Versiyon:** 0.6.5
 - **Tez Temasi:** Knowledge Integrity & Agent Verification
 - **Ogrenci:** Omer Yasir Onal (2221221562)
 - **Danismanl:** Dr. Ogr. Uyesi Nazli Dogan
@@ -73,8 +73,10 @@ Her adimda → failed (retryable) | cancelled
 | Database | PostgreSQL + Drizzle ORM |
 | AI Provider | Anthropic (claude-sonnet-4-6) |
 | GitHub Entegrasyon | GitHub REST API (pipeline), OAuth (kullanici login) |
-| Test | Vitest (unit), Playwright (e2e) |
+| File Upload | @fastify/multipart (bellekte isleme, Scribe context injection) |
+| Test | Vitest (unit — 673 test), Node test (backend — 3112 test), Playwright (e2e) |
 | Deployment | OCI x86_64, Docker Compose, Caddy |
+| RAG/Knowledge | pgvector, RepoDocsIngester, hybrid search (keyword + semantic) |
 
 ### Mimari Kisitlamalar
 - Backend: Fastify + TypeScript, PostgreSQL + Drizzle. Express, NestJS, Prisma, Next.js YASAK.
@@ -125,6 +127,7 @@ devagents/
 │       │   ├── agents/               scribe/, proto/, trace/
 │       │   ├── core/                 contracts/, orchestrator/, pipeline-factory.ts
 │       │   ├── adapters/             GitHubMCPAdapter.ts, GitHubRESTAdapter.ts
+│       │   ├── services/            FileUploadService.ts (multipart dosya isleme)
 │       │   ├── db/                   pipeline-schema.ts
 │       │   └── api/                  pipeline.routes.ts, pipeline.plugin.ts
 │       ├── db/                       Drizzle ORM schema + client
