@@ -43,7 +43,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
   }
 
   return {
-    async startPipeline(request: unknown, _reply: unknown) {
+    async startPipeline(request: unknown, _reply: unknown, attachmentContext?: string) {
       const userId = getUserId(request);
 
       // ── Auth + Usage Limit Guard ─────────────────────────────────────
@@ -101,6 +101,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
         context: body.context,
         targetStack: body.targetStack,
         existingRepo: body.existingRepo,
+        attachmentContext,
       }, body.model, body.jiraConfig, body.parentPipelineId, body.skipScribe, body.traceEnabled);
       return { pipeline };
     },
@@ -123,11 +124,11 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       return { activities: getActivities(id) };
     },
 
-    async sendMessage(request: unknown) {
+    async sendMessage(request: unknown, attachmentContext?: string) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
       const body = SendMessageRequestSchema.parse((request as { body: unknown }).body);
-      const pipeline = await orchestrator.sendMessage(id, body.message);
+      const pipeline = await orchestrator.sendMessage(id, body.message, attachmentContext);
       return { pipeline };
     },
 

@@ -8,6 +8,8 @@ import type { PipelineOrchestrator } from '../core/orchestrator/PipelineOrchestr
 import { PipelineNotFoundError, InvalidStageError, GitHubAPIError } from '../core/contracts/PipelineErrors.js';
 import { StaleStateError } from '../db/DrizzlePipelineStore.js';
 import { ZodError } from 'zod';
+import { FileUploadService, type ProcessedAttachment } from '../services/FileUploadService.js';
+import { logger } from '../../lib/logger.js';
 
 // ─── AKIS Platform Repo Guard ────────────────────
 const BLOCKED_PLATFORM_REPOS = [
@@ -26,12 +28,63 @@ export interface PipelinePluginOptions {
   devUserId?: string;
 }
 
+/**
+ * Parse a potentially multipart request, extracting fields and file attachments.
+ * Falls back to standard JSON body when request is not multipart.
+ */
+async function parseMultipartRequest(
+  request: FastifyRequest,
+  fileUploadService: FileUploadService,
+): Promise<{ fields: Record<string, unknown>; attachments: ProcessedAttachment[]; attachmentContext?: string }> {
+  if (!request.isMultipart()) {
+    return {
+      fields: (request.body ?? {}) as Record<string, unknown>,
+      attachments: [],
+      attachmentContext: undefined,
+    };
+  }
+
+  const fields: Record<string, unknown> = {};
+  const attachments: ProcessedAttachment[] = [];
+
+  const parts = request.parts();
+  for await (const part of parts) {
+    if (part.type === 'file') {
+      if (!part.filename) continue;
+      try {
+        const processed = await fileUploadService.processMultipartFile(part);
+        attachments.push(processed);
+      } catch (err) {
+        logger.warn({ err, file: part.filename }, '[Pipeline] Dosya işleme hatası');
+        throw err;
+      }
+    } else {
+      // Field — try JSON parse for structured values
+      const value = part.value as string;
+      try {
+        fields[part.fieldname] = JSON.parse(value);
+      } catch {
+        fields[part.fieldname] = value;
+      }
+    }
+  }
+
+  fileUploadService.validateFileCount(attachments.length);
+
+  const attachmentContext = attachments.length > 0
+    ? fileUploadService.buildContextString(attachments)
+    : undefined;
+
+  return { fields, attachments, attachmentContext };
+}
+
 export async function pipelinePlugin(
   fastify: FastifyInstance,
   opts: PipelinePluginOptions,
 ) {
   const { orchestrator, requireAuth, devUserId } = opts;
   const isDevMode = process.env.DEV_MODE === 'true';
+  const fileUploadService = new FileUploadService();
 
   const routes = createPipelineRoutes({
     orchestrator,
@@ -124,8 +177,12 @@ export async function pipelinePlugin(
   });
 
   // POST /api/pipelines — start new pipeline (rate-limited: 5/min per user)
+  // Supports both JSON and multipart/form-data (with file attachments)
   fastify.post('/', { preHandler: authPreHandler, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const result = await routes.startPipeline(request, reply);
+    const { fields, attachmentContext } = await parseMultipartRequest(request, fileUploadService);
+    // Inject parsed fields as body so downstream route handler can parse them
+    (request as unknown as { body: unknown }).body = fields;
+    const result = await routes.startPipeline(request, reply, attachmentContext);
     return reply.code(201).send(result);
   });
 
@@ -145,8 +202,11 @@ export async function pipelinePlugin(
   });
 
   // POST /api/pipelines/:id/message — send message to Scribe
+  // Supports both JSON and multipart/form-data (with file attachments)
   fastify.post('/:id/message', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    return routes.sendMessage(request);
+    const { fields, attachmentContext } = await parseMultipartRequest(request, fileUploadService);
+    (request as unknown as { body: unknown }).body = fields;
+    return routes.sendMessage(request, attachmentContext);
   });
 
   // POST /api/pipelines/:id/approve — approve spec

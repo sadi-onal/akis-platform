@@ -1,9 +1,19 @@
+// ─── FILE UPLOAD ──────────────────────────────────
+
+export interface PipelineAttachment {
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  type: 'text' | 'image';
+}
+
 // ─── SCRIBE ───────────────────────────────────────
 
 export interface ScribeInput {
   idea: string;
   context?: string;
   targetStack?: string;
+  attachmentContext?: string;
   existingRepo?: {
     owner: string;
     repo: string;

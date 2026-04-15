@@ -93,8 +93,8 @@ export class HttpClient {
           ...((fetchOptions.headers as Record<string, string>) || {}),
         };
         
-        // Add Content-Type only when body is present and not already set
-        if (fetchOptions.body && !headers['Content-Type'] && !headers['content-type']) {
+        // Add Content-Type only when body is present, not FormData, and not already set
+        if (fetchOptions.body && !(fetchOptions.body instanceof FormData) && !headers['Content-Type'] && !headers['content-type']) {
           headers['Content-Type'] = 'application/json';
         }
 
@@ -158,6 +158,18 @@ export class HttpClient {
       method: 'GET',
     });
 
+    return this.parseJsonResponse<T>(response);
+  }
+
+  async postFormData<T>(path: string, formData: FormData, options?: RequestOptions): Promise<T> {
+    const url = `${this.baseURL}${path}`;
+    const response = await this.fetchWithRetry(url, {
+      credentials: 'include',
+      ...options,
+      method: 'POST',
+      body: formData,
+      // Do NOT set Content-Type — browser auto-sets multipart boundary
+    });
     return this.parseJsonResponse<T>(response);
   }
 

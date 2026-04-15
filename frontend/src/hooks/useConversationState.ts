@@ -47,9 +47,9 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
     if (uiState === 'ci_running') return 'CI çalışıyor... Mesaj bırakabilirsiniz.';
     // Terminal states
     if (uiState === 'idle' && currentStageRef.current) {
-      if (currentStageRef.current === 'completed') return 'Projeniz hazır! Soru sorabilir veya not bırakabilirsiniz.';
-      if (currentStageRef.current === 'completed_partial') return 'Pipeline kısmen tamamlandı. Soru sorabilirsiniz.';
-      if (currentStageRef.current === 'failed') return 'Pipeline başarısız oldu. Detayları inceleyebilirsiniz.';
+      if (currentStageRef.current === 'completed') return 'Projeniz hazır! Değişiklik isteği yazarak yeni iterasyon başlatın.';
+      if (currentStageRef.current === 'completed_partial') return 'Pipeline kısmen tamamlandı. Değişiklik isteği yazabilirsiniz.';
+      if (currentStageRef.current === 'failed') return 'Pipeline başarısız oldu. Yeniden deneyebilir veya sorununuzu yazabilirsiniz.';
     }
     return 'Projenizi anlatın...';
   }, [uiState]);

@@ -20,6 +20,7 @@ import { workflowsApi } from '../../services/api/workflows';
 import { RepoSelector, type RepoMode, type SelectedRepo } from '../../components/chat/RepoSelector';
 import type { RepoContext } from '../../services/api/github';
 import { LOGO_MARK_SVG } from '../../theme/brand';
+import type { ChatAttachment } from '../../components/chat/ChatInput';
 
 function localizeError(e: unknown): string {
   if (e instanceof Error) {
@@ -514,7 +515,7 @@ export default function ChatPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleNewConversation]);
 
-  const handleSend = useCallback(async (content: string) => {
+  const handleSend = useCallback(async (content: string, attachments?: ChatAttachment[]) => {
     const userMsg: ChatMessage = { type: 'user', content, timestamp: new Date().toISOString() };
     setMessages((prev) => [...prev, userMsg]);
 
@@ -538,7 +539,7 @@ export default function ChatPage() {
           idea: content,
           traceEnabled,
           existingRepo: selectedRepo ?? undefined,
-        });
+        }, attachments);
         setPendingConv(null);
         // Reset repo selector state after pipeline creation
         setRepoMode('new');
@@ -584,13 +585,13 @@ export default function ChatPage() {
             existingRepo: { owner: repoOwner, repo: repoName, branch: protoBranch },
             parentPipelineId: conversationId,
             skipScribe: true,
-          });
+          }, attachments);
           loadedIdRef.current = w.id;
           setActiveWorkflow(w);
           setMessages((prev) => [...prev, ...conversationToChatMessages(w.conversation ?? [], w.currentStage)]);
           syncFromStage(w.currentStage ?? 'completed');
           refreshList();
-          navigate(`/chat/${w.id}`, { replace: true });
+          navigate(`/chat/${w.id}`);
         } catch (e) {
           toast(localizeError(e), 'error');
         } finally {
@@ -603,13 +604,33 @@ export default function ChatPage() {
     // Send message to the existing pipeline — works for ALL stages including terminal ones.
     // Backend saves it as a user_note (terminal) or processes it as a Scribe answer (clarifying).
     try {
-      await workflowsApi.sendMessage(conversationId, content);
+      await workflowsApi.sendMessage(conversationId, content, attachments);
       await refreshWorkflow();
       refreshList();
+
+      // Show feedback when pipeline is not in an interactive state
+      const stage = activeWorkflow?.currentStage;
+      if (stage && stage !== 'scribe_clarifying' && stage !== 'awaiting_approval') {
+        const stageMessages: Record<string, string> = {
+          scribe_generating: 'Notunuz kaydedildi. Scribe spec oluşturma işlemi devam ediyor.',
+          proto_building: 'Notunuz kaydedildi. Proto kod üretimi devam ediyor.',
+          trace_testing: 'Notunuz kaydedildi. Trace test yazımı devam ediyor.',
+          ci_running: 'Notunuz kaydedildi. CI kontrolü devam ediyor.',
+          completed: 'Notunuz kaydedildi.',
+          completed_partial: 'Notunuz kaydedildi.',
+          failed: 'Notunuz kaydedildi. Yeniden denemek için Retry butonunu kullanabilirsiniz.',
+        };
+        const infoMsg: ChatMessage = {
+          type: 'info',
+          content: stageMessages[stage] || 'Notunuz kaydedildi.',
+          timestamp: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, infoMsg]);
+      }
     } catch (e) {
       if (import.meta.env.DEV) console.error('Failed to send:', e);
     }
-  }, [conversationId, pendingConv, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, repoMode, creating]);
+  }, [conversationId, pendingConv, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, activeWorkflow?.currentStage, activeWorkflow?.stages.proto?.branch, activeWorkflow?.stages.proto?.repo, syncFromStage]);
 
   const approveInFlightRef = useRef(false);
   const handleApprove = useCallback(async () => {
