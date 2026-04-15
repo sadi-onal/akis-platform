@@ -69,7 +69,7 @@ export default function LandingPage() {
           <FeaturesSection />
 
           {/* CTA Section */}
-          <section className="px-4 py-24 text-center">
+          <section className="px-4 sm:px-6 py-24 text-center">
             <motion.div
               className="mx-auto max-w-md"
               initial={reduced ? {} : { y: 20 }}

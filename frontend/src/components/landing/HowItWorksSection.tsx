@@ -48,7 +48,7 @@ export function HowItWorksSection() {
   const reduced = useReducedMotion();
 
   return (
-    <section className="relative px-4 py-24 max-w-5xl mx-auto">
+    <section className="relative px-4 sm:px-6 lg:px-8 py-24 max-w-5xl mx-auto">
       <motion.h2
         className="text-center text-3xl font-bold mb-4"
         initial={reduced ? {} : { y: 20 }}
@@ -66,7 +66,7 @@ export function HowItWorksSection() {
         3 AI agent, fikrinizi spec → kod → test zincirine dönüştürür.
       </motion.p>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-4 md:gap-6 md:grid-cols-3">
         {STEPS.map((step, i) => (
           <motion.div
             key={step.agent}

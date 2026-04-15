@@ -60,7 +60,7 @@ export function ProfileSetupWizard({ onClose }: ProfileSetupWizardProps) {
   }, []);
 
   const handlePreferencesComplete = useCallback((locale: string) => {
-    localStorage.setItem('akis-locale', locale);
+    if (typeof window !== 'undefined') localStorage.setItem('akis-locale', locale);
     onClose();
   }, [onClose]);
 
@@ -143,7 +143,7 @@ export function ProfileSetupWizard({ onClose }: ProfileSetupWizardProps) {
           )}
           {step === 3 && (
             <StepPreferences
-              currentLocale={localStorage.getItem('akis-locale') ?? 'tr'}
+              currentLocale={(typeof window !== 'undefined' ? localStorage.getItem('akis-locale') : null) ?? 'tr'}
               onComplete={handlePreferencesComplete}
             />
           )}

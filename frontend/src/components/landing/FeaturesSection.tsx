@@ -36,7 +36,7 @@ export function FeaturesSection() {
   const reduced = useReducedMotion();
 
   return (
-    <section className="px-4 py-24 max-w-5xl mx-auto">
+    <section className="px-4 sm:px-6 lg:px-8 py-24 max-w-5xl mx-auto">
       <motion.h2
         className="text-center text-3xl font-bold mb-4"
         initial={reduced ? {} : { y: 20 }}

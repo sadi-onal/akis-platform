@@ -20,7 +20,7 @@ export function HeroSection() {
   const reduced = useReducedMotion();
 
   return (
-    <section className="relative flex min-h-[calc(100vh-72px)] flex-col items-center justify-center px-4 pb-20 text-center overflow-hidden">
+    <section className="relative flex min-h-[calc(100vh-72px)] flex-col items-center justify-center px-4 sm:px-6 lg:px-8 pb-20 text-center overflow-hidden">
       {/* Background glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <motion.div

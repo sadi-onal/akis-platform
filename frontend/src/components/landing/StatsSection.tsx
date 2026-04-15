@@ -37,7 +37,7 @@ export function StatsSection() {
   const reduced = useReducedMotion();
 
   return (
-    <section className="px-4 py-20">
+    <section className="px-4 sm:px-6 lg:px-8 py-20">
       <div className="mx-auto max-w-4xl rounded-2xl border border-ak-border bg-ak-surface/70 backdrop-blur-sm p-10">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           {STATS.map((stat, i) => (

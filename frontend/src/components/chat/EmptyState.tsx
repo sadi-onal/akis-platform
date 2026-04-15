@@ -43,7 +43,7 @@ export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
 
   const handleWizardComplete = useCallback(async () => {
     try {
-      localStorage.setItem('hasSeenBetaWelcome', 'true');
+      if (typeof window !== 'undefined') localStorage.setItem('hasSeenBetaWelcome', 'true');
       await fetch('/auth/update-preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
