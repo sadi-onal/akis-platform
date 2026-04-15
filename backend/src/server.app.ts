@@ -40,6 +40,7 @@ import { billingRoutes } from './api/billing.js';
 import { pipelinePlugin } from './pipeline/api/pipeline.plugin.js';
 import { pipelineStreamPlugin } from './pipeline/api/pipeline-stream.plugin.js';
 import { devSessionPlugin } from './pipeline/api/dev-session.plugin.js';
+import { engineerPlugin } from './pipeline/api/engineer.plugin.js';
 import { createPipelineSystem, type GitHubServiceLike } from './pipeline/core/pipeline-factory.js';
 import { createGitHubRESTAdapter, getGitHubOwnerViaREST } from './pipeline/adapters/GitHubRESTAdapter.js';
 import { pushLog } from './lib/logBuffer.js';
@@ -398,6 +399,12 @@ export async function buildApp() {
       devUserId,
     }),
     { prefix: '/api/pipelines' },
+  );
+
+  // Engineer Rental Mode routes
+  await app.register(
+    async (instance) => engineerPlugin(instance, { requireAuth, devUserId }),
+    { prefix: '/api/engineer' },
   );
 
   // Initialize Piri RAG service if configured

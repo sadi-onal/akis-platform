@@ -67,8 +67,43 @@ const FREE_PLAN: UserPlan = {
   priceMonthly: 0,
 };
 
+const BUILDER_PLAN: UserPlan = {
+  planId: 'pro',
+  tier: 'pro',
+  name: 'Builder',
+  jobsPerDay: 25,
+  maxTokenBudget: 500_000,
+  maxAgents: 3,
+  depthModesAllowed: ['lite', 'standard', 'deep'],
+  maxOutputTokensPerJob: 32_000,
+  passesAllowed: 3,
+  priorityQueue: false,
+  priceMonthly: 29,
+};
+
+const TEAM_PLAN: UserPlan = {
+  planId: 'team',
+  tier: 'team',
+  name: 'Team',
+  jobsPerDay: 999,
+  maxTokenBudget: 2_000_000,
+  maxAgents: 5,
+  depthModesAllowed: ['lite', 'standard', 'deep', 'extreme'],
+  maxOutputTokensPerJob: 128_000,
+  passesAllowed: 5,
+  priorityQueue: true,
+  priceMonthly: 99,
+};
+
+/** Quick lookup map for fallback plans when DB is unavailable */
+const PLAN_MAP: Record<string, UserPlan> = {
+  free: FREE_PLAN,
+  pro: BUILDER_PLAN,
+  team: TEAM_PLAN,
+};
+
 /**
- * Get the active plan for a user. Falls back to 'free' if no subscription.
+ * Get the active plan for a user. Falls back to PLAN_MAP (then 'free') if no subscription or DB unavailable.
  */
 export async function getUserPlan(userId: string): Promise<UserPlan> {
   try {
@@ -81,7 +116,7 @@ export async function getUserPlan(userId: string): Promise<UserPlan> {
     const planId = sub.length > 0 ? sub[0].planId : 'free';
 
     const plan = await db.select().from(plans).where(eq(plans.id, planId)).limit(1);
-    if (plan.length === 0) return FREE_PLAN;
+    if (plan.length === 0) return PLAN_MAP[planId] ?? FREE_PLAN;
 
     const p = plan[0];
     return {

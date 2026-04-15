@@ -128,6 +128,38 @@ export const api = {
     return httpClient.get('/api/billing/plan');
   },
 
+  // GET /api/usage — consolidated usage with plan data
+  getUsageWithPlan: async (): Promise<{
+    totalJobs: number;
+    totalTokens: number;
+    estimatedCost: number;
+    period: string;
+    plan: {
+      planId: string;
+      tier: string;
+      name: string;
+      jobsPerDay: number;
+      maxTokenBudget: number;
+      maxAgents: number;
+      depthModesAllowed: string[];
+      maxOutputTokensPerJob: number;
+      passesAllowed: number;
+      priorityQueue: boolean;
+      priceMonthly: number;
+    };
+    remaining: { jobs: number; tokens: number };
+    usage: {
+      jobsUsedToday: number;
+      tokensUsedThisMonth: number;
+      jobsLimit: number;
+      tokensLimit: number;
+      percentJobsUsed: number;
+      percentTokensUsed: number;
+    };
+  }> => {
+    return httpClient.get('/api/usage');
+  },
+
   // GET /api/billing/plans — all available plans
   getAvailablePlans: async (): Promise<{
     plans: Array<{

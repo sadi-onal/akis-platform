@@ -1,6 +1,7 @@
 /**
  * Usage API - Token usage and cost tracking
  * GET /api/usage/current-month - Get usage stats for current month
+ * GET /api/usage - Consolidated usage with plan data
  *
  * Queries the pipelines table (not legacy jobs table) for real pipeline data.
  */
@@ -9,6 +10,7 @@ import { db } from '../db/client.js';
 import { pipelines } from '../db/schema.js';
 import { and, eq, gte, sql, ne } from 'drizzle-orm';
 import { requireAuth } from '../utils/auth.js';
+import { getUserPlan, getUsageSummary } from '../services/billing/BillingService.js';
 
 // Config-driven free tier
 const FREE_TIER = {
@@ -133,6 +135,67 @@ export async function usageRoutes(fastify: FastifyInstance) {
             cost: Math.min(100, (estimatedCostUsd / FREE_TIER.costUsd) * 100),
           },
           daily,
+        });
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message === 'UNAUTHORIZED') {
+          return reply.code(401).send({
+            error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+          });
+        }
+        throw err;
+      }
+    }
+  );
+
+  // GET /api/usage — Consolidated usage with plan data for settings UI
+  fastify.get(
+    '/api/usage',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const user = await requireAuth(request);
+
+        const plan = await getUserPlan(user.id);
+        const usage = await getUsageSummary(user.id);
+
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        // Aggregate total jobs + tokens from pipelines this month
+        const result = await db
+          .select({
+            totalJobs: sql<number>`COUNT(*)::int`,
+            totalTokens: sql<number>`COALESCE(SUM((${pipelines.metrics}->>'totalTokens')::int), 0)::int`,
+            estimatedCost: sql<string>`COALESCE(SUM((${pipelines.metrics}->>'estimatedCost')::numeric), 0)::numeric(12,6)`,
+          })
+          .from(pipelines)
+          .where(
+            and(
+              eq(pipelines.userId, user.id),
+              gte(pipelines.createdAt, startOfMonth),
+              ne(pipelines.stage, 'cancelled'),
+            )
+          );
+
+        const stats = result[0] || { totalJobs: 0, totalTokens: 0, estimatedCost: '0' };
+
+        return reply.code(200).send({
+          totalJobs: stats.totalJobs,
+          totalTokens: stats.totalTokens,
+          estimatedCost: parseFloat(parseFloat(stats.estimatedCost).toFixed(6)),
+          period: 'monthly',
+          plan,
+          remaining: {
+            jobs: Math.max(0, plan.jobsPerDay - usage.jobsUsedToday),
+            tokens: Math.max(0, plan.maxTokenBudget - usage.tokensUsedThisMonth),
+          },
+          usage: {
+            jobsUsedToday: usage.jobsUsedToday,
+            tokensUsedThisMonth: usage.tokensUsedThisMonth,
+            jobsLimit: usage.jobsLimit,
+            tokensLimit: usage.tokensLimit,
+            percentJobsUsed: usage.percentJobsUsed,
+            percentTokensUsed: usage.percentTokensUsed,
+          },
         });
       } catch (err: unknown) {
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {
