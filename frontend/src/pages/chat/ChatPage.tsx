@@ -21,6 +21,7 @@ import { RepoSelector, type RepoMode, type SelectedRepo } from '../../components
 import type { RepoContext } from '../../services/api/github';
 import { LOGO_MARK_SVG } from '../../theme/brand';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
+import { ChatSkeleton } from '../../components/chat/ChatSkeleton';
 
 function localizeError(e: unknown): string {
   if (e instanceof Error) {
@@ -838,7 +839,7 @@ export default function ChatPage() {
                     </svg>
                   </button>
                   <ErrorBoundary fallbackPath="/chat" fallbackLabel="Chat">
-                    <Suspense fallback={<div className="flex h-full items-center justify-center bg-ak-bg text-ak-text-tertiary text-sm">Yükleniyor...</div>}>
+                    <Suspense fallback={<ChatSkeleton />}>
                       <PreviewPanel
                         files={protoFiles}
                         branch={activeWorkflow?.stages?.proto?.branch}

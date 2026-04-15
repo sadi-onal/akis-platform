@@ -262,7 +262,11 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
 
     async getFileContent(request: unknown) {
       const { id, '*': filePath } = (request as { params: { id: string; '*': string } }).params;
-      if (!filePath) throw new Error('File path is required');
+      if (!filePath) throw Object.assign(new Error('File path is required'), { statusCode: 400 });
+      // Guard against path traversal attempts
+      if (filePath.includes('..') || filePath.startsWith('/')) {
+        throw Object.assign(new Error('Invalid file path'), { statusCode: 400 });
+      }
       const pipeline = await assertOwnership(request, id);
 
       // Search in proto output files
@@ -293,7 +297,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
         };
       }
 
-      throw new Error(`File not found: ${filePath}`);
+      throw Object.assign(new Error('File not found'), { statusCode: 404 });
     },
   };
 }
