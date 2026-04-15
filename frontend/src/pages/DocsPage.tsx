@@ -74,16 +74,37 @@ function renderInline(text: string): React.ReactNode[] {
 }
 
 function renderMarkdown(md: string) {
-  return md.split('\n').map((line, i) => {
-    if (line.startsWith('### ')) return <h3 key={i} className="mt-5 mb-2 text-base font-semibold text-white">{renderInline(line.slice(4))}</h3>;
-    if (line.startsWith('## ')) return <h2 key={i} className="mt-6 mb-3 text-xl font-bold text-white">{renderInline(line.slice(3))}</h2>;
-    if (line.startsWith('```')) return <div key={i} className="my-1" />;
-    if (line.startsWith('- ')) return <li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-disc">{renderInline(line.slice(2))}</li>;
-    if (/^\d+\. /.test(line)) return <li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-decimal">{renderInline(line.replace(/^\d+\. /, ''))}</li>;
-    if (line.trim() === '') return <div key={i} className="h-2" />;
-    if (line.startsWith('`') && line.endsWith('`')) return <code key={i} className="block rounded bg-ak-surface-2 px-3 py-1.5 text-xs font-mono text-[#07D1AF]">{line.slice(1, -1)}</code>;
-    return <p key={i} className="text-sm text-gray-300 leading-relaxed">{renderInline(line)}</p>;
-  });
+  const lines = md.split('\n');
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    // Fenced code block: ```...``` collect all lines until closing ```
+    if (line.startsWith('```')) {
+      const codeLines: string[] = [];
+      i++; // skip opening ```
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip closing ```
+      elements.push(
+        <pre key={`code-${i}`} className="my-3 rounded-lg bg-ak-surface-2 px-4 py-3 text-xs font-mono text-[#07D1AF] overflow-x-auto">
+          <code>{codeLines.join('\n')}</code>
+        </pre>
+      );
+      continue;
+    }
+    if (line.startsWith('### ')) { elements.push(<h3 key={i} className="mt-5 mb-2 text-base font-semibold text-white">{renderInline(line.slice(4))}</h3>); }
+    else if (line.startsWith('## ')) { elements.push(<h2 key={i} className="mt-6 mb-3 text-xl font-bold text-white">{renderInline(line.slice(3))}</h2>); }
+    else if (line.startsWith('- ')) { elements.push(<li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-disc">{renderInline(line.slice(2))}</li>); }
+    else if (/^\d+\. /.test(line)) { elements.push(<li key={i} className="ml-4 text-sm text-gray-300 leading-relaxed list-decimal">{renderInline(line.replace(/^\d+\. /, ''))}</li>); }
+    else if (line.trim() === '') { elements.push(<div key={i} className="h-2" />); }
+    else if (line.startsWith('`') && line.endsWith('`') && line.length > 2) { elements.push(<code key={i} className="block rounded bg-ak-surface-2 px-3 py-1.5 text-xs font-mono text-[#07D1AF]">{line.slice(1, -1)}</code>); }
+    else { elements.push(<p key={i} className="text-sm text-gray-300 leading-relaxed">{renderInline(line)}</p>); }
+    i++;
+  }
+  return elements;
 }
 
 export default function DocsPage() {
@@ -112,11 +133,12 @@ export default function DocsPage() {
       <div className="mx-auto max-w-5xl flex">
         {/* Sidebar */}
         <aside className="hidden md:block w-56 flex-shrink-0 border-r border-gray-800 py-6 pr-4 pl-4">
-          <nav className="sticky top-6 space-y-1">
+          <nav aria-label="Dokümantasyon bölümleri" className="sticky top-6 space-y-1">
             {sections.map((s) => (
               <button
                 key={s.id}
                 onClick={() => setActiveSection(s.id)}
+                aria-current={activeSection === s.id ? 'page' : undefined}
                 className={cn(
                   'block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors',
                   activeSection === s.id
