@@ -4,7 +4,7 @@
  * Uses node:test runner (project standard).
  * Run: node --test --import tsx src/pipeline/core/task-discovery/__tests__/TaskDiscoveryService.test.ts
  */
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { TaskDiscoveryService } from '../TaskDiscoveryService.js';
 import type { TaskDiscoveryInput } from '../TaskDiscoveryTypes.js';
