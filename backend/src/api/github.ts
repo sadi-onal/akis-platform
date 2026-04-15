@@ -216,4 +216,51 @@ export async function githubRoutes(fastify: FastifyInstance) {
 
     return { connected: false };
   });
+
+  // GET /api/github/repos/:owner/:repo/context — fetch repo analysis context
+  fastify.get(
+    '/repos/:owner/:repo/context',
+    { preHandler: authPreHandler },
+    async (request, reply) => {
+      const userId = getUserId(request);
+      const token = await getGitHubToken(userId);
+
+      if (!token) {
+        return reply.code(401).send({ error: { code: 'GITHUB_NOT_CONNECTED', message: 'GitHub not connected' } });
+      }
+
+      const params = request.params as { owner: string; repo: string };
+      const query = (request.query ?? {}) as { branch?: string };
+      const { owner, repo } = params;
+      const branch = query.branch ?? 'main';
+
+      try {
+        const { createGitHubRESTAdapter } = await import('../pipeline/adapters/GitHubRESTAdapter.js');
+        const { RepoContextAgent } = await import('../pipeline/agents/repo-context/RepoContextAgent.js');
+
+        const githubService = createGitHubRESTAdapter({ token });
+
+        // Create agent with a lightweight AI stub (fallback only — no AI summary)
+        const agent = new RepoContextAgent(
+          {
+            async generateText(_sys: string, _user: string): Promise<string> {
+              // Lightweight fallback — returns empty JSON so the agent uses its detectTechStackFromFiles fallback
+              return JSON.stringify({ summary: `${owner}/${repo} repository`, techStack: [] });
+            },
+          },
+          {
+            listFiles: (o: string, r: string, b: string) => githubService.listFiles(o, r, b),
+            getFileContent: (o: string, r: string, b: string, f: string) => githubService.getFileContent(o, r, b, f),
+          },
+        );
+
+        const context = await agent.fetchContext({ owner, repo, branch });
+        return { context };
+      } catch (err) {
+        return reply.code(500).send({
+          error: { code: 'REPO_CONTEXT_ERROR', message: err instanceof Error ? err.message : 'Failed to analyze repo' },
+        });
+      }
+    },
+  );
 }

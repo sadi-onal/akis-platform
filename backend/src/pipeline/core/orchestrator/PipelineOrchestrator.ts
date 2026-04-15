@@ -26,6 +26,10 @@ import { incrementUsage } from '../../../services/billing/BillingService.js';
 import type { ScribeAgent, ScribeState, ScribeResult } from '../../agents/scribe/ScribeAgent.js';
 import type { ProtoAgent } from '../../agents/proto/ProtoAgent.js';
 import type { TraceAgent } from '../../agents/trace/TraceAgent.js';
+import type { CriticAgent, CriticResult } from '../../agents/critic/CriticAgent.js';
+import type { CriticReviewOutput } from '../../agents/critic/CriticTypes.js';
+import { FixLoopService } from '../fix-loop/FixLoopService.js';
+import { PipelineMetricsService } from '../metrics/PipelineMetricsService.js';
 
 // ─── Timeout Guard ───────────────────────────────
 
@@ -61,17 +65,21 @@ export interface PipelineStateUpdate {
   stage: PipelineStage;
   title: string;
   model: string;
+  traceEnabled: boolean;
   scribeConversation: ScribeMessageType[];
   scribeOutput: ScribeOutput;
   approvedSpec: StructuredSpec;
   protoOutput: ProtoOutput;
   traceOutput: TraceOutput;
+  repoContext: import('../../agents/repo-context/RepoContextTypes.js').RepoContext;
   protoConfig: { repoName: string; repoVisibility: 'public' | 'private' };
   jiraConfig: { projectKey: string; enabled: boolean; epicKey?: string };
   metrics: PipelineMetrics;
   error: PipelineError | null;
   intermediateState: Record<string, unknown>;
   attemptCount: number;
+  autoApproveEnabled: boolean;
+  autoApproveThreshold: number;
 }
 
 // ─── Event Interface ──────────────────────────────
@@ -89,6 +97,7 @@ export interface AgentSet {
   scribe: ScribeAgent;
   proto: ProtoAgent;
   trace: TraceAgent;
+  critic?: CriticAgent;
 }
 
 export class PipelineOrchestrator {
@@ -96,6 +105,47 @@ export class PipelineOrchestrator {
   private locks = new Map<string, Promise<unknown>>();
 
   private activityLogger?: { record(entry: Record<string, unknown>): Promise<void> };
+
+  // ─── Token Usage Tracking ─────────────────────────
+  /** Accumulated token usage per pipeline (flushed to DB when stage completes). */
+  private tokenAccumulators = new Map<string, { inputTokens: number; outputTokens: number }>();
+
+  /** Create a callback that accumulates token usage for a specific pipeline. */
+  createTokenCallback(pipelineId: string): import('../pipeline-factory.js').TokenUsageCallback {
+    return (usage) => {
+      const acc = this.tokenAccumulators.get(pipelineId) ?? { inputTokens: 0, outputTokens: 0 };
+      acc.inputTokens += usage.inputTokens;
+      acc.outputTokens += usage.outputTokens;
+      this.tokenAccumulators.set(pipelineId, acc);
+    };
+  }
+
+  /** Flush accumulated token usage to the pipeline's metrics in the DB. */
+  private async flushTokenUsage(pipelineId: string): Promise<void> {
+    const acc = this.tokenAccumulators.get(pipelineId);
+    if (!acc || (acc.inputTokens === 0 && acc.outputTokens === 0)) return;
+
+    try {
+      const pipeline = await this.store.getById(pipelineId);
+      if (!pipeline) return;
+      const metrics = pipeline.metrics;
+      const updatedMetrics = {
+        ...metrics,
+        inputTokens: (metrics.inputTokens ?? 0) + acc.inputTokens,
+        outputTokens: (metrics.outputTokens ?? 0) + acc.outputTokens,
+        totalTokens: (metrics.totalTokens ?? 0) + acc.inputTokens + acc.outputTokens,
+      };
+      await this.store.update(pipelineId, { metrics: updatedMetrics });
+      this.tokenAccumulators.delete(pipelineId);
+    } catch (err) {
+      logger.warn({ err, pipelineId }, '[Pipeline] Token usage flush failed (non-fatal)');
+    }
+  }
+
+  // ─── Level 3 Services ───────────────────────────
+  private criticAgent?: CriticAgent;
+  private fixLoopService = new FixLoopService();
+  private metricsService = new PipelineMetricsService();
 
   constructor(
     private store: PipelineStore,
@@ -106,12 +156,22 @@ export class PipelineOrchestrator {
     private getGitHubToken: (userId: string) => Promise<string | null>,
     private createGitHubService: (token: string) => import('../pipeline-factory.js').GitHubServiceLike,
     private emit?: (event: PipelineEvent) => void,
-    private createAgentsForModel?: (model: string, githubService?: import('../pipeline-factory.js').GitHubServiceLike) => AgentSet,
+    private createAgentsForModel?: (model: string, githubService?: import('../pipeline-factory.js').GitHubServiceLike, onTokenUsage?: import('../pipeline-factory.js').TokenUsageCallback) => AgentSet,
   ) {}
 
   /** Inject optional agent activity logger for integrity metrics */
   setActivityLogger(logger: { record(entry: Record<string, unknown>): Promise<void> }): void {
     this.activityLogger = logger;
+  }
+
+  /** Inject CriticAgent for Level 3 adversarial review (optional — backward-compatible) */
+  setCriticAgent(critic: CriticAgent): void {
+    this.criticAgent = critic;
+  }
+
+  /** Access the pipeline metrics service for reporting */
+  getMetricsService(): PipelineMetricsService {
+    return this.metricsService;
   }
 
   /** Log agent activity (non-blocking, best-effort) */
@@ -137,9 +197,10 @@ export class PipelineOrchestrator {
     }
   }
 
-  private getAgents(model?: string): AgentSet {
+  private getAgents(model?: string, pipelineId?: string): AgentSet {
+    const tokenCb = pipelineId ? this.createTokenCallback(pipelineId) : undefined;
     if (model && this.createAgentsForModel) {
-      return this.createAgentsForModel(model);
+      return this.createAgentsForModel(model, undefined, tokenCb);
     }
     return { scribe: this.scribe, proto: this.proto, trace: this.trace };
   }
@@ -153,6 +214,7 @@ export class PipelineOrchestrator {
     jiraConfig?: { projectKey: string; enabled: boolean; epicKey?: string },
     parentPipelineId?: string,
     skipScribe?: boolean,
+    traceEnabled?: boolean,
   ): Promise<PipelineState> {
     const pipeline = await this.store.create(userId);
 
@@ -163,6 +225,7 @@ export class PipelineOrchestrator {
     const updateData: Partial<PipelineStateUpdate> = {
       title: input.idea.slice(0, 100),
       model,
+      traceEnabled: traceEnabled ?? false,
       scribeConversation: conversation,
       metrics: { ...pipeline.metrics, startedAt: new Date() },
     };
@@ -246,14 +309,53 @@ export class PipelineOrchestrator {
     const emit = createActivityEmitter(pipelineId, 'scribe');
     emit('start', 'Kullanıcı fikri analiz ediliyor...', 5);
 
+    // ─── Repo Context: fetch if existingRepo is set ───
+    const pipeline = await this.getPipeline(pipelineId);
+    const existingRepo = pipeline.intermediateState?.existingRepo as
+      | { owner: string; repo: string; branch?: string }
+      | undefined;
+    let repoKnowledge = '';
+
+    if (existingRepo) {
+      try {
+        emit('start', 'Mevcut repo analiz ediliyor...', 10);
+        const repoContext = await this.fetchRepoContext(
+          pipeline.userId,
+          existingRepo.owner,
+          existingRepo.repo,
+          existingRepo.branch,
+        );
+        // Cache in DB for later use by Proto
+        await this.store.update(pipelineId, { repoContext });
+
+        repoKnowledge = `\n\n--- EXISTING REPOSITORY CONTEXT ---\n`
+          + `Repository: ${repoContext.owner}/${repoContext.repo} (branch: ${repoContext.branch})\n`
+          + `Tech Stack: ${repoContext.techStack.join(', ')}\n`
+          + `Summary: ${repoContext.summary}\n\n`
+          + `File Tree:\n${repoContext.fileTree}\n`
+          + `--- END REPOSITORY CONTEXT ---\n`
+          + `\nIMPORTANT: You are writing a spec for a CHANGE to this existing codebase, not a new project. `
+          + `The spec should describe what to ADD or MODIFY in the existing code.`;
+        logger.info({ pipelineId, owner: existingRepo.owner, repo: existingRepo.repo }, '[Pipeline] RepoContext fetched');
+      } catch (err) {
+        logger.warn({ err, pipelineId }, '[Pipeline] RepoContext fetch failed, continuing without context');
+        emit('progress', 'Repo analizi atlandı, devam ediliyor...', 15);
+      }
+    }
+
     // Effort-based model routing
     const effort = scoreScribeEffort(input.idea);
     const effectiveModel = model ?? effort.model;
     logger.info(`[Scribe] Effort: ${effort.score}/10 → Model: ${effectiveModel} (${effort.reasoning})`);
 
-    const agents = this.getAgents(effectiveModel);
+    const agents = this.getAgents(effectiveModel, pipelineId);
     const scribeState = agents.scribe.createInitialState(input);
     scribeState.pipelineId = pipelineId;
+
+    // Inject repo context as knowledge context
+    if (repoKnowledge) {
+      scribeState.knowledgeContext = (scribeState.knowledgeContext ?? '') + repoKnowledge;
+    }
 
     await this.writeCheckpoint(pipelineId, 'scribe', input.idea);
     const result = await withRetry(
@@ -497,9 +599,10 @@ export class PipelineOrchestrator {
     }
 
     const protoModel = model ?? 'claude-sonnet-4-6'; // Use stronger model for iterations
+    const tokenCb = this.createTokenCallback(pipelineId);
     const agents = userGithubService
-      ? (this.createAgentsForModel?.(protoModel, userGithubService) ?? this.getAgents(protoModel))
-      : this.getAgents(protoModel);
+      ? (this.createAgentsForModel?.(protoModel, userGithubService, tokenCb) ?? this.getAgents(protoModel, pipelineId))
+      : this.getAgents(protoModel, pipelineId);
 
     await this.writeCheckpoint(pipelineId, 'proto', `İterasyon: ${iterationRequest.slice(0, 80)}`);
     const protoResult = await withRetry(
@@ -585,6 +688,31 @@ export class PipelineOrchestrator {
     return results;
   }
 
+  /** Inject optional AI service for RepoContextAgent */
+  private aiService?: import('../pipeline-factory.js').AIServiceLike;
+  setAIService(aiService: import('../pipeline-factory.js').AIServiceLike): void {
+    this.aiService = aiService;
+  }
+
+  /** Fetch repo context using RepoContextAgent with per-user GitHub token. */
+  private async fetchRepoContext(
+    userId: string,
+    owner: string,
+    repo: string,
+    branch?: string,
+  ): Promise<import('../../agents/repo-context/RepoContextTypes.js').RepoContext> {
+    const { token } = await this.validateGitHubAccess(userId);
+    const githubService = this.createGitHubService(token);
+    const { createRepoContextAgent } = await import('../pipeline-factory.js');
+
+    if (!this.aiService) {
+      throw new Error('AI service not configured for RepoContextAgent');
+    }
+
+    const agent = createRepoContextAgent(this.aiService, githubService, 'claude-haiku-4-5');
+    return agent.fetchContext({ owner, repo, branch });
+  }
+
   // ─── Background Proto + Trace Runner ────────
 
   private async runProtoAndTrace(
@@ -606,15 +734,23 @@ export class PipelineOrchestrator {
     logger.info(`[Proto] Effort: ${protoEffort.score}/10 → Model: ${protoModel} (${protoEffort.reasoning})`);
 
     // Use per-user GitHub adapter if available, otherwise default agents
+    const tokenCbProto = this.createTokenCallback(pipelineId);
     const agents = userGithubService
-      ? (this.createAgentsForModel?.(protoModel, userGithubService) ?? this.getAgents(protoModel))
-      : this.getAgents(protoModel);
+      ? (this.createAgentsForModel?.(protoModel, userGithubService, tokenCbProto) ?? this.getAgents(protoModel, pipelineId))
+      : this.getAgents(protoModel, pipelineId);
+    // Inject repo context knowledge into Proto if available
+    const pipelineData = await this.getPipeline(pipelineId);
+    const repoCtx = pipelineData.repoContext;
+    const protoKnowledge = repoCtx
+      ? `\n\n--- EXISTING REPOSITORY CONTEXT ---\nRepository: ${repoCtx.owner}/${repoCtx.repo} (branch: ${repoCtx.branch})\nTech Stack: ${repoCtx.techStack.join(', ')}\nSummary: ${repoCtx.summary}\n\nFile Tree:\n${repoCtx.fileTree}\n--- END REPOSITORY CONTEXT ---\nIMPORTANT: Generate code that fits into this EXISTING codebase. Follow its conventions and patterns.`
+      : undefined;
+
     await this.writeCheckpoint(pipelineId, 'proto', spec.title);
     const protoResult = await withRetry(
       (attempt) => {
         if (attempt > 1) protoEmit('retry', `Proto yeniden deneniyor (deneme ${attempt})...`, 25);
         return withTimeout(
-          agents.proto.execute({ spec, repoName, repoVisibility, owner, pipelineId }),
+          agents.proto.execute({ spec, repoName, repoVisibility, owner, pipelineId, knowledgeContext: protoKnowledge }),
           STAGE_TIMEOUT,
           'Proto',
         );
@@ -650,8 +786,8 @@ export class PipelineOrchestrator {
     const pipeline = await this.getPipeline(pipelineId);
     const requiresTests = pipeline.scribeOutput?.plan?.requiresTests ?? true;
 
-    if (!requiresTests) {
-      // Skip Trace — mark as completed directly
+    if (!requiresTests || !pipeline.traceEnabled) {
+      // Skip Trace — mark as completed directly (either Scribe said no tests needed, or user disabled Trace)
       await this.store.update(pipelineId, {
         protoOutput: protoResult.data,
         stage: 'completed',
@@ -659,6 +795,36 @@ export class PipelineOrchestrator {
       });
       this.emitEvent(pipelineId, 'stage_change', 'completed');
       return;
+    }
+
+    // ─── Level 3: CriticAgent code review (if available) ───
+    if (this.criticAgent) {
+      this.metricsService.startStage(pipelineId, 'critic_code');
+      await this.store.update(pipelineId, {
+        protoOutput: protoResult.data,
+        stage: 'critic_reviewing_code',
+        metrics: protoCompletedMetrics,
+      });
+      this.emitEvent(pipelineId, 'stage_change', 'critic_reviewing_code');
+
+      const ideaMsg = pipeline.scribeConversation.find((m) => m.type === 'user_idea');
+      const originalIdea = typeof ideaMsg?.content === 'string' ? ideaMsg.content : '';
+      const criticResult = await this.runCriticCodeReview(pipelineId, protoResult.data, spec, originalIdea);
+
+      this.metricsService.endStage(pipelineId, 'critic_code', criticResult?.approved ?? true, {
+        overallScore: criticResult?.overallScore ?? 0,
+        findingsCount: criticResult?.findings?.length ?? 0,
+        approved: criticResult?.approved ?? true,
+      });
+
+      if (criticResult) {
+        const currentState = await this.store.getById(pipelineId);
+        const existingIntermediate = (currentState?.intermediateState ?? {}) as Record<string, unknown>;
+        await this.store.update(pipelineId, {
+          intermediateState: { ...existingIntermediate, criticCodeOutput: criticResult },
+        });
+      }
+      logger.info({ pipelineId, approved: criticResult?.approved, score: criticResult?.overallScore }, '[Pipeline] Critic code review completed');
     }
 
     // Proto succeeded → transition to trace_testing
@@ -823,6 +989,23 @@ export class PipelineOrchestrator {
     return updated;
   }
 
+  // ─── Toggle Trace ───────────────────────────
+
+  async toggleTrace(pipelineId: string, enabled: boolean): Promise<PipelineState> {
+    return this.withLock(pipelineId, () => this._toggleTrace(pipelineId, enabled));
+  }
+  private async _toggleTrace(pipelineId: string, enabled: boolean): Promise<PipelineState> {
+    const pipeline = await this.getPipeline(pipelineId);
+
+    // Only allow toggling before trace stage has started
+    const terminalOrTraceStages: PipelineStage[] = ['trace_testing', 'completed', 'completed_partial', 'failed', 'cancelled'];
+    if (terminalOrTraceStages.includes(pipeline.stage)) {
+      throw new InvalidStageError('pre-trace stage', pipeline.stage);
+    }
+
+    return this.store.update(pipelineId, { traceEnabled: enabled });
+  }
+
   // ─── Query ───────────────────────────────────
 
   async getStatus(pipelineId: string): Promise<PipelineState> {
@@ -867,6 +1050,86 @@ export class PipelineOrchestrator {
     if (result.type === 'spec') {
       conversation.push({ type: 'spec_draft', content: result.data });
       const pipelineForJira = await this.store.getById(pipelineId);
+
+      // ─── Level 3: CriticAgent spec review (if available) ───
+      if (this.criticAgent) {
+        this.metricsService.startStage(pipelineId, 'critic_spec');
+        await this.store.update(pipelineId, {
+          stage: 'critic_reviewing_spec',
+          scribeConversation: conversation,
+          scribeOutput: result.data,
+          title: result.data.spec.title,
+          metrics: { ...metrics, scribeCompletedAt: new Date() },
+        });
+        this.emitEvent(pipelineId, 'stage_change', 'critic_reviewing_spec');
+
+        const ideaMsg = conversation.find((m) => m.type === 'user_idea');
+        const originalIdea = typeof ideaMsg?.content === 'string' ? ideaMsg.content : '';
+        const criticResult = await this.runCriticSpecReview(pipelineId, result.data.spec, originalIdea);
+
+        this.metricsService.endStage(pipelineId, 'critic_spec', criticResult?.approved ?? true, {
+          overallScore: criticResult?.overallScore ?? 0,
+          findingsCount: criticResult?.findings?.length ?? 0,
+          approved: criticResult?.approved ?? true,
+        });
+
+        // Store critic output in intermediateState
+        if (criticResult) {
+          await this.store.update(pipelineId, {
+            intermediateState: { criticSpecOutput: criticResult },
+          });
+        }
+        // If critic rejected and score < threshold, log but proceed (human gate is next)
+        logger.info({ pipelineId, approved: criticResult?.approved, score: criticResult?.overallScore }, '[Pipeline] Critic spec review completed');
+
+        // ─── Level 4: Adaptive Autonomy — auto-approve if threshold met ───
+        const currentPipeline = await this.store.getById(pipelineId);
+        const autoThreshold = currentPipeline?.autoApproveThreshold ?? 85;
+        if (
+          currentPipeline?.autoApproveEnabled &&
+          criticResult?.approved &&
+          criticResult.overallScore >= autoThreshold
+        ) {
+          logger.info(
+            { pipelineId, criticScore: criticResult.overallScore, threshold: autoThreshold },
+            '[Pipeline] Auto-approved: critic score meets adaptive autonomy threshold',
+          );
+          await this.store.update(pipelineId, {
+            scribeConversation: conversation,
+            scribeOutput: result.data,
+            approvedSpec: result.data.spec,
+            title: result.data.spec.title,
+            metrics: { ...metrics, scribeCompletedAt: new Date(), approvedAt: new Date() },
+            intermediateState: {
+              ...currentPipeline.intermediateState,
+              autoApproved: true,
+              autoApproveScore: criticResult.overallScore,
+            },
+          });
+
+          // Determine repo config
+          const proto = currentPipeline.protoConfig ?? { repoName: result.data.spec.title.replace(/\s+/g, '-').toLowerCase().slice(0, 50), repoVisibility: 'private' as const };
+          const autoOwner = await this.getGitHubOwner(currentPipeline.userId);
+          // Trigger Proto directly (skip human gate)
+          this.runProtoAndTrace(
+            pipelineId,
+            { ...metrics, scribeCompletedAt: new Date(), approvedAt: new Date() } as PipelineMetrics,
+            result.data.spec,
+            proto.repoName,
+            proto.repoVisibility,
+            autoOwner,
+            currentPipeline.model,
+          ).catch((err) => {
+            logger.error({ err, pipelineId }, '[Pipeline] Background Proto+Trace failed after auto-approve');
+            this.failPipeline(pipelineId, 'Proto', err).catch((e) => logger.error({ err: e }, '[Pipeline] failPipeline also failed'));
+          }).finally(() => {
+            cleanupPipelineListeners(pipelineId);
+          });
+
+          return await this.store.getById(pipelineId) as PipelineState;
+        }
+      }
+
       const updated = await this.store.update(pipelineId, {
         stage: 'awaiting_approval',
         scribeConversation: conversation,
@@ -1241,6 +1504,8 @@ export class PipelineOrchestrator {
     // Clean up event listeners when pipeline reaches a terminal state
     if (stage === 'completed' || stage === 'completed_partial' || stage === 'failed' || stage === 'cancelled') {
       cleanupPipelineListeners(pipelineId);
+      // Flush accumulated token usage to DB (best-effort, non-blocking)
+      this.flushTokenUsage(pipelineId).catch((err) => logger.warn({ err, pipelineId }, '[Pipeline] Token flush failed'));
     }
   }
 
@@ -1301,8 +1566,12 @@ export class PipelineOrchestrator {
     input: unknown,
   ): Promise<void> {
     try {
+      // Merge with existing intermediateState to preserve critic outputs
+      const current = await this.store.getById(pipelineId);
+      const existing = (current?.intermediateState ?? {}) as Record<string, unknown>;
       await this.store.update(pipelineId, {
         intermediateState: {
+          ...existing,
           agent: agentName,
           startedAt: new Date().toISOString(),
           status: 'in_progress',
@@ -1312,6 +1581,57 @@ export class PipelineOrchestrator {
       });
     } catch {
       // checkpoint failure is non-fatal — don't block agent execution
+    }
+  }
+
+  // ─── Level 3: Critic Review Helpers ────────────
+
+  /**
+   * Run CriticAgent spec review. Returns the review output or null on error.
+   * Errors are logged but do not fail the pipeline — critic is advisory.
+   */
+  private async runCriticSpecReview(
+    pipelineId: string,
+    spec: StructuredSpec,
+    originalIdea: string,
+  ): Promise<CriticReviewOutput | null> {
+    if (!this.criticAgent) return null;
+    try {
+      const result: CriticResult = await this.criticAgent.reviewSpec(
+        { reviewType: 'spec_review', artifact: spec, originalIdea },
+        1,
+      );
+      if (result.type === 'review') return result.data;
+      logger.warn({ pipelineId, error: result.error }, '[Pipeline] Critic spec review returned error');
+      return null;
+    } catch (err) {
+      logger.warn({ err, pipelineId }, '[Pipeline] Critic spec review failed (non-fatal)');
+      return null;
+    }
+  }
+
+  /**
+   * Run CriticAgent code review. Returns the review output or null on error.
+   * Errors are logged but do not fail the pipeline — critic is advisory.
+   */
+  private async runCriticCodeReview(
+    pipelineId: string,
+    protoOutput: ProtoOutput,
+    spec: StructuredSpec,
+    originalIdea: string,
+  ): Promise<CriticReviewOutput | null> {
+    if (!this.criticAgent) return null;
+    try {
+      const result: CriticResult = await this.criticAgent.reviewCode(
+        { reviewType: 'code_review', artifact: protoOutput, originalIdea, referenceSpec: spec },
+        1,
+      );
+      if (result.type === 'review') return result.data;
+      logger.warn({ pipelineId, error: result.error }, '[Pipeline] Critic code review returned error');
+      return null;
+    } catch (err) {
+      logger.warn({ err, pipelineId }, '[Pipeline] Critic code review failed (non-fatal)');
+      return null;
     }
   }
 }

@@ -9,7 +9,7 @@ import type { Pipeline, PipelineStage, ScribeOutput, ProtoOutput, TraceOutput, S
 
 const http = new HttpClient(getApiBaseUrl());
 
-function mapStageStatus(pipelineStage: PipelineStage): { workflowStatus: WorkflowStatus; stages: WorkflowStages } {
+function mapStageStatus(pipelineStage: PipelineStage, traceEnabled?: boolean): { workflowStatus: WorkflowStatus; stages: WorkflowStages } {
   const idle: StageResult = { status: 'idle' };
 
   const stages: WorkflowStages = {
@@ -49,7 +49,7 @@ function mapStageStatus(pipelineStage: PipelineStage): { workflowStatus: Workflo
       stages.scribe.status = 'completed';
       stages.approve.status = 'completed';
       stages.proto.status = 'completed';
-      stages.trace.status = 'completed';
+      stages.trace.status = traceEnabled === false ? 'idle' : 'completed';
       workflowStatus = 'completed';
       break;
     case 'completed_partial':
@@ -142,6 +142,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
         break;
       }
       case 'user_answer':
+      case 'user_note':
         messages.push({
           role: 'user',
           type: 'message',
@@ -256,7 +257,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
 }
 
 export function mapPipelineToWorkflow(pipeline: Pipeline): Workflow {
-  const { workflowStatus, stages } = mapStageStatus(pipeline.stage);
+  const { workflowStatus, stages } = mapStageStatus(pipeline.stage, pipeline.traceEnabled);
 
   // Enrich stages with actual output data
   const scribeData = mapScribeOutput(pipeline.scribeOutput);
@@ -303,6 +304,7 @@ export function mapPipelineToWorkflow(pipeline: Pipeline): Workflow {
 
   return {
     id: pipeline.id,
+    traceEnabled: pipeline.traceEnabled ?? false,
     title: pipeline.title || (
       pipeline.scribeConversation?.[0]?.type === 'user_idea' &&
       typeof (pipeline.scribeConversation[0] as Record<string, unknown>)?.content === 'string'
@@ -342,6 +344,7 @@ export const workflowsApi = {
     existingRepo?: { owner: string; repo: string; branch: string };
     parentPipelineId?: string;
     skipScribe?: boolean;
+    traceEnabled?: boolean;
   }): Promise<Workflow> => {
     const res = await http.post<PipelineResponse>('/api/pipelines', data);
     return mapPipelineToWorkflow(res.pipeline);
@@ -372,6 +375,11 @@ export const workflowsApi = {
 
   skipTrace: async (id: string): Promise<Workflow> => {
     const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/skip-trace`);
+    return mapPipelineToWorkflow(res.pipeline);
+  },
+
+  toggleTrace: async (id: string, enabled: boolean): Promise<Workflow> => {
+    const res = await http.patch<PipelineResponse>(`/api/pipelines/${id}/trace-toggle`, { enabled });
     return mapPipelineToWorkflow(res.pipeline);
   },
 

@@ -17,6 +17,8 @@ import type { Workflow, WorkflowStatus, ConversationMessage, StructuredSpec } fr
 import type { UserFriendlyPlan } from '../../types/plan';
 import type { PipelineStage } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
+import { RepoSelector, type RepoMode, type SelectedRepo } from '../../components/chat/RepoSelector';
+import type { RepoContext } from '../../services/api/github';
 import { LOGO_MARK_SVG } from '../../theme/brand';
 
 function localizeError(e: unknown): string {
@@ -212,6 +214,14 @@ export default function ChatPage() {
   });
   // Pending new conversation — created locally, pipeline not yet started on backend
   const [pendingConv, setPendingConv] = useState<{ displayName: string } | null>(null);
+  // Trace toggle — off by default
+  const [traceEnabled, setTraceEnabled] = useState(false);
+  // Repo selector state
+  const [repoMode, setRepoMode] = useState<RepoMode>('new');
+  const [selectedRepo, setSelectedRepo] = useState<SelectedRepo | null>(null);
+  const [repoContext, setRepoContext] = useState<RepoContext | null>(null);
+  // Key source badge state
+  const [keySourceBadge, setKeySourceBadge] = useState<{ source: 'akis' | 'own'; jobsRemaining: number; jobsLimit: number } | null>(null);
   const [showProfileWizard, setShowProfileWizard] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   // Resizable preview panel (percentage of container width, 30-70%)
@@ -283,6 +293,20 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => { refreshList(); }, [refreshList]);
+
+  // Fetch key source badge (once on mount)
+  useEffect(() => {
+    fetch('/api/settings/ai-keys/status', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        const source: 'akis' | 'own' = data.keySource ?? 'akis';
+        const jobsUsed = data.usage?.jobsUsedToday ?? 0;
+        const jobsLimit = data.usage?.jobsLimit ?? 3;
+        setKeySourceBadge({ source, jobsRemaining: Math.max(0, jobsLimit - jobsUsed), jobsLimit });
+      })
+      .catch(() => { /* best-effort */ });
+  }, []);
 
   // Load active conversation — keep old content visible until new data arrives
   useEffect(() => {
@@ -490,51 +514,6 @@ export default function ChatPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleNewConversation]);
 
-  /** Check if the current pipeline is in a terminal state (no further agent work possible). */
-  const isTerminalState = useCallback((workflow: Workflow | null): boolean => {
-    if (!workflow?.currentStage) return false;
-    const terminalStages: PipelineStage[] = ['completed', 'completed_partial', 'failed', 'cancelled'];
-    return terminalStages.includes(workflow.currentStage);
-  }, []);
-
-  /** Build a context summary from a completed pipeline for follow-up conversations. */
-  const buildFollowUpContext = useCallback((workflow: Workflow): string => {
-    const parts: string[] = [];
-
-    // Signal this is a modification of an existing project
-    parts.push('ÖNEMLİ: Bu mevcut bir projenin DEVAM isteğidir. Yeni bir proje DEĞİL.');
-    parts.push('Kullanıcının mevcut projesinde değişiklik yapmak istediğini anla ve ona göre spec hazırla.');
-
-    // Include original idea
-    const ideaMsg = workflow.conversation?.find(m => m.role === 'user' && m.type === 'message');
-    if (ideaMsg) {
-      parts.push(`Önceki proje fikri: ${ideaMsg.content}`);
-    }
-
-    // Include spec summary if available
-    const specMsg = workflow.conversation?.find(m => m.type === 'spec' && m.spec);
-    if (specMsg?.spec) {
-      parts.push(`Önceki spec başlığı: ${specMsg.spec.title ?? 'Belirtilmedi'}`);
-      parts.push(`Problem: ${specMsg.spec.problemStatement}`);
-      if (specMsg.spec.userStories?.length) {
-        const stories = specMsg.spec.userStories.map(s => s.action || s.iWant || '').filter(Boolean);
-        parts.push(`Özellikler: ${stories.join(', ')}`);
-      }
-      const tc = specMsg.spec.technicalConstraints;
-      if (tc && typeof tc === 'object' && !Array.isArray(tc) && tc.stack) {
-        parts.push(`Tech stack: ${tc.stack}`);
-      }
-    }
-
-    // Include proto result — repo info for continuation
-    if (workflow.stages.proto.repo) {
-      parts.push(`Mevcut repo: ${workflow.stages.proto.repo} (branch: ${workflow.stages.proto.branch ?? 'main'})`);
-      parts.push('Bu repo üzerinde çalışmaya devam edilecek — yeni repo OLUŞTURMA.');
-    }
-
-    return parts.join('\n');
-  }, []);
-
   const handleSend = useCallback(async (content: string) => {
     const userMsg: ChatMessage = { type: 'user', content, timestamp: new Date().toISOString() };
     setMessages((prev) => [...prev, userMsg]);
@@ -555,8 +534,16 @@ export default function ChatPage() {
 
       try {
         setCreating(true);
-        const w = await workflowsApi.create({ idea: content });
+        const w = await workflowsApi.create({
+          idea: content,
+          traceEnabled,
+          existingRepo: selectedRepo ?? undefined,
+        });
         setPendingConv(null);
+        // Reset repo selector state after pipeline creation
+        setRepoMode('new');
+        setSelectedRepo(null);
+        setRepoContext(null);
         loadedIdRef.current = w.id;
         setActiveWorkflow(w);
         setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
@@ -581,88 +568,17 @@ export default function ChatPage() {
 
     if (!conversationId) return;
 
-    // If the current pipeline is in a terminal state, start a follow-up pipeline
-    // that iterates on the SAME repo (if available) with context from the previous run.
-    if (isTerminalState(activeWorkflow)) {
-      if (content.trim().length < 10) {
-        setMessages((prev) => [...prev, {
-          type: 'error',
-          agent: 'system',
-          message: 'Fikrinizi en az 10 karakter ile açıklayın.',
-          retryable: false,
-          timestamp: new Date().toISOString(),
-        }]);
-        return;
-      }
-
-      try {
-        setCreating(true);
-        const context = activeWorkflow ? buildFollowUpContext(activeWorkflow) : undefined;
-
-        // Extract existing repo info for pipeline continuation
-        const protoStage = activeWorkflow?.stages?.proto;
-        const repoFull = protoStage?.repo; // "owner/repo-name"
-        let existingRepo: { owner: string; repo: string; branch: string } | undefined;
-        if (repoFull && protoStage?.branch) {
-          const [repoOwner, repoName] = repoFull.includes('/')
-            ? repoFull.split('/')
-            : ['', repoFull];
-          if (repoOwner && repoName) {
-            existingRepo = { owner: repoOwner, repo: repoName, branch: protoStage.branch };
-          }
-        }
-
-        // Iteration mode: skip Scribe when we have an existing repo
-        const skipScribe = !!existingRepo;
-
-        const w = await workflowsApi.create({
-          idea: content,
-          context,
-          existingRepo,
-          parentPipelineId: activeWorkflow?.id,
-          skipScribe,
-        });
-        loadedIdRef.current = w.id;
-        setActiveWorkflow(w);
-        // Append iteration status message to existing conversation
-        setMessages((prev) => [
-          ...prev,
-          {
-            type: 'agent' as const,
-            agent: 'proto' as const,
-            content: skipScribe
-              ? 'Mevcut kod okunuyor ve değişiklikler uygulanıyor...'
-              : 'Yeni proje planlanıyor...',
-            timestamp: new Date().toISOString(),
-          },
-        ]);
-        syncFromStage(w.currentStage ?? 'completed');
-        refreshList();
-        // Replace URL silently — user stays in same conversation view
-        navigate(`/chat/${w.id}`, { replace: true });
-      } catch (e) {
-        const errorMsg = localizeError(e);
-        toast(errorMsg, 'error');
-        setMessages((prev) => [...prev, {
-          type: 'error',
-          agent: 'system',
-          message: errorMsg,
-          retryable: true,
-          timestamp: new Date().toISOString(),
-        }]);
-      } finally {
-        setCreating(false);
-      }
-      return;
-    }
-
+    // Send message to the existing pipeline — works for ALL stages including terminal ones.
+    // Backend saves it as a user_note (terminal) or processes it as a Scribe answer (clarifying).
+    // This keeps the user in the SAME conversation instead of creating a new one.
     try {
       await workflowsApi.sendMessage(conversationId, content);
       await refreshWorkflow();
+      refreshList(); // update sidebar ordering (updatedAt changed)
     } catch (e) {
       if (import.meta.env.DEV) console.error('Failed to send:', e);
     }
-  }, [conversationId, pendingConv, activeWorkflow, isTerminalState, buildFollowUpContext, refreshWorkflow, refreshList, syncFromStage, navigate]);
+  }, [conversationId, pendingConv, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, repoMode, creating]);
 
   const approveInFlightRef = useRef(false);
   const handleApprove = useCallback(async () => {
@@ -790,7 +706,11 @@ export default function ChatPage() {
                   uiState={uiState}
                   isInputEnabled={pendingConv ? !creating : (creating ? false : isInputEnabled)}
                   showCancelButton={showCancelButton}
-                  inputPlaceholder={pendingConv ? 'Projenizi anlatın...' : inputPlaceholder}
+                  inputPlaceholder={pendingConv
+                    ? (repoMode === 'existing' && selectedRepo
+                      ? 'Bu repoda ne degistirmek istiyorsunuz...'
+                      : 'Projenizi anlatın...')
+                    : inputPlaceholder}
                   onSend={handleSend}
                   onCancel={handleCancel}
                   onApprove={handleApprove}
@@ -802,6 +722,19 @@ export default function ChatPage() {
                   currentStep={currentStep}
                   activities={pipelineActivities}
                   createdFiles={createdFiles}
+                  traceEnabled={traceEnabled}
+                  onTraceToggle={pendingConv ? setTraceEnabled : undefined}
+                  repoSelectorSlot={pendingConv ? (
+                    <RepoSelector
+                      mode={repoMode}
+                      onModeChange={setRepoMode}
+                      selectedRepo={selectedRepo}
+                      onRepoSelect={setSelectedRepo}
+                      repoContext={repoContext}
+                      onRepoContextChange={setRepoContext}
+                    />
+                  ) : undefined}
+                  keySourceBadge={pendingConv ? keySourceBadge : null}
                 />
               </ErrorBoundary>
             </div>

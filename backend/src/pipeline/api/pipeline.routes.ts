@@ -48,19 +48,24 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
 
       // ── Auth + Usage Limit Guard ─────────────────────────────────────
       // Admins: unlimited, no restrictions
-      // Users WITH own API key: unlimited pipelines (they pay their own API costs)
-      // Users WITHOUT own API key: limited to FREE_PLAN.jobsPerDay/day (uses platform key)
+      // Users using own API key (active provider has configured key): relaxed limits (daily job limit still applies)
+      // Users using AKIS built-in key: full plan limits (daily jobs + monthly token budget)
       try {
         const { requireAuth: _requireAuth } = await import('../../utils/auth.js');
         const user = await _requireAuth(request as import('fastify').FastifyRequest);
         if (user.role !== 'admin') {
           const { getMultiProviderStatus } = await import('../../services/ai/user-ai-keys.js');
           const keyStatus = await getMultiProviderStatus(user.id);
-          const providers = keyStatus.providers as Record<string, { configured: boolean }>;
-          const hasOwnKey = Object.values(providers).some((p) => p.configured);
 
-          if (!hasOwnKey) {
-            // No own key → enforce daily limit (uses platform's API key)
+          // Determine if user is actively using their own key
+          const activeProvider = keyStatus.activeProvider;
+          const providers = keyStatus.providers as Record<string, { configured: boolean }>;
+          const isUsingOwnKey = activeProvider
+            ? providers[activeProvider]?.configured === true
+            : false;
+
+          if (!isUsingOwnKey) {
+            // Using AKIS built-in key → enforce full plan limits (daily + token budget)
             const { checkUsageLimits } = await import('../../services/billing/BillingService.js');
             const limitCheck = await checkUsageLimits(user.id);
             if (!limitCheck.allowed) {
@@ -70,7 +75,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
               );
             }
           }
-          // hasOwnKey = true → no limit check, user pays their own API costs
+          // isUsingOwnKey = true → skip token budget check, but daily job limit still tracked via incrementUsage
         }
       } catch (err) {
         if (err && typeof err === 'object' && 'statusCode' in err) {
@@ -96,7 +101,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
         context: body.context,
         targetStack: body.targetStack,
         existingRepo: body.existingRepo,
-      }, body.model, body.jiraConfig, body.parentPipelineId, body.skipScribe);
+      }, body.model, body.jiraConfig, body.parentPipelineId, body.skipScribe, body.traceEnabled);
       return { pipeline };
     },
 
@@ -156,6 +161,17 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       return { pipeline };
     },
 
+    async toggleTrace(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const { enabled } = (request as { body: { enabled: boolean } }).body;
+      if (typeof enabled !== 'boolean') {
+        throw Object.assign(new Error('enabled field must be a boolean'), { statusCode: 400 });
+      }
+      const pipeline = await orchestrator.toggleTrace(id, enabled);
+      return { pipeline };
+    },
+
     async cancelPipeline(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
@@ -203,6 +219,14 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const trimmed = title.trim().slice(0, 200);
       const pipeline = await orchestrator.updateTitle(id, userId, trimmed);
       return { pipeline };
+    },
+
+    async getMetrics(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const metricsService = orchestrator.getMetricsService();
+      const runMetrics = metricsService.getRunMetrics(id);
+      return { metrics: runMetrics ?? null, summary: metricsService.getSummary() };
     },
 
     async getFileContent(request: unknown) {

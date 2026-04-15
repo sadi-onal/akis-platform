@@ -203,6 +203,9 @@ export const PipelineMetricsSchema = z.object({
   clarificationRounds: z.number().int().min(0).max(3),
   retryCount: z.number().int().min(0),
   estimatedCost: z.number().min(0).optional(),
+  inputTokens: z.number().int().min(0).optional(),
+  outputTokens: z.number().int().min(0).optional(),
+  totalTokens: z.number().int().min(0).optional(),
 });
 
 export const JiraConfigSchema = z.object({
@@ -251,6 +254,8 @@ export const StartPipelineRequestSchema = z.object({
   parentPipelineId: z.string().uuid().optional(),
   /** When true, skip Scribe and jump directly to Proto (iteration on existing project) */
   skipScribe: z.boolean().optional().default(false),
+  /** When true, run Trace (test generation) after Proto. Default: false (skip Trace). */
+  traceEnabled: z.boolean().optional().default(false),
   model: z.enum(['claude-sonnet-4-6', 'claude-haiku-4-5']).optional().default('claude-haiku-4-5'),
   jiraConfig: JiraConfigSchema,
 });

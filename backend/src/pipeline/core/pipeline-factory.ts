@@ -6,6 +6,8 @@ import { PipelineOrchestrator, type PipelineStore } from './orchestrator/Pipelin
 import { ScribeAgent } from '../agents/scribe/ScribeAgent.js';
 import { ProtoAgent, type ProtoAIDeps, type ProtoGitHubDeps } from '../agents/proto/ProtoAgent.js';
 import { TraceAgent, type TraceAIDeps, type TraceGitHubDeps } from '../agents/trace/TraceAgent.js';
+import { CriticAgent, type CriticAIDeps } from '../agents/critic/CriticAgent.js';
+import { RepoContextAgent } from '../agents/repo-context/RepoContextAgent.js';
 import type { ScribeAIDeps } from '../agents/scribe/ScribeAgent.js';
 import { DrizzlePipelineStore } from '../db/DrizzlePipelineStore.js';
 import { PipelineReconciler } from './PipelineReconciler.js';
@@ -23,44 +25,64 @@ export interface AIServiceLike {
     context?: unknown;
     maxTokens?: number;
     modelOverride?: string;
-  }): Promise<{ content: string }>;
+  }): Promise<{ content: string; metadata?: Record<string, unknown> }>;
 }
 
-function createScribeAIDeps(aiService: AIServiceLike, model?: string): ScribeAIDeps {
-  return {
-    async generateText(systemPrompt: string, userPrompt: string): Promise<string> {
-      const result = await aiService.generateWorkArtifact({
-        systemPrompt,
-        task: userPrompt,
-        maxTokens: 8192,
-        modelOverride: model,
-      });
-      return result.content;
-    },
+/** Callback type for accumulating token usage per AI call. */
+export type TokenUsageCallback = (usage: { inputTokens: number; outputTokens: number }) => void;
+
+/**
+ * Wraps generateWorkArtifact: returns content and optionally reports token usage via callback.
+ */
+function makeGenerateText(
+  aiService: AIServiceLike,
+  maxTokens: number,
+  model?: string,
+  onTokenUsage?: TokenUsageCallback,
+): (systemPrompt: string, userPrompt: string) => Promise<string> {
+  return async (systemPrompt: string, userPrompt: string): Promise<string> => {
+    const result = await aiService.generateWorkArtifact({
+      systemPrompt,
+      task: userPrompt,
+      maxTokens,
+      modelOverride: model,
+    });
+    // Report token usage if callback provided and metadata has usage info
+    if (onTokenUsage && result.metadata?.usage) {
+      const u = result.metadata.usage as { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number };
+      const inp = u.inputTokens ?? u.input_tokens ?? 0;
+      const out = u.outputTokens ?? u.output_tokens ?? 0;
+      if (inp > 0 || out > 0) {
+        onTokenUsage({ inputTokens: inp, outputTokens: out });
+      }
+    }
+    return result.content;
   };
 }
 
-function createProtoAIDeps(aiService: AIServiceLike, model?: string): ProtoAIDeps {
-  return {
-    async generateText(systemPrompt: string, userPrompt: string): Promise<string> {
-      const result = await aiService.generateWorkArtifact({
-        systemPrompt,
-        task: userPrompt,
-        maxTokens: 16384,
-        modelOverride: model,
-      });
-      return result.content;
-    },
-  };
+function createScribeAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): ScribeAIDeps {
+  return { generateText: makeGenerateText(aiService, 8192, model, onTokenUsage) };
 }
 
-function createTraceAIDeps(aiService: AIServiceLike, model?: string): TraceAIDeps {
+function createProtoAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): ProtoAIDeps {
+  return { generateText: makeGenerateText(aiService, 16384, model, onTokenUsage) };
+}
+
+function createTraceAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): TraceAIDeps {
+  return { generateText: makeGenerateText(aiService, 32768, model, onTokenUsage) };
+}
+
+function createCriticAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): CriticAIDeps {
+  return { generateText: makeGenerateText(aiService, 8192, model, onTokenUsage) };
+}
+
+function createRepoContextAIDeps(aiService: AIServiceLike, model?: string) {
   return {
     async generateText(systemPrompt: string, userPrompt: string): Promise<string> {
       const result = await aiService.generateWorkArtifact({
         systemPrompt,
         task: userPrompt,
-        maxTokens: 32768,
+        maxTokens: 4096,
         modelOverride: model,
       });
       return result.content;
@@ -131,10 +153,12 @@ export function createAgentsForModel(
   githubService: GitHubServiceLike,
   model?: string,
   agenticDeps?: AgenticLoopDeps,
+  onTokenUsage?: TokenUsageCallback,
 ) {
-  const scribeAI = createScribeAIDeps(aiService, model);
-  const protoAI = createProtoAIDeps(aiService, model);
-  const traceAI = createTraceAIDeps(aiService, model);
+  const scribeAI = createScribeAIDeps(aiService, model, onTokenUsage);
+  const protoAI = createProtoAIDeps(aiService, model, onTokenUsage);
+  const traceAI = createTraceAIDeps(aiService, model, onTokenUsage);
+  const criticAI = createCriticAIDeps(aiService, model, onTokenUsage);
   const protoGH = createProtoGitHubDeps(githubService);
   const traceGH = createTraceGitHubDeps(githubService);
 
@@ -142,7 +166,22 @@ export function createAgentsForModel(
     scribe: new ScribeAgent(scribeAI),
     proto: new ProtoAgent(protoAI, protoGH, agenticDeps),
     trace: new TraceAgent(traceAI, traceGH, agenticDeps),
+    critic: new CriticAgent(criticAI),
   };
+}
+
+export function createRepoContextAgent(
+  aiService: AIServiceLike,
+  githubService: GitHubServiceLike,
+  model?: string,
+): RepoContextAgent {
+  const ai = createRepoContextAIDeps(aiService, model);
+  const github = {
+    listFiles: (owner: string, repo: string, branch: string) => githubService.listFiles(owner, repo, branch),
+    getFileContent: (owner: string, repo: string, branch: string, filePath: string) =>
+      githubService.getFileContent(owner, repo, branch, filePath),
+  };
+  return new RepoContextAgent(ai, github);
 }
 
 export interface PipelineSystem {
@@ -171,12 +210,19 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
     opts.getGitHubToken,
     opts.createGitHubService,
     undefined, // emit
-    (model, githubService?) => createAgentsForModel(opts.aiService, githubService ?? fallbackGH, model, opts.agenticDeps),
+    (model, githubService?, onTokenUsage?) => createAgentsForModel(opts.aiService, githubService ?? fallbackGH, model, opts.agenticDeps, onTokenUsage),
   );
 
   // Wire agent activity logging for integrity metrics
   const activityService = new AgentActivityService({ db });
   orchestrator.setActivityLogger(activityService);
+
+  // Wire Level 3: CriticAgent for adversarial review
+  const criticAI = createCriticAIDeps(opts.aiService);
+  orchestrator.setCriticAgent(new CriticAgent(criticAI));
+
+  // Wire AI service for RepoContextAgent
+  orchestrator.setAIService(opts.aiService);
 
   const reconciler = new PipelineReconciler(store);
   return { orchestrator, reconciler };

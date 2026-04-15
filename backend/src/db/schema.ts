@@ -1639,8 +1639,9 @@ export type NewFeedback = typeof feedback.$inferInsert;
 // ============================================================================
 
 export const pipelineStageEnum = pgEnum('pipeline_stage', [
-  'scribe_clarifying', 'scribe_generating', 'awaiting_approval',
-  'proto_building', 'trace_testing', 'ci_running',
+  'scribe_clarifying', 'scribe_generating', 'critic_reviewing_spec',
+  'awaiting_approval', 'proto_building', 'critic_reviewing_code',
+  'trace_testing', 'fix_loop_iteration', 'ci_running',
   'completed', 'completed_partial', 'failed', 'cancelled',
 ]);
 
@@ -1654,6 +1655,8 @@ export const pipelines = pgTable('pipelines', {
   approvedSpec: jsonb('approved_spec'),
   protoOutput: jsonb('proto_output'),
   traceOutput: jsonb('trace_output'),
+  traceEnabled: boolean('trace_enabled').default(false).notNull(),
+  repoContext: jsonb('repo_context'),
   protoConfig: jsonb('proto_config'),
   jiraConfig: jsonb('jira_config'),
   metrics: jsonb('metrics').default({}),

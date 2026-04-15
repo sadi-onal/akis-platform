@@ -54,6 +54,10 @@ interface ProviderStatus {
 interface MultiProviderStatus {
   activeProvider: Provider | null;
   providers: Record<Provider, ProviderStatus>;
+  keySource?: 'akis' | 'own';
+  canUseOwnKey?: boolean;
+  plan?: { tier: string; name: string; jobsPerDay: number; maxTokenBudget: number };
+  usage?: { jobsUsedToday: number; tokensUsedThisMonth: number; jobsLimit: number; tokensLimit: number };
 }
 
 interface PipelineStatsData {
@@ -505,7 +509,7 @@ function AIKeysTab({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
   };
 
   const handleDelete = async (provider: Provider) => {
-    if (!window.confirm('Bu API anahtarını silmek istediğinize emin misiniz?')) return;
+    if (!window.confirm('Bu API anahtarini silmek istediginize emin misiniz?')) return;
     try {
       await fetch('/api/settings/ai-keys', {
         method: 'DELETE',
@@ -530,122 +534,254 @@ function AIKeysTab({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
         body: JSON.stringify({ provider }),
       });
       await fetchStatus();
+      toast('Aktif saglayici degistirildi', 'success');
     } catch (e) {
       if (import.meta.env.DEV) console.warn('Failed to set active provider:', e);
     }
   };
 
+  const keySource = status?.keySource ?? 'akis';
+  const plan = status?.plan;
+  const usage = status?.usage;
+  const canUseOwnKey = status?.canUseOwnKey ?? false;
+  const hasAnyOwnKey = status ? Object.values(status.providers).some((p) => p.configured) : false;
+
+  const tokenBudgetPct = (plan?.maxTokenBudget && usage)
+    ? Math.min(100, Math.round((usage.tokensUsedThisMonth / plan.maxTokenBudget) * 100))
+    : 0;
+
   return (
     <>
-      <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.ai.title')}</h2>
-      <div className="space-y-3 mb-8">
-        {loading ? (
-          <div className="space-y-3 rounded-xl border border-ak-border bg-ak-surface p-4"><Skeleton className="h-4 w-1/4" /><Skeleton className="h-8 w-full" /><Skeleton className="h-4 w-1/3" /></div>
-        ) : (
-          PROVIDERS.map((p) => {
-            const ps = status?.providers[p.key];
-            const isActive = status?.activeProvider === p.key;
-            const isEditing = editingProvider === p.key;
+      {/* ── Section 1: Aktif Saglayici ──────────────────── */}
+      <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">Aktif Saglayici</h2>
 
-            return (
-              <div key={p.key} className="rounded-xl border border-ak-border bg-ak-surface p-4">
-                <div className="flex items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-ak-text-primary">{p.label}</h3>
-                      {isActive && (
-                        <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-medium text-ak-primary">
-                          {t('settings.ai.default')}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-ak-text-tertiary">
-                      {ps?.configured
-                        ? `API Key: ••••${ps.last4}`
-                        : t('settings.ai.notConfigured')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {ps?.configured && !isActive && (
-                      <button
-                        onClick={() => handleSetActive(p.key)}
-                        className="rounded-lg border border-ak-border px-2.5 py-1 text-[11px] font-medium text-ak-text-secondary hover:text-ak-primary transition-colors"
-                      >
-                        {t('settings.ai.makeDefault')}
-                      </button>
-                    )}
-                    {ps?.configured && (
-                      <button
-                        onClick={() => handleDelete(p.key)}
-                        className="rounded-lg border border-ak-border px-2.5 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 transition-colors"
-                      >
-                        {t('settings.ai.delete')}
-                      </button>
-                    )}
-                    {!isEditing && (
-                      <button
-                        onClick={() => { setEditingProvider(p.key); setApiKeyInput(''); setError(null); }}
-                        className="rounded-lg bg-ak-primary/10 px-2.5 py-1 text-[11px] font-medium text-ak-primary hover:bg-ak-primary/20 transition-colors"
-                      >
-                        {ps?.configured ? t('settings.ai.update') : t('settings.ai.add')}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {isEditing && (
-                  <div className="mt-3 space-y-2">
-                    <input
-                      type="password"
-                      value={apiKeyInput}
-                      onChange={(e) => setApiKeyInput(e.target.value)}
-                      placeholder={p.placeholder}
-                      autoFocus
-                      className={cn(
-                        'w-full rounded-lg border border-ak-border bg-ak-surface-2 px-3 py-2 text-xs text-ak-text-primary font-mono',
-                        'placeholder:text-ak-text-tertiary focus:border-ak-primary focus:outline-none focus:ring-1 focus:ring-ak-primary/30',
-                      )}
-                    />
-                    {error && <p className="text-xs text-red-400">{error}</p>}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setEditingProvider(null); setApiKeyInput(''); setError(null); }}
-                        className="rounded-lg border border-ak-border px-3 py-1.5 text-xs text-ak-text-secondary"
-                      >
-                        {t('settings.ai.cancel')}
-                      </button>
-                      <button
-                        onClick={() => handleSave(p.key)}
-                        disabled={!apiKeyInput.trim() || saving}
-                        className={cn(
-                          'rounded-lg bg-ak-primary px-3 py-1.5 text-xs font-medium text-[color:var(--ak-on-primary)]',
-                          (!apiKeyInput.trim() || saving) && 'opacity-50 cursor-not-allowed',
-                        )}
-                      >
-                        {saving ? t('settings.ai.saving') : t('settings.ai.save')}
-                      </button>
-                    </div>
-                  </div>
-                )}
+      {loading ? (
+        <div className="space-y-3 mb-6"><Skeleton className="h-24 w-full rounded-xl" /><Skeleton className="h-20 w-full rounded-xl" /></div>
+      ) : (
+        <div className="space-y-2 mb-6">
+          {/* AKIS Built-in Key Card */}
+          <div
+            className={cn(
+              'rounded-xl border-2 p-4 transition-colors cursor-pointer',
+              keySource === 'akis'
+                ? 'border-ak-primary bg-ak-primary/5'
+                : 'border-ak-border bg-ak-surface hover:border-ak-primary/30',
+            )}
+            onClick={() => {
+              // Switching to AKIS = clear active provider preference so system falls back to built-in
+              // We can do this by setting active to 'anthropic' (which won't have a user key if they deleted it)
+              // Or simply: if they click AKIS and they're already on own key, we could clear active
+              // For simplicity: AKIS is active when no own key is active — just toast info
+              if (keySource !== 'akis') {
+                toast('Kendi anahtarinizi silerek AKIS anahtarina donebilirsiniz', 'info');
+              }
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2',
+                keySource === 'akis' ? 'border-ak-primary' : 'border-ak-border',
+              )}>
+                {keySource === 'akis' && <div className="h-2.5 w-2.5 rounded-full bg-ak-primary" />}
               </div>
-            );
-          })
-        )}
-      </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-ak-text-primary">AKIS Yerlesik Anahtar</h3>
+                  {keySource === 'akis' && (
+                    <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-medium text-ak-primary">Aktif</span>
+                  )}
+                </div>
+                <p className="text-xs text-ak-text-tertiary">
+                  Anthropic Claude &middot; {plan?.name ?? 'Free'} planiniz dahilinde
+                </p>
+              </div>
+            </div>
 
-      {/* User Info */}
-      <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.account.title')}</h2>
-      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ak-primary/20 text-sm font-semibold text-ak-primary">
-            {user?.name?.[0]?.toUpperCase() ?? '?'}
+            {/* Token budget progress (only for AKIS key) */}
+            {plan && usage && (
+              <div className="mt-3 space-y-1">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-ak-text-tertiary">Token Bütçesi</span>
+                  <span className="font-mono text-ak-text-secondary">
+                    {formatTokens(usage.tokensUsedThisMonth)} / {formatTokens(plan.maxTokenBudget)}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-ak-surface-2">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-500',
+                      tokenBudgetPct > 90 ? 'bg-red-500' : tokenBudgetPct > 70 ? 'bg-yellow-500' : 'bg-ak-primary',
+                    )}
+                    style={{ width: `${tokenBudgetPct}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-ak-text-tertiary">
+                  <span>Is: {usage.jobsUsedToday}/{usage.jobsLimit} bugun</span>
+                  <span>{tokenBudgetPct}% kullanildi</span>
+                </div>
+              </div>
+            )}
           </div>
-          <div>
-            <p className="text-sm font-medium text-ak-text-primary">{user?.name ?? t('settings.account.defaultName')}</p>
-            <p className="text-xs text-ak-text-tertiary">{user?.email ?? ''}</p>
+
+          {/* Own Key Card */}
+          <div
+            className={cn(
+              'rounded-xl border-2 p-4 transition-colors',
+              keySource === 'own'
+                ? 'border-ak-primary bg-ak-primary/5'
+                : 'border-ak-border bg-ak-surface',
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2',
+                keySource === 'own' ? 'border-ak-primary' : 'border-ak-border',
+              )}>
+                {keySource === 'own' && <div className="h-2.5 w-2.5 rounded-full bg-ak-primary" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-ak-text-primary">Kendi Anahtariniz</h3>
+                  {keySource === 'own' && (
+                    <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-medium text-ak-primary">Aktif</span>
+                  )}
+                </div>
+                <p className="text-xs text-ak-text-tertiary">
+                  {!canUseOwnKey
+                    ? 'Pro plan gerektirir'
+                    : hasAnyOwnKey
+                      ? 'Kendi API anahtarinizla sinirsiz kullanim'
+                      : 'Kendi API anahtarinizi ekleyerek sinirsiz kullanin'}
+                </p>
+              </div>
+              {!canUseOwnKey && (
+                <span className="shrink-0 rounded-lg bg-ak-surface-2 px-2.5 py-1 text-[10px] font-medium text-ak-text-tertiary">
+                  Pro Gerekli
+                </span>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Section 2: Kullanilabilir Saglayicilar ──────── */}
+      {!loading && (canUseOwnKey || hasAnyOwnKey) && (
+        <>
+          <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.ai.title')}</h2>
+          <div className="space-y-3 mb-6">
+            {PROVIDERS.map((p) => {
+              const ps = status?.providers[p.key];
+              const isActive = status?.activeProvider === p.key && ps?.configured;
+              const isEditing = editingProvider === p.key;
+
+              return (
+                <div key={p.key} className="rounded-xl border border-ak-border bg-ak-surface p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-ak-text-primary">{p.label}</h3>
+                        {isActive && (
+                          <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-medium text-ak-primary">
+                            {t('settings.ai.default')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-ak-text-tertiary">
+                        {ps?.configured
+                          ? `API Key: ••••${ps.last4}`
+                          : t('settings.ai.notConfigured')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {ps?.configured && !isActive && (
+                        <button
+                          onClick={() => handleSetActive(p.key)}
+                          className="rounded-lg border border-ak-border px-2.5 py-1 text-[11px] font-medium text-ak-text-secondary hover:text-ak-primary transition-colors"
+                        >
+                          {t('settings.ai.makeDefault')}
+                        </button>
+                      )}
+                      {ps?.configured && (
+                        <button
+                          onClick={() => handleDelete(p.key)}
+                          className="rounded-lg border border-ak-border px-2.5 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 transition-colors"
+                        >
+                          {t('settings.ai.delete')}
+                        </button>
+                      )}
+                      {!isEditing && (
+                        <button
+                          onClick={() => { setEditingProvider(p.key); setApiKeyInput(''); setError(null); }}
+                          className="rounded-lg bg-ak-primary/10 px-2.5 py-1 text-[11px] font-medium text-ak-primary hover:bg-ak-primary/20 transition-colors"
+                        >
+                          {ps?.configured ? t('settings.ai.update') : t('settings.ai.add')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <div className="mt-3 space-y-2">
+                      <input
+                        type="password"
+                        value={apiKeyInput}
+                        onChange={(e) => setApiKeyInput(e.target.value)}
+                        placeholder={p.placeholder}
+                        autoFocus
+                        className={cn(
+                          'w-full rounded-lg border border-ak-border bg-ak-surface-2 px-3 py-2 text-xs text-ak-text-primary font-mono',
+                          'placeholder:text-ak-text-tertiary focus:border-ak-primary focus:outline-none focus:ring-1 focus:ring-ak-primary/30',
+                        )}
+                      />
+                      {error && <p className="text-xs text-red-400">{error}</p>}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setEditingProvider(null); setApiKeyInput(''); setError(null); }}
+                          className="rounded-lg border border-ak-border px-3 py-1.5 text-xs text-ak-text-secondary"
+                        >
+                          {t('settings.ai.cancel')}
+                        </button>
+                        <button
+                          onClick={() => handleSave(p.key)}
+                          disabled={!apiKeyInput.trim() || saving}
+                          className={cn(
+                            'rounded-lg bg-ak-primary px-3 py-1.5 text-xs font-medium text-[color:var(--ak-on-primary)]',
+                            (!apiKeyInput.trim() || saving) && 'opacity-50 cursor-not-allowed',
+                          )}
+                        >
+                          {saving ? t('settings.ai.saving') : t('settings.ai.save')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* ── Section 3: Plan Bilgisi ──────────────────────── */}
+      {!loading && plan && (
+        <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-ak-text-primary">
+                {plan.name} Plan
+              </p>
+              <p className="text-[10px] text-ak-text-tertiary">
+                {plan.jobsPerDay} is/gun &middot; {formatTokens(plan.maxTokenBudget)} token/ay
+              </p>
+            </div>
+            <button
+              disabled
+              className="rounded-lg bg-ak-surface-2 px-3 py-1.5 text-[10px] font-medium text-ak-text-tertiary cursor-not-allowed"
+            >
+              Pro Plana Yukselt (Yakinda)
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

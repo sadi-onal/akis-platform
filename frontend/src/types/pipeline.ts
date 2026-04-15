@@ -149,6 +149,7 @@ export interface Pipeline {
   userId: string;
   stage: PipelineStage;
   title?: string;
+  traceEnabled: boolean;
   scribeConversation: ScribeMessageType[];
   scribeOutput?: ScribeOutput;
   approvedSpec?: StructuredSpec;

@@ -7,8 +7,9 @@
 
 export const PIPELINE_TABLE_SQL = `
 CREATE TYPE pipeline_stage AS ENUM (
-  'scribe_clarifying', 'scribe_generating', 'awaiting_approval',
-  'proto_building', 'trace_testing', 'ci_running',
+  'scribe_clarifying', 'scribe_generating', 'critic_reviewing_spec',
+  'awaiting_approval', 'proto_building', 'critic_reviewing_code',
+  'trace_testing', 'fix_loop_iteration', 'ci_running',
   'completed', 'completed_partial', 'failed', 'cancelled'
 );
 
@@ -22,6 +23,8 @@ CREATE TABLE pipelines (
   approved_spec JSONB,
   proto_output JSONB,
   trace_output JSONB,
+  trace_enabled BOOLEAN NOT NULL DEFAULT false,
+  repo_context JSONB,
   proto_config JSONB,
   jira_config JSONB,
   metrics JSONB DEFAULT '{}',

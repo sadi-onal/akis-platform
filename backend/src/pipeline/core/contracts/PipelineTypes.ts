@@ -161,9 +161,12 @@ export interface TraceOutput {
 export type PipelineStage =
   | 'scribe_clarifying'
   | 'scribe_generating'
+  | 'critic_reviewing_spec'   // Level 3: CriticAgent reviews Scribe's spec
   | 'awaiting_approval'
   | 'proto_building'
+  | 'critic_reviewing_code'   // Level 3: CriticAgent reviews Proto's code
   | 'trace_testing'
+  | 'fix_loop_iteration'      // Level 3: FixLoop retrying Proto+Trace
   | 'ci_running' // reserved — future CI/CD integration
   | 'completed'
   | 'completed_partial'
@@ -188,6 +191,10 @@ export interface PipelineMetrics {
   clarificationRounds: number;
   retryCount: number;
   estimatedCost?: number;
+  /** Accumulated AI token usage across all stages */
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
 }
 
 export interface PipelineState {
@@ -204,12 +211,18 @@ export interface PipelineState {
   traceOutput?: TraceOutput;
   /** Reserved for future CI/CD integration (GitHub Actions run result) */
   ciResult?: { ok: boolean; runId: number; status: string; conclusion: string | null; htmlUrl: string };
+  traceEnabled: boolean;
   protoConfig?: { repoName: string; repoVisibility: 'public' | 'private' };
   jiraConfig?: {
     projectKey: string;
     enabled: boolean;
     epicKey?: string;
   };
+  repoContext?: import('../../agents/repo-context/RepoContextTypes.js').RepoContext;
+
+  /** Level 4: Adaptive autonomy — auto-approve when critic score meets threshold */
+  autoApproveEnabled?: boolean;
+  autoApproveThreshold?: number; // default 85
 
   metrics: PipelineMetrics;
   error?: PipelineError;

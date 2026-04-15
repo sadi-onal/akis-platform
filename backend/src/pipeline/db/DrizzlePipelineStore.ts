@@ -37,6 +37,9 @@ function parseMetrics(raw: Record<string, unknown> | null): PipelineState['metri
     clarificationRounds: (raw.clarificationRounds as number) ?? 0,
     retryCount: (raw.retryCount as number) ?? 0,
     estimatedCost: raw.estimatedCost as number | undefined,
+    inputTokens: raw.inputTokens as number | undefined,
+    outputTokens: raw.outputTokens as number | undefined,
+    totalTokens: raw.totalTokens as number | undefined,
   };
 }
 
@@ -49,11 +52,13 @@ function rowToState(row: typeof pipelines.$inferSelect): PipelineState {
     userId: row.userId,
     stage: row.stage as PipelineState['stage'],
     title: row.title ?? undefined,
+    traceEnabled: row.traceEnabled,
     scribeConversation: (row.scribeConversation ?? []) as PipelineState['scribeConversation'],
     scribeOutput: row.scribeOutput as PipelineState['scribeOutput'],
     approvedSpec: row.approvedSpec as PipelineState['approvedSpec'],
     protoOutput: row.protoOutput as PipelineState['protoOutput'],
     traceOutput: row.traceOutput as PipelineState['traceOutput'],
+    repoContext: row.repoContext as PipelineState['repoContext'],
     protoConfig: row.protoConfig as PipelineState['protoConfig'],
     jiraConfig: row.jiraConfig as PipelineState['jiraConfig'],
     metrics: parseMetrics(row.metrics as Record<string, unknown> | null),
@@ -106,7 +111,7 @@ export class DrizzlePipelineStore implements PipelineStore {
       .select()
       .from(pipelines)
       .where(eq(pipelines.userId, userId))
-      .orderBy(desc(pipelines.createdAt));
+      .orderBy(desc(pipelines.updatedAt));
 
     return rows.map(rowToState);
   }
@@ -131,6 +136,8 @@ export class DrizzlePipelineStore implements PipelineStore {
     if (data.metrics !== undefined) updateData.metrics = data.metrics;
     if (data.error !== undefined) updateData.error = data.error;
     if (data.intermediateState !== undefined) updateData.intermediateState = data.intermediateState;
+    if (data.repoContext !== undefined) updateData.repoContext = data.repoContext;
+    if (data.traceEnabled !== undefined) updateData.traceEnabled = data.traceEnabled;
     if (data.attemptCount !== undefined) updateData.attemptCount = data.attemptCount;
 
     // Optimistic locking: when stage changes, require version match + increment
