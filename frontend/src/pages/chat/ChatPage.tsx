@@ -593,7 +593,16 @@ export default function ChatPage() {
           refreshList();
           navigate(`/chat/${w.id}`);
         } catch (e) {
+          if (import.meta.env.DEV) console.error('Failed to create iteration:', e);
           toast(localizeError(e), 'error');
+          const errMsg: ChatMessage = {
+            type: 'error',
+            agent: 'system',
+            message: 'İterasyon başlatılamadı. Lütfen tekrar deneyin.',
+            retryable: true,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages(prev => [...prev, errMsg]);
         } finally {
           setCreating(false);
         }

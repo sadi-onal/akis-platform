@@ -60,7 +60,7 @@ export function FeaturesSection() {
         {FEATURES.map((f, i) => (
           <motion.div
             key={f.title}
-            className="group rounded-2xl border border-ak-border bg-ak-surface/30 p-6 backdrop-blur-sm"
+            className="group rounded-2xl border border-ak-border bg-ak-surface/70 p-6 backdrop-blur-sm"
             variants={reduced ? {} : cardVariants}
             initial="hidden"
             whileInView="visible"
@@ -70,7 +70,7 @@ export function FeaturesSection() {
           >
             <div className="mb-3 text-2xl">{f.icon}</div>
             <h3 className="text-base font-semibold mb-1.5">{f.title}</h3>
-            <p className="text-sm text-ak-text-secondary leading-relaxed">{f.description}</p>
+            <p className="text-sm text-ak-text-primary leading-relaxed">{f.description}</p>
           </motion.div>
         ))}
       </div>

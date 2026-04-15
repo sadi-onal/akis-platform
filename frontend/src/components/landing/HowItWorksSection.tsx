@@ -72,7 +72,7 @@ export function HowItWorksSection() {
         {STEPS.map((step, i) => (
           <motion.div
             key={step.agent}
-            className="group relative rounded-2xl border border-ak-border bg-ak-surface/50 p-6 backdrop-blur-sm transition-colors hover:border-opacity-60"
+            className="group relative rounded-2xl border border-ak-border bg-ak-surface/70 p-6 backdrop-blur-sm transition-colors hover:border-opacity-60"
             style={{ '--card-color': step.color } as React.CSSProperties}
             variants={reduced ? {} : cardVariants}
             initial="hidden"
@@ -100,7 +100,7 @@ export function HowItWorksSection() {
             </div>
 
             <h3 className="text-lg font-semibold mb-2">{step.title}</h3>
-            <p className="text-sm text-ak-text-secondary leading-relaxed">{step.description}</p>
+            <p className="text-sm text-ak-text-primary leading-relaxed">{step.description}</p>
 
             {/* Connecting arrow (visible on desktop between cards) */}
             {i < 2 && (

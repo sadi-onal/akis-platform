@@ -1,4 +1,5 @@
 import { HttpClient } from '../../http/HttpClient.js';
+import { logger } from '../../../lib/logger.js';
 import { randomUUID } from 'crypto';
 
 /**
@@ -641,7 +642,7 @@ export class GitHubMCPService {
       // Expected "file not found" errors - log at debug level only
       if (error instanceof McpError && (error.mcpCode === -32603 || error.mcpCode === -32601)) {
         // Resource not found or tool not found - expected for optional files
-        console.debug(`[GitHubMCP] File not found (expected): ${filePath}`);
+        logger.debug(`[GitHubMCP] File not found (expected): ${filePath}`);
         return null;
       }
       // Network or auth errors should still be thrown
@@ -649,7 +650,7 @@ export class GitHubMCPService {
         throw error;
       }
       // For unexpected errors, log at debug and return null (don't spam ERROR)
-      console.debug(`[GitHubMCP] Failed to read ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.debug(`[GitHubMCP] Failed to read ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }

@@ -67,7 +67,7 @@ export function HeroSection() {
 
       {/* Subtitle */}
       <motion.p
-        className="relative z-10 mt-6 max-w-xl text-lg text-ak-text-secondary leading-relaxed"
+        className="relative z-10 mt-6 max-w-xl text-lg text-ak-text-primary leading-relaxed"
         initial={reduced ? {} : { opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.8 }}

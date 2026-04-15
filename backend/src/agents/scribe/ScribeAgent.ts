@@ -375,7 +375,7 @@ export class ScribeAgent extends BaseAgent {
       return null;
     } catch {
       // Directory not found or other error - return null silently
-      console.debug(`[Scribe] Could not list directory: ${path}`);
+      logger.debug(`[Scribe] Could not list directory: ${path}`);
       return null;
     }
   }

@@ -38,7 +38,7 @@ export function StatsSection() {
 
   return (
     <section className="px-4 py-20">
-      <div className="mx-auto max-w-4xl rounded-2xl border border-ak-border bg-ak-surface/30 backdrop-blur-sm p-10">
+      <div className="mx-auto max-w-4xl rounded-2xl border border-ak-border bg-ak-surface/70 backdrop-blur-sm p-10">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           {STATS.map((stat, i) => (
             <motion.div
@@ -52,7 +52,7 @@ export function StatsSection() {
               <div className="text-3xl font-bold text-[#07D1AF]">
                 {stat.display ?? <AnimatedCounter target={stat.value} suffix={stat.suffix} />}
               </div>
-              <div className="mt-1 text-sm text-ak-text-secondary">{stat.label}</div>
+              <div className="mt-1 text-sm text-ak-text-primary">{stat.label}</div>
             </motion.div>
           ))}
         </div>
