@@ -207,7 +207,7 @@ describe('Orchestrator — Happy path', () => {
   it('clear idea → spec → approve → completed', async () => {
     const { orchestrator, store } = createOrchestrator();
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'React todo app with Google Auth' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'React todo app with Google Auth' }, undefined, undefined, undefined, undefined, true);
 
     // Background: Scribe runs async — wait for it
     const specReady = await waitForStage(store, started.id, ['awaiting_approval']);
@@ -329,7 +329,7 @@ describe('Orchestrator — Graceful degradation', () => {
     });
     const { orchestrator, store } = createOrchestrator({ trace });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
     await orchestrator.approveSpec(started.id, 'my-app', 'private');
     const final = await waitForStage(store, started.id, ['completed_partial']);
@@ -478,7 +478,7 @@ describe('Orchestrator — Events', () => {
       emit: (event) => events.push(event),
     });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
     await orchestrator.approveSpec(started.id, 'my-app', 'private');
     await waitForStage(store, started.id, ['completed']);

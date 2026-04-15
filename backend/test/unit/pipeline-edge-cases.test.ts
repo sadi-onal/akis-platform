@@ -85,6 +85,7 @@ class InMemoryStore implements PipelineStore {
       userId,
       stage: 'scribe_generating',
       scribeConversation: [],
+      traceEnabled: true,
       metrics: { startedAt: new Date(), clarificationRounds: 0, retryCount: 0 },
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -411,7 +412,7 @@ describe('Pipeline edge cases — Retry on failed state', () => {
     const store = new InMemoryStore();
     const { orchestrator } = createOrchestrator({ store, proto });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app edge retry' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app edge retry' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
     await orchestrator.approveSpec(started.id, 'my-app', 'private');
     await waitForStage(store, started.id, ['failed']);
@@ -464,7 +465,7 @@ describe('Pipeline edge cases — Retry on failed state', () => {
     // Use a proto that succeeds then trace that fails first time
     const { orchestrator } = createOrchestrator({ store, trace });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge retry trace' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge retry trace' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
     await orchestrator.approveSpec(started.id, 'my-app', 'private');
 
@@ -584,7 +585,7 @@ describe('Pipeline edge cases — Cancel during different stages', () => {
     const store = new InMemoryStore();
     const { orchestrator } = createOrchestrator({ store, trace });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge cancel partial' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge cancel partial' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
     await orchestrator.approveSpec(started.id, 'my-app', 'private');
     await waitForStage(store, started.id, ['completed_partial']);
@@ -597,7 +598,7 @@ describe('Pipeline edge cases — Cancel during different stages', () => {
     const store = new InMemoryStore();
     const { orchestrator } = createOrchestrator({ store });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge cancel trace' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge cancel trace' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
 
     // Force to trace_testing to simulate mid-trace
@@ -647,7 +648,7 @@ describe('Pipeline edge cases — Skip trace transitions', () => {
     const store = new InMemoryStore();
     const { orchestrator } = createOrchestrator({ store });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge skip trace' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge skip trace' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
 
     await store.forceStage(started.id, 'trace_testing', {
@@ -664,7 +665,7 @@ describe('Pipeline edge cases — Skip trace transitions', () => {
     const store = new InMemoryStore();
     const { orchestrator } = createOrchestrator({ store });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge skip trace failed' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge skip trace failed' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
 
     // Simulate: Proto succeeded, Trace failed
@@ -744,7 +745,7 @@ describe('Pipeline edge cases — Skip trace transitions', () => {
     const store = new InMemoryStore();
     const { orchestrator } = createOrchestrator({ store, emit: (e) => events.push(e) });
 
-    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge skip trace event' });
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Edge skip trace event' }, undefined, undefined, undefined, undefined, true);
     await waitForStage(store, started.id, ['awaiting_approval']);
 
     await store.forceStage(started.id, 'trace_testing', {

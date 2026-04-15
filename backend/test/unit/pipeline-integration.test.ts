@@ -138,6 +138,7 @@ function createInMemoryStore(): PipelineStore {
           clarificationRounds: 0,
           retryCount: 0,
         },
+        traceEnabled: true,
         attemptCount: 0,
         stageVersion: 0,
         createdAt: new Date(),
@@ -318,7 +319,7 @@ describe('Pipeline integration — happy path', () => {
     // 1. Start pipeline with idea
     const initial = await orchestrator.startPipeline('user-1', {
       idea: 'basit hesap makinesi, toplama ve cikarma yapsin',
-    });
+    }, undefined, undefined, undefined, undefined, true);
     assert.ok(initial.id, 'pipeline should have an id');
     assert.equal(initial.title, 'basit hesap makinesi, toplama ve cikarma yapsin');
 
@@ -431,7 +432,7 @@ describe('Pipeline integration — happy path', () => {
 
     const pipeline = await orchestrator.startPipeline('user-1', {
       idea: 'basit hesap makinesi — toplama, cikarma, carpma, bolme',
-    });
+    }, undefined, undefined, undefined, undefined, true);
 
     // Wait for spec
     const afterSpec = await waitForStage(store, pipeline.id, ['awaiting_approval']);
@@ -501,7 +502,7 @@ describe('Pipeline integration — completed_partial path', () => {
 
     const pipeline = await orchestrator.startPipeline('user-1', {
       idea: 'basit hesap makinesi uygulamasi gelistir',
-    });
+    }, undefined, undefined, undefined, undefined, true);
 
     // Wait for spec
     await waitForStage(store, pipeline.id, ['awaiting_approval']);
@@ -559,7 +560,7 @@ describe('Pipeline integration — completed_partial path', () => {
 
     const pipeline = await orchestrator.startPipeline('user-1', {
       idea: 'basit hesap makinesi, Trace skip test',
-    });
+    }, undefined, undefined, undefined, undefined, true);
 
     await waitForStage(store, pipeline.id, ['awaiting_approval']);
     await orchestrator.approveSpec(pipeline.id, 'calc-skip', 'private');
@@ -615,7 +616,7 @@ describe('Pipeline integration — stage transitions', () => {
 
     const pipeline = await orchestrator.startPipeline('user-1', {
       idea: 'basit hesap makinesi, FSM transition test',
-    });
+    }, undefined, undefined, undefined, undefined, true);
 
     // scribe_clarifying — wait for conversation to have clarification message
     await waitForConversationMessage(store, pipeline.id, 'clarification');

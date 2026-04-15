@@ -216,7 +216,7 @@ function resolveRelativePath(
     }
   }
 
-  return '/' + parts.join('/');
+  return parts.join('/');
 }
 
 // ---------------------------------------------------------------------------
@@ -229,10 +229,14 @@ export function importCheck(files: ValidationFile[]): ValidationIssue[] {
   // Build a set of known file paths (without extensions) for relative import resolution.
   const knownPaths = new Set<string>();
   for (const f of files) {
+    // Normalize: add both with and without leading slash for robustness
+    const normalized = f.path.replace(/^\//, '');
     knownPaths.add(f.path);
+    knownPaths.add(normalized);
     // Also add without common extensions so `./foo` matches `./foo.ts`
     const withoutExt = f.path.replace(/\.(ts|tsx|js|jsx|mjs|cjs|json|css|html)$/, '');
     knownPaths.add(withoutExt);
+    knownPaths.add(withoutExt.replace(/^\//, ''));
   }
 
   const tsJsFiles = files.filter(
