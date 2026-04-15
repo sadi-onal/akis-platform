@@ -5,9 +5,8 @@
  * SSE wire format, heartbeat interval, max connection age,
  * client disconnect cleanup, backpressure, and activity type shapes.
  */
-import { describe, it, beforeEach, afterEach, mock } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
 
 import {
   pipelineBus,
@@ -35,7 +34,7 @@ function makeActivity(
 }
 
 /** Drain the internal buffer for a pipeline so tests start clean. */
-function drainBuffer(pipelineId: string): void {
+function _drainBuffer(_pipelineId: string): void {
   // Emit nothing — just read to confirm current state, then overwrite
   // by emitting enough to shift everything out. Simpler: access via
   // getActivities, then repeatedly emit dummy + shift until empty.
@@ -333,7 +332,7 @@ describe('SSE Stream — backpressure handling', () => {
     let drainCallbackRegistered = false;
 
     const fakeWritable = {
-      write(chunk: string): boolean {
+      write(_chunk: string): boolean {
         // Simulate buffer full after first write
         return false;
       },
@@ -385,13 +384,13 @@ describe('SSE Stream — backpressure handling', () => {
 
 describe('SSE Stream — client disconnect cleanup', () => {
   it('cleanup removes listener and clears timers (simulated)', () => {
-    const id = `test-disconnect-${Date.now()}`;
+    const _id = `test-disconnect-${Date.now()}`;
     let listenerRemoved = false;
     let heartbeatCleared = false;
     let maxAgeCleared = false;
 
     // Simulate the cleanup function from the SSE handler
-    const onActivity = () => {};
+    const _onActivity = () => {};
     const heartbeat = setInterval(() => {}, 15_000);
     const maxAge = setTimeout(() => {}, 30 * 60 * 1000);
     let cleaned = false;

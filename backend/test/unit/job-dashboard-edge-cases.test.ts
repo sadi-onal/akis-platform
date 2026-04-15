@@ -4,7 +4,7 @@
  *
  * Does NOT require a running DB — all computation is extracted and tested in isolation.
  */
-import { describe, it, test } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import {
@@ -13,7 +13,6 @@ import {
   type LogEvent,
   type ErrorEvent,
   type AiCallEvent,
-  type StreamEvent,
 } from '../../src/types/stream-events.js';
 
 // ─── Re-create the streamQuerySchema from job-events.ts for isolated testing ──

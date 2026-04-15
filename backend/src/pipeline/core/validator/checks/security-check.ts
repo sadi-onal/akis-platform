@@ -26,7 +26,7 @@ interface SecurityPattern {
 const SECURITY_PATTERNS: ReadonlyArray<SecurityPattern> = [
   // ── Hardcoded secrets ──────────────────────────────────────────────────
   {
-    pattern: /(?:api[_-]?key|apikey)\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}['"]/i,
+    pattern: /(?:api[_-]?key|apikey)\s*[:=]\s*['"][A-Za-z0-9_-]{16,}['"]/i,
     severity: 'error',
     message: 'Hardcoded API key detected',
     rule: 'no-hardcoded-secret',

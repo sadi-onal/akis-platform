@@ -6,7 +6,7 @@
  * - Marketplace: profile schema, ingest schema, matching scoring edge cases, proposal generation
  * - Admin: log buffer getLogs filtering/pagination
  */
-import { describe, it, test, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 
@@ -18,7 +18,6 @@ import {
   DEFAULT_WORKER_COLORS,
   type CrewRunStatus,
   type CrewTaskStatus,
-  type CrewEventType,
   type CrewEvent,
 } from '../../src/core/crew/types.js';
 

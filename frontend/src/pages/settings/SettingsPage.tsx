@@ -130,7 +130,6 @@ function formatDate(iso: string): string {
 /* ------------------------------------------------------------------ */
 
 export default function SettingsPage() {
-  const { user } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -193,7 +192,7 @@ export default function SettingsPage() {
         <ErrorBoundary fallbackPath="/settings" fallbackLabel="Ayarlar">
           <div key={activeTab} className="animate-in fade-in slide-in-from-bottom-2 duration-200">
             {activeTab === 'profile' && <ProfileTab />}
-            {activeTab === 'ai-keys' && <AIKeysTab user={user} />}
+            {activeTab === 'ai-keys' && <AIKeysTab />}
             {activeTab === 'usage' && <UsageTab />}
             {activeTab === 'plan' && <PlanTab />}
             {activeTab === 'pipeline-stats' && <PipelineStatsTab />}
@@ -463,7 +462,7 @@ function ProfileTab() {
 /*  AI Keys Tab                                                        */
 /* ------------------------------------------------------------------ */
 
-function AIKeysTab({ user }: { user: ReturnType<typeof useAuth>['user'] }) {
+function AIKeysTab() {
   const { t } = useI18n();
   const [status, setStatus] = useState<MultiProviderStatus | null>(null);
   const [loading, setLoading] = useState(true);

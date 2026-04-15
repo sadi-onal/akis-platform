@@ -3,7 +3,7 @@
  * Tests: file tree building, key file selection, language detection,
  * tech stack detection, AI summary parsing, content truncation, error handling.
  */
-import { describe, it, mock } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { RepoContextAgent, type RepoContextAIDeps, type RepoContextGitHubDeps } from '../../src/pipeline/agents/repo-context/RepoContextAgent.js';

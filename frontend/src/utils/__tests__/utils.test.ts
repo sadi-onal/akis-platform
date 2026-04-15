@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { analyzePreviewCapability } from '../previewStrategy';
-import type { PreviewAnalysis } from '../previewStrategy';
+
 import {
   mapStageToUIState,
   mapStageToMode,

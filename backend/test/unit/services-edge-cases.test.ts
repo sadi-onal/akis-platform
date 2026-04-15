@@ -18,7 +18,6 @@ import {
   isEmailConfigured,
   MockEmailService,
   type EmailProvider,
-  type EmailServiceFactoryConfig,
 } from '../../src/services/email/index.js';
 
 import {

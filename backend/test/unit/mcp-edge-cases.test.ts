@@ -11,7 +11,7 @@
  *   GitHubMCPService: tool cache TTL, getFileContentSafe, createBranch,
  *                commitFile, createPRDraft, getLatestRelease
  */
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
@@ -502,10 +502,10 @@ describe('GitHub REST Adapter — createRepository', () => {
 describe('GitHub REST Adapter — commitFile (base64 encoding)', () => {
   it('encodes content as base64 in the PUT body', async () => {
     let capturedBody: Record<string, unknown> | null = null;
-    let callCount = 0;
+    let _callCount = 0;
 
     const restore = stubFetch(async (url, init) => {
-      callCount += 1;
+      _callCount += 1;
 
       // First call: GET to check existing file — return 404
       if (init.method === 'GET') {
@@ -837,9 +837,9 @@ describe('GitHub REST Adapter — createBranch', () => {
   });
 
   it('throws when branch already exists (422)', async () => {
-    let callCount = 0;
+    let _callCount = 0;
     const restore = stubFetch(async (_url, init) => {
-      callCount += 1;
+      _callCount += 1;
       if (init.method === 'GET') {
         return jsonResponse({ object: { sha: 'sha-abc' } });
       }

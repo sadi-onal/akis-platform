@@ -19,9 +19,7 @@ import {
 } from '../../src/utils/errorHandler.js';
 import {
   JobNotFoundError,
-  InvalidStateTransitionError,
   DatabaseError,
-  AIProviderError,
   TraceAutomationError,
 } from '../../src/core/errors.js';
 import { corsPlugin } from '../../src/plugins/security/cors.js';

@@ -36,9 +36,6 @@ import {
   PipelineMetricsSchema,
   StructuredSpecSchema,
   JiraConfigSchema,
-  ScribeOutputSchema,
-  ProtoOutputSchema,
-  TraceOutputSchema,
 } from '../../src/pipeline/core/contracts/PipelineSchemas.js';
 
 import {

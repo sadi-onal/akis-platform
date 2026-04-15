@@ -24,7 +24,7 @@ function SimpleMarkdown({ text }: { text: string }) {
       // Process inline markdown
       const lines = seg.split('\n');
       for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
+        const line = lines[i];
         const nodes: React.ReactNode[] = [];
         // Replace **bold** and `inline code`
         const inlineRegex = /(\*\*(.+?)\*\*|`([^`]+)`)/g;

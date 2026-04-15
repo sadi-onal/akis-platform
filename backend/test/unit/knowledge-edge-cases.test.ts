@@ -56,15 +56,15 @@ class StubRetrieval extends KnowledgeRetrievalService {
   }
 
   // Expose private helpers for direct testing
-  public testClampScore(v: number) { return (this as any).clampScore(v); }
+  public testClampScore(v: number) { return (this as unknown as Record<string, (v: number) => number>).clampScore(v); }
   public testComputeFusedScore(kw: number, sem: number, kwW: number, semW: number) {
-    return (this as any).computeFusedScore(kw, sem, kwW, semW);
+    return (this as unknown as Record<string, (kw: number, sem: number, kwW: number, semW: number) => number>).computeFusedScore(kw, sem, kwW, semW);
   }
   public testApplyTokenBudget(results: RetrievalResult[], maxResults: number, maxTokens: number) {
-    return (this as any).applyTokenBudget(results, maxResults, maxTokens);
+    return (this as unknown as Record<string, (results: RetrievalResult[], maxResults: number, maxTokens: number) => RetrievalResult[]>).applyTokenBudget(results, maxResults, maxTokens);
   }
   public testNormalizeForMerge(content: string) {
-    return (this as any).normalizeForMerge(content);
+    return (this as unknown as Record<string, (content: string) => string>).normalizeForMerge(content);
   }
 }
 
@@ -111,44 +111,50 @@ function getContentHash(content: string): string {
 }
 
 // ── PipelineKnowledgeIngester formatting (replicated for pure-logic testing)
-function formatSpecForKB(spec: any, _markdown: string): string {
+function formatSpecForKB(spec: unknown, _markdown: string): string {
+  const s = spec as Record<string, unknown>;
+  const tc = s.technicalConstraints as Record<string, unknown> | undefined;
   const parts = [
-    `# ${spec.title}`, '',
-    `## Problem`, spec.problemStatement, '',
+    `# ${s.title}`, '',
+    `## Problem`, s.problemStatement as string, '',
     `## User Stories`,
-    ...(spec.userStories ?? []).map((us: any) => `- ${us.persona}: ${us.action} → ${us.benefit}`), '',
+    ...(s.userStories as Array<Record<string, string>> ?? []).map((us: Record<string, string>) => `- ${us.persona}: ${us.action} → ${us.benefit}`), '',
     `## Acceptance Criteria`,
-    ...(spec.acceptanceCriteria ?? []).map((ac: any) => `- [${ac.id}] Given ${ac.given}, When ${ac.when}, Then ${ac.then}`), '',
+    ...(s.acceptanceCriteria as Array<Record<string, string>> ?? []).map((ac: Record<string, string>) => `- [${ac.id}] Given ${ac.given}, When ${ac.when}, Then ${ac.then}`), '',
     `## Technical Constraints`,
-    `Stack: ${spec.technicalConstraints?.stack ?? 'N/A'}`,
-    `Integrations: ${(spec.technicalConstraints?.integrations ?? []).join(', ')}`, '',
+    `Stack: ${tc?.stack ?? 'N/A'}`,
+    `Integrations: ${(tc?.integrations as string[] ?? []).join(', ')}`, '',
     `## Out of Scope`,
-    ...(spec.outOfScope ?? []).map((s: string) => `- ${s}`),
+    ...(s.outOfScope as string[] ?? []).map((s: string) => `- ${s}`),
   ];
   return parts.join('\n');
 }
 
-function formatProtoManifest(data: any): string {
+function formatProtoManifest(data: unknown): string {
+  const d = data as Record<string, unknown>;
+  const protoFiles = d.protoFiles as Array<Record<string, unknown>>;
   const parts = [
-    `# Scaffold: ${data.repoName}`,
-    `Repo: ${data.repoOwner}/${data.repoName} (branch: ${data.branch ?? 'main'})`, '',
-    `## Files (${data.protoFiles!.length} total)`,
-    ...data.protoFiles!.map((f: any) => `- ${f.filePath} (${f.linesOfCode} lines)`),
+    `# Scaffold: ${d.repoName}`,
+    `Repo: ${d.repoOwner}/${d.repoName} (branch: ${d.branch ?? 'main'})`, '',
+    `## Files (${protoFiles.length} total)`,
+    ...protoFiles.map((f: Record<string, unknown>) => `- ${f.filePath} (${f.linesOfCode} lines)`),
   ];
   return parts.join('\n');
 }
 
-function formatTraceResults(data: any): string {
+function formatTraceResults(data: unknown): string {
+  const d = data as Record<string, unknown>;
+  const summary = d.traceTestSummary as Record<string, unknown>;
   const parts = [
-    `# Test Results: ${data.repoName}`,
-    `Total Tests: ${data.traceTestSummary!.totalTests}`,
-    ...(data.traceTestSummary!.frameworks
-      ? [`Frameworks: ${data.traceTestSummary!.frameworks.join(', ')}`]
+    `# Test Results: ${d.repoName}`,
+    `Total Tests: ${summary.totalTests}`,
+    ...(summary.frameworks
+      ? [`Frameworks: ${(summary.frameworks as string[]).join(', ')}`]
       : []),
   ];
-  if (data.traceCoverageMatrix) {
+  if (d.traceCoverageMatrix) {
     parts.push('', '## Coverage Matrix');
-    for (const [acId, files] of Object.entries(data.traceCoverageMatrix)) {
+    for (const [acId, files] of Object.entries(d.traceCoverageMatrix as Record<string, unknown>)) {
       parts.push(`- ${acId}: ${(files as string[]).join(', ')}`);
     }
   }

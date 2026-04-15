@@ -8,6 +8,10 @@ import assert from 'node:assert/strict';
 
 import { PipelineOrchestrator, type PipelineStore, type PipelineStateUpdate } from '../../src/pipeline/core/orchestrator/PipelineOrchestrator.js';
 import type { PipelineState } from '../../src/pipeline/core/contracts/PipelineTypes.js';
+import type { ScribeAgent } from '../../src/pipeline/agents/scribe/ScribeAgent.js';
+import type { ProtoAgent } from '../../src/pipeline/agents/proto/ProtoAgent.js';
+import type { TraceAgent } from '../../src/pipeline/agents/trace/TraceAgent.js';
+import type { GitHubServiceLike } from '../../src/pipeline/core/pipeline-factory.js';
 
 // ─── Shared Fixtures ────────────────────────────
 
@@ -81,12 +85,12 @@ function createNoopTrace() {
 function createOrchestrator(store: PipelineStore) {
   return new PipelineOrchestrator(
     store,
-    createNoopScribe() as any,
-    createNoopProto() as any,
-    createNoopTrace() as any,
+    createNoopScribe() as unknown as ScribeAgent,
+    createNoopProto() as unknown as ProtoAgent,
+    createNoopTrace() as unknown as TraceAgent,
     async () => 'test-owner',
     async () => 'fake-token',
-    () => ({} as any),
+    () => ({}) as unknown as GitHubServiceLike,
   );
 }
 

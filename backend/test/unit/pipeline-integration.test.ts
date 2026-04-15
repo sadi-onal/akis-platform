@@ -20,7 +20,6 @@ import { TraceAgent, type TraceAIDeps, type TraceGitHubDeps } from '../../src/pi
 import type {
   PipelineState,
   PipelineStage,
-  PipelineMetrics,
   ScribeMessageType,
 } from '../../src/pipeline/core/contracts/PipelineTypes.js';
 import type { GitHubServiceLike } from '../../src/pipeline/core/pipeline-factory.js';
@@ -363,7 +362,7 @@ describe('Pipeline integration — happy path', () => {
     assert.ok(afterApprove.metrics.approvedAt, 'approvedAt should be set');
 
     // 6. Wait for Proto to complete → transitions to trace_testing
-    const afterProto = await waitForStage(store, initial.id, ['trace_testing', 'completed', 'completed_partial']);
+    const _afterProto = await waitForStage(store, initial.id, ['trace_testing', 'completed', 'completed_partial']);
     // Proto should have completed if we see trace_testing or later
     const pipelineAfterProto = await store.getById(initial.id);
     assert.ok(pipelineAfterProto, 'pipeline should exist');

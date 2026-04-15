@@ -33,11 +33,8 @@ import { PipelineMetricsService } from '../metrics/PipelineMetricsService.js';
 
 // ─── Level 4 Imports ─────────────────────────────
 import { DeterministicValidator } from '../validator/DeterministicValidator.js';
-import type { ValidationResult } from '../validator/ValidatorTypes.js';
 import { SecurityGate } from '../security-gate/SecurityGate.js';
-import type { SecurityScanResult } from '../security-gate/SecurityGateTypes.js';
 import { ExplainabilityService } from '../explainability/ExplainabilityService.js';
-import type { AgentReasoning } from '../explainability/ExplainabilityTypes.js';
 import { LearningService } from '../learning/LearningService.js';
 
 // ─── Timeout Guard ───────────────────────────────
@@ -1100,7 +1097,7 @@ export class PipelineOrchestrator {
 
   /** Update pipeline-level configuration (auto-approve, thresholds, etc.) */
   async updatePipelineConfig(pipelineId: string, config: Record<string, unknown>): Promise<PipelineState> {
-    const pipeline = await this.getPipeline(pipelineId);
+    await this.getPipeline(pipelineId);
     const update: Partial<PipelineStateUpdate> = {};
     if ('autoApproveEnabled' in config && typeof config.autoApproveEnabled === 'boolean') {
       update.autoApproveEnabled = config.autoApproveEnabled;
