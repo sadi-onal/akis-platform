@@ -6,6 +6,7 @@ import { HttpClient } from './HttpClient';
 import { getApiBaseUrl } from './config';
 import type { Workflow, WorkflowStages, WorkflowStatus, StageResult, ConversationMessage } from '../../types/workflow';
 import type { Pipeline, PipelineStage, ScribeOutput, ProtoOutput, TraceOutput, ScribeMessageType, ScribeClarification } from '../../types/pipeline';
+import type { ChatAttachment } from '../../components/chat/ChatInput';
 
 const http = new HttpClient(getApiBaseUrl());
 
@@ -345,7 +346,23 @@ export const workflowsApi = {
     parentPipelineId?: string;
     skipScribe?: boolean;
     traceEnabled?: boolean;
-  }): Promise<Workflow> => {
+  }, attachments?: ChatAttachment[]): Promise<Workflow> => {
+    if (attachments && attachments.length > 0) {
+      const formData = new FormData();
+      formData.append('idea', data.idea);
+      if (data.context) formData.append('context', data.context);
+      if (data.targetStack) formData.append('targetStack', data.targetStack);
+      if (data.model) formData.append('model', data.model);
+      if (data.traceEnabled != null) formData.append('traceEnabled', String(data.traceEnabled));
+      if (data.skipScribe != null) formData.append('skipScribe', String(data.skipScribe));
+      if (data.existingRepo) formData.append('existingRepo', JSON.stringify(data.existingRepo));
+      if (data.parentPipelineId) formData.append('parentPipelineId', data.parentPipelineId);
+      for (const att of attachments) {
+        formData.append('files', att.file);
+      }
+      const res = await http.postFormData<PipelineResponse>('/api/pipelines', formData);
+      return mapPipelineToWorkflow(res.pipeline);
+    }
     const res = await http.post<PipelineResponse>('/api/pipelines', data);
     return mapPipelineToWorkflow(res.pipeline);
   },
@@ -396,7 +413,16 @@ export const workflowsApi = {
     return mapPipelineToWorkflow(res.pipeline);
   },
 
-  sendMessage: async (id: string, message: string): Promise<Workflow> => {
+  sendMessage: async (id: string, message: string, attachments?: ChatAttachment[]): Promise<Workflow> => {
+    if (attachments && attachments.length > 0) {
+      const formData = new FormData();
+      formData.append('message', message);
+      for (const att of attachments) {
+        formData.append('files', att.file);
+      }
+      const res = await http.postFormData<PipelineResponse>(`/api/pipelines/${id}/message`, formData);
+      return mapPipelineToWorkflow(res.pipeline);
+    }
     const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/message`, { message });
     return mapPipelineToWorkflow(res.pipeline);
   },

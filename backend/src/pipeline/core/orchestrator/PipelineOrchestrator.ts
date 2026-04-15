@@ -262,6 +262,13 @@ export class PipelineOrchestrator {
         parentPipelineId,
       };
     }
+    // Store attachment context for Scribe knowledge injection
+    if (input.attachmentContext) {
+      updateData.intermediateState = {
+        ...updateData.intermediateState,
+        attachmentContext: input.attachmentContext,
+      };
+    }
 
     // ─── Iteration Mode: skip Scribe, jump directly to Proto ───
     if (skipScribe && parentPipelineId && input.existingRepo) {
@@ -379,6 +386,12 @@ export class PipelineOrchestrator {
       scribeState.knowledgeContext = (scribeState.knowledgeContext ?? '') + repoKnowledge;
     }
 
+    // Inject file attachment context (uploaded files)
+    const attachmentContext = (await this.getPipeline(pipelineId)).intermediateState?.attachmentContext as string | undefined;
+    if (attachmentContext) {
+      scribeState.knowledgeContext = (scribeState.knowledgeContext ?? '') + '\n\n' + attachmentContext;
+    }
+
     await this.writeCheckpoint(pipelineId, 'scribe', input.idea);
     const result = await withRetry(
       (attempt) => {
@@ -403,11 +416,22 @@ export class PipelineOrchestrator {
 
   // ─── Send Message (Scribe Chat) ──────────────
 
-  async sendMessage(pipelineId: string, message: string): Promise<PipelineState> {
-    return this.withLock(pipelineId, () => this._sendMessage(pipelineId, message));
+  async sendMessage(pipelineId: string, message: string, attachmentContext?: string): Promise<PipelineState> {
+    return this.withLock(pipelineId, () => this._sendMessage(pipelineId, message, attachmentContext));
   }
-  private async _sendMessage(pipelineId: string, message: string): Promise<PipelineState> {
+  private async _sendMessage(pipelineId: string, message: string, attachmentContext?: string): Promise<PipelineState> {
     const pipeline = await this.getPipeline(pipelineId);
+
+    // Persist new attachment context in intermediateState if provided
+    if (attachmentContext) {
+      const existingCtx = (pipeline.intermediateState?.attachmentContext as string) ?? '';
+      await this.store.update(pipelineId, {
+        intermediateState: {
+          ...pipeline.intermediateState,
+          attachmentContext: existingCtx ? existingCtx + '\n\n' + attachmentContext : attachmentContext,
+        },
+      });
+    }
 
     // Non-scribe states: save user note to conversation without changing pipeline state
     if (pipeline.stage !== 'scribe_clarifying') {
@@ -436,6 +460,13 @@ export class PipelineOrchestrator {
 
     const agents = this.getAgents(pipeline.model);
     const scribeState = this.reconstructScribeState(pipeline);
+
+    // Inject accumulated attachment context into scribe state for this continuation
+    const accumulatedCtx = (await this.getPipeline(pipelineId)).intermediateState?.attachmentContext as string | undefined;
+    if (accumulatedCtx) {
+      scribeState.knowledgeContext = (scribeState.knowledgeContext ?? '') + '\n\n' + accumulatedCtx;
+    }
+
     agents.scribe.processUserAnswer(scribeState, message);
 
     const conversation: ScribeMessageType[] = [

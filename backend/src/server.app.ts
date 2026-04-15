@@ -10,6 +10,7 @@ import { isEmailConfigured } from './services/email/index.js';
 import { registerAgents } from './core/agents/registry.js';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import multipart from '@fastify/multipart';
 import { indexRoutes } from './api/index.js';
 import { healthRoutes } from './api/health.js';
 import { agentsRoutes, setOrchestrator } from './api/agents.js';
@@ -241,6 +242,12 @@ export async function buildApp() {
     },
     staticCSP: true,
     transformStaticCSP: (header: string) => header,
+  });
+
+  // Register multipart plugin for file uploads (before routes, after swagger)
+  await app.register(multipart, {
+    limits: { fileSize: 10 * 1024 * 1024, files: 5, fieldSize: 50_000 },
+    attachFieldsToBody: false, // We'll use request.parts() manually
   });
 
   // Register routes (order matters: root first, then specific routes)
