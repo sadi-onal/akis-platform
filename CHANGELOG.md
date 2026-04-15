@@ -1,5 +1,76 @@
 # Changelog
 
+## v0.6.5 (2026-04-15)
+
+### File Upload (New Feature)
+- **feat:** End-to-end file upload — ChatInput → FormData API → @fastify/multipart → Scribe
+- **feat:** FileUploadService: in-memory processing for text (.ts/.tsx/.js/.md/.json/.html/.css), images (.png/.jpeg/.gif/.webp), basic PDF
+- **feat:** Attachment context injection into Scribe knowledgeContext (reuses existing RAG pattern)
+- **feat:** Backend multipart/JSON auto-detection — full backward compatibility
+
+### Chat UX Improvements
+- **feat:** Info messages shown when user sends notes during running pipeline stages
+- **feat:** Iteration mode error feedback — ChatMessage error shown on failure
+- **fix:** Iteration mode navigation preserves browser history (removed replace:true)
+- **fix:** Updated Turkish placeholder text for all pipeline terminal states
+- **feat:** ChatSkeleton used as Suspense fallback instead of plain text
+
+### Landing Page Fixes
+- **fix:** framer-motion opacity:0 animation failure — removed all opacity from initial states
+- **fix:** LazyMotion domAnimation → domMax (enables whileInView support)
+- **fix:** WCAG AA contrast — text-secondary → text-primary, bg-surface/30 → /70
+- **fix:** Mobile responsive padding — px-4 sm:px-6 lg:px-8 on all sections
+- **fix:** HowItWorks grid gap responsive — gap-4 md:gap-6
+
+### DocsPage Improvements
+- **feat:** Inline markdown rendering — **bold**, \`code\`, [links](url) now properly rendered
+- **feat:** Fenced code blocks (\`\`\`) render as styled \<pre\>\<code\> blocks
+- **fix:** Sidebar nav accessibility — aria-label, aria-current="page"
+
+### Accessibility
+- **fix:** ChatInput: aria-labels for file/image buttons, dynamic remove label
+- **fix:** ChatMessage: aria-labels for copy buttons
+- **fix:** ErrorBoundary: Turkish character fixes, aria-expanded toggle
+- **feat:** File upload validation toast messages (size, count, type errors)
+
+### i18n
+- **feat:** StatusBadge labels internationalized (7 keys TR+EN)
+- **feat:** common.loading key added to both locale files
+
+### Security
+- **fix:** Path traversal guard on getFileContent endpoint (rejects ../ and absolute paths)
+- **fix:** Error message no longer leaks file path structure (404 instead of path in message)
+- **fix:** HTTP status codes: 400 for invalid input, 404 for not found (was 500 for all)
+
+### Type Safety
+- **refactor:** Eliminated all 25 \`as any\` assertions from backend (0 remaining)
+- **fix:** fastify.d.ts: added hijack(), routerPath, user, raw, delete() type declarations
+- **fix:** StripeService: proper unknown cast for subscription period fields
+
+### Code Quality
+- **fix:** Silent .catch(() => {}) handlers replaced with dev console.warn
+- **fix:** console.debug → logger.debug in ScribeAgent and GitHubMCPService
+- **fix:** localStorage SSR safety guards in EmptyState, ProfileSetupWizard
+
+### Deploy Reliability
+- **fix:** deploy_prebuilt.sh: sudo for frontend cleanup (prevents permission denied)
+- **fix:** deploy.sh: GITHUB_REPOSITORY sync in .env (prevents image tag mismatch)
+- **fix:** @fastify/multipart v10 → v8 (Fastify 4 compatibility)
+- **fix:** @fastify/compress v8 → v7 (Fastify 4 compatibility)
+
+### Test Coverage
+- **test:** LandingPage.test.tsx — 24 tests (hero, steps, features, stats, navigation, auth)
+- **test:** DocsPage.test.tsx — 23 tests (sections, markdown, a11y, navigation)
+- **test:** file-upload-service.test.ts — 15 tests (text extraction, image encoding, limits)
+- **test:** pipeline-multipart.test.ts — 18 tests (field parsing, context string, e2e flow)
+- **test:** pipeline-orchestrator.test.ts — +4 tests (attachment threading)
+- **test:** ErrorBoundary tests updated for Turkish character fixes
+- **stats:** Frontend 620 → 673 (+53), Backend 3075 → 3112 (+37), Total +90
+
+### Knowledge Base
+- **feat:** 30 project documents ingested into RAG (188 chunks)
+- **docs:** CLAUDE.md updated to v0.6.5 with file upload and RAG docs
+
 ## v0.5.0 (2026-04-13)
 
 ### Pipeline Engine
