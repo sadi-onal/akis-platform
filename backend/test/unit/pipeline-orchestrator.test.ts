@@ -489,3 +489,98 @@ describe('Orchestrator — Events', () => {
     assert.ok(events.some((e) => e.type === 'completed'));
   });
 });
+
+// ─── Attachment Context Threading ────────────────
+
+describe('Orchestrator — Attachment context threading', () => {
+  it('startPipeline with attachmentContext stores it in intermediateState', async () => {
+    const store = new InMemoryStore();
+    const { orchestrator } = createOrchestrator({ store });
+
+    const attachmentCtx = '--- UPLOADED FILE: spec.md ---\n# My Spec\n--- END FILE ---';
+    const started = await orchestrator.startPipeline(
+      'user-1',
+      { idea: 'Build a task manager with file uploads', attachmentContext: attachmentCtx },
+    );
+
+    // Wait for scribe to finish processing
+    await waitForStage(store, started.id, ['awaiting_approval']);
+
+    const pipeline = await store.getById(started.id);
+    assert.ok(pipeline);
+    assert.ok(pipeline.intermediateState);
+    assert.strictEqual(pipeline.intermediateState.attachmentContext, attachmentCtx);
+  });
+
+  it('startPipeline without attachmentContext does not set intermediateState.attachmentContext', async () => {
+    const store = new InMemoryStore();
+    const { orchestrator } = createOrchestrator({ store });
+
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Simple todo app without files' });
+    await waitForStage(store, started.id, ['awaiting_approval']);
+
+    const pipeline = await store.getById(started.id);
+    assert.ok(pipeline);
+    // intermediateState may be undefined or may not have attachmentContext
+    const ctx = pipeline.intermediateState?.attachmentContext;
+    assert.strictEqual(ctx, undefined);
+  });
+
+  it('sendMessage with attachmentContext accumulates in intermediateState', async () => {
+    const scribe = createMockScribe({
+      analyzIdea: async () => ({ type: 'clarification', data: mockClarification }),
+      continueAfterAnswer: async () => ({ type: 'spec', data: mockScribeOutput }),
+    });
+    const store = new InMemoryStore();
+    const { orchestrator } = createOrchestrator({ store, scribe });
+
+    // Start pipeline with initial attachment
+    const initialCtx = '--- UPLOADED FILE: init.ts ---\nconst x = 1;\n--- END FILE ---';
+    const started = await orchestrator.startPipeline(
+      'user-1',
+      { idea: 'Build an app with these files', attachmentContext: initialCtx },
+    );
+    await waitForStage(store, started.id, ['scribe_clarifying']);
+
+    // Send message with additional attachment
+    const additionalCtx = '--- UPLOADED FILE: extra.ts ---\nconst y = 2;\n--- END FILE ---';
+    await orchestrator.sendMessage(started.id, 'Here is another file', additionalCtx);
+
+    await waitForStage(store, started.id, ['awaiting_approval']);
+
+    const pipeline = await store.getById(started.id);
+    assert.ok(pipeline);
+    const accumulated = pipeline.intermediateState?.attachmentContext as string;
+    assert.ok(accumulated);
+    // Both contexts should be present, joined by double newline
+    assert.ok(accumulated.includes('init.ts'));
+    assert.ok(accumulated.includes('extra.ts'));
+    assert.ok(accumulated.includes('const x = 1;'));
+    assert.ok(accumulated.includes('const y = 2;'));
+  });
+
+  it('sendMessage without attachmentContext preserves existing context', async () => {
+    const scribe = createMockScribe({
+      analyzIdea: async () => ({ type: 'clarification', data: mockClarification }),
+      continueAfterAnswer: async () => ({ type: 'spec', data: mockScribeOutput }),
+    });
+    const store = new InMemoryStore();
+    const { orchestrator } = createOrchestrator({ store, scribe });
+
+    const initialCtx = '--- UPLOADED FILE: only.md ---\n# Only file\n--- END FILE ---';
+    const started = await orchestrator.startPipeline(
+      'user-1',
+      { idea: 'App idea with one uploaded file', attachmentContext: initialCtx },
+    );
+    await waitForStage(store, started.id, ['scribe_clarifying']);
+
+    // Send message without any new attachment
+    await orchestrator.sendMessage(started.id, 'Use Google Auth please');
+    await waitForStage(store, started.id, ['awaiting_approval']);
+
+    const pipeline = await store.getById(started.id);
+    assert.ok(pipeline);
+    // Original context should still be intact
+    assert.strictEqual(pipeline.intermediateState?.attachmentContext, initialCtx);
+  });
+});
