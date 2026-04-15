@@ -26,13 +26,14 @@ import { ChatSkeleton } from '../../components/chat/ChatSkeleton';
 function localizeError(e: unknown): string {
   if (e instanceof Error) {
     const m = e.message.toLowerCase();
-    if (m.includes('rate limit') || m.includes('usage limit')) return 'API limiti asildi. Lutfen daha sonra tekrar deneyin.';
-    if (m.includes('unauthorized') || m.includes('401')) return 'Oturum suresi doldu. Tekrar giris yapin.';
-    if (m.includes('network') || m.includes('fetch') || m.includes('failed to fetch')) return 'Baglanti hatasi. Internet baglantinizi kontrol edin.';
-    if (m.includes('timeout')) return 'Istek zaman asimina ugradi. Tekrar deneyin.';
+    if (m.includes('rate limit') || m.includes('usage limit') || m.includes('too many') || m.includes('çok fazla istek')) return 'API limiti aşıldı. Lütfen daha sonra tekrar deneyin.';
+    if (m.includes('unauthorized') || m.includes('401') || m.includes('oturum süresi')) return 'Oturum süresi doldu. Tekrar giriş yapın.';
+    if (m.includes('network') || m.includes('fetch') || m.includes('failed to fetch') || m.includes('bağlantı hatası')) return 'Bağlantı hatası. İnternet bağlantınızı kontrol edin.';
+    if (m.includes('timeout') || m.includes('zaman aşımı')) return 'İstek zaman aşımına uğradı. Tekrar deneyin.';
+    if (m.includes('sunucu geçici')) return 'Sunucu geçici olarak kullanılamıyor. Lütfen biraz bekleyip tekrar deneyin.';
     return e.message;
   }
-  return 'Beklenmeyen bir hata olustu.';
+  return 'Beklenmeyen bir hata oluştu.';
 }
 
 const PreviewPanel = lazy(() => import('../../components/workflow/PreviewPanel').then(m => ({ default: m.PreviewPanel })));

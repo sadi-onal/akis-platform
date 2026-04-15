@@ -25,22 +25,61 @@ export class HttpClient {
   }
 
   private async parseErrorResponse(response: Response): Promise<ApiError> {
-    let errorData: { error?: { code?: string; message?: string; details?: unknown } } = {};
+    let errorData: Record<string, unknown> = {};
     try {
       errorData = await response.json();
     } catch {
       // If response is not JSON, use status text
     }
 
-    const error: ApiError = new Error(
-      errorData.error?.message || response.statusText || 'Request failed'
-    ) as ApiError;
-    error.code = errorData.error?.code || `HTTP_${response.status}`;
+    // Handle multiple error response formats:
+    // 1. AKIS standard envelope: { error: { code, message, details } }
+    // 2. Fastify default format:  { statusCode, error: "string", message: "string" }
+    // 3. Raw message:             { message: "string" }
+    const errorObj = errorData.error;
+    const nestedMessage = typeof errorObj === 'object' && errorObj !== null
+      ? (errorObj as { message?: string }).message
+      : undefined;
+    const topLevelMessage = typeof errorData.message === 'string'
+      ? (errorData.message as string)
+      : undefined;
+
+    const message = nestedMessage
+      || topLevelMessage
+      || response.statusText
+      || HttpClient.getDefaultMessageForStatus(response.status);
+
+    const nestedCode = typeof errorObj === 'object' && errorObj !== null
+      ? (errorObj as { code?: string }).code
+      : undefined;
+    const nestedDetails = typeof errorObj === 'object' && errorObj !== null
+      ? (errorObj as { details?: unknown }).details
+      : undefined;
+
+    const error: ApiError = new Error(message) as ApiError;
+    error.code = nestedCode || `HTTP_${response.status}`;
     error.statusCode = response.status;
-    error.details = errorData.error?.details;
+    error.details = nestedDetails;
     error.requestId = response.headers.get('request-id') || undefined;
 
     return error;
+  }
+
+  /** Fallback messages when HTTP/2 statusText is empty and body is unparseable */
+  private static getDefaultMessageForStatus(status: number): string {
+    switch (status) {
+      case 400: return 'Geçersiz istek';
+      case 401: return 'Oturum süresi doldu';
+      case 403: return 'Erişim engellendi';
+      case 404: return 'Kaynak bulunamadı';
+      case 409: return 'Çakışma hatası';
+      case 429: return 'Çok fazla istek — lütfen biraz bekleyin';
+      case 500: return 'Sunucu hatası';
+      case 502: return 'Sunucu bağlantı hatası';
+      case 503: return 'Sunucu geçici olarak kullanılamıyor';
+      case 504: return 'Sunucu yanıt zaman aşımı';
+      default: return `Sunucu hatası (${status})`;
+    }
   }
 
   /**
@@ -147,7 +186,7 @@ export class HttpClient {
       }
     }
 
-    throw lastError || new Error('Request failed after retries');
+    throw lastError || new Error('Bağlantı hatası — sunucuya ulaşılamıyor');
   }
 
   async get<T>(path: string, options?: RequestOptions): Promise<T> {
