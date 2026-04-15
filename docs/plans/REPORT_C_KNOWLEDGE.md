@@ -1,0 +1,20 @@
+## AGENT C — KNOWLEDGE BASE RAPORU
+- Durum: TAMAMLANDI
+- Olusturulan dosyalar:
+  - `docs/learnings/SCRIBE_LEARNINGS.md`
+  - `docs/learnings/PROTO_LEARNINGS.md`
+  - `docs/learnings/TRACE_LEARNINGS.md`
+  - `docs/learnings/CRITIC_LEARNINGS.md`
+  - `docs/learnings/PIPELINE_LEARNINGS.md`
+  - `docs/learnings/CONVENTIONS.md`
+  - `docs/architecture/ADR-001-adversarial-review.md`
+  - `docs/architecture/ADR-002-fix-loop-pattern.md`
+  - `docs/architecture/ADR-003-holdout-testing.md`
+  - `docs/architecture/ADR-004-level3-pipeline-architecture.md`
+- Test sonuclari: N/A (docs only)
+- Typecheck: N/A (docs only)
+- Notlar:
+  - Pre-filled with actual patterns from codebase (not empty templates)
+  - JSON safety chain documented: extractJsonSafe -> sanitizeJsonControlChars -> repairTruncatedJson -> parseAIJson
+  - Holdout pattern already implemented in current codebase (Proto write-only, Trace read+write)
+  - All 4 ADRs reference real research: StrongDM, HubSpot Sidekick, METR 2025, LLMloop, Reflexion, SentinelOne

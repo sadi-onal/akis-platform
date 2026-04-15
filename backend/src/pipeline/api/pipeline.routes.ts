@@ -172,6 +172,36 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       return { pipeline };
     },
 
+    /** Level 4: Get pipeline explanation (explainability interface) */
+    async getExplanation(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const explainability = orchestrator.getExplainability();
+      const explanation = explainability.getExplanation(id);
+      return { explanation };
+    },
+
+    /** Level 4: Configure adaptive autonomy — auto-approve threshold */
+    async setAutoApprove(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const body = (request as { body: { enabled?: boolean; threshold?: number } }).body;
+
+      const enabled = typeof body.enabled === 'boolean' ? body.enabled : undefined;
+      const threshold = typeof body.threshold === 'number' ? body.threshold : undefined;
+
+      if (threshold !== undefined && (threshold < 50 || threshold > 100)) {
+        throw Object.assign(new Error('threshold must be between 50 and 100'), { statusCode: 400 });
+      }
+
+      const update: Record<string, unknown> = {};
+      if (enabled !== undefined) update.autoApproveEnabled = enabled;
+      if (threshold !== undefined) update.autoApproveThreshold = threshold;
+
+      const pipeline = await orchestrator.updatePipelineConfig(id, update);
+      return { pipeline };
+    },
+
     async cancelPipeline(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);

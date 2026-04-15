@@ -1,0 +1,18 @@
+## AGENT A — CRITIC AGENT RAPORU
+- Durum: TAMAMLANDI
+- Olusturulan dosyalar:
+  - `backend/src/pipeline/agents/critic/CriticTypes.ts`
+  - `backend/src/pipeline/agents/critic/CriticAgent.ts`
+  - `backend/src/pipeline/agents/critic/prompts/spec-review.ts`
+  - `backend/src/pipeline/agents/critic/prompts/code-review.ts`
+  - `backend/src/pipeline/agents/critic/__tests__/CriticAgent.test.ts`
+  - `backend/src/pipeline/agents/critic/__tests__/prompts.test.ts`
+- Test sonuclari: 28/28 passing (5 suites, 0 fail, 0 skip)
+- Typecheck: PASS
+- Notlar:
+  - CriticAIDeps interface: { generateText(systemPrompt, userPrompt): Promise<string> }
+  - Uses parseAIJson from shared json-extract.js
+  - Approval threshold: overallScore >= 75
+  - Normalization: out-of-range scores clamped 0-100, unknown severity/category defaults
+  - Spec review: 5 weighted criteria (Completeness 0.25, Ambiguity 0.25, Testability 0.20, Consistency 0.15, Technical Feasibility 0.15)
+  - Code review: 5 weighted criteria (Spec Compliance 0.35, Code Quality 0.20, Security 0.20, Completeness 0.15, Testability 0.10)

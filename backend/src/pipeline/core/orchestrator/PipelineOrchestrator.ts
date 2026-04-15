@@ -31,6 +31,15 @@ import type { CriticReviewOutput } from '../../agents/critic/CriticTypes.js';
 import { FixLoopService } from '../fix-loop/FixLoopService.js';
 import { PipelineMetricsService } from '../metrics/PipelineMetricsService.js';
 
+// ─── Level 4 Imports ─────────────────────────────
+import { DeterministicValidator } from '../validator/DeterministicValidator.js';
+import type { ValidationResult } from '../validator/ValidatorTypes.js';
+import { SecurityGate } from '../security-gate/SecurityGate.js';
+import type { SecurityScanResult } from '../security-gate/SecurityGateTypes.js';
+import { ExplainabilityService } from '../explainability/ExplainabilityService.js';
+import type { AgentReasoning } from '../explainability/ExplainabilityTypes.js';
+import { LearningService } from '../learning/LearningService.js';
+
 // ─── Timeout Guard ───────────────────────────────
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -147,6 +156,12 @@ export class PipelineOrchestrator {
   private fixLoopService = new FixLoopService();
   private metricsService = new PipelineMetricsService();
 
+  // ─── Level 4 Services ───────────────────────────
+  private validator = new DeterministicValidator();
+  private securityGate = new SecurityGate();
+  private explainability = new ExplainabilityService();
+  private learningService = new LearningService();
+
   constructor(
     private store: PipelineStore,
     private scribe: ScribeAgent,
@@ -172,6 +187,16 @@ export class PipelineOrchestrator {
   /** Access the pipeline metrics service for reporting */
   getMetricsService(): PipelineMetricsService {
     return this.metricsService;
+  }
+
+  /** Level 4: Access explainability service */
+  getExplainability(): ExplainabilityService {
+    return this.explainability;
+  }
+
+  /** Level 4: Access learning service */
+  getLearningService(): LearningService {
+    return this.learningService;
   }
 
   /** Log agent activity (non-blocking, best-effort) */
@@ -797,6 +822,71 @@ export class PipelineOrchestrator {
       return;
     }
 
+    // ─── Level 4: Deterministic Validator (before CriticCode) ───
+    if (protoResult.data.files && protoResult.data.files.length > 0) {
+      const validationInput = {
+        files: protoResult.data.files.map((f) => ({
+          path: f.filePath,
+          content: f.content,
+          language: (f.filePath.endsWith('.ts') || f.filePath.endsWith('.tsx') ? 'typescript'
+            : f.filePath.endsWith('.json') ? 'json'
+            : f.filePath.endsWith('.html') ? 'html'
+            : f.filePath.endsWith('.css') ? 'css'
+            : 'javascript') as 'typescript' | 'javascript' | 'json' | 'html' | 'css',
+        })),
+        spec,
+      };
+
+      const validationResult = this.validator.validate(validationInput);
+      logger.info({
+        pipelineId,
+        passed: validationResult.passed,
+        score: validationResult.score,
+        errors: validationResult.summary.errors,
+        warnings: validationResult.summary.warnings,
+      }, '[Pipeline] Level 4: Deterministic validation completed');
+
+      // Store validation result
+      const currentStateForValidation = await this.store.getById(pipelineId);
+      await this.store.update(pipelineId, {
+        intermediateState: {
+          ...(currentStateForValidation?.intermediateState ?? {}),
+          validationResult: {
+            passed: validationResult.passed,
+            score: validationResult.score,
+            summary: validationResult.summary,
+          },
+        },
+      });
+
+      // Add explainability reasoning
+      this.explainability.addReasoning(pipelineId, {
+        agentName: 'validator',
+        timestamp: new Date(),
+        decision: validationResult.passed ? 'Kod dogrulama basarili' : 'Kod dogrulama basarisiz',
+        reasoning: [`Skor: ${validationResult.score}/100`, `${validationResult.summary.errors} hata, ${validationResult.summary.warnings} uyari`],
+        assumptions: ['Deterministic kontroller yeterli'],
+        confidence: { score: validationResult.score, factors: validationResult.summary.checksRun },
+      });
+
+      // If validator found errors → fail early (save LLM tokens)
+      if (!validationResult.passed && validationResult.summary.errors > 0) {
+        logger.warn({ pipelineId, score: validationResult.score }, '[Pipeline] Validator caught errors — failing before Critic');
+        await this.store.update(pipelineId, {
+          stage: 'failed',
+          protoOutput: protoResult.data,
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: `Deterministic validation failed: ${validationResult.summary.errors} error(s) found (score: ${validationResult.score}/100)`,
+            retryable: true,
+            recoveryAction: 'retry',
+          },
+        });
+        this.emitEvent(pipelineId, 'error', 'failed');
+        return;
+      }
+    }
+
     // ─── Level 3: CriticAgent code review (if available) ───
     if (this.criticAgent) {
       this.metricsService.startStage(pipelineId, 'critic_code');
@@ -1006,6 +1096,21 @@ export class PipelineOrchestrator {
     return this.store.update(pipelineId, { traceEnabled: enabled });
   }
 
+  // ─── Level 4: Adaptive Autonomy Config ───────
+
+  /** Update pipeline-level configuration (auto-approve, thresholds, etc.) */
+  async updatePipelineConfig(pipelineId: string, config: Record<string, unknown>): Promise<PipelineState> {
+    const pipeline = await this.getPipeline(pipelineId);
+    const update: Partial<PipelineStateUpdate> = {};
+    if ('autoApproveEnabled' in config && typeof config.autoApproveEnabled === 'boolean') {
+      update.autoApproveEnabled = config.autoApproveEnabled;
+    }
+    if ('autoApproveThreshold' in config && typeof config.autoApproveThreshold === 'number') {
+      update.autoApproveThreshold = config.autoApproveThreshold;
+    }
+    return this.store.update(pipelineId, update);
+  }
+
   // ─── Query ───────────────────────────────────
 
   async getStatus(pipelineId: string): Promise<PipelineState> {
@@ -1081,6 +1186,22 @@ export class PipelineOrchestrator {
         }
         // If critic rejected and score < threshold, log but proceed (human gate is next)
         logger.info({ pipelineId, approved: criticResult?.approved, score: criticResult?.overallScore }, '[Pipeline] Critic spec review completed');
+
+        // Level 4: Explainability — record critic reasoning
+        if (criticResult) {
+          this.explainability.addReasoning(pipelineId, {
+            agentName: 'critic',
+            timestamp: new Date(),
+            decision: criticResult.approved ? 'Spec onaylandi' : 'Spec reddedildi',
+            reasoning: criticResult.findings?.map((f) => f.description) ?? [],
+            assumptions: [],
+            confidence: {
+              score: criticResult.overallScore ?? 0,
+              factors: [`${criticResult.findings?.length ?? 0} bulgu raporlandi`],
+            },
+            risks: criticResult.findings?.filter((f) => f.severity === 'critical').map((f) => f.description),
+          });
+        }
 
         // ─── Level 4: Adaptive Autonomy — auto-approve if threshold met ───
         const currentPipeline = await this.store.getById(pipelineId);

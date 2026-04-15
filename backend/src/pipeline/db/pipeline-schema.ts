@@ -24,6 +24,8 @@ CREATE TABLE pipelines (
   proto_output JSONB,
   trace_output JSONB,
   trace_enabled BOOLEAN NOT NULL DEFAULT false,
+  auto_approve_enabled BOOLEAN NOT NULL DEFAULT false,
+  auto_approve_threshold INTEGER NOT NULL DEFAULT 85,
   repo_context JSONB,
   proto_config JSONB,
   jira_config JSONB,
