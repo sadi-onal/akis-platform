@@ -568,13 +568,44 @@ export default function ChatPage() {
 
     if (!conversationId) return;
 
+    // ─── Iteration Mode: completed pipeline + protoOutput → create follow-up pipeline in same chat ───
+    const isTerminal = activeWorkflow?.currentStage === 'completed' || activeWorkflow?.currentStage === 'completed_partial';
+    const protoRepo = activeWorkflow?.stages.proto?.result?.repo;
+    const protoBranch = activeWorkflow?.stages.proto?.result?.branch;
+
+    if (isTerminal && protoRepo && protoBranch) {
+      const [repoOwner, repoName] = protoRepo.split('/');
+      if (repoOwner && repoName) {
+        try {
+          setCreating(true);
+          const w = await workflowsApi.create({
+            idea: content,
+            traceEnabled,
+            existingRepo: { owner: repoOwner, repo: repoName, branch: protoBranch },
+            parentPipelineId: conversationId,
+            skipScribe: true,
+          });
+          loadedIdRef.current = w.id;
+          setActiveWorkflow(w);
+          setMessages((prev) => [...prev, ...conversationToChatMessages(w.conversation ?? [], w.currentStage)]);
+          syncFromStage(w.currentStage ?? 'completed');
+          refreshList();
+          navigate(`/chat/${w.id}`, { replace: true });
+        } catch (e) {
+          toast(localizeError(e), 'error');
+        } finally {
+          setCreating(false);
+        }
+        return;
+      }
+    }
+
     // Send message to the existing pipeline — works for ALL stages including terminal ones.
     // Backend saves it as a user_note (terminal) or processes it as a Scribe answer (clarifying).
-    // This keeps the user in the SAME conversation instead of creating a new one.
     try {
       await workflowsApi.sendMessage(conversationId, content);
       await refreshWorkflow();
-      refreshList(); // update sidebar ordering (updatedAt changed)
+      refreshList();
     } catch (e) {
       if (import.meta.env.DEV) console.error('Failed to send:', e);
     }
