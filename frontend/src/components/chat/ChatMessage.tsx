@@ -508,6 +508,60 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
       );
     }
 
+    case 'critic_review': {
+      const isSpec = message.reviewType === 'spec_review';
+      const scoreColor = message.score >= 75 ? 'text-green-400' : message.score >= 50 ? 'text-amber-400' : 'text-red-400';
+      const scoreBg = message.score >= 75 ? 'bg-green-500/10 border-green-500/20' : message.score >= 50 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-red-500/10 border-red-500/20';
+      const SEVERITY_COLORS: Record<string, string> = {
+        critical: 'text-red-400 bg-red-500/10',
+        major: 'text-amber-400 bg-amber-500/10',
+        minor: 'text-blue-400 bg-blue-500/10',
+        info: 'text-ak-text-tertiary bg-ak-surface-2',
+      };
+      return (
+        <div className={cn('rounded-xl border p-4 animate-in fade-in slide-in-from-left-2 duration-200', scoreBg)}>
+          <div className="mb-2 flex items-center gap-2 flex-wrap">
+            <span className="text-lg">{isSpec ? '📋' : '🔍'}</span>
+            <span className="text-sm font-semibold text-ak-text-primary">
+              {isSpec ? 'Spec İncelemesi' : 'Kod İncelemesi'}
+            </span>
+            <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', scoreColor, scoreBg)}>
+              {message.score}/100
+            </span>
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', message.approved ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400')}>
+              {message.approved ? 'Onaylandı' : 'Reddedildi'}
+            </span>
+          </div>
+          {message.summary && (
+            <p className="mb-3 text-xs text-ak-text-secondary">{message.summary}</p>
+          )}
+          {message.findings.length > 0 && (
+            <details className="group">
+              <summary className="cursor-pointer text-xs font-medium text-ak-text-secondary hover:text-ak-text-primary transition-colors">
+                {message.findings.length} bulgu
+              </summary>
+              <div className="mt-2 space-y-1.5">
+                {message.findings.map((f, i) => (
+                  <div key={i} className="rounded-lg border border-ak-border-subtle bg-ak-surface/60 p-2">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-semibold', SEVERITY_COLORS[f.severity] ?? SEVERITY_COLORS.info)}>
+                        {f.severity}
+                      </span>
+                      <span className="text-[10px] text-ak-text-tertiary">{f.category}</span>
+                    </div>
+                    <p className="text-xs text-ak-text-primary">{f.description}</p>
+                    {f.suggestion && (
+                      <p className="mt-0.5 text-[11px] text-ak-text-tertiary">💡 {f.suggestion}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      );
+    }
+
     case 'gherkin_spec': {
       const { features, totalScenarios } = message;
       return (

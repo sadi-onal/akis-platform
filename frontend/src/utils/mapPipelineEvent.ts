@@ -1,4 +1,4 @@
-import type { Pipeline, PipelineStage } from '../types/pipeline';
+import type { Pipeline, PipelineStage, CriticReviewOutput } from '../types/pipeline';
 import type { ChatMessage, ChatMode, ConversationUIState, ConversationListItem, ConversationStatus } from '../types/chat';
 
 /**
@@ -9,12 +9,15 @@ export function mapStageToUIState(stage: PipelineStage): ConversationUIState {
     case 'scribe_clarifying':
       return 'scribe_clarifying'; // Scribe finished — waiting for user answers
     case 'scribe_generating':
+    case 'critic_reviewing_spec':
       return 'scribe_running';
     case 'awaiting_approval':
       return 'awaiting_approval';
     case 'proto_building':
+    case 'critic_reviewing_code':
       return 'proto_running';
     case 'trace_testing':
+    case 'fix_loop_iteration':
       return 'trace_running';
     case 'ci_running':
       return 'ci_running';
@@ -35,10 +38,13 @@ export function mapStageToMode(stage?: PipelineStage): ChatMode {
     case 'scribe_clarifying':
       return 'ask';
     case 'scribe_generating':
+    case 'critic_reviewing_spec':
     case 'awaiting_approval':
       return 'plan';
     case 'proto_building':
+    case 'critic_reviewing_code':
     case 'trace_testing':
+    case 'fix_loop_iteration':
     case 'ci_running':
       return 'act';
     case 'completed_partial':
@@ -57,8 +63,11 @@ export function mapStageToConversationStatus(stage: PipelineStage): Conversation
   switch (stage) {
     case 'scribe_clarifying':
     case 'scribe_generating':
+    case 'critic_reviewing_spec':
     case 'proto_building':
+    case 'critic_reviewing_code':
     case 'trace_testing':
+    case 'fix_loop_iteration':
     case 'ci_running':
       return 'running';
     case 'awaiting_approval':
@@ -141,6 +150,20 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
     }
   }
 
+  // Critic spec review result
+  const criticSpec = pipeline.intermediateState?.criticSpecOutput as CriticReviewOutput | undefined;
+  if (criticSpec) {
+    messages.push({
+      type: 'critic_review',
+      reviewType: 'spec_review',
+      approved: criticSpec.approved,
+      score: criticSpec.overallScore,
+      findings: criticSpec.findings ?? [],
+      summary: criticSpec.summary ?? '',
+      timestamp: now,
+    });
+  }
+
   // Proto result
   if (pipeline.protoOutput?.ok) {
     const po = pipeline.protoOutput;
@@ -152,6 +175,20 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
       branch: po.branch,
       filesChanged: po.files?.length ?? 0,
       linesChanged: po.metadata?.totalLinesOfCode ?? 0,
+      timestamp: now,
+    });
+  }
+
+  // Critic code review result
+  const criticCode = pipeline.intermediateState?.criticCodeOutput as CriticReviewOutput | undefined;
+  if (criticCode) {
+    messages.push({
+      type: 'critic_review',
+      reviewType: 'code_review',
+      approved: criticCode.approved,
+      score: criticCode.overallScore,
+      findings: criticCode.findings ?? [],
+      summary: criticCode.summary ?? '',
       timestamp: now,
     });
   }

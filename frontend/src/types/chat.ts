@@ -88,6 +88,20 @@ export type ChatMessage =
       timestamp: string;
     }
   | {
+      type: 'critic_review';
+      reviewType: 'spec_review' | 'code_review';
+      approved: boolean;
+      score: number;
+      findings: Array<{
+        severity: 'critical' | 'major' | 'minor' | 'info';
+        category: string;
+        description: string;
+        suggestion: string;
+      }>;
+      summary: string;
+      timestamp: string;
+    }
+  | {
       type: 'gherkin_spec';
       features: Array<{
         featureName: string;
