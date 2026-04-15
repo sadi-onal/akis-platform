@@ -1,21 +1,22 @@
 import { cn } from '../../utils/cn';
+import { useI18n } from '../../i18n/useI18n';
 import type { WorkflowStatus, StageStatus } from '../../types/workflow';
 
 type BadgeStatus = WorkflowStatus | StageStatus;
 
-const STATUS_CONFIG: Record<string, { label: string; colorClass: string; dotClass?: string }> = {
-  completed: { label: 'Tamamlandı', colorClass: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' },
-  completed_partial: { label: 'Kısmi', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
-  running: { label: 'Çalışıyor', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
-  awaiting_approval: { label: 'Onay Bekliyor', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
-  failed: { label: 'Başarısız', colorClass: 'text-red-400 bg-red-400/10 border-red-400/30' },
-  cancelled: { label: 'İptal', colorClass: 'text-ak-text-tertiary bg-ak-text-tertiary/10 border-ak-text-tertiary/30' },
-  idle: { label: 'Beklemede', colorClass: 'text-ak-text-tertiary bg-ak-text-tertiary/10 border-ak-text-tertiary/30' },
-  pending: { label: 'Beklemede', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
-  scribe_clarifying: { label: 'Çalışıyor', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
-  scribe_generating: { label: 'Çalışıyor', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
-  proto_building: { label: 'Çalışıyor', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
-  trace_testing: { label: 'Çalışıyor', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
+const STATUS_CONFIG: Record<string, { labelKey: string; colorClass: string; dotClass?: string }> = {
+  completed: { labelKey: 'badge.completed', colorClass: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' },
+  completed_partial: { labelKey: 'badge.partial', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
+  running: { labelKey: 'badge.running', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
+  awaiting_approval: { labelKey: 'badge.awaiting_approval', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
+  failed: { labelKey: 'badge.failed', colorClass: 'text-red-400 bg-red-400/10 border-red-400/30' },
+  cancelled: { labelKey: 'badge.cancelled', colorClass: 'text-ak-text-tertiary bg-ak-text-tertiary/10 border-ak-text-tertiary/30' },
+  idle: { labelKey: 'badge.pending', colorClass: 'text-ak-text-tertiary bg-ak-text-tertiary/10 border-ak-text-tertiary/30' },
+  pending: { labelKey: 'badge.pending', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
+  scribe_clarifying: { labelKey: 'badge.running', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
+  scribe_generating: { labelKey: 'badge.running', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
+  proto_building: { labelKey: 'badge.running', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
+  trace_testing: { labelKey: 'badge.running', colorClass: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dotClass: 'bg-amber-400' },
 };
 
 interface StatusBadgeProps {
@@ -25,6 +26,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = 'normal', className }: StatusBadgeProps) {
+  const { t } = useI18n();
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
   const isSmall = size === 'small';
 
@@ -41,7 +43,7 @@ export function StatusBadge({ status, size = 'normal', className }: StatusBadgeP
         <span className={cn('h-1.5 w-1.5 rounded-full animate-pulse', cfg.dotClass)} />
       )}
       {status === 'completed' && <span>&#10003;</span>}
-      {cfg.label}
+      {t(cfg.labelKey)}
     </span>
   );
 }
