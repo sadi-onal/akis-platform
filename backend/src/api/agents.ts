@@ -849,9 +849,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
         // Phase 7.E: Use unified error model
         const errorResponse = formatErrorResponse(request, error);
         const statusCode = getStatusCodeForError(errorResponse.error.code);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const req = request as any;
-        const routeForError = req.routeOptions?.url ?? req.routerPath ?? request.url.split('?')[0];
+        const routeForError = request.routeOptions?.url ?? request.url.split('?')[0];
         const userIdForError = userId;
         pushLog({
           requestId: request.id,

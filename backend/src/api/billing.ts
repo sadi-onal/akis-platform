@@ -196,8 +196,7 @@ export async function stripeWebhookRoutes(fastify: FastifyInstance) {
   fastify.addContentTypeParser(
     'application/json',
     { parseAs: 'buffer' },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((_req: any, body: any, done: any) => { done(null, body); }) as any,
+    ((_req: unknown, body: unknown, done: (err: null, result: unknown) => void) => { done(null, body); }) as (...args: unknown[]) => unknown,
   );
 
   fastify.post('/api/webhooks/stripe', async (request, reply) => {

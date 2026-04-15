@@ -89,8 +89,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
   );
 
   // PUT /api/settings/workspace - Update workspace name
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).put(
+  fastify.put(
     '/workspace',
     {
       config: {
@@ -161,8 +160,7 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
   );
 
   // DELETE /api/settings/workspace - Delete account
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).delete(
+  fastify.delete(
     '/workspace',
     {
       config: {

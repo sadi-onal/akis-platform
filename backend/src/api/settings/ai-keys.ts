@@ -132,8 +132,7 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
 
   // PUT /api/settings/ai-keys
   // Save API key for a specific provider
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).put(
+  fastify.put(
     '/ai-keys',
     {
       config: {
@@ -196,8 +195,7 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
 
   // PUT /api/settings/ai-provider/active
   // Set the active AI provider for the user
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).put(
+  fastify.put(
     '/ai-provider/active',
     {
       config: {
@@ -282,8 +280,7 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
 
   // DELETE /api/settings/ai-keys
   // Delete API key for a specific provider
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).delete(
+  fastify.delete(
     '/ai-keys',
     {
       config: {

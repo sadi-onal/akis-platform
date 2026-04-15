@@ -424,8 +424,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
   );
 
   // PUT /api/knowledge/sources/:id (update)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).put(
+  fastify.put(
     '/api/knowledge/sources/:id',
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -464,8 +463,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
   );
 
   // DELETE /api/knowledge/sources/:id — soft-deactivate
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).delete(
+  fastify.delete(
     '/api/knowledge/sources/:id',
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {

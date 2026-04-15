@@ -96,8 +96,7 @@ export async function crewRoutes(fastify: FastifyInstance) {
     const { id: crewRunId } = request.params as { id: string };
     const { cursor } = request.query as { cursor?: string };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = (reply as any).raw as import('http').ServerResponse;
+    const raw = reply.raw;
     raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -134,8 +133,7 @@ export async function crewRoutes(fastify: FastifyInstance) {
     }, 15000);
 
     // Cleanup on close
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (request as any).raw.on('close', () => {
+    request.raw.on('close', () => {
       clearInterval(keepAlive);
       unsubscribe();
     });

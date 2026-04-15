@@ -16,6 +16,7 @@ declare module 'fastify' {
     routeOptions?: { url?: string };
     cookies?: Record<string, string>;
     authSessionId?: string | null;
+    raw: import('http').IncomingMessage;
   }
 
   export interface FastifyReply {
@@ -30,6 +31,7 @@ declare module 'fastify' {
     clearCookie(name: string, options?: Record<string, unknown>): FastifyReply;
     setAuthCookie(sessionId: string): FastifyReply;
     clearAuthCookie(): FastifyReply;
+    raw: import('http').ServerResponse;
   }
 
   export type FastifyHandler = (
@@ -45,6 +47,8 @@ declare module 'fastify' {
     post(path: string, opts: Record<string, unknown>, handler: FastifyHandler): FastifyInstance;
     put(path: string, handler: FastifyHandler): FastifyInstance;
     put(path: string, opts: Record<string, unknown>, handler: FastifyHandler): FastifyInstance;
+    delete(path: string, handler: FastifyHandler): FastifyInstance;
+    delete(path: string, opts: Record<string, unknown>, handler: FastifyHandler): FastifyInstance;
     route(opts: {
       method: string | string[];
       url: string;

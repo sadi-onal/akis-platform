@@ -97,8 +97,7 @@ export async function profileRoutes(fastify: FastifyInstance) {
   );
 
   // PUT /api/settings/profile - Update profile
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).put(
+  fastify.put(
     '/profile',
     {
       config: {
@@ -168,8 +167,7 @@ export async function profileRoutes(fastify: FastifyInstance) {
   );
 
   // PUT /api/settings/profile/password - Change password
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).put(
+  fastify.put(
     '/profile/password',
     {
       config: {

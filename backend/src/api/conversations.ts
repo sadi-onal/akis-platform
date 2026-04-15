@@ -762,8 +762,7 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Thread not found' } });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = (reply as any).raw as import('http').ServerResponse;
+    const raw = reply.raw;
     raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -800,7 +799,6 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
     };
 
     conversationEventBus.subscribe(threadId, onEvent);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((request as any).raw as import('http').IncomingMessage).on('close', cleanup);
+    request.raw.on('close', cleanup);
   });
 }

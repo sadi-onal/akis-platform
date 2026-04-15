@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
 import { agentTriggers } from '../db/triggers-schema.js';
@@ -90,8 +90,7 @@ export async function triggersRoutes(fastify: FastifyInstance) {
   );
 
   // PUT /api/triggers/:id - Update trigger
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).put(
+  fastify.put(
     '/api/triggers/:id',
     {
       schema: {
@@ -104,8 +103,7 @@ export async function triggersRoutes(fastify: FastifyInstance) {
         },
       },
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const user = await requireAuth(request);
         const params = triggerIdSchema.parse(request.params);
@@ -134,8 +132,7 @@ export async function triggersRoutes(fastify: FastifyInstance) {
           .returning();
 
         return { trigger: updated };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } catch (error: any) {
+      } catch (error: unknown) {
         const errorResponse = formatErrorResponse(request, error);
         const statusCode = getStatusCodeForError(errorResponse.error.code);
         reply.code(statusCode).send(errorResponse);
@@ -144,8 +141,7 @@ export async function triggersRoutes(fastify: FastifyInstance) {
   );
 
   // DELETE /api/triggers/:id - Delete trigger
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fastify as any).delete(
+  fastify.delete(
     '/api/triggers/:id',
     {
       schema: {
@@ -158,8 +154,7 @@ export async function triggersRoutes(fastify: FastifyInstance) {
         },
       },
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const user = await requireAuth(request);
         const params = triggerIdSchema.parse(request.params);
@@ -177,8 +172,7 @@ export async function triggersRoutes(fastify: FastifyInstance) {
         await db.delete(agentTriggers).where(eq(agentTriggers.id, params.id));
 
         return reply.code(200).send({ success: true, message: 'Trigger deleted' });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } catch (error: any) {
+      } catch (error: unknown) {
         const errorResponse = formatErrorResponse(request, error);
         const statusCode = getStatusCodeForError(errorResponse.error.code);
         reply.code(statusCode).send(errorResponse);

@@ -67,8 +67,7 @@ export async function jobEventsRoutes(fastify: FastifyInstance) {
         }
 
       // Access raw Node.js response for SSE
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const raw = (reply as any).raw as import('http').ServerResponse;
+      const raw = reply.raw;
       raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -121,8 +120,7 @@ export async function jobEventsRoutes(fastify: FastifyInstance) {
 
       jobEventBus.subscribeStream(id, onEvent);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ((request as any).raw as import('http').IncomingMessage).on('close', cleanup);
+      request.raw.on('close', cleanup);
       } catch (error) {
         if (error instanceof Error && error.message === 'UNAUTHORIZED') {
           return reply.code(401).send({
