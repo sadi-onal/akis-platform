@@ -1,6 +1,6 @@
 {
 	"name": "akis-platform",
-	"version": "0.2.0",
+	"version": "0.6.5",
 	"description": "AKIS — Adaptive Knowledge Integrity System: AI Agent Workflows Engine for automated software development",
 	"author": "Ömer Yasir Önal <omeryasironal@gmail.com>",
 	"license": "MIT",
