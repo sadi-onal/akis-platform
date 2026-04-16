@@ -8,8 +8,6 @@ import { knowledgeSources, users } from '../../src/db/schema.js';
 import { eq, sql } from 'drizzle-orm';
 import { sign } from '../../src/services/auth/jwt.js';
 import { env as authEnv } from '../../src/lib/env.js';
-import { getEnv } from '../../src/config/env.js';
-import { cookiesPlugin } from '../../src/plugins/security/cookies.js';
 
 const hasDatabase = !!process.env.DATABASE_URL;
 
@@ -19,14 +17,6 @@ test('Knowledge signals routes', { skip: !hasDatabase }, async (t) => {
   }
 
   const app = await buildApp();
-  const env = getEnv();
-  await app.register(cookiesPlugin, {
-    name: env.AUTH_COOKIE_NAME,
-    maxAge: env.AUTH_COOKIE_MAXAGE,
-    sameSite: env.AUTH_COOKIE_SAMESITE,
-    secure: env.AUTH_COOKIE_SECURE,
-    domain: env.AUTH_COOKIE_DOMAIN,
-  });
   await app.ready();
   const adminId = randomUUID();
   const adminEmail = `knowledge-signals-admin-${Date.now()}@test.local`;
