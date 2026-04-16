@@ -1,0 +1,104 @@
+# AKIS Platform - Edge Reverse Proxy Caddyfile
+# Routes traffic based on hostname to appropriate backend/frontend
+#
+# Domains:
+#   akisflow.com         -> Production
+#   staging.akisflow.com -> Redirect to akisflow.com
+
+{
+    email {$ACME_EMAIL:admin@akisflow.com}
+}
+
+# ==============================================================================
+# Production (akisflow.com)
+# ==============================================================================
+akisflow.com {
+    encode gzip zstd
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Waitlist redirect (edge-level for campaigns)
+    @waitlist_redirect {
+        path /waitlist
+        query utm_source=*
+    }
+    handle @waitlist_redirect {
+        redir {$WAITLIST_URL:https://forms.gle/3aVfEh1Q8929DSY2A}?{query} temporary
+    }
+
+    # Health check endpoint
+    handle /health {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # Readiness check
+    handle /ready {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # Version endpoint
+    handle /version {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # API routes -> Backend
+    handle /api/* {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # Auth routes -> Backend
+    handle /auth/* {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # OpenAPI / Swagger
+    handle /api/docs* {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    handle /openapi.json {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # Metrics (internal)
+    handle /metrics {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # Static frontend
+    handle {
+        root * /srv/prod-frontend
+        try_files {path} /index.html
+        file_server
+    }
+
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}
+
+# www redirect
+www.akisflow.com {
+    redir https://akisflow.com{uri} permanent
+}
+
+# HTTP -> HTTPS redirect
+http://akisflow.com, http://www.akisflow.com {
+    redir https://akisflow.com{uri} permanent
+}
+
+# ==============================================================================
+# Staging redirect (staging.akisflow.com -> akisflow.com)
+# ==============================================================================
+staging.akisflow.com {
+    redir https://akisflow.com{uri} permanent
+}

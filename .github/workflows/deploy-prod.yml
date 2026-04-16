@@ -1,0 +1,687 @@
+# =============================================================================
+# AKIS Platform - Production Deployment
+# =============================================================================
+#
+# Sadece workflow_dispatch (manuel) aktif
+#
+# Target: OCI Free Tier VM (akisflow.com)
+# Requires: Manual approval via GitHub Environment protection
+#
+# =============================================================================
+
+name: Deploy to Production
+
+on:
+  # DISABLED: Auto-deploy on release publish
+  # release:
+  #   types: [published]
+
+  # DISABLED: Auto-deploy on semver tags
+  # push:
+  #   tags:
+  #     - 'v[0-9]+.[0-9]+.[0-9]+'
+  #     - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual trigger'
+        required: false
+        default: 'Manual production deploy'
+
+# Prevent concurrent production deployments
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  NODE_VERSION: '22.12.0'
+
+jobs:
+  # ============================================================================
+  # Validate Release
+  # ============================================================================
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.version.outputs.commit }}
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version info
+        id: version
+        run: |
+          set -euo pipefail
+          COMMIT="${GITHUB_SHA:0:7}"
+          PKG_VERSION=$(node -p "require('./backend/package.json').version")
+
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          elif echo "${GITHUB_REF}" | grep -qE '^refs/tags/v[0-9]'; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+          else
+            # workflow_dispatch / branch builds: use backend semver (matches Docker APP_VERSION)
+            VERSION="${PKG_VERSION}"
+            TAG="v${VERSION}"
+          fi
+
+          {
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+            echo "commit=${COMMIT}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Tag: ${TAG}"
+          echo "Version: ${VERSION}"
+          echo "Commit: ${COMMIT}"
+
+      - name: Validate semver format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
+            echo "❌ Invalid semver format: $VERSION"
+            exit 1
+          fi
+          echo "✅ Valid semver: $VERSION"
+
+  # ============================================================================
+  # Build and Test
+  # ============================================================================
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: validate
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: akis_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pnpm install --frozen-lockfile || pnpm install
+
+      - name: Run backend tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/akis_test
+          NODE_ENV: test
+        run: |
+          pnpm db:migrate
+          pnpm run typecheck
+          pnpm run lint
+          pnpm run test:ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci || npm install
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run test
+
+      - name: Build frontend (production)
+        working-directory: frontend
+        env:
+          VITE_API_URL: /api
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-prod
+          path: frontend/dist
+          retention-days: 30
+
+  # ============================================================================
+  # Build Docker Images
+  # ============================================================================
+  docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [validate, build]
+    
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      backend_image: ${{ steps.vars.outputs.backend_image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Compute image names
+        id: vars
+        run: |
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          BACKEND_IMAGE="ghcr.io/${REPO_LC}/akis-backend"
+          echo "repo_lc=${REPO_LC}" >> $GITHUB_OUTPUT
+          echo "backend_image=${BACKEND_IMAGE}" >> $GITHUB_OUTPUT
+          echo "Backend Image: ${BACKEND_IMAGE}"
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-prod
+          path: frontend/dist
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.vars.outputs.backend_image }}:latest
+            ${{ steps.vars.outputs.backend_image }}:${{ needs.validate.outputs.tag }}
+            ${{ steps.vars.outputs.backend_image }}:${{ needs.validate.outputs.version }}
+          build-args: |
+            BUILD_COMMIT=${{ needs.validate.outputs.commit }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp || github.event.release.created_at }}
+            APP_VERSION=${{ needs.validate.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # ============================================================================
+  # Deploy to Production (Requires Manual Approval)
+  # ============================================================================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [validate, build, docker]
+    environment:
+      name: production
+      url: https://akisflow.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-prod
+          path: frontend/dist
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Get previous version for rollback
+        id: previous
+        run: |
+          PREV_VERSION=$(ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "docker inspect akis-prod-backend --format '{{.Config.Image}}' 2>/dev/null || echo 'none'")
+          echo "previous_image=$PREV_VERSION" >> $GITHUB_OUTPUT
+          echo "Previous image: $PREV_VERSION"
+
+      - name: Create full database backup
+        run: |
+          echo "📦 Creating pre-deployment database backup..."
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            cd /opt/akis
+            BACKUP_FILE="/opt/akis/backups/prod-pre-deploy-v${{ needs.validate.outputs.version }}-$(date +%Y%m%d-%H%M%S).dump"
+            docker exec akis-prod-db pg_dump -U akis -Fc akis_prod > "$BACKUP_FILE"
+            echo "Backup created: $BACKUP_FILE"
+            ls -lh "$BACKUP_FILE"
+          EOF
+
+      - name: Verify server prerequisites
+        run: |
+          echo "Checking server prerequisites..."
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            echo "=== Server Architecture ==="
+            uname -m
+
+            echo ""
+            echo "=== Docker Version ==="
+            docker --version || { echo "ERROR: Docker not installed"; exit 1; }
+
+            echo ""
+            echo "=== Docker Compose Version ==="
+            docker compose version || docker-compose --version || { echo "ERROR: Docker Compose not available"; exit 1; }
+
+            echo ""
+            echo "=== Port 80/443 binding check (preflight) ==="
+            echo "Services binding to port 80:"
+            sudo ss -tlnp | grep ':80 ' || echo "  (none)"
+            echo "Services binding to port 443:"
+            sudo ss -tlnp | grep ':443 ' || echo "  (none)"
+          EOF
+
+      - name: Stop conflicting services
+        run: |
+          echo "=== Checking and stopping services that may conflict with port 80/443 ==="
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            # Check if nginx is running
+            if systemctl is-active --quiet nginx 2>/dev/null; then
+              echo "nginx is running. Stopping and masking for AKIS deployment..."
+              sudo systemctl stop nginx
+              sudo systemctl disable nginx
+              sudo systemctl mask nginx 2>/dev/null || true
+              echo "✅ nginx stopped, disabled, and masked (will not auto-start)"
+            else
+              echo "nginx is not running (OK)"
+              # Ensure nginx stays masked even if not currently running
+              sudo systemctl mask nginx 2>/dev/null || true
+            fi
+            
+            # Stop any old akis containers that might bind to 80/443
+            echo ""
+            echo "Stopping old akis containers with port bindings..."
+            docker stop akis-prod-caddy akis-edge-caddy 2>/dev/null || true
+            docker rm akis-prod-caddy akis-edge-caddy 2>/dev/null || true
+            
+            sleep 2
+            
+            # Verify ports are free
+            echo ""
+            echo "=== Port status after cleanup ==="
+            if sudo ss -tlnp | grep -q ':80 '; then
+              echo "⚠️ Port 80 still in use:"
+              sudo ss -tlnp | grep ':80 '
+            else
+              echo "✅ Port 80 is free"
+            fi
+            
+            if sudo ss -tlnp | grep -q ':443 '; then
+              echo "⚠️ Port 443 still in use:"
+              sudo ss -tlnp | grep ':443 '
+            else
+              echo "✅ Port 443 is free"
+            fi
+          EOF
+
+      - name: Setup GHCR authentication on server
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << EOF
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          EOF
+          echo "✅ GHCR authentication configured on production server"
+
+      - name: Deploy to production server
+        env:
+          BACKEND_VERSION: ${{ needs.validate.outputs.tag }}
+        run: |
+          # Compute lowercase repo for image references
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          
+          # Copy compose files - prod stack and edge proxy
+          scp -i ~/.ssh/deploy_key devops/compose/docker-compose.prod.yml \
+            ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:/opt/akis/prod/docker-compose.yml
+          scp -i ~/.ssh/deploy_key devops/compose/docker-compose.edge.yml \
+            ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:/opt/akis/docker-compose.edge.yml
+          scp -i ~/.ssh/deploy_key devops/compose/Caddyfile.edge \
+            ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:/opt/akis/Caddyfile.edge
+          
+          # Copy frontend dist to bind mount location
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "mkdir -p /opt/akis/prod-frontend /opt/akis/prod"
+          scp -r -i ~/.ssh/deploy_key frontend/dist/* \
+            ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:/opt/akis/prod-frontend/
+
+          # Write .env with deterministic image references
+          echo "=== Writing image references to .env ==="
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "cd /opt/akis/prod && touch .env && sed -i '/^GITHUB_REPOSITORY=/d; /^BACKEND_VERSION=/d' .env"
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "cd /opt/akis/prod && echo 'GITHUB_REPOSITORY=${REPO_LC}' >> .env && echo 'BACKEND_VERSION=${{ needs.validate.outputs.tag }}' >> .env"
+          
+          echo "Image: ghcr.io/${REPO_LC}/akis-backend:${{ needs.validate.outputs.tag }}"
+
+      - name: Verify prod static frontend on server
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            set -e
+            if [ ! -f /opt/akis/prod-frontend/index.html ]; then
+              echo "::error::Missing /opt/akis/prod-frontend/index.html (edge Caddy serves SPA from here)"
+              ls -la /opt/akis/prod-frontend/ || true
+              exit 1
+            fi
+            echo "✅ prod-frontend/index.html present ($(wc -c </opt/akis/prod-frontend/index.html | awk '{print $1}') bytes)"
+          EOF
+
+      - name: Setup edge proxy network
+        run: |
+          echo "=== Creating edge proxy network ==="
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "docker network create akis-edge-net 2>/dev/null || echo 'Network akis-edge-net already exists'"
+
+      - name: Pull Docker images
+        run: |
+          echo "=== Pulling new images ==="
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "cd /opt/akis/prod && docker compose pull"
+
+      - name: Run database migrations
+        run: |
+          echo "=== Running database migrations ==="
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "cd /opt/akis/prod && docker compose run --rm backend pnpm db:migrate" || echo "WARN: Migration failed or no migrations to run"
+
+      - name: Start production services
+        run: |
+          echo "=== Starting production services ==="
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "cd /opt/akis/prod && docker compose up -d --remove-orphans"
+
+      - name: Start edge proxy
+        run: |
+          echo "=== Starting edge proxy ==="
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            cd /opt/akis
+            
+            # Start edge proxy (the only service binding 80/443)
+            echo "Starting edge proxy container..."
+            if ! docker compose -f docker-compose.edge.yml up -d 2>&1; then
+              echo "ERROR: Failed to start edge proxy"
+              docker compose -f docker-compose.edge.yml logs --tail=50 2>&1 || true
+              exit 1
+            fi
+            
+            sleep 5
+            
+            # Verify edge proxy container is running
+            if ! docker ps --format '{{.Names}}' | grep -q 'akis-edge-caddy'; then
+              echo "ERROR: akis-edge-caddy container is not running!"
+              docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+              docker logs akis-edge-caddy 2>&1 || true
+              exit 1
+            fi
+            
+            echo "✅ Edge proxy container is running"
+            docker exec akis-edge-caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || true
+          EOF
+          
+          echo ""
+          echo "=== Container status ==="
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | head -20"
+
+      - name: Cleanup old images
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+            "docker image prune -f" || true
+
+      - name: Wait for deployment
+        run: sleep 45
+
+      - name: Health check
+        id: health
+        run: |
+          echo "🏥 Running health checks..."
+          for i in {1..30}; do
+            HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://akisflow.com/health || echo "000")
+            READY=$(curl -s -o /dev/null -w "%{http_code}" https://akisflow.com/ready || echo "000")
+            
+            if [ "$HEALTH" = "200" ] && [ "$READY" = "200" ]; then
+              echo "✅ Health checks passed!"
+              echo "health_status=success" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            
+            echo "Attempt $i/30: health=$HEALTH, ready=$READY"
+            sleep 5
+          done
+          
+          echo "❌ Health checks failed after 30 attempts"
+          echo "health_status=failure" >> $GITHUB_OUTPUT
+          exit 1
+
+      - name: Verify deployed version
+        if: steps.health.outputs.health_status == 'success'
+        run: |
+          DEPLOYED=$(curl -s https://akisflow.com/version)
+          DEPLOYED_VERSION=$(echo "$DEPLOYED" | jq -r '.version')
+          DEPLOYED_COMMIT=$(echo "$DEPLOYED" | jq -r '.commit')
+          EXPECTED_VERSION="${{ needs.validate.outputs.version }}"
+          EXPECTED_COMMIT="${{ needs.validate.outputs.commit }}"
+          
+          echo "Deployed version: $DEPLOYED_VERSION (commit: $DEPLOYED_COMMIT)"
+          echo "Expected version: $EXPECTED_VERSION (commit: $EXPECTED_COMMIT)"
+          
+          if [ "$DEPLOYED_VERSION" = "$EXPECTED_VERSION" ]; then
+            echo "✅ Version verified!"
+          else
+            echo "❌ Version mismatch!"
+            exit 1
+          fi
+
+      - name: Rollback on failure
+        if: failure() && steps.previous.outputs.previous_image != 'none'
+        run: |
+          echo "⚠️ Deployment failed, initiating rollback..."
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << EOF
+            cd /opt/akis
+            echo "Rolling back to: ${{ steps.previous.outputs.previous_image }}"
+            docker compose pull backend:${{ steps.previous.outputs.previous_image }}
+            docker compose up -d backend
+            
+            # Note: Database is NOT rolled back automatically
+            # Manual intervention required for schema changes
+            echo "⚠️ WARNING: Database schema was NOT rolled back."
+            echo "Check backup files if data restoration is needed."
+          EOF
+
+      - name: Save deployment logs
+        if: always()
+        run: |
+          echo "📋 Collecting deployment logs..."
+          {
+            echo "=== Deployment Info ==="
+            echo "Version: ${{ needs.validate.outputs.version }}"
+            echo "Commit: ${{ needs.validate.outputs.commit }}"
+            echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo ""
+            echo "=== Container Logs ==="
+            ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+              "docker compose -f /opt/akis/docker-compose.yml logs --tail=200" 2>&1 || echo "Failed to get logs"
+            echo ""
+            echo "=== Health Check Results ==="
+            curl -s https://akisflow.com/health || echo "Health check failed"
+            echo ""
+            curl -s https://akisflow.com/ready || echo "Ready check failed"
+            echo ""
+            curl -s https://akisflow.com/version || echo "Version check failed"
+          } > deploy-evidence.txt
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-deploy-evidence-${{ needs.validate.outputs.tag }}
+          path: deploy-evidence.txt
+          retention-days: 90
+
+  # ============================================================================
+  # Post-Deploy Smoke Tests
+  # ============================================================================
+  smoke-test:
+    name: Production Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [validate, deploy]
+    if: success()
+
+    steps:
+      - name: Wait for services to stabilize
+        run: sleep 15
+
+      - name: Test health endpoints with schema validation
+        run: |
+          echo "Testing /health..."
+          HEALTH_RESPONSE=$(curl -sf https://akisflow.com/health)
+          echo "Response: $HEALTH_RESPONSE"
+          # Validate schema: must contain {"status":"ok"}
+          if echo "$HEALTH_RESPONSE" | grep -q '"status"'; then
+            echo "✅ /health schema valid"
+          else
+            echo "❌ /health response missing required 'status' field"
+            exit 1
+          fi
+          
+          echo "Testing /ready..."
+          READY_RESPONSE=$(curl -sf https://akisflow.com/ready)
+          echo "Response: $READY_RESPONSE"
+          # Validate schema: must contain {"ready":true/false}
+          if echo "$READY_RESPONSE" | grep -q '"ready"'; then
+            echo "✅ /ready schema valid"
+          else
+            echo "❌ /ready response missing required 'ready' field"
+            exit 1
+          fi
+          
+          echo "Testing /version..."
+          VERSION_RESPONSE=$(curl -sf https://akisflow.com/version)
+          echo "Response: $VERSION_RESPONSE"
+          # Validate schema: must contain {"version":"..."}
+          if echo "$VERSION_RESPONSE" | grep -q '"version"'; then
+            echo "✅ /version schema valid"
+          else
+            echo "❌ /version response missing required 'version' field"
+            exit 1
+          fi
+
+      - name: Test API endpoints
+        run: |
+          echo "Testing /api/agents/jobs (should return 401 or jobs list)..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://akisflow.com/api/agents/jobs)
+          if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ API responding correctly (HTTP $HTTP_CODE)"
+          else
+            echo "❌ Unexpected response: HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Test frontend loading
+        run: |
+          echo "Testing frontend..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://akisflow.com/)
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Frontend loading correctly"
+          else
+            echo "❌ Frontend failed to load: HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Create smoke test report
+        run: |
+          {
+            echo "## Production Smoke Test Results"
+            echo ""
+            echo "| Test | Result |"
+            echo "|------|--------|"
+            echo "| Health Check | ✅ Pass |"
+            echo "| Ready Check | ✅ Pass |"
+            echo "| Version Check | ✅ Pass |"
+            echo "| API Response | ✅ Pass |"
+            echo "| Frontend Load | ✅ Pass |"
+          } > smoke-test-results.md
+          cat smoke-test-results.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload smoke test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-results-${{ needs.validate.outputs.tag }}
+          path: smoke-test-results.md
+          retention-days: 90
+
+  # ============================================================================
+  # Create Deployment Summary
+  # ============================================================================
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [validate, deploy, smoke-test]
+    if: always()
+
+    steps:
+      - name: Create summary
+        run: |
+          if [ "${{ needs.deploy.result }}" = "success" ] && [ "${{ needs.smoke-test.result }}" = "success" ]; then
+            STATUS="✅ Successful"
+          else
+            STATUS="❌ Failed"
+          fi
+          
+          {
+            echo "# 🚀 Production Deployment Report"
+            echo ""
+            echo "## Status: $STATUS"
+            echo ""
+            echo "### Deployment Details"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Version | ${{ needs.validate.outputs.version }} |"
+            echo "| Tag | ${{ needs.validate.outputs.tag }} |"
+            echo "| Commit | ${{ needs.validate.outputs.commit }} |"
+            echo "| URL | https://akisflow.com |"
+            echo "| Workflow Run | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |"
+            echo "| Triggered By | ${{ github.actor }} |"
+            echo "| Timestamp | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
+            echo ""
+            echo "### Artifacts"
+            echo ""
+            echo "- [Deployment Evidence](./prod-deploy-evidence-${{ needs.validate.outputs.tag }})"
+            echo "- [Smoke Test Results](./smoke-test-results-${{ needs.validate.outputs.tag }})"
+            echo "- [Frontend Build](./frontend-dist-prod)"
+          } >> $GITHUB_STEP_SUMMARY

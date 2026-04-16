@@ -81,19 +81,13 @@ describe('ChatInput', () => {
     expect(textarea.className).toContain('cursor-not-allowed');
   });
 
-  // ─── Keyboard hint text ────────────────────────────────────────────────────
+  // ─── Keyboard hint text (single helper row, no <kbd>) ─────────────────────
 
-  it('renders keyboard hint labels (Gonder, Yeni satir)', () => {
+  it('renders keyboard helper row (Gönder, Yeni satır, Temizle)', () => {
     render(<ChatInput onSend={vi.fn()} />);
-    expect(screen.getByText('Gonder')).toBeInTheDocument();
-    expect(screen.getByText('Yeni satir')).toBeInTheDocument();
-  });
-
-  it('renders keyboard shortcut symbols in hints', () => {
-    const { container } = render(<ChatInput onSend={vi.fn()} />);
-    const kbds = container.querySelectorAll('kbd');
-    // Expect 2 kbd elements: Enter, Shift+Enter
-    expect(kbds.length).toBe(2);
+    expect(
+      screen.getByText(/⏎ Gönder.*⇧⏎ Yeni satır.*Esc Temizle/s),
+    ).toBeInTheDocument();
   });
 
   // ─── Escape key clears input ──────────────────────────────────────────────

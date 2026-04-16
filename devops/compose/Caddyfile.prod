@@ -1,0 +1,103 @@
+# AKIS Platform - Production Caddyfile
+# Reverse proxy configuration for production environment
+
+{
+    # Production: Use Let's Encrypt production CA
+    email {$ACME_EMAIL:admin@akisflow.com}
+    
+    # OCSP stapling
+    ocsp_stapling on
+}
+
+# Production domain
+akisflow.com {
+    # Enable compression
+    encode gzip zstd
+
+    # Strict security headers for production
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://api.openrouter.ai"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        -Server
+    }
+
+    # Health check endpoint (for load balancer / uptime monitoring)
+    handle /health {
+        reverse_proxy backend:3000
+    }
+
+    # Readiness check endpoint
+    handle /ready {
+        reverse_proxy backend:3000
+    }
+
+    # Version endpoint
+    handle /version {
+        reverse_proxy backend:3000
+    }
+
+    # API routes → Backend
+    handle /api/* {
+        reverse_proxy backend:3000
+    }
+
+    # Auth routes → Backend
+    handle /auth/* {
+        reverse_proxy backend:3000
+    }
+
+    # OpenAPI / Swagger UI → Backend (at /api/docs)
+    handle /api/docs* {
+        reverse_proxy backend:3000
+    }
+
+    handle /openapi.json {
+        reverse_proxy backend:3000
+    }
+
+    # Metrics endpoint - INTERNAL ONLY
+    # Protected by IP allowlist in production
+    @internal {
+        remote_ip 127.0.0.1 172.21.0.0/16
+    }
+    handle /metrics {
+        @notInternal not remote_ip 127.0.0.1 172.21.0.0/16
+        respond @notInternal "Forbidden" 403
+        reverse_proxy backend:3000
+    }
+
+    # Static frontend files
+    handle {
+        root * /srv/frontend
+        try_files {path} /index.html
+        file_server
+        
+        # Cache static assets
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    # Access logging
+    log {
+        output stdout
+        format json
+        level WARN
+    }
+}
+
+# www redirect
+www.akisflow.com {
+    redir https://akisflow.com{uri} permanent
+}
+
+# HTTP → HTTPS redirect
+http://akisflow.com, http://www.akisflow.com {
+    redir https://akisflow.com{uri} permanent
+}

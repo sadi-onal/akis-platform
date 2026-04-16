@@ -1,0 +1,207 @@
+# AKIS Platform - Production Environment
+# Docker Compose for production deployment on OCI Free Tier
+#
+# Usage:
+#   docker compose -f devops/compose/docker-compose.prod.yml up -d
+#
+# Prerequisites:
+#   - .env.prod file with required environment variables
+#   - Docker and Docker Compose installed on OCI VM
+#   - GitHub Release or semver tag trigger
+#   - Manual approval via GitHub Environment protection
+#   - Edge proxy must be running (docker-compose.edge.yml)
+#
+# Architecture:
+#   This stack does NOT bind to ports 80/443. Instead, the edge proxy
+#   (akis-edge-caddy) routes traffic to the backend via the shared network.
+
+name: akis-prod
+
+services:
+  # ============================================================================
+  # Backend - Fastify API Server
+  # ============================================================================
+  backend:
+    image: ghcr.io/${GITHUB_REPOSITORY:-akis}/akis-backend:${BACKEND_VERSION:-latest}
+    container_name: akis-prod-backend
+    restart: always
+    expose:
+      - "3000"
+    environment:
+      # Core
+      NODE_ENV: production
+      PORT: "3000"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+      # Database
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Auth - CRITICAL: Secure cookie is MANDATORY in production
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:-lax}
+      AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-akis_sid}
+      # Cookie domain enables cross-subdomain session sharing (e.g., akisflow.com and www.akisflow.com)
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-.akisflow.com}
+      
+      # URLs
+      BACKEND_URL: ${BACKEND_URL:-https://akisflow.com/api}
+      FRONTEND_URL: ${FRONTEND_URL:-https://akisflow.com}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://akisflow.com}
+      
+      # Rate Limiting (strict for production)
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-60000}
+      
+      # AI
+      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_MODEL_DEFAULT: ${AI_MODEL_DEFAULT:-meta-llama/llama-3.3-70b-instruct:free}
+      AI_MODEL_PLANNER: ${AI_MODEL_PLANNER:-}
+      AI_MODEL_VALIDATION: ${AI_MODEL_VALIDATION:-}
+      
+      # MCP Gateway
+      GITHUB_MCP_BASE_URL: ${GITHUB_MCP_BASE_URL:-http://mcp-gateway:4010/mcp}
+      
+      # Atlassian (disabled by default)
+      MCP_ATLASSIAN_ENABLED: ${MCP_ATLASSIAN_ENABLED:-false}
+    networks:
+      - prod-network
+      - akis-edge-net  # Connect to edge proxy network
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ============================================================================
+  # Database - PostgreSQL 16
+  # ============================================================================
+  db:
+    image: postgres:16-alpine
+    container_name: akis-prod-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-akis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-akis_prod}
+      # Production-safe settings
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - prod_pgdata:/var/lib/postgresql/data
+    networks:
+      - prod-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-akis} -d ${POSTGRES_DB:-akis_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    # Production-specific: Log slow queries
+    command: >
+      postgres
+      -c log_min_duration_statement=1000
+      -c log_statement=ddl
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+
+  # ============================================================================
+  # MCP Gateway (for GitHub/Jira/Confluence integrations)
+  # ============================================================================
+  mcp-gateway:
+    image: ghcr.io/${GITHUB_REPOSITORY:-akis}/akis-mcp-gateway:${MCP_VERSION:-latest}
+    container_name: akis-prod-mcp
+    restart: always
+    profiles:
+      - mcp
+    expose:
+      - "4010"
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      PORT: "4010"
+    networks:
+      - prod-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # ============================================================================
+  # Database Backup (scheduled via cron in container)
+  # ============================================================================
+  backup:
+    image: postgres:16-alpine
+    container_name: akis-prod-backup
+    restart: "no"
+    profiles:
+      - backup
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-akis}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-akis_prod}
+    volumes:
+      - ./backups:/backups
+    networks:
+      - prod-network
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        pg_dump -Fc > /backups/akis-prod-$$(date +%Y%m%d-%H%M%S).dump &&
+        echo 'Backup completed successfully' &&
+        find /backups -name '*.dump' -mtime +7 -delete &&
+        echo 'Old backups cleaned'
+      "
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  prod-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+  # External network shared with edge proxy
+  akis-edge-net:
+    external: true
+    name: akis-edge-net
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  prod_pgdata:
+    name: akis-prod-pgdata

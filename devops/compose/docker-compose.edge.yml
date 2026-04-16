@@ -1,0 +1,65 @@
+# AKIS Platform - Edge Reverse Proxy
+# Single entry point for all domains on the server
+#
+# This is the ONLY service that binds to ports 80/443 on the host.
+# It routes requests to the appropriate backend based on hostname:
+#   - akisflow.com        -> akis-prod-backend:3000
+#   - staging.akisflow.com -> akis-staging-backend:3000
+#
+# Usage:
+#   docker compose -f docker-compose.edge.yml up -d
+#   docker compose -f docker-compose.edge.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
+#
+# Prerequisites:
+#   - akis-edge-net network must exist (created by staging/prod stack or manually)
+#   - Frontend files must be in /opt/akis/staging-frontend and /opt/akis/prod-frontend
+
+name: akis-edge
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: akis-edge-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.edge:/etc/caddy/Caddyfile:ro
+      - edge_caddy_data:/data
+      - edge_caddy_config:/config
+      # Bind mount frontend directories for static file serving
+      - /opt/akis/staging-frontend:/srv/staging-frontend:ro
+      - /opt/akis/prod-frontend:/srv/prod-frontend:ro
+    networks:
+      - akis-edge-net
+    # Route via Host so multi-site Caddy config matches akisflow.com (backend /health, not SPA /)
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider --header='Host: akisflow.com' http://127.0.0.1/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+networks:
+  # External network shared by staging, prod, and edge stacks
+  # Must be created before first deploy: docker network create akis-edge-net
+  akis-edge-net:
+    external: true
+    name: akis-edge-net
+
+volumes:
+  edge_caddy_data:
+    name: akis-edge-caddy-data
+  edge_caddy_config:
+    name: akis-edge-caddy-config

@@ -73,3 +73,9 @@ pnpm dev
 - Backend sadece internal network'te expose edilir (Caddy arkasında)
 - MCP Gateway, GitHub token gerektirir (PAT: repo + read:org)
 - DB volume'u persist edilir (`akis-staging-pgdata`)
+
+## Production (`akisflow.com`)
+
+- **CI/CD:** `.github/workflows/deploy-prod.yml` — `workflow_dispatch` (GitHub Environment: `production`, onay gerekebilir).
+- **Sunucu dizinleri:** `/opt/akis/prod` (Compose), `/opt/akis/prod-frontend` (Vite `dist`, edge Caddy `root` → `/srv/prod-frontend`).
+- **Edge proxy:** `devops/compose/docker-compose.edge.yml` + `devops/compose/Caddyfile.edge` — tek giriş noktası 80/443; `akisflow.com` ve `staging.akisflow.com` burada yönlendirilir.
