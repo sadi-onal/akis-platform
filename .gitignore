@@ -189,7 +189,6 @@ frontend/Dockerfile.dev
 docs/deploy/
 docs/ENV_PRODUCTION.md
 .github/workflows/oci-staging-deploy.yml
-.github/workflows/nightly-smoke.yml
 
 # ─── İç geliştirme dosyaları (GitHub'da olmaz) ───
 .claude/
