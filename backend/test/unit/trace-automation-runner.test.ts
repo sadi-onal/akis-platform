@@ -25,16 +25,27 @@ describe('TraceAutomationRunner error types', () => {
 });
 
 describe('TraceAutomationRunner JSON report parsing', async () => {
-  // Dynamically import the module to test the parse logic
   const mod = await import('../../src/services/trace/TraceAutomationRunner.js');
 
-  // parseJsonReport is not exported, but we can test buildTestFileContent
-  // and the overall runTraceAutomation contract via type assertions
-
   it('buildTestFileContent produces valid test structure', () => {
-    // Access internal via module - since buildTestFileContent is not exported,
-    // we verify the runner module exports the run function
     assert.equal(typeof mod.runTraceAutomation, 'function');
+    assert.equal(typeof mod.buildTestFileContent, 'function');
+  });
+
+  it('buildTestFileContent escapes titles and URL for valid TypeScript', () => {
+    const src = mod.buildTestFileContent(
+      [
+        {
+          featureName: 'Screen "Home"',
+          scenarios: [{ name: "User's dashboard loads", steps: ['Given x', 'Then y'] }],
+        },
+      ],
+      'https://staging.example.com/path?q=a&b=2',
+      'chromium',
+    );
+    assert.match(src, /test\.describe\("Screen \\"Home\\"/);
+    assert.ok(src.includes(`test("User's dashboard loads"`));
+    assert.ok(src.includes('await page.goto("https://staging.example.com/path?q=a&b=2"'));
   });
 
   it('TraceTestSpec interface shape is usable', () => {

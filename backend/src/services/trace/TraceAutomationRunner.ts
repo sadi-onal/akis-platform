@@ -45,8 +45,9 @@ function sanitizeBrowser(raw?: string): BrowserTarget {
 
 /**
  * Generate a Playwright test file from parsed specs.
+ * Uses JSON.stringify for titles and URL so names with quotes/newlines cannot break TS syntax.
  */
-function buildTestFileContent(specs: TraceTestSpec[], baseUrl: string, browser: BrowserTarget): string {
+export function buildTestFileContent(specs: TraceTestSpec[], baseUrl: string, browser: BrowserTarget): string {
   const lines: string[] = [
     `import { test, expect } from '@playwright/test';`,
     ``,
@@ -54,14 +55,14 @@ function buildTestFileContent(specs: TraceTestSpec[], baseUrl: string, browser: 
     ``,
   ];
   for (const spec of specs) {
-    lines.push(`test.describe('${spec.featureName}', () => {`);
+    lines.push(`test.describe(${JSON.stringify(spec.featureName)}, () => {`);
     for (const scenario of spec.scenarios) {
-      lines.push(`  test('${scenario.name}', async ({ page }) => {`);
-      lines.push(`    await page.goto('${baseUrl}');`);
+      lines.push(`  test(${JSON.stringify(scenario.name)}, async ({ page }) => {`);
+      lines.push(`    await page.goto(${JSON.stringify(baseUrl)}, { waitUntil: 'domcontentloaded' });`);
+      lines.push(`    await expect(page.locator('body')).toBeVisible({ timeout: 15_000 });`);
       for (const step of scenario.steps) {
-        // Steps are human-readable; we wrap them as soft-assertions with page context
-        lines.push(`    // ${step}`);
-        lines.push(`    await expect(page).not.toHaveTitle('error', { timeout: 5000 }).catch(() => {});`);
+        const safe = String(step).replace(/\r?\n/g, ' ').replace(/\*\//g, '* /');
+        lines.push(`    // ${safe}`);
       }
       lines.push(`  });`);
     }

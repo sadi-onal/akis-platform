@@ -153,6 +153,8 @@ export interface TraceOutput {
   };
   branch?: string;
   prUrl?: string;
+  /** When set, AKIS pushed `.github/workflows/akis-e2e.yml` for GitHub Actions verification */
+  ciWorkflowPath?: string;
   gherkinFeatures?: Array<{
     featureName: string;
     filePath: string;

@@ -36,6 +36,7 @@ import { DeterministicValidator } from '../validator/DeterministicValidator.js';
 import { SecurityGate } from '../security-gate/SecurityGate.js';
 import { ExplainabilityService } from '../explainability/ExplainabilityService.js';
 import { LearningService } from '../learning/LearningService.js';
+import { buildUnifiedAgentKnowledgeContext } from '../unifiedPipelineContext.js';
 
 // ─── Timeout Guard ───────────────────────────────
 
@@ -658,6 +659,8 @@ export class PipelineOrchestrator {
       : this.getAgents(protoModel, pipelineId);
 
     await this.writeCheckpoint(pipelineId, 'proto', `İterasyon: ${iterationRequest.slice(0, 80)}`);
+    const iterationKnowledgeRaw = buildUnifiedAgentKnowledgeContext(pipeline, { role: 'proto' });
+    const iterationKnowledge = iterationKnowledgeRaw.trim() ? iterationKnowledgeRaw : undefined;
     const protoResult = await withRetry(
       (attempt) => {
         if (attempt > 1) protoEmit('retry', `Proto yeniden deneniyor (deneme ${attempt})...`, 30);
@@ -670,6 +673,7 @@ export class PipelineOrchestrator {
             pipelineId,
             iterationRequest,
             existingFiles,
+            knowledgeContext: iterationKnowledge,
           }),
           STAGE_TIMEOUT,
           'Proto',
@@ -791,12 +795,10 @@ export class PipelineOrchestrator {
     const agents = userGithubService
       ? (this.createAgentsForModel?.(protoModel, userGithubService, tokenCbProto) ?? this.getAgents(protoModel, pipelineId))
       : this.getAgents(protoModel, pipelineId);
-    // Inject repo context knowledge into Proto if available
+    // Unified pipeline chat + GitHub/repo signals (Cursor-like single context bundle)
     const pipelineData = await this.getPipeline(pipelineId);
-    const repoCtx = pipelineData.repoContext;
-    const protoKnowledge = repoCtx
-      ? `\n\n--- EXISTING REPOSITORY CONTEXT ---\nRepository: ${repoCtx.owner}/${repoCtx.repo} (branch: ${repoCtx.branch})\nTech Stack: ${repoCtx.techStack.join(', ')}\nSummary: ${repoCtx.summary}\n\nFile Tree:\n${repoCtx.fileTree}\n--- END REPOSITORY CONTEXT ---\nIMPORTANT: Generate code that fits into this EXISTING codebase. Follow its conventions and patterns.`
-      : undefined;
+    const protoKnowledgeRaw = buildUnifiedAgentKnowledgeContext(pipelineData, { role: 'proto' });
+    const protoKnowledge = protoKnowledgeRaw.trim() ? protoKnowledgeRaw : undefined;
 
     await this.writeCheckpoint(pipelineId, 'proto', spec.title);
     const protoResult = await withRetry(
@@ -1330,11 +1332,21 @@ export class PipelineOrchestrator {
     // Read cucumberEnabled from pipeline intermediateState
     const pipelineForCucumber = await this.getPipeline(pipelineId);
     const cucumberEnabled = (pipelineForCucumber.intermediateState as Record<string, unknown> | undefined)?.cucumberEnabled === true;
+    const traceKnowledgeRaw = buildUnifiedAgentKnowledgeContext(pipelineForCucumber, { role: 'trace' });
+    const traceKnowledge = traceKnowledgeRaw.trim() ? traceKnowledgeRaw : undefined;
     const traceResult = await withRetry(
       (attempt) => {
         if (attempt > 1) traceEmit('retry', `Trace yeniden deneniyor (deneme ${attempt})...`, 30);
         return withTimeout(
-          agents.trace.execute({ repoOwner: owner, repo, branch, spec, pipelineId, cucumberEnabled }),
+          agents.trace.execute({
+            repoOwner: owner,
+            repo,
+            branch,
+            spec,
+            pipelineId,
+            cucumberEnabled,
+            knowledgeContext: traceKnowledge,
+          }),
           TRACE_TIMEOUT,
           'Trace',
         );
@@ -1369,9 +1381,17 @@ export class PipelineOrchestrator {
           spec,
           async (_s, feedback) => {
             const fixAgents = this.getAgents(model);
+            const pl = await this.getPipeline(pipelineId);
+            const baseCtx = buildUnifiedAgentKnowledgeContext(pl, { role: 'proto' });
+            const fb = feedback ? `\n--- FIX LOOP FEEDBACK ---\n${feedback}\n--- END FEEDBACK ---\n` : '';
+            const merged = [baseCtx, fb].filter(Boolean).join('\n');
             const protoRes = await fixAgents.proto.execute({
-              spec, repoName: repo, repoVisibility: 'private', owner, pipelineId,
-              knowledgeContext: feedback ? `\n--- FIX LOOP FEEDBACK ---\n${feedback}\n--- END FEEDBACK ---` : undefined,
+              spec,
+              repoName: repo,
+              repoVisibility: 'private',
+              owner,
+              pipelineId,
+              knowledgeContext: merged.trim() ? merged : undefined,
             });
             if (protoRes.type === 'error') throw new Error(protoRes.error.message);
             return protoRes.data;
@@ -1387,7 +1407,16 @@ export class PipelineOrchestrator {
             }
 
             const fixAgents = this.getAgents(model);
-            const traceRes = await fixAgents.trace.execute({ repoOwner: owner, repo, branch, spec, pipelineId });
+            const plTrace = await this.getPipeline(pipelineId);
+            const traceKb = buildUnifiedAgentKnowledgeContext(plTrace, { role: 'trace' });
+            const traceRes = await fixAgents.trace.execute({
+              repoOwner: owner,
+              repo,
+              branch,
+              spec,
+              pipelineId,
+              knowledgeContext: traceKb.trim() ? traceKb : undefined,
+            });
             if (traceRes.type === 'error') throw new Error(traceRes.error.message);
             return traceRes.data;
           },
@@ -1572,6 +1601,8 @@ export class PipelineOrchestrator {
     // Per-user GitHub adapter for retry
     const userGithubService = this.createGitHubService(userGitHubToken);
     const agents = this.createAgentsForModel?.(pipeline.model ?? '', userGithubService) ?? this.getAgents(pipeline.model);
+    const retryProtoKbRaw = buildUnifiedAgentKnowledgeContext(pipeline, { role: 'proto' });
+    const retryProtoKb = retryProtoKbRaw.trim() ? retryProtoKbRaw : undefined;
     const result = await withTimeout(
       agents.proto.execute({
         spec: pipeline.approvedSpec,
@@ -1579,6 +1610,7 @@ export class PipelineOrchestrator {
         repoVisibility,
         owner,
         pipelineId,
+        knowledgeContext: retryProtoKb,
       }),
       STAGE_TIMEOUT,
       'Proto',

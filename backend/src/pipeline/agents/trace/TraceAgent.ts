@@ -11,6 +11,10 @@ import {
 } from '../../core/contracts/PipelineErrors.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { generateGherkinFromSpec } from '../../integrations/cucumberGenerator.js';
+import {
+  AKIS_E2E_WORKFLOW_PATH,
+  mergeAkisCiWorkflowIntoTestFiles,
+} from '../../templates/akisE2eWorkflow.js';
 import { logger } from '../../../lib/logger.js';
 import { parseAIJson } from '../../core/json-extract.js';
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
@@ -265,11 +269,11 @@ export class TraceAgent {
     emit?.('traceability', 'Testler doğrulanıyor', 85);
 
     // Combine Playwright test files with Gherkin feature/step files for push
-    const allFilesToPush: TraceOutput['testFiles'] = [
+    const allFilesToPush: TraceOutput['testFiles'] = mergeAkisCiWorkflowIntoTestFiles([
       ...testFiles,
       ...gherkinResult.features.map((f) => ({ filePath: f.filePath, content: f.content, testCount: f.scenarioCount })),
       ...gherkinResult.stepDefinitions.map((s) => ({ filePath: s.filePath, content: s.content, testCount: 0 })),
-    ];
+    ]);
 
     const pushResult = await this.pushTestFiles(
       input.repoOwner,
@@ -289,7 +293,7 @@ export class TraceAgent {
         input.repoOwner,
         input.repo,
         'test: add Playwright e2e tests',
-        this.buildPRBody(testSummary, coverageMatrix),
+        this.buildPRBody(testSummary, coverageMatrix, true),
         branchName,
         input.branch
       );
@@ -308,6 +312,7 @@ export class TraceAgent {
         testSummary,
         branch: branchName,
         prUrl,
+        ciWorkflowPath: AKIS_E2E_WORKFLOW_PATH,
         gherkinFeatures: gherkinResult.features,
         stepDefinitions: gherkinResult.stepDefinitions,
       },
@@ -325,7 +330,22 @@ export class TraceAgent {
     const toolDeps: TraceToolDeps = {
       listFiles: (owner, repo, branch) => this.github.listFiles(owner, repo, branch),
       getFileContent: (owner, repo, branch, filePath) => this.github.getFileContent(owner, repo, branch, filePath),
-      pushFiles: (owner, repo, branch, files, message) => this.github.pushFiles!(owner, repo, branch, files, message),
+      pushFiles: (owner, repo, branch, files, message) => {
+        const merged = mergeAkisCiWorkflowIntoTestFiles(
+          files.map((f) => ({
+            filePath: f.path,
+            content: f.content,
+            testCount: 0,
+          })),
+        );
+        return this.github.pushFiles!(
+          owner,
+          repo,
+          branch,
+          merged.map((f) => ({ path: f.filePath, content: f.content })),
+          message,
+        );
+      },
       createBranch: (owner, repo, branch, fromBranch) => this.github.createBranch(owner, repo, branch, fromBranch),
     };
     const handlers = createTraceToolHandlers(toolDeps);
@@ -334,7 +354,11 @@ export class TraceAgent {
       ? `\nSpec:\n- Title: ${input.spec.title}\n- Acceptance Criteria:\n${input.spec.acceptanceCriteria.map((ac) => `  ${ac.id}: WHEN ${ac.when} THEN ${ac.then}`).join('\n')}`
       : '';
 
-    const userPrompt = `Write Playwright e2e tests for the project at GitHub: ${input.repoOwner}/${input.repo} (branch: ${input.branch})
+    const pipelineKnowledge = input.knowledgeContext?.trim()
+      ? `\n--- FULL PIPELINE CONTEXT (chat + GitHub signals) ---\n${input.knowledgeContext.trim()}\n--- END FULL PIPELINE CONTEXT ---\n\n`
+      : '';
+
+    const userPrompt = `${pipelineKnowledge}Write Playwright e2e tests for the project at GitHub: ${input.repoOwner}/${input.repo} (branch: ${input.branch})
 ${specContext}
 
 Steps:
@@ -388,6 +412,7 @@ After pushing, respond with a JSON summary:
             coverageMatrix: parsed.coverageMatrix ?? {},
             testSummary: parsed.testSummary ?? { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
             branch: 'trace/tests',
+            ciWorkflowPath: AKIS_E2E_WORKFLOW_PATH,
           },
         };
       }
@@ -649,7 +674,8 @@ After pushing, respond with a JSON summary:
 
   private buildPRBody(
     summary: TraceOutput['testSummary'],
-    matrix: Record<string, string[]>
+    matrix: Record<string, string[]>,
+    includeCiHint = false,
   ): string {
     const lines = [
       '## Playwright E2E Tests',
@@ -658,6 +684,16 @@ After pushing, respond with a JSON summary:
       `- ${summary.coveragePercentage}% acceptance criteria coverage`,
       '',
     ];
+
+    if (includeCiHint) {
+      lines.push(
+        '### GitHub Actions',
+        '',
+        `Bu repoya \`${AKIS_E2E_WORKFLOW_PATH}\` eklendi: push/PR sonrası Playwright E2E ve (varsa) Cucumber özellik dosyaları koşar.`,
+        'Sonuçlar **Actions** sekmesinde; başarısızlıkta `playwright-report` artifact yüklenir.',
+        '',
+      );
+    }
 
     if (Object.keys(matrix).length > 0) {
       lines.push('### Coverage Matrix');

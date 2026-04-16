@@ -100,7 +100,7 @@ export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
         </div>
 
         {/* Hero content */}
-        <div className="relative z-10 flex flex-col items-center gap-6 w-full max-w-xl">
+        <div className="relative z-10 flex w-full max-w-4xl flex-col items-center gap-7">
           <div className="relative">
             <img
               src={LOGO_MARK_SVG}
@@ -115,16 +115,19 @@ export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
             <h2 className={cn('text-2xl font-bold text-ak-text-primary', !reduced && 'animate-fade-in')}>
               {t('chat.emptyState.greeting')} <span className="text-ak-primary">{t('chat.emptyState.brandName')}</span>.
             </h2>
-            <p className={cn(
-              'mt-2 text-sm text-ak-text-tertiary leading-relaxed max-w-md mx-auto',
-              !reduced && 'animate-fade-in',
-            )} style={!reduced ? { animationDelay: '100ms', animationFillMode: 'backwards' } : undefined}>
+            <p
+              className={cn(
+                'mx-auto mt-2 max-w-lg text-sm leading-relaxed text-ak-text-tertiary text-pretty',
+                !reduced && 'animate-fade-in',
+              )}
+              style={!reduced ? { animationDelay: '100ms', animationFillMode: 'backwards' } : undefined}
+            >
               {t('chat.emptyState.heroSubtitle')}
             </p>
           </div>
 
           {/* Agent feature cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full mt-2">
+          <div className="mt-1 grid w-full grid-cols-1 items-stretch gap-4 md:grid-cols-3">
             <AgentFeatureCard
               agent="scribe"
               title="Scribe"

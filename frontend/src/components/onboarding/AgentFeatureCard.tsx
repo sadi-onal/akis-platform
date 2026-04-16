@@ -9,9 +9,21 @@ interface AgentFeatureCardProps {
 }
 
 const agentStyles = {
-  scribe: { accent: 'bg-ak-scribe', border: 'hover:border-ak-scribe/30', iconBg: 'bg-ak-scribe/10', text: 'text-ak-scribe' },
-  proto: { accent: 'bg-ak-proto', border: 'hover:border-ak-proto/30', iconBg: 'bg-ak-proto/10', text: 'text-ak-proto' },
-  trace: { accent: 'bg-ak-trace', border: 'hover:border-ak-trace/30', iconBg: 'bg-ak-trace/10', text: 'text-ak-trace' },
+  scribe: {
+    frame: 'bg-gradient-to-br from-ak-scribe/90 via-ak-scribe/45 to-ak-scribe/15',
+    iconBg: 'bg-ak-scribe/12',
+    text: 'text-ak-scribe',
+  },
+  proto: {
+    frame: 'bg-gradient-to-br from-ak-proto/90 via-ak-proto/45 to-ak-proto/15',
+    iconBg: 'bg-ak-proto/12',
+    text: 'text-ak-proto',
+  },
+  trace: {
+    frame: 'bg-gradient-to-br from-ak-trace/90 via-ak-trace/45 to-ak-trace/15',
+    iconBg: 'bg-ak-trace/12',
+    text: 'text-ak-trace',
+  },
 };
 
 export function AgentFeatureCard({ agent, title, description, icon, delay = 0 }: AgentFeatureCardProps) {
@@ -20,25 +32,34 @@ export function AgentFeatureCard({ agent, title, description, icon, delay = 0 }:
   return (
     <div
       className={cn(
-        'relative flex items-start gap-3 rounded-2xl border border-ak-border bg-ak-surface p-4',
-        'transition-all duration-200 animate-fade-in',
-        s.border,
-        'hover:shadow-ak-glow-sm',
+        'h-full rounded-2xl p-[2px] shadow-sm transition-all duration-200 animate-fade-in',
+        'hover:shadow-md hover:brightness-[1.02]',
+        s.frame,
       )}
       style={delay > 0 ? { animationDelay: `${delay}ms`, animationFillMode: 'backwards' } : undefined}
     >
-      {/* Left accent strip */}
-      <div className={cn('absolute left-0 top-3 bottom-3 w-[3px] rounded-full', s.accent)} />
-
-      {/* Icon */}
-      <div className={cn('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ml-2', s.iconBg)}>
-        <span className={s.text}>{icon}</span>
-      </div>
-
-      {/* Content */}
-      <div className="min-w-0">
-        <h3 className={cn('text-sm font-semibold', s.text)}>{title}</h3>
-        <p className="mt-0.5 text-xs text-ak-text-tertiary leading-relaxed">{description}</p>
+      <div
+        className={cn(
+          'flex h-full min-h-[7.5rem] flex-col rounded-[14px] bg-ak-surface px-4 py-3.5',
+          'border border-ak-border/60',
+        )}
+      >
+        <div className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)] grid-rows-[auto_1fr] gap-x-3 gap-y-1">
+          <div
+            className={cn(
+              'row-span-2 row-start-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+              s.iconBg,
+            )}
+          >
+            <span className={s.text}>{icon}</span>
+          </div>
+          <h3 className={cn('col-start-2 row-start-1 self-center text-sm font-semibold leading-tight', s.text)}>
+            {title}
+          </h3>
+          <p className="col-start-2 row-start-2 text-xs leading-relaxed text-ak-text-secondary text-pretty">
+            {description}
+          </p>
+        </div>
       </div>
     </div>
   );

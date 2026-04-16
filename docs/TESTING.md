@@ -1,6 +1,16 @@
 # Test Rehberi (Canonical)
 
-## Zorunlu Kalite Kapıları
+## Tek terminal — tam yerel gate (önerilen)
+
+Workspace kökünde sırayla backend birim testleri, frontend birim + build, ardından Playwright E2E:
+
+```bash
+./scripts/run-local-gate.sh
+```
+
+> **Not:** Kök `package.json` workspace tanımlı değilse `pnpm -r …` yerine bu script veya aşağıdaki paket bazlı komutları kullanın. E2E bazı speclerde API mock kullanır; kırmızı testler çoğunlukla selector/i18n gecikmesi veya ortam kaynaklıdır — `frontend/playwright-report/` ve `test-results/` ile hata ayıklayın.
+
+## Zorunlu Kalite Kapıları (pnpm workspace kullanan monorepolar)
 
 Reponun kökünden çalıştırın:
 

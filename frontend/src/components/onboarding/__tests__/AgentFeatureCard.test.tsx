@@ -24,24 +24,24 @@ describe('AgentFeatureCard', () => {
     const { container } = render(
       <AgentFeatureCard agent="scribe" title="Scribe" description="desc" icon={icon} />,
     );
-    const accent = container.querySelector('.bg-ak-scribe');
-    expect(accent).toBeInTheDocument();
+    const el = container.querySelector('[class*="ak-scribe"]');
+    expect(el).toBeTruthy();
   });
 
   it('applies proto agent styling', () => {
     const { container } = render(
       <AgentFeatureCard agent="proto" title="Proto" description="desc" icon={icon} />,
     );
-    const accent = container.querySelector('.bg-ak-proto');
-    expect(accent).toBeInTheDocument();
+    const el = container.querySelector('[class*="ak-proto"]');
+    expect(el).toBeTruthy();
   });
 
   it('applies trace agent styling', () => {
     const { container } = render(
       <AgentFeatureCard agent="trace" title="Trace" description="desc" icon={icon} />,
     );
-    const accent = container.querySelector('.bg-ak-trace');
-    expect(accent).toBeInTheDocument();
+    const el = container.querySelector('[class*="ak-trace"]');
+    expect(el).toBeTruthy();
   });
 
   it('applies animation delay when delay > 0', () => {

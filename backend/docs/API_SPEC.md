@@ -355,6 +355,10 @@ Returns Knowledge Integrity metrics derived from `agent_activities`, pipeline ou
 - `dataQuality`: `none` | `partial` | `good`
 - `reasons` — machine-readable hints when `hasMeaningfulData` is `false` (e.g. `NO_AGENT_OR_TRACE_SIGNAL`)
 
+**Pipeline `traceOutput` reference (stored on pipeline records, not this endpoint):** when Trace pushes generated tests to a target repo, it may also add `.github/workflows/akis-e2e.yml` (Playwright on GitHub Actions; optional Cucumber if `features/**/*.feature` exists). The merge step only skips when that exact file is already in the batch — other workflow YAML files do not block it. The tool-use (agentic) `push_files` path applies the same merge before each push. The pipeline JSON may then include optional `traceOutput.ciWorkflowPath` set to that path for UI/docs linking.
+
+**Unified agent context:** Proto and Trace receive a single bundled `knowledgeContext` built server-side: **session brief**, **approved specification block** (when present — canonical contract), Scribe plan hint, **chronological transcript** (including `user_note`), attachments, optional `repoContext` (GitHub tree + summary), and repo URLs. **Smart truncation** keeps the start and end of a long transcript; **role-specific instructions** (`proto` vs `trace`) are appended so models know how to weigh chat vs spec. Default budget ~32k characters.
+
 ### PUT /api/settings/ai-keys
 
 Store/update an API key for a specific provider. Key is encrypted server-side and only last 4 characters are stored for identification.
