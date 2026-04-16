@@ -194,8 +194,92 @@
     {
       "idx": 27,
       "version": "7",
+      "when": 1771000000000,
+      "tag": "0027_add_invite_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1771100000000,
+      "tag": "0028_add_agent_runtime_controls",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1771200000000,
+      "tag": "0029_add_conversation_thread_domain",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1771300000000,
+      "tag": "0030_add_studio_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1771400000000,
+      "tag": "0031_add_knowledge_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1771500000000,
+      "tag": "0032_add_crew_system",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1771600000000,
+      "tag": "0033_add_marketplace_workstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
       "when": 1771940200000,
       "tag": "0034_drop_smart_automations",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1772000000000,
+      "tag": "0035_add_github_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1772050000000,
+      "tag": "0035b_create_pipelines_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1772100000000,
+      "tag": "0036_add_pipeline_checkpoint_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1772200000000,
+      "tag": "0037_add_jira_config_column",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1772300000000,
+      "tag": "0038_add_pgvector_rag",
       "breakpoints": true
     }
   ]

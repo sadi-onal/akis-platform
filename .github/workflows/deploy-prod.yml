@@ -105,7 +105,9 @@ jobs:
     
     services:
       postgres:
-        image: postgres:16
+        # pgvector/pgvector:pg16 — needed for migration 0038_add_pgvector_rag
+        # which runs CREATE EXTENSION vector.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
