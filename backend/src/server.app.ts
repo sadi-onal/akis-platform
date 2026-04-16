@@ -57,6 +57,7 @@ import {
 } from './services/knowledge/FreshnessScheduler.js';
 import { formatErrorResponse, getStatusCodeForError, type ErrorCode } from './utils/errorHandler.js';
 import { requireAuth } from './utils/auth.js';
+import { cookiesPlugin } from './plugins/security/cookies.js';
 import { ZodError } from 'zod';
 
 const QUIET_ROUTES = new Set([
@@ -214,6 +215,18 @@ export async function buildApp() {
       pushLog(entry);
       app.log.info(entry, 'request completed');
     }
+  });
+
+  // HttpOnly cookie parser (registers @fastify/cookie via fastify-plugin).
+  // Must be before any route that reads request.cookies.* (auth middleware,
+  // OAuth flows, etc). Registered here — not in server.ts — so tests using
+  // buildApp() via app.inject() also get cookie parsing.
+  await app.register(cookiesPlugin, {
+    name: env.AUTH_COOKIE_NAME,
+    maxAge: env.AUTH_COOKIE_MAXAGE,
+    sameSite: env.AUTH_COOKIE_SAMESITE,
+    secure: env.AUTH_COOKIE_SECURE,
+    domain: env.AUTH_COOKIE_DOMAIN,
   });
 
   // Phase 7.C: Register Swagger/OpenAPI

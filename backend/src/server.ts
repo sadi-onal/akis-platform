@@ -3,7 +3,6 @@ import compress from '@fastify/compress';
 import { buildApp } from './server.app.js';
 import { getEnv } from './config/env.js';
 import { corsPlugin } from './plugins/security/cors.js';
-import { cookiesPlugin } from './plugins/security/cookies.js';
 import { helmetPlugin } from './plugins/security/helmet.js';
 import { runSchemaGuard } from './utils/schemaGuard.js';
 
@@ -62,14 +61,8 @@ await app.register(corsPlugin, {
   origins: env.CORS_ORIGINS,
 });
 
-// HttpOnly cookie (JWT)
-await app.register(cookiesPlugin, {
-  name: env.AUTH_COOKIE_NAME,
-  maxAge: env.AUTH_COOKIE_MAXAGE,
-  sameSite: env.AUTH_COOKIE_SAMESITE, // dev: Lax
-  secure: env.AUTH_COOKIE_SECURE,      // dev: false
-  domain: env.AUTH_COOKIE_DOMAIN,      // dev: localhost
-});
+// NOTE: @fastify/cookie (cookiesPlugin) is registered inside buildApp() now —
+// both prod server.ts and test harness (app.inject) go through the same path.
 
 const port = env.AKIS_PORT;
 const host = env.AKIS_HOST;
