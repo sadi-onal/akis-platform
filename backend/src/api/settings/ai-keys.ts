@@ -96,8 +96,8 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
           : false;
         const keySource: 'akis' | 'own' = hasOwnKey ? 'own' : 'akis';
 
-        // Check if user's plan allows own keys (Free plan = no)
-        const canUseOwnKey = plan.tier !== 'free';
+        // All authenticated users may configure their own provider keys (S0.5 product decision)
+        const canUseOwnKey = true;
 
         return reply.code(200).send({
           ...status,

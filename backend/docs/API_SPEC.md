@@ -324,6 +324,8 @@ Return multi-provider status including active provider selection.
 ```json
 {
   "activeProvider": "openai",
+  "canUseOwnKey": true,
+  "keySource": "own",
   "providers": {
     "openai": {
       "configured": true,
@@ -335,9 +337,23 @@ Return multi-provider status including active provider selection.
       "last4": null,
       "updatedAt": null
     }
-  }
+  },
+  "plan": { "tier": "free", "name": "Free", "jobsPerDay": 3, "maxTokenBudget": 100000 },
+  "usage": { "jobsUsedToday": 0, "tokensUsedThisMonth": 0, "jobsLimit": 3, "tokensLimit": 100000 }
 }
 ```
+
+`canUseOwnKey` is `true` for all authenticated users (users may supply their own provider API keys on any plan).
+
+### GET /api/settings/integrity-metrics
+
+Returns Knowledge Integrity metrics derived from `agent_activities`, pipeline outputs, and Trace data.
+
+**Response (200)** includes:
+- `avgSpecCompliance`, `assumptionStats`, `confidenceTrend`, `criteriaStats`
+- `hasMeaningfulData` — `false` when there is not enough real signal to show KPIs (synthetic compliance values are not used)
+- `dataQuality`: `none` | `partial` | `good`
+- `reasons` — machine-readable hints when `hasMeaningfulData` is `false` (e.g. `NO_AGENT_OR_TRACE_SIGNAL`)
 
 ### PUT /api/settings/ai-keys
 
@@ -409,6 +425,26 @@ Remove the user's key for a specific provider.
 **Notes**:
 - If the deleted key belongs to the active provider, `activeProvider` is set to `null`
 - User must configure a new key before running agent jobs
+
+---
+
+## GitHub PAT API (`/api/github`)
+
+Legacy/PAT-backed routes used by Engineer and repo tooling. OAuth-based GitHub lives under `/api/integrations/github/*`.
+
+### GET /api/github/repos
+
+**Errors**:
+- `401 Unauthorized`: Missing or invalid AKIS session
+- `403 Forbidden`: `{ "error": { "code": "GITHUB_NOT_CONNECTED", "message": "GitHub not connected" } }` when no GitHub token is stored for the user. **Not** a session expiry — clients must not map this to “logout”.
+
+### POST /api/github/repos
+
+Same `GITHUB_NOT_CONNECTED` shape as above when GitHub is not connected.
+
+### GET /api/github/repos/:owner/:repo/context
+
+Same `GITHUB_NOT_CONNECTED` shape as above when GitHub is not connected.
 
 ---
 

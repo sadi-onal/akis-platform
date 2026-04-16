@@ -109,7 +109,7 @@ export async function githubRoutes(fastify: FastifyInstance) {
     const token = await getGitHubToken(userId);
 
     if (!token) {
-      return reply.code(401).send({ error: { code: 'GITHUB_NOT_CONNECTED', message: 'GitHub not connected' } });
+      return reply.code(403).send({ error: { code: 'GITHUB_NOT_CONNECTED', message: 'GitHub not connected' } });
     }
 
     try {
@@ -143,7 +143,7 @@ export async function githubRoutes(fastify: FastifyInstance) {
     const token = await getGitHubToken(userId);
 
     if (!token) {
-      return reply.code(401).send({ error: { code: 'GITHUB_NOT_CONNECTED', message: 'GitHub not connected' } });
+      return reply.code(403).send({ error: { code: 'GITHUB_NOT_CONNECTED', message: 'GitHub not connected' } });
     }
 
     const body = CreateRepoSchema.parse(request.body);
@@ -226,7 +226,7 @@ export async function githubRoutes(fastify: FastifyInstance) {
       const token = await getGitHubToken(userId);
 
       if (!token) {
-        return reply.code(401).send({ error: { code: 'GITHUB_NOT_CONNECTED', message: 'GitHub not connected' } });
+        return reply.code(403).send({ error: { code: 'GITHUB_NOT_CONNECTED', message: 'GitHub not connected' } });
       }
 
       const params = request.params as { owner: string; repo: string };

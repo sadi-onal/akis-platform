@@ -43,6 +43,9 @@ interface IntegrityMetricsData {
     coveredCriteria: number;
     coverageRate: number;
   };
+  hasMeaningfulData?: boolean;
+  dataQuality?: 'none' | 'partial' | 'good';
+  reasons?: string[];
 }
 
 interface ProviderStatus {
@@ -542,7 +545,6 @@ function AIKeysTab() {
   const keySource = status?.keySource ?? 'akis';
   const plan = status?.plan;
   const usage = status?.usage;
-  const canUseOwnKey = status?.canUseOwnKey ?? false;
   const hasAnyOwnKey = status ? Object.values(status.providers).some((p) => p.configured) : false;
 
   const tokenBudgetPct = (plan?.maxTokenBudget && usage)
@@ -638,9 +640,7 @@ function AIKeysTab() {
               'rounded-xl border-2 p-4 transition-colors',
               keySource === 'own'
                 ? 'border-ak-primary bg-ak-primary/5'
-                : canUseOwnKey
-                  ? 'border-ak-border bg-ak-surface'
-                  : 'border-ak-border bg-ak-surface opacity-60',
+                : 'border-ak-border bg-ak-surface',
             )}
           >
             <div className="flex items-center gap-3">
@@ -652,31 +652,24 @@ function AIKeysTab() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className={cn('text-sm font-semibold', canUseOwnKey ? 'text-ak-text-primary' : 'text-ak-text-tertiary')}>Kendi Anahtariniz</h3>
+                  <h3 className="text-sm font-semibold text-ak-text-primary">Kendi Anahtariniz</h3>
                   {keySource === 'own' && (
                     <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-medium text-ak-primary">Aktif</span>
                   )}
                 </div>
                 <p className="text-xs text-ak-text-tertiary">
-                  {!canUseOwnKey
-                    ? 'Builder planinda kullanilabilir'
-                    : hasAnyOwnKey
-                      ? 'Kendi API anahtarinizla sinirsiz kullanim'
-                      : 'Kendi API anahtarinizi ekleyerek sinirsiz kullanin'}
+                  {hasAnyOwnKey
+                    ? 'Kendi API anahtarinizla sinirsiz kullanim'
+                    : 'Kendi API anahtarinizi ekleyerek sinirsiz kullanin'}
                 </p>
               </div>
-              {!canUseOwnKey && (
-                <span className="shrink-0 rounded-lg bg-ak-surface-2 px-2.5 py-1 text-[10px] font-medium text-ak-text-tertiary">
-                  Builder Gerekli
-                </span>
-              )}
             </div>
           </div>
         </div>
       )}
 
       {/* ── Section 2: Kullanilabilir Saglayicilar ──────── */}
-      {!loading && (canUseOwnKey || hasAnyOwnKey) && (
+      {!loading && (
         <>
           <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.ai.title')}</h2>
           <div className="space-y-3 mb-6">
@@ -1096,17 +1089,23 @@ function IntegrityTab() {
 
   if (!data) return null;
 
-  const hasData = data.avgSpecCompliance.scribe > 0 || data.avgSpecCompliance.proto > 0 || data.avgSpecCompliance.trace > 0
-    || data.confidenceTrend.length > 0 || data.criteriaStats.totalCriteria > 0 || data.assumptionStats.totalTracked > 0;
+  const legacyHasMetrics =
+    data.avgSpecCompliance.scribe > 0
+    || data.avgSpecCompliance.proto > 0
+    || data.avgSpecCompliance.trace > 0
+    || data.confidenceTrend.length > 0
+    || data.criteriaStats.totalCriteria > 0
+    || data.assumptionStats.totalTracked > 0;
+  const hasMeaningful = data.hasMeaningfulData ?? legacyHasMetrics;
 
-  if (!hasData) {
+  if (!hasMeaningful) {
     return (
       <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-8 text-center">
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-ak-surface-2">
           <svg className="h-5 w-5 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
         </div>
-        <p className="text-xs text-ak-text-tertiary">{t('integrity.noData')}</p>
-        <p className="mt-1 text-[10px] text-ak-text-tertiary">Pipeline calistirdikca agent kalite metrikleri burada gorunecek.</p>
+        <p className="text-xs font-medium text-ak-text-secondary">{t('integrity.noData')}</p>
+        <p className="mt-2 text-xs leading-relaxed text-ak-text-tertiary">{t('integrity.empty.howDataBuilds')}</p>
       </div>
     );
   }

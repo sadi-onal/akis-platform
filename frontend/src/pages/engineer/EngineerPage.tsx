@@ -7,8 +7,9 @@
  * Step 4: Confirmation
  */
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { githubApi, type GitHubRepo } from '../../services/api/github';
+import { useI18n } from '../../i18n/useI18n';
 import {
   engineerApi,
   type DiscoveredTask,
@@ -109,12 +110,15 @@ function Step1RepoSelection({
   loading,
   selectedRepo,
   onSelect,
+  githubNotConnected,
 }: {
   repos: GitHubRepo[];
   loading: boolean;
   selectedRepo: GitHubRepo | null;
   onSelect: (repo: GitHubRepo) => void;
+  githubNotConnected: boolean;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
 
   const filtered = repos.filter((r) =>
@@ -146,6 +150,16 @@ function Step1RepoSelection({
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#07D1AF] border-t-transparent" />
+        </div>
+      ) : githubNotConnected ? (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-6 text-center">
+          <p className="text-sm text-white/80">{t('engineer.githubNotConnected')}</p>
+          <Link
+            to="/settings?tab=integrations"
+            className="mt-4 inline-flex items-center justify-center rounded-lg bg-[#07D1AF]/15 px-4 py-2 text-sm font-medium text-[#07D1AF] hover:bg-[#07D1AF]/25 transition-colors"
+          >
+            {t('engineer.integrationsCta')}
+          </Link>
         </div>
       ) : (
         <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
@@ -455,6 +469,7 @@ export default function EngineerPage() {
   // Step 1 — Repo
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [reposLoading, setReposLoading] = useState(true);
+  const [githubNotConnected, setGithubNotConnected] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
 
   // Step 2 — Tasks
@@ -471,10 +486,27 @@ export default function EngineerPage() {
   // Fetch repos on mount
   useEffect(() => {
     let cancelled = false;
-    githubApi.listRepos()
-      .then((data) => { if (!cancelled) setRepos(data); })
-      .catch(() => { /* toast error would go here */ })
-      .finally(() => { if (!cancelled) setReposLoading(false); });
+    githubApi
+      .listRepos()
+      .then((data) => {
+        if (!cancelled) {
+          setRepos(data);
+          setGithubNotConnected(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const code =
+            err && typeof err === 'object' && 'code' in err
+              ? String((err as { code: string }).code)
+              : '';
+          if (code === 'GITHUB_NOT_CONNECTED') setGithubNotConnected(true);
+          setRepos([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReposLoading(false);
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -565,6 +597,7 @@ export default function EngineerPage() {
               loading={reposLoading}
               selectedRepo={selectedRepo}
               onSelect={handleRepoSelect}
+              githubNotConnected={githubNotConnected}
             />
           )}
 

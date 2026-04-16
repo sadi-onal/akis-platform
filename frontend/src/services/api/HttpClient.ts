@@ -142,15 +142,16 @@ export class HttpClient {
           headers,
         });
 
-        // Auth expired — redirect to login (don't retry)
+        // Auth expired — redirect to login (don't retry). Skip redirect for known non-session errors.
         if (response.status === 401) {
+          const apiErr = await this.parseErrorResponse(response);
           const currentPath = window.location.pathname;
           const authPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/'];
-          const isOnAuthPage = authPaths.some(p => currentPath.startsWith(p));
-          if (!isOnAuthPage) {
+          const isOnAuthPage = authPaths.some((p) => currentPath.startsWith(p));
+          if (apiErr.code !== 'GITHUB_NOT_CONNECTED' && !isOnAuthPage) {
             window.location.href = '/login';
           }
-          throw await this.parseErrorResponse(response);
+          throw apiErr;
         }
 
         // Don't retry on client errors (4xx) except 429 (rate limit)

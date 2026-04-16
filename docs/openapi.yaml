@@ -511,6 +511,8 @@ paths:
                 type: object
                 properties:
                   activeProvider: { type: string }
+                  canUseOwnKey: { type: boolean, description: Always true for authenticated users (own provider keys allowed on any plan) }
+                  keySource: { type: string, enum: [akis, own] }
                   providers:
                     type: object
                     properties:
@@ -589,6 +591,18 @@ paths:
                         fullName: { type: string }
                         private: { type: boolean }
                         url: { type: string, format: uri }
+        "403":
+          description: GitHub not connected (not a session expiry)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [GITHUB_NOT_CONNECTED] }
+                      message: { type: string }
 
   /api/github/connect:
     post:

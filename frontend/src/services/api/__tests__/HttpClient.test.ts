@@ -245,6 +245,78 @@ describe('HttpClient retry logic', () => {
 
 // ─── Error response parsing ────────────────────────────────────────
 
+describe('HttpClient 401 session handling', () => {
+  let client: HttpClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client = new HttpClient('http://localhost:3000');
+  });
+
+  it('redirects to /login on 401 for normal API errors', async () => {
+    let currentHref = '';
+    Object.defineProperty(window, 'location', {
+      value: {
+        pathname: '/dashboard',
+        set href(v: string) {
+          currentHref = v;
+        },
+        get href() {
+          return currentHref;
+        },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }),
+    });
+
+    await expect(client.get('/api/test')).rejects.toThrow();
+    expect(currentHref).toBe('/login');
+  });
+
+  it('does not redirect to login when 401 body is GITHUB_NOT_CONNECTED', async () => {
+    let currentHref = '/initial';
+    Object.defineProperty(window, 'location', {
+      value: {
+        pathname: '/engineer',
+        set href(v: string) {
+          currentHref = v;
+        },
+        get href() {
+          return currentHref;
+        },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        error: { code: 'GITHUB_NOT_CONNECTED', message: 'GitHub not connected' },
+      }),
+    });
+
+    try {
+      await client.get('/api/github/repos');
+    } catch (e) {
+      const err = e as ApiError;
+      expect(err.code).toBe('GITHUB_NOT_CONNECTED');
+    }
+    expect(currentHref).toBe('/initial');
+  });
+});
+
 describe('HttpClient error response parsing', () => {
   let client: HttpClient;
 
