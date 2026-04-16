@@ -5,7 +5,7 @@ import { eq, sql } from 'drizzle-orm';
 
 import { buildApp } from '../../src/server.app.js';
 import { db } from '../../src/db/client.js';
-import { jobs, users } from '../../src/db/schema.js';
+import { jobs, usageCounters, users } from '../../src/db/schema.js';
 import { sign } from '../../src/services/auth/jwt.js';
 import { env as authEnv } from '../../src/lib/env.js';
 import { hashPassword } from '../../src/services/auth/password.js';
@@ -202,6 +202,9 @@ test('Agents approval flow', { skip: !hasDatabase }, async (t) => {
     await db
       .delete(jobs)
       .where(sql`(${jobs.payload}->>'userId')::text = ${userId}`);
+    // usage_counters holds FK to users — purge the rows this test created
+    // before deleting the user, otherwise cleanup fails with 23503.
+    await db.delete(usageCounters).where(eq(usageCounters.userId, userId));
     await db.delete(users).where(eq(users.id, userId));
     await app.close();
   }
