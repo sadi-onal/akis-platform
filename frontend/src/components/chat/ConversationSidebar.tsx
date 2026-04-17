@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, memo } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { LOGO_MARK_SVG } from '../../theme/brand';
@@ -17,7 +17,7 @@ interface ConversationSidebarProps {
   onToggleCollapse?: () => void;
 }
 
-export function ConversationSidebar({
+export const ConversationSidebar = memo(function ConversationSidebar({
   conversations,
   activeId,
   onNewConversation,
@@ -331,4 +331,4 @@ export function ConversationSidebar({
       </div>
     </div>
   );
-}
+});

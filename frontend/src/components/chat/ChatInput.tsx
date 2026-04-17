@@ -13,6 +13,7 @@ interface ChatInputProps {
   onSend: (message: string, attachments?: ChatAttachment[]) => void;
   onCancel?: () => void;
   disabled?: boolean;
+  isSending?: boolean;
   showCancel?: boolean;
   placeholder?: string;
 }
@@ -35,13 +36,14 @@ function computeTextareaMaxHeight(expanded: boolean): number {
 
 let _attachId = 0;
 
-export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder }: ChatInputProps) {
+export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, placeholder }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastSendAtRef = useRef<number>(0);
 
   // Auto-resize textarea; max-height is viewport-aware and grows when expanded.
   useEffect(() => {
@@ -113,18 +115,23 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
   }, []);
 
   const handleSend = useCallback(() => {
+    if (isSending || disabled) return;
     const trimmed = value.trim();
-    if ((!trimmed && attachments.length === 0) || disabled) return;
+    if (!trimmed && attachments.length === 0) return;
+    const now = Date.now();
+    if (now - lastSendAtRef.current < 400) return;
+    lastSendAtRef.current = now;
     onSend(trimmed, attachments.length > 0 ? attachments : undefined);
     setValue('');
     setAttachments([]);
     setExpanded(false);
-  }, [value, attachments, disabled, onSend]);
+  }, [value, attachments, disabled, isSending, onSend]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        if (isSending || disabled) return;
         handleSend();
       }
       if (e.key === 'Escape') {
@@ -134,7 +141,7 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
         textareaRef.current?.blur();
       }
     },
-    [handleSend],
+    [handleSend, isSending, disabled],
   );
 
   const handleFileChange = useCallback(
@@ -286,7 +293,7 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            disabled={disabled}
+            disabled={disabled || isSending}
             placeholder={placeholder ?? 'Projenizi anlatın...'}
             rows={1}
             aria-label="Mesaj yaz"
@@ -294,7 +301,7 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
               'w-full border-none outline-none resize-none text-sm bg-transparent placeholder:text-gray-400',
               'dark:text-white dark:placeholder:text-gray-500',
               expanded ? 'min-h-[240px]' : 'min-h-[24px]',
-              disabled && 'cursor-not-allowed opacity-70 saturate-50',
+              (disabled || isSending) && 'cursor-not-allowed opacity-70 saturate-50',
             )}
           />
         </div>
@@ -317,12 +324,13 @@ export function ChatInput({ onSend, onCancel, disabled, showCancel, placeholder 
         ) : (
           <button
             onClick={handleSend}
-            disabled={disabled || !hasContent}
+            disabled={disabled || isSending || !hasContent}
+            aria-busy={isSending ? 'true' : undefined}
             aria-label="Gönder"
             className={cn(
               'w-10 h-10 rounded-full flex items-center justify-center transition-colors ml-2 shrink-0',
               expanded && 'self-end',
-              hasContent && !disabled
+              hasContent && !disabled && !isSending
                 ? 'bg-[#07D1AF] hover:bg-[#06B89A] text-white active:scale-95'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-white/[0.08] dark:text-gray-600',
             )}

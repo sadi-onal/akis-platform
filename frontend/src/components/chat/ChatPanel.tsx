@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { cn } from '../../utils/cn';
 import type { ChatMessage as ChatMessageType, ConversationUIState } from '../../types/chat';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
@@ -33,6 +33,7 @@ interface ChatPanelProps {
   messages: ChatMessageType[];
   uiState: ConversationUIState;
   isInputEnabled: boolean;
+  isSending?: boolean;
   showCancelButton: boolean;
   inputPlaceholder: string;
   onSend: (message: string, attachments?: import('./ChatInput').ChatAttachment[]) => void;
@@ -52,7 +53,7 @@ interface ChatPanelProps {
   keySourceBadge?: { source: 'akis' | 'own'; jobsRemaining: number; jobsLimit: number } | null;
 }
 
-export function ChatPanel({
+export const ChatPanel = memo(function ChatPanel({
   conversationId,
   repoShortName,
   repoFullName,
@@ -67,6 +68,7 @@ export function ChatPanel({
   messages,
   uiState,
   isInputEnabled,
+  isSending,
   showCancelButton,
   inputPlaceholder,
   onSend,
@@ -362,10 +364,11 @@ export function ChatPanel({
           onSend={onSend}
           onCancel={onCancel}
           disabled={!isInputEnabled}
+          isSending={isSending}
           showCancel={showCancelButton}
           placeholder={inputPlaceholder}
         />
       )}
     </div>
   );
-}
+});

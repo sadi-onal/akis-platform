@@ -41,11 +41,19 @@ const PreviewPanel = lazy(() => import('../../components/workflow/PreviewPanel')
 /* ── helpers ──────────────────────────────────────── */
 
 const POLLING_STAGES: PipelineStage[] = [
-  'scribe_generating', 'proto_building', 'trace_testing', 'ci_running',
+  'scribe_clarifying', 'scribe_generating', 'proto_building', 'trace_testing', 'ci_running',
 ];
+
+// Stages where the user is actively waiting for an AI reply — poll fast (5s).
+// Other running stages do heavy backend work, so 20s (SSE up) / 8s (SSE down) is fine.
+const INTERACTIVE_STAGES: PipelineStage[] = ['scribe_clarifying'];
 
 function isRunningStage(stage?: PipelineStage): boolean {
   return !!stage && POLLING_STAGES.includes(stage);
+}
+
+function isInteractiveStage(stage?: PipelineStage): boolean {
+  return !!stage && INTERACTIVE_STAGES.includes(stage);
 }
 
 /** Converts a human-readable title to a valid GitHub repo name */
@@ -281,9 +289,15 @@ export default function ChatPage() {
     useConversationState(stage);
 
   const loadedIdRef = useRef<string | undefined>(undefined);
+  const sendingRef = useRef(false);
+  const lastMessagesKeyRef = useRef('');
+  const activeWorkflowRef = useRef(activeWorkflow);
+  activeWorkflowRef.current = activeWorkflow;
+  const pendingConvRef = useRef(pendingConv);
+  pendingConvRef.current = pendingConv;
 
   const isRunning = activeWorkflow ? isRunningStage(activeWorkflow.currentStage) : false;
-  const { activities: pipelineActivities, currentStep, createdFiles } = usePipelineStream(conversationId ?? '', isRunning);
+  const { activities: pipelineActivities, currentStep, createdFiles, isConnected } = usePipelineStream(conversationId ?? '', isRunning);
 
   // Load conversation list — only on mount and after mutations, NOT on every chat switch
   const refreshList = useCallback(() => {
@@ -335,7 +349,13 @@ export default function ChatPage() {
       // Stale response guard: skip if user navigated away during fetch
       if (loadedIdRef.current !== targetId) return;
       setActiveWorkflow(w);
-      setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
+      const convLen = w.conversation?.length ?? 0;
+      const lastTs = w.conversation?.[convLen - 1]?.timestamp ?? '';
+      const key = `${targetId}:${convLen}:${lastTs}`;
+      if (key !== lastMessagesKeyRef.current) {
+        lastMessagesKeyRef.current = key;
+        setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
+      }
       syncFromStage(w.currentStage ?? 'completed');
     }).catch(() => {
       if (loadedIdRef.current !== targetId) return;
@@ -352,8 +372,15 @@ export default function ChatPage() {
   const backoffRef = useRef(8000);
   const connectionLostRef = useRef(false);
 
+  const currentStageForPolling = activeWorkflow?.currentStage;
   useEffect(() => {
     if (!conversationId || !isRunning) return;
+    // Interactive stages (scribe_clarifying): user is waiting for an AI reply — poll fast.
+    // Non-interactive running stages: SSE up → 20s, SSE down → 8s + backoff on failures.
+    const baseInterval = isInteractiveStage(currentStageForPolling)
+      ? 5000
+      : (isConnected ? 20000 : 8000);
+    backoffRef.current = baseInterval;
     const controller = new AbortController();
     let timeoutId: ReturnType<typeof setTimeout>;
 
@@ -365,7 +392,7 @@ export default function ChatPage() {
 
         // Success — reset error tracking
         consecutiveErrorsRef.current = 0;
-        backoffRef.current = 8000;
+        backoffRef.current = baseInterval;
         if (connectionLostRef.current) {
           connectionLostRef.current = false;
           toast('Bağlantı yeniden kuruldu.', 'success');
@@ -376,7 +403,12 @@ export default function ChatPage() {
         if (convLen !== prevConvLenRef.current || stageChanged) {
           prevConvLenRef.current = convLen;
           setActiveWorkflow(w);
-          setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
+          const lastTs = w.conversation?.[convLen - 1]?.timestamp ?? '';
+          const key = `${conversationId}:${convLen}:${lastTs}`;
+          if (key !== lastMessagesKeyRef.current) {
+            lastMessagesKeyRef.current = key;
+            setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
+          }
           syncFromStage(w.currentStage ?? 'completed');
         }
       } catch {
@@ -396,7 +428,7 @@ export default function ChatPage() {
 
     timeoutId = setTimeout(poll, backoffRef.current);
     return () => { controller.abort(); clearTimeout(timeoutId); };
-  }, [conversationId, isRunning, syncFromStage]);
+  }, [conversationId, isRunning, isConnected, currentStageForPolling, syncFromStage]);
 
   // Sidebar conversations: real + pending
   const sidebarConversations = useMemo(() => {
@@ -479,7 +511,13 @@ export default function ChatPage() {
     const w = await workflowsApi.get(conversationId);
     loadedIdRef.current = conversationId;
     setActiveWorkflow(w);
-    setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
+    const convLen = w.conversation?.length ?? 0;
+    const lastTs = w.conversation?.[convLen - 1]?.timestamp ?? '';
+    const key = `${conversationId}:${convLen}:${lastTs}`;
+    if (key !== lastMessagesKeyRef.current) {
+      lastMessagesKeyRef.current = key;
+      setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
+    }
     syncFromStage(w.currentStage ?? 'completed');
     // Update sidebar item in-place (no full list refetch)
     const item = workflowToListItem(w);
@@ -496,6 +534,29 @@ export default function ChatPage() {
     loadedIdRef.current = undefined;
     navigate('/chat');
   }, [navigate]);
+
+  // Stable handlers for memoized children (ChatPanel, ConversationSidebar)
+  const handleTogglePreview = useCallback(() => setShowPreview((p) => !p), []);
+  const handleBack = useCallback(() => {
+    setPendingConv(null);
+    navigate('/chat');
+  }, [navigate]);
+  const handleToggleCollapse = useCallback(() => setSidebarCollapsed((c) => !c), []);
+
+  // Stable JSX slot for ChatPanel — prevents fresh React element on every render
+  const repoSelectorSlot = useMemo(() => {
+    if (!pendingConv) return undefined;
+    return (
+      <RepoSelector
+        mode={repoMode}
+        onModeChange={setRepoMode}
+        selectedRepo={selectedRepo}
+        onRepoSelect={setSelectedRepo}
+        repoContext={repoContext}
+        onRepoContextChange={setRepoContext}
+      />
+    );
+  }, [pendingConv, repoMode, selectedRepo, repoContext]);
 
   // ─── Global Keyboard Shortcuts ────────────────
   useEffect(() => {
@@ -518,130 +579,141 @@ export default function ChatPage() {
   }, [handleNewConversation]);
 
   const handleSend = useCallback(async (content: string, attachments?: ChatAttachment[]) => {
-    const userMsg: ChatMessage = { type: 'user', content, timestamp: new Date().toISOString() };
-    setMessages((prev) => [...prev, userMsg]);
+    // In-flight guard — blocks duplicate submits from double-Enter / slow network
+    if (sendingRef.current) return;
+    sendingRef.current = true;
 
-    // If pending new conversation — create pipeline with first message as idea
-    if (pendingConv && !conversationId) {
-      // Client-side validation: idea must be at least 10 chars
-      if (content.trim().length < 10) {
-        setMessages((prev) => [...prev, {
-          type: 'error',
-          agent: 'system',
-          message: 'Fikrinizi en az 10 karakter ile açıklayın. Örn: "React ile basit bir todo uygulaması"',
-          retryable: false,
-          timestamp: new Date().toISOString(),
-        }]);
-        return;
-      }
+    try {
+      const userMsg: ChatMessage = { type: 'user', content, timestamp: new Date().toISOString() };
+      setMessages((prev) => [...prev, userMsg]);
 
-      try {
-        setCreating(true);
-        const w = await workflowsApi.create({
-          idea: content,
-          traceEnabled,
-          existingRepo: selectedRepo ?? undefined,
-        }, attachments);
-        setPendingConv(null);
-        // Reset repo selector state after pipeline creation
-        setRepoMode('new');
-        setSelectedRepo(null);
-        setRepoContext(null);
-        loadedIdRef.current = w.id;
-        setActiveWorkflow(w);
-        setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
-        syncFromStage(w.currentStage ?? 'completed');
-        refreshList();
-        navigate(`/chat/${w.id}`, { replace: true });
-      } catch (e) {
-        const errorMsg = localizeError(e);
-        toast(errorMsg, 'error');
-        setMessages((prev) => [...prev, {
-          type: 'error',
-          agent: 'system',
-          message: errorMsg,
-          retryable: true,
-          timestamp: new Date().toISOString(),
-        }]);
-      } finally {
-        setCreating(false);
-      }
-      return;
-    }
+      const currentPending = pendingConvRef.current;
+      const currentWorkflow = activeWorkflowRef.current;
 
-    if (!conversationId) return;
+      // If pending new conversation — create pipeline with first message as idea
+      if (currentPending && !conversationId) {
+        // Client-side validation: idea must be at least 10 chars
+        if (content.trim().length < 10) {
+          setMessages((prev) => [...prev, {
+            type: 'error',
+            agent: 'system',
+            message: 'Fikrinizi en az 10 karakter ile açıklayın. Örn: "React ile basit bir todo uygulaması"',
+            retryable: false,
+            timestamp: new Date().toISOString(),
+          }]);
+          return;
+        }
 
-    // ─── Iteration Mode: completed pipeline + protoOutput → create follow-up pipeline in same chat ───
-    const isTerminal = activeWorkflow?.currentStage === 'completed' || activeWorkflow?.currentStage === 'completed_partial';
-    const protoRepo = activeWorkflow?.stages.proto?.repo;
-    const protoBranch = activeWorkflow?.stages.proto?.branch;
-
-    if (isTerminal && protoRepo && protoBranch) {
-      const [repoOwner, repoName] = protoRepo.split('/');
-      if (repoOwner && repoName) {
         try {
           setCreating(true);
           const w = await workflowsApi.create({
             idea: content,
             traceEnabled,
-            existingRepo: { owner: repoOwner, repo: repoName, branch: protoBranch },
-            parentPipelineId: conversationId,
-            skipScribe: true,
+            existingRepo: selectedRepo ?? undefined,
           }, attachments);
+          setPendingConv(null);
+          // Reset repo selector state after pipeline creation
+          setRepoMode('new');
+          setSelectedRepo(null);
+          setRepoContext(null);
           loadedIdRef.current = w.id;
           setActiveWorkflow(w);
-          setMessages((prev) => [...prev, ...conversationToChatMessages(w.conversation ?? [], w.currentStage)]);
+          setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
           syncFromStage(w.currentStage ?? 'completed');
           refreshList();
-          navigate(`/chat/${w.id}`);
+          navigate(`/chat/${w.id}`, { replace: true });
         } catch (e) {
-          if (import.meta.env.DEV) console.error('Failed to create iteration:', e);
-          toast(localizeError(e), 'error');
-          const errMsg: ChatMessage = {
+          const errorMsg = localizeError(e);
+          toast(errorMsg, 'error');
+          setMessages((prev) => [...prev, {
             type: 'error',
             agent: 'system',
-            message: 'İterasyon başlatılamadı. Lütfen tekrar deneyin.',
+            message: errorMsg,
             retryable: true,
             timestamp: new Date().toISOString(),
-          };
-          setMessages(prev => [...prev, errMsg]);
+          }]);
         } finally {
           setCreating(false);
         }
         return;
       }
-    }
 
-    // Send message to the existing pipeline — works for ALL stages including terminal ones.
-    // Backend saves it as a user_note (terminal) or processes it as a Scribe answer (clarifying).
-    try {
-      await workflowsApi.sendMessage(conversationId, content, attachments);
-      await refreshWorkflow();
-      refreshList();
+      if (!conversationId) return;
 
-      // Show feedback when pipeline is not in an interactive state
-      const stage = activeWorkflow?.currentStage;
-      if (stage && stage !== 'scribe_clarifying' && stage !== 'awaiting_approval') {
-        const stageMessages: Record<string, string> = {
-          scribe_generating: 'Notunuz kaydedildi. Scribe spec oluşturma işlemi devam ediyor.',
-          proto_building: 'Notunuz kaydedildi. Proto kod üretimi devam ediyor.',
-          trace_testing: 'Notunuz kaydedildi. Trace test yazımı devam ediyor.',
-          ci_running: 'Notunuz kaydedildi. CI kontrolü devam ediyor.',
-          completed: 'Notunuz kaydedildi.',
-          completed_partial: 'Notunuz kaydedildi.',
-          failed: 'Notunuz kaydedildi. Yeniden denemek için Retry butonunu kullanabilirsiniz.',
-        };
-        const infoMsg: ChatMessage = {
-          type: 'info',
-          content: stageMessages[stage] || 'Notunuz kaydedildi.',
-          timestamp: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, infoMsg]);
+      // ─── Iteration Mode: completed pipeline + protoOutput → create follow-up pipeline in same chat ───
+      const isTerminal = currentWorkflow?.currentStage === 'completed' || currentWorkflow?.currentStage === 'completed_partial';
+      const protoRepo = currentWorkflow?.stages.proto?.repo;
+      const protoBranch = currentWorkflow?.stages.proto?.branch;
+
+      if (isTerminal && protoRepo && protoBranch) {
+        const [repoOwner, repoName] = protoRepo.split('/');
+        if (repoOwner && repoName) {
+          try {
+            setCreating(true);
+            const w = await workflowsApi.create({
+              idea: content,
+              traceEnabled,
+              existingRepo: { owner: repoOwner, repo: repoName, branch: protoBranch },
+              parentPipelineId: conversationId,
+              skipScribe: true,
+            }, attachments);
+            loadedIdRef.current = w.id;
+            setActiveWorkflow(w);
+            setMessages((prev) => [...prev, ...conversationToChatMessages(w.conversation ?? [], w.currentStage)]);
+            syncFromStage(w.currentStage ?? 'completed');
+            refreshList();
+            navigate(`/chat/${w.id}`);
+          } catch (e) {
+            if (import.meta.env.DEV) console.error('Failed to create iteration:', e);
+            toast(localizeError(e), 'error');
+            const errMsg: ChatMessage = {
+              type: 'error',
+              agent: 'system',
+              message: 'İterasyon başlatılamadı. Lütfen tekrar deneyin.',
+              retryable: true,
+              timestamp: new Date().toISOString(),
+            };
+            setMessages(prev => [...prev, errMsg]);
+          } finally {
+            setCreating(false);
+          }
+          return;
+        }
       }
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('Failed to send:', e);
+
+      // Send message to the existing pipeline — works for ALL stages including terminal ones.
+      // Backend saves it as a user_note (terminal) or processes it as a Scribe answer (clarifying).
+      try {
+        await workflowsApi.sendMessage(conversationId, content, attachments);
+        await refreshWorkflow();
+        refreshList();
+
+        // Show feedback when pipeline is not in an interactive state
+        const stage = activeWorkflowRef.current?.currentStage;
+        if (stage && stage !== 'scribe_clarifying' && stage !== 'awaiting_approval') {
+          const stageMessages: Record<string, string> = {
+            scribe_generating: 'Notunuz kaydedildi. Scribe spec oluşturma işlemi devam ediyor.',
+            proto_building: 'Notunuz kaydedildi. Proto kod üretimi devam ediyor.',
+            trace_testing: 'Notunuz kaydedildi. Trace test yazımı devam ediyor.',
+            ci_running: 'Notunuz kaydedildi. CI kontrolü devam ediyor.',
+            completed: 'Notunuz kaydedildi.',
+            completed_partial: 'Notunuz kaydedildi.',
+            failed: 'Notunuz kaydedildi. Yeniden denemek için Retry butonunu kullanabilirsiniz.',
+          };
+          const infoMsg: ChatMessage = {
+            type: 'info',
+            content: stageMessages[stage] || 'Notunuz kaydedildi.',
+            timestamp: new Date().toISOString(),
+          };
+          setMessages(prev => [...prev, infoMsg]);
+        }
+      } catch (e) {
+        if (import.meta.env.DEV) console.error('Failed to send:', e);
+      }
+    } finally {
+      sendingRef.current = false;
     }
-  }, [conversationId, pendingConv, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, activeWorkflow?.currentStage, activeWorkflow?.stages.proto?.branch, activeWorkflow?.stages.proto?.repo, syncFromStage]);
+  }, [conversationId, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, syncFromStage]);
 
   const approveInFlightRef = useRef(false);
   const handleApprove = useCallback(async () => {
@@ -713,7 +785,7 @@ export default function ChatPage() {
           onRename={handleRename}
           onDelete={handleDelete}
           collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onToggleCollapse={handleToggleCollapse}
         />
       </div>
 
@@ -764,10 +836,11 @@ export default function ChatPage() {
                   mode={chatMode}
                   hasPreview={!!protoFiles}
                   showPreview={showPreview}
-                  onTogglePreview={() => setShowPreview(p => !p)}
+                  onTogglePreview={handleTogglePreview}
                   messages={messages}
                   uiState={uiState}
                   isInputEnabled={pendingConv ? !creating : (creating ? false : isInputEnabled)}
+                  isSending={creating}
                   showCancelButton={showCancelButton}
                   inputPlaceholder={pendingConv
                     ? (repoMode === 'existing' && selectedRepo
@@ -780,23 +853,14 @@ export default function ChatPage() {
                   onReject={handleReject}
                   onRetry={handleRetry}
                   onSkip={handleSkip}
-                  onBack={() => { setPendingConv(null); navigate('/chat'); }}
+                  onBack={handleBack}
                   showBackButton
                   currentStep={currentStep}
                   activities={pipelineActivities}
                   createdFiles={createdFiles}
                   traceEnabled={traceEnabled}
                   onTraceToggle={pendingConv ? setTraceEnabled : undefined}
-                  repoSelectorSlot={pendingConv ? (
-                    <RepoSelector
-                      mode={repoMode}
-                      onModeChange={setRepoMode}
-                      selectedRepo={selectedRepo}
-                      onRepoSelect={setSelectedRepo}
-                      repoContext={repoContext}
-                      onRepoContextChange={setRepoContext}
-                    />
-                  ) : undefined}
+                  repoSelectorSlot={repoSelectorSlot}
                   keySourceBadge={pendingConv ? keySourceBadge : null}
                 />
               </ErrorBoundary>

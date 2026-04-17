@@ -120,7 +120,36 @@ describe('ChatInput', () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  // ─── Expand toggle ────────────────────────────────────────────────────────
+  // ─── In-flight guard (T3) ────────────────────────────────────────────────
+
+  it('fires onSend once when Enter is pressed twice within 300ms', () => {
+    const onSend = vi.fn();
+    render(<ChatInput onSend={onSend} />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'rapid message' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    // Second Enter lands within 400ms debounce window (ardışık sync çağrılar <1ms)
+    fireEvent.change(textarea, { target: { value: 'rapid message' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables input and marks send button aria-busy when isSending', () => {
+    const onSend = vi.fn();
+    const { rerender } = render(<ChatInput onSend={onSend} />);
+    const textarea = screen.getByRole('textbox');
+    // Put text in first (textarea is enabled), then flip isSending=true via rerender
+    fireEvent.change(textarea, { target: { value: 'queued message' } });
+    rerender(<ChatInput onSend={onSend} isSending />);
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    expect(onSend).not.toHaveBeenCalled();
+    const sendBtn = screen.getByRole('button', { name: 'Gönder' });
+    expect(sendBtn).toBeDisabled();
+    expect(sendBtn).toHaveAttribute('aria-busy', 'true');
+    expect(textarea).toBeDisabled();
+  });
+
+  // ─── Expand toggle (T1) ──────────────────────────────────────────────────
 
   it('clicking expand toggle flips the data-expanded attribute and aria label', () => {
     const { container } = render(<ChatInput onSend={vi.fn()} />);

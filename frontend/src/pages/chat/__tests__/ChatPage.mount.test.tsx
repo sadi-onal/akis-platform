@@ -37,7 +37,7 @@ vi.mock('../../../hooks/useProfileCompleteness', () => ({
 }));
 
 vi.mock('../../../hooks/usePipelineStream', () => ({
-  usePipelineStream: () => ({ activities: [], currentStep: null, createdFiles: [] }),
+  usePipelineStream: () => ({ activities: [], currentStep: null, createdFiles: [], isConnected: false, progressByStage: {} }),
 }));
 
 // Mock workflowsApi — list returns empty, get rejects (no conversation selected)
@@ -140,5 +140,14 @@ describe('ChatPage — mount', () => {
   it('shows new chat CTA button when no conversation selected', () => {
     renderChatPage('/chat');
     expect(screen.getByRole('button', { name: /chat\.emptyState\.newChat/i })).toBeInTheDocument();
+  });
+
+  it('memoized subtree mounts without runtime errors or warnings', () => {
+    // React.memo-wrapped ChatPanel / ConversationSidebar / PreviewPanel should
+    // render cleanly — no PropType warnings, key warnings, or act() warnings.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderChatPage('/chat');
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

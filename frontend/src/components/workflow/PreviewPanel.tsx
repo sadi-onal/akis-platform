@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { SandpackProvider, SandpackLayout, SandpackPreview as SandpackPreviewEmbed } from '@codesandbox/sandpack-react';
 import { cn } from '../../utils/cn';
 import { analyzePreviewCapability } from '../../utils/previewStrategy';
@@ -230,7 +230,7 @@ function NotPreviewable({ reason, repoUrl }: { reason: string; repoUrl?: string 
 }
 
 /* ── Main Component ───────────────────────── */
-export function PreviewPanel({ files, loading: externalLoading, branch, activities, createdFiles, repoUrl }: PreviewPanelProps) {
+export const PreviewPanel = memo(function PreviewPanel({ files, loading: externalLoading, branch, activities, createdFiles, repoUrl }: PreviewPanelProps) {
   const [tab, setTab] = useState<PanelTab>('preview');
   const [view, setView] = useState<PreviewView>('web');
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -548,4 +548,4 @@ export function PreviewPanel({ files, loading: externalLoading, branch, activiti
       )}
     </div>
   );
-}
+});
