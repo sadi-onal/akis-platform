@@ -291,10 +291,11 @@ jobs:
             ls -lh "$BACKUP_FILE"
           EOF
 
-      - name: Verify server prerequisites
+      - name: Verify server prerequisites & ensure target directories
         run: |
-          echo "Checking server prerequisites..."
           ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            set -euo pipefail
+
             echo "=== Server Architecture ==="
             uname -m
 
@@ -305,6 +306,32 @@ jobs:
             echo ""
             echo "=== Docker Compose Version ==="
             docker compose version || docker-compose --version || { echo "ERROR: Docker Compose not available"; exit 1; }
+
+            echo ""
+            echo "=== Ensuring target directories exist (idempotent) ==="
+            # These paths are populated by scp in later steps — they MUST exist first.
+            # Previous failure mode: scp ran before mkdir → workflow aborted after
+            # killing Caddy, producing a full outage. mkdir -p here is a no-op if
+            # paths already exist, so it is safe on every run.
+            mkdir -p /opt/akis /opt/akis/prod /opt/akis/prod-frontend /opt/akis/backups
+            ls -ld /opt/akis /opt/akis/prod /opt/akis/prod-frontend /opt/akis/backups
+
+            echo ""
+            echo "=== DB volume safety gate ==="
+            # Prevent silent data loss during the flat → edge-split architecture migration.
+            # New compose expects volume 'akis-prod_prod_pgdata'. If only a legacy
+            # volume with data exists, a fresh `docker compose up` would create an
+            # empty DB and orphan production data. Halt and require manual migration.
+            NEW_VOL=$(docker volume ls -q --filter name='^akis-prod_prod_pgdata$')
+            LEGACY_VOL=$(docker volume ls -q --filter name='^akis-staging-pgdata$')
+            if [ -z "$NEW_VOL" ] && [ -n "$LEGACY_VOL" ]; then
+              echo "::error::DB volume migration required."
+              echo "  Found: akis-staging-pgdata (legacy, has production data)"
+              echo "  Missing: akis-prod_prod_pgdata (new architecture)"
+              echo "Running the new compose would create an empty DB and orphan live data."
+              echo "Resolve by following devops/runbooks/db-volume-migration.md"
+              exit 1
+            fi
 
             echo ""
             echo "=== Port 80/443 binding check (preflight) ==="
@@ -379,9 +406,8 @@ jobs:
           scp -i ~/.ssh/deploy_key devops/compose/Caddyfile.edge \
             ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:/opt/akis/Caddyfile.edge
           
-          # Copy frontend dist to bind mount location
-          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
-            "mkdir -p /opt/akis/prod-frontend /opt/akis/prod"
+          # Copy frontend dist to bind mount location.
+          # Target dirs were created in the preflight step; no mkdir needed here.
           scp -r -i ~/.ssh/deploy_key frontend/dist/* \
             ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:/opt/akis/prod-frontend/
 
