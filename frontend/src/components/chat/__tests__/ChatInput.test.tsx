@@ -119,4 +119,44 @@ describe('ChatInput', () => {
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     expect(onSend).not.toHaveBeenCalled();
   });
+
+  // ─── Expand toggle ────────────────────────────────────────────────────────
+
+  it('clicking expand toggle flips the data-expanded attribute and aria label', () => {
+    const { container } = render(<ChatInput onSend={vi.fn()} />);
+    const wrapper = container.querySelector('[data-expanded]') as HTMLElement;
+    expect(wrapper.dataset.expanded).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Büyük yaz' }));
+    expect(wrapper.dataset.expanded).toBe('true');
+    expect(screen.getByRole('button', { name: 'Küçült' })).toBeInTheDocument();
+  });
+
+  it('returns to collapsed mode after a successful send', () => {
+    const onSend = vi.fn();
+    const { container } = render(<ChatInput onSend={onSend} />);
+    const wrapper = container.querySelector('[data-expanded]') as HTMLElement;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Büyük yaz' }));
+    expect(wrapper.dataset.expanded).toBe('true');
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'my long idea' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gönder' }));
+
+    expect(onSend).toHaveBeenCalledOnce();
+    expect(wrapper.dataset.expanded).toBe('false');
+    expect(screen.getByRole('button', { name: 'Büyük yaz' })).toBeInTheDocument();
+  });
+
+  it('textarea max-height inline style grows when expanded', () => {
+    render(<ChatInput onSend={vi.fn()} />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    const collapsedMax = parseFloat(textarea.style.maxHeight);
+    expect(collapsedMax).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Büyük yaz' }));
+    const expandedMax = parseFloat(textarea.style.maxHeight);
+    expect(expandedMax).toBeGreaterThan(collapsedMax);
+  });
 });
