@@ -62,7 +62,39 @@ services:
       
       # MCP Gateway
       GITHUB_MCP_BASE_URL: ${GITHUB_MCP_BASE_URL:-http://mcp-gateway:4010/mcp}
-      
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+
+      # OAuth login — GitHub + Google
+      # These are REQUIRED for user login via OAuth providers.
+      # Without them, getProviderConfig() returns null and /auth/oauth/* fails.
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
+      GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
+      GITHUB_OAUTH_CALLBACK_URL: ${GITHUB_OAUTH_CALLBACK_URL:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://akisflow.com}
+
+      # Email delivery — signup confirmation, password reset
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-mock}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: ${EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:-15}
+
+      # User AI key encryption (AES-256-GCM). Without this, users cannot
+      # save personal AI provider keys from the Settings page.
+      AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
+      AI_KEY_ENCRYPTION_KEY_VERSION: ${AI_KEY_ENCRYPTION_KEY_VERSION:-v1}
+
+      # Reverse proxy — edge Caddy terminates TLS in front of backend
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+
+      # Stripe billing (optional — leave blank to disable)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_PRO_PLUS: ${STRIPE_PRICE_PRO_PLUS:-}
+      STRIPE_PRICE_TEAM: ${STRIPE_PRICE_TEAM:-}
+
       # Atlassian (disabled by default)
       MCP_ATLASSIAN_ENABLED: ${MCP_ATLASSIAN_ENABLED:-false}
     networks:
