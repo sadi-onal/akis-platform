@@ -19,6 +19,26 @@ const MOBILE_INDICATORS = [
   '@capacitor/core', '@ionic/react',
 ];
 
+const BACKEND_SOURCE_PATTERNS: RegExp[] = [
+  /fetch\(\s*['"`]\/api\//,
+  /fetch\(\s*['"`]https?:\/\//,
+  /from\s+['"]axios['"]/,
+  /from\s+['"]@supabase\//,
+  /from\s+['"]firebase\//,
+];
+
+const SCAN_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
+
+function scanSourceForBackendCalls(files: Record<string, string>): boolean {
+  for (const [path, content] of Object.entries(files)) {
+    if (!SCAN_EXTENSIONS.some((ext) => path.endsWith(ext))) continue;
+    for (const pattern of BACKEND_SOURCE_PATTERNS) {
+      if (pattern.test(content)) return true;
+    }
+  }
+  return false;
+}
+
 export function analyzePreviewCapability(
   files: Record<string, string>,
 ): PreviewAnalysis {
@@ -61,6 +81,16 @@ export function analyzePreviewCapability(
       capability: 'not-previewable',
       reason: 'Bu uygulama sunucu (backend) gerektirir ve tarayıcıda önizlenemez. Projeyi klonlayıp yerel ortamınızda çalıştırabilirsiniz.',
       framework, hasBackendDependency, hasMobilePlatform,
+    };
+  }
+
+  if (scanSourceForBackendCalls(files)) {
+    return {
+      capability: 'not-previewable',
+      reason: 'Bu uygulama bir API sunucusu gerektiriyor; tarayıcıda önizlenemez.',
+      framework,
+      hasBackendDependency: true,
+      hasMobilePlatform,
     };
   }
 

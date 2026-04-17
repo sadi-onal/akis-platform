@@ -160,6 +160,37 @@ describe('analyzePreviewCapability', () => {
     expect(result.capability).toBe('not-previewable');
     expect(result.hasBackendDependency).toBe(true);
   });
+
+  it('detects fetch(/api/...) in source as not-previewable', () => {
+    const files: Record<string, string> = {
+      'package.json': makePkg({ react: '^19.0.0' }),
+      'src/App.tsx': "fetch('/api/users').then(r => r.json());",
+    };
+    const result = analyzePreviewCapability(files);
+    expect(result.capability).toBe('not-previewable');
+    expect(result.hasBackendDependency).toBe(true);
+    expect(result.reason).toContain('API sunucusu');
+  });
+
+  it('detects axios import as not-previewable', () => {
+    const files: Record<string, string> = {
+      'package.json': makePkg({ react: '^19.0.0' }),
+      'src/api.ts': "import axios from 'axios';\nexport const get = () => axios.get('/users');",
+    };
+    const result = analyzePreviewCapability(files);
+    expect(result.capability).toBe('not-previewable');
+    expect(result.hasBackendDependency).toBe(true);
+  });
+
+  it('does not flag source that only mentions "api" in a comment', () => {
+    const files: Record<string, string> = {
+      'package.json': makePkg({ react: '^19.0.0' }),
+      'src/App.tsx': "// note: no real api here, just a stub\nexport default function App() { return <div>hi</div>; }",
+    };
+    const result = analyzePreviewCapability(files);
+    expect(result.capability).toBe('sandpack');
+    expect(result.hasBackendDependency).toBe(false);
+  });
 });
 
 // ─────────────────────────────────────────────────────────
