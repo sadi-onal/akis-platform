@@ -460,11 +460,79 @@ function Step4Confirmation({
 
 // ─── Main Page ───────────────────────────────────────────
 
+const ENGINEER_INTRO_STORAGE_KEY = 'akis_engineer_intro_seen';
+
+/**
+ * Intro modal shown on the user's first visit to /engineer (issue #395 / BUG-15).
+ * Explains what the mode does before the wizard starts. Persisted via
+ * localStorage so it only appears once per browser.
+ */
+function EngineerIntroModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-white/[0.08] bg-[#0A1215] p-6 md:p-8 shadow-xl">
+        <div className="mb-5 flex items-center gap-3">
+          <span className="text-3xl">&#x1F527;</span>
+          <h2 className="text-xl font-semibold text-white">Mühendis Modu nedir?</h2>
+        </div>
+        <p className="mb-4 text-sm leading-relaxed text-white/75">
+          Mevcut GitHub repo&apos;larınıza bir AI mühendis kiralayın. Belirlediğiniz süre ve
+          bütçe içinde issue/task&apos;larınızı çözsün, açıkladığınız değişiklikleri uygulasın,
+          PR açsın.
+        </p>
+        <ol className="mb-6 space-y-2 text-sm text-white/70">
+          <li>
+            <span className="font-semibold text-[#07D1AF]">1.</span>{' '}
+            GitHub repo&apos;nuzu seçin
+          </li>
+          <li>
+            <span className="font-semibold text-[#07D1AF]">2.</span>{' '}
+            AI&apos;ın bulduğu görevler arasından 5 taneye kadar seçin
+          </li>
+          <li>
+            <span className="font-semibold text-[#07D1AF]">3.</span>{' '}
+            Ne kadar süre çalışsın (30dk → 3 saat) + tahmini maliyet
+          </li>
+          <li>
+            <span className="font-semibold text-[#07D1AF]">4.</span>{' '}
+            Onaylayın → mühendis çalışır, PR açar
+          </li>
+        </ol>
+        <button
+          onClick={onClose}
+          className="w-full rounded-lg bg-[#07D1AF] px-4 py-3 text-sm font-semibold text-black hover:bg-[#06B89A] transition-colors"
+        >
+          Başla
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function EngineerPage() {
   const navigate = useNavigate();
 
   // Wizard state
   const [step, setStep] = useState(1);
+
+  // Intro modal state — shown once per browser on first visit (localStorage gated).
+  // Issue #395 / BUG-15: users did not know what Mühendis Modu is.
+  const [showIntro, setShowIntro] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage?.getItem(ENGINEER_INTRO_STORAGE_KEY) !== 'true';
+    } catch {
+      return false;
+    }
+  });
+  const dismissIntro = useCallback(() => {
+    setShowIntro(false);
+    try {
+      window.localStorage?.setItem(ENGINEER_INTRO_STORAGE_KEY, 'true');
+    } catch {
+      // localStorage unavailable (privacy mode) — the modal will just reappear next session
+    }
+  }, []);
 
   // Step 1 — Repo
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
@@ -575,6 +643,7 @@ export default function EngineerPage() {
 
   return (
     <div className="min-h-screen bg-[#0A1215]">
+      {showIntro && <EngineerIntroModal onClose={dismissIntro} />}
       <div className="mx-auto max-w-3xl px-4 py-12">
         {/* Back to chat */}
         <button
