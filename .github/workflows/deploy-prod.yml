@@ -644,6 +644,29 @@ jobs:
             exit 1
           fi
 
+      - name: Test OAuth providers are configured (regression guard)
+        # Guards against the OAUTH_NOT_CONFIGURED silent failure observed
+        # when compose forgets to inject GITHUB_OAUTH_* / GOOGLE_OAUTH_* into
+        # the backend container. Properly configured providers return a 302
+        # redirect to the provider's consent page. A 503 means env vars are
+        # missing — fail the deploy so rollback triggers.
+        run: |
+          for provider in github google; do
+            echo "Testing /auth/oauth/$provider..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://akisflow.com/auth/oauth/$provider")
+            if [ "$HTTP_CODE" = "503" ]; then
+              BODY=$(curl -s "https://akisflow.com/auth/oauth/$provider")
+              echo "❌ $provider OAuth returned 503 — env vars missing in container."
+              echo "Body: $BODY"
+              exit 1
+            fi
+            if [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "303" ] || [ "$HTTP_CODE" = "307" ]; then
+              echo "✅ $provider OAuth redirecting (HTTP $HTTP_CODE)"
+            else
+              echo "⚠️  $provider OAuth returned unexpected HTTP $HTTP_CODE (not 503, continuing)"
+            fi
+          done
+
       - name: Test frontend loading
         run: |
           echo "Testing frontend..."
@@ -666,6 +689,7 @@ jobs:
             echo "| Ready Check | ✅ Pass |"
             echo "| Version Check | ✅ Pass |"
             echo "| API Response | ✅ Pass |"
+            echo "| OAuth Providers | ✅ Pass |"
             echo "| Frontend Load | ✅ Pass |"
           } > smoke-test-results.md
           cat smoke-test-results.md >> $GITHUB_STEP_SUMMARY

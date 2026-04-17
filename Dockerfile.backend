@@ -42,6 +42,9 @@ COPY backend/drizzle.config.ts ./
 # Copy backend source (includes pipeline code at src/pipeline/)
 COPY backend/src ./src
 
+# Copy build scripts (required by `pnpm run build` for skill .md assets)
+COPY backend/scripts ./scripts
+
 # Copy root package.json for "type": "module" — rootDir=".." needs this
 # at /build/package.json so Node.js ESM resolution works correctly.
 COPY package.json /build/package.json

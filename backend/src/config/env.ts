@@ -299,6 +299,30 @@ const envSchema = z
     }
 
     // OAuth credentials validation
+    // In production, both GitHub and Google OAuth must be fully configured —
+    // the login UI shows both buttons, so a missing provider results in
+    // silent 503 OAUTH_NOT_CONFIGURED at runtime. Fail fast at startup instead.
+    if (isProduction) {
+      if (!data.GITHUB_OAUTH_CLIENT_ID || !data.GITHUB_OAUTH_CLIENT_SECRET) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET are required in production. ' +
+            'Without them /auth/oauth/github returns 503 OAUTH_NOT_CONFIGURED.',
+          path: ['GITHUB_OAUTH_CLIENT_ID'],
+        });
+      }
+      if (!data.GOOGLE_OAUTH_CLIENT_ID || !data.GOOGLE_OAUTH_CLIENT_SECRET) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required in production. ' +
+            'Without them /auth/oauth/google returns 503 OAUTH_NOT_CONFIGURED.',
+          path: ['GOOGLE_OAUTH_CLIENT_ID'],
+        });
+      }
+    }
+
     // If a provider's client ID is provided, the secret must also be provided
     if (data.GITHUB_OAUTH_CLIENT_ID && !data.GITHUB_OAUTH_CLIENT_SECRET) {
       ctx.addIssue({
