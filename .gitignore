@@ -203,3 +203,8 @@ demo-screenshots/
 .github/workflows/trace-agent.yml
 frontend/public/brand/TEMP_NOTES.md
 frontend/package-lock.json
+
+# Local planning notes for sibling projects (e.g. akis-comms) kept
+# alongside the main repo for convenience. They live in /Users working
+# copies only; shipping them would confuse contributors.
+AKIS_*_PLAN.md
