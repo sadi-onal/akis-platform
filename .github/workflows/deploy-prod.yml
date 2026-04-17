@@ -246,7 +246,9 @@ jobs:
             APP_VERSION=${{ needs.validate.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          # Prod server is x86_64 (OCI Free Tier). ARM64 cross-build via QEMU
+          # adds ~20 min for an image nothing consumes — keep it single-platform.
+          platforms: linux/amd64
 
   # ============================================================================
   # Deploy to Production (Requires Manual Approval)
