@@ -20,6 +20,12 @@ import { parseAIJson } from '../../core/json-extract.js';
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { TRACE_TOOLS, createTraceToolHandlers, type TraceToolDeps } from './trace-tools.js';
+import type { SkillRegistry } from '../skills/index.js';
+import {
+  buildSystemPromptWithSkills,
+  buildUseSkillTool,
+  createUseSkillHandlers,
+} from '../skills/index.js';
 
 // ─── Dependency Interfaces ────────────────────────
 
@@ -190,11 +196,23 @@ export class TraceAgent {
   private ai: TraceAIDeps;
   private github: TraceGitHubDeps;
   private agenticDeps?: AgenticLoopDeps;
+  private skillRegistry?: SkillRegistry;
 
-  constructor(ai: TraceAIDeps, github: TraceGitHubDeps, agenticDeps?: AgenticLoopDeps) {
+  constructor(
+    ai: TraceAIDeps,
+    github: TraceGitHubDeps,
+    agenticDeps?: AgenticLoopDeps,
+    skillRegistry?: SkillRegistry,
+  ) {
     this.ai = ai;
     this.github = github;
     this.agenticDeps = agenticDeps;
+    this.skillRegistry = skillRegistry;
+  }
+
+  private enhance(basePrompt: string): string {
+    if (!this.skillRegistry) return basePrompt;
+    return buildSystemPromptWithSkills(basePrompt, 'trace', this.skillRegistry);
   }
 
   async execute(input: TraceInput): Promise<TraceResult> {
@@ -375,12 +393,22 @@ After pushing, respond with a JSON summary:
   "testSummary": {"totalTests": N, "coveragePercentage": N, "coveredCriteria": [...], "uncoveredCriteria": [...]}
 }`;
 
+    const traceTools = [...TRACE_TOOLS];
+    let allHandlers = handlers;
+    if (this.skillRegistry) {
+      const skillTool = buildUseSkillTool('trace', this.skillRegistry);
+      if (skillTool) {
+        traceTools.push(skillTool);
+        allHandlers = { ...handlers, ...createUseSkillHandlers('trace', this.skillRegistry) };
+      }
+    }
+
     const result = await runAgenticLoop(
       this.agenticDeps!,
-      TEST_GENERATION_PROMPT,
+      this.enhance(TEST_GENERATION_PROMPT),
       userPrompt,
-      TRACE_TOOLS,
-      handlers,
+      traceTools,
+      allHandlers,
       {
         maxIterations: 15,
         maxTokens: 32768,
@@ -528,8 +556,8 @@ After pushing, respond with a JSON summary:
           emit?.('ai_call', `Playwright testleri oluşturuluyor (deneme ${attempt + 1})...`, 45, undefined, attempt);
         }
         const traceSystemPrompt = knowledgeContext
-          ? `${TEST_GENERATION_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
-          : TEST_GENERATION_PROMPT;
+          ? `${this.enhance(TEST_GENERATION_PROMPT)}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
+          : this.enhance(TEST_GENERATION_PROMPT);
         const aiPromise = this.ai.generateText(traceSystemPrompt, userPrompt);
         responseText = await withAiTimeout(aiPromise, AI_CALL_TIMEOUT_MS);
         emit?.('parsing', 'AI yanıtı alındı, ayrıştırılıyor...', 65);

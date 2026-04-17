@@ -42,6 +42,7 @@ import { pipelineStreamPlugin } from './pipeline/api/pipeline-stream.plugin.js';
 import { devSessionPlugin } from './pipeline/api/dev-session.plugin.js';
 import { engineerPlugin } from './pipeline/api/engineer.plugin.js';
 import { createPipelineSystem, type GitHubServiceLike } from './pipeline/core/pipeline-factory.js';
+import { initSkills } from './pipeline/agents/skills/index.js';
 import { createGitHubRESTAdapter, getGitHubOwnerViaREST } from './pipeline/adapters/GitHubRESTAdapter.js';
 import { pushLog } from './lib/logBuffer.js';
 import { logger } from './lib/logger.js';
@@ -351,8 +352,14 @@ export async function buildApp() {
   const { db: drizzleDb } = await import('./db/client.js');
   const pipelineStore = new DrizzlePipelineStore(drizzleDb);
 
+  // Initialize agent skill system — reads skills/*.md from disk and validates
+  // the registry. Fails fast at startup if any skill file is missing or broken.
+  const skillRegistry = await initSkills();
+  logger.info('[buildApp] Skill system initialized');
+
   const { orchestrator: pipelineOrchestrator, reconciler: pipelineReconciler } = createPipelineSystem({
     aiService,
+    skillRegistry,
     createGitHubService: (token: string) => createGitHubRESTAdapter({ token }),
     fallbackGitHubService: pipelineGitHubService,
     getGitHubOwner: async (userId: string) => {

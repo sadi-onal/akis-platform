@@ -17,6 +17,8 @@ import type { PipelineError } from '../../core/contracts/PipelineTypes.js';
 import { isSpecMinimallyValid } from './SpecContract.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { parseAIJson } from '../../core/json-extract.js';
+import type { SkillRegistry } from '../skills/index.js';
+import { buildSystemPromptWithSkills } from '../skills/index.js';
 
 // ─── Types ────────────────────────────────────────
 
@@ -346,9 +348,21 @@ function normalizeSpecResponse(raw: Record<string, unknown>): Record<string, unk
 
 export class ScribeAgent {
   private ai: ScribeAIDeps;
+  private skillRegistry?: SkillRegistry;
 
-  constructor(ai: ScribeAIDeps) {
+  constructor(ai: ScribeAIDeps, skillRegistry?: SkillRegistry) {
     this.ai = ai;
+    this.skillRegistry = skillRegistry;
+  }
+
+  /**
+   * Wrap a base system prompt with this agent's core skills when a registry
+   * is available. Falls back to the raw prompt in tests where skills aren't
+   * initialized.
+   */
+  private enhance(basePrompt: string): string {
+    if (!this.skillRegistry) return basePrompt;
+    return buildSystemPromptWithSkills(basePrompt, 'scribe', this.skillRegistry);
   }
 
   createInitialState(input: ScribeInput): ScribeState {
@@ -378,9 +392,10 @@ export class ScribeAgent {
     emit?.('ai_call', 'Claude AI ile fikir analiz ediliyor...', 25);
     let responseText: string;
     try {
+      const clarificationBase = this.enhance(CLARIFICATION_SYSTEM_PROMPT);
       const systemPrompt = state.knowledgeContext
-        ? `${CLARIFICATION_SYSTEM_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${state.knowledgeContext}\n--- END KNOWLEDGE ---`
-        : CLARIFICATION_SYSTEM_PROMPT;
+        ? `${clarificationBase}\n\n--- RETRIEVED KNOWLEDGE ---\n${state.knowledgeContext}\n--- END KNOWLEDGE ---`
+        : clarificationBase;
       responseText = await this.ai.generateText(systemPrompt, userPrompt);
     } catch {
       emit?.('error', 'AI çağrısı başarısız oldu', 0);
@@ -482,9 +497,10 @@ export class ScribeAgent {
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
       try {
+        const specBase = this.enhance(SPEC_GENERATION_SYSTEM_PROMPT);
         const specSystemPrompt = state.knowledgeContext
-          ? `${SPEC_GENERATION_SYSTEM_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${state.knowledgeContext}\n--- END KNOWLEDGE ---`
-          : SPEC_GENERATION_SYSTEM_PROMPT;
+          ? `${specBase}\n\n--- RETRIEVED KNOWLEDGE ---\n${state.knowledgeContext}\n--- END KNOWLEDGE ---`
+          : specBase;
         responseText = await this.ai.generateText(specSystemPrompt, userPrompt);
       } catch {
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;

@@ -8,6 +8,8 @@ import {
   buildCodeReviewUserPrompt,
 } from './prompts/code-review.js';
 import { parseAIJson } from '../../core/json-extract.js';
+import type { SkillRegistry } from '../skills/index.js';
+import { buildSystemPromptWithSkills } from '../skills/index.js';
 
 // ─── Dependency Interface ────────────────────────
 
@@ -29,9 +31,16 @@ const APPROVAL_THRESHOLD = 75;
 
 export class CriticAgent {
   private ai: CriticAIDeps;
+  private skillRegistry?: SkillRegistry;
 
-  constructor(ai: CriticAIDeps) {
+  constructor(ai: CriticAIDeps, skillRegistry?: SkillRegistry) {
     this.ai = ai;
+    this.skillRegistry = skillRegistry;
+  }
+
+  private enhance(basePrompt: string): string {
+    if (!this.skillRegistry) return basePrompt;
+    return buildSystemPromptWithSkills(basePrompt, 'critic', this.skillRegistry);
   }
 
   /**
@@ -54,7 +63,7 @@ export class CriticAgent {
 
     let responseText: string;
     try {
-      responseText = await this.ai.generateText(SPEC_REVIEW_SYSTEM_PROMPT, userPrompt);
+      responseText = await this.ai.generateText(this.enhance(SPEC_REVIEW_SYSTEM_PROMPT), userPrompt);
     } catch {
       return {
         type: 'error',
@@ -93,7 +102,7 @@ export class CriticAgent {
 
     let responseText: string;
     try {
-      responseText = await this.ai.generateText(CODE_REVIEW_SYSTEM_PROMPT, userPrompt);
+      responseText = await this.ai.generateText(this.enhance(CODE_REVIEW_SYSTEM_PROMPT), userPrompt);
     } catch {
       return {
         type: 'error',

@@ -15,6 +15,12 @@ import { extractJsonSafe, sanitizeJsonControlChars, repairTruncatedJson } from '
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { PROTO_TOOLS, createProtoToolHandlers, type ProtoToolDeps } from './proto-tools.js';
+import type { SkillRegistry } from '../skills/index.js';
+import {
+  buildSystemPromptWithSkills,
+  buildUseSkillTool,
+  createUseSkillHandlers,
+} from '../skills/index.js';
 
 // ─── Dependency Interfaces ────────────────────────
 
@@ -164,11 +170,23 @@ export class ProtoAgent {
   private ai: ProtoAIDeps;
   private github: ProtoGitHubDeps;
   private agenticDeps?: AgenticLoopDeps;
+  private skillRegistry?: SkillRegistry;
 
-  constructor(ai: ProtoAIDeps, github: ProtoGitHubDeps, agenticDeps?: AgenticLoopDeps) {
+  constructor(
+    ai: ProtoAIDeps,
+    github: ProtoGitHubDeps,
+    agenticDeps?: AgenticLoopDeps,
+    skillRegistry?: SkillRegistry,
+  ) {
     this.ai = ai;
     this.github = github;
     this.agenticDeps = agenticDeps;
+    this.skillRegistry = skillRegistry;
+  }
+
+  private enhance(basePrompt: string): string {
+    if (!this.skillRegistry) return basePrompt;
+    return buildSystemPromptWithSkills(basePrompt, 'proto', this.skillRegistry);
   }
 
   async execute(input: ProtoInput): Promise<ProtoResult> {
@@ -395,13 +413,23 @@ Steps:
 
 After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "totalLinesOfCode": N, "stackUsed": "..." }`;
 
+    const protoTools = [...PROTO_TOOLS];
+    let allHandlers = handlers;
+    if (this.skillRegistry) {
+      const skillTool = buildUseSkillTool('proto', this.skillRegistry);
+      if (skillTool) {
+        protoTools.push(skillTool);
+        allHandlers = { ...handlers, ...createUseSkillHandlers('proto', this.skillRegistry) };
+      }
+    }
+
     try {
       const result = await runAgenticLoop(
         this.agenticDeps!,
-        SCAFFOLD_SYSTEM_PROMPT,
+        this.enhance(SCAFFOLD_SYSTEM_PROMPT),
         userPrompt,
-        PROTO_TOOLS,
-        handlers,
+        protoTools,
+        allHandlers,
         {
           maxIterations: 10,
           maxTokens: 16384,
@@ -524,9 +552,10 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
       try {
+        const scaffoldBase = this.enhance(SCAFFOLD_SYSTEM_PROMPT);
         const protoSystemPrompt = knowledgeContext
-          ? `${SCAFFOLD_SYSTEM_PROMPT}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
-          : SCAFFOLD_SYSTEM_PROMPT;
+          ? `${scaffoldBase}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
+          : scaffoldBase;
         responseText = await this.ai.generateText(protoSystemPrompt, userPrompt);
       } catch (err) {
         logger.error(`[Proto] Attempt ${attempt + 1}: AI call error: ${err instanceof Error ? err.message : String(err)}`);

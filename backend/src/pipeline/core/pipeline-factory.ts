@@ -14,6 +14,7 @@ import { PipelineReconciler } from './PipelineReconciler.js';
 import { db } from '../../db/client.js';
 import type { AgenticLoopDeps } from './AgenticLoop.js';
 import { AgentActivityService } from '../services/AgentActivityService.js';
+import type { SkillRegistry } from '../agents/skills/index.js';
 
 // ─── AI Adapter ──────────────────────────────────
 // Bridges the existing AIService to agent AI deps interfaces.
@@ -146,6 +147,8 @@ export interface CreatePipelineOrchestratorOptions {
   store?: PipelineStore;
   /** Optional: tool-calling client for agentic loop (Claude API tool_use) */
   agenticDeps?: AgenticLoopDeps;
+  /** Optional: pre-initialized skill registry for agent prompt enrichment */
+  skillRegistry?: SkillRegistry;
 }
 
 export function createAgentsForModel(
@@ -154,6 +157,7 @@ export function createAgentsForModel(
   model?: string,
   agenticDeps?: AgenticLoopDeps,
   onTokenUsage?: TokenUsageCallback,
+  skillRegistry?: SkillRegistry,
 ) {
   const scribeAI = createScribeAIDeps(aiService, model, onTokenUsage);
   const protoAI = createProtoAIDeps(aiService, model, onTokenUsage);
@@ -163,10 +167,10 @@ export function createAgentsForModel(
   const traceGH = createTraceGitHubDeps(githubService);
 
   return {
-    scribe: new ScribeAgent(scribeAI),
-    proto: new ProtoAgent(protoAI, protoGH, agenticDeps),
-    trace: new TraceAgent(traceAI, traceGH, agenticDeps),
-    critic: new CriticAgent(criticAI),
+    scribe: new ScribeAgent(scribeAI, skillRegistry),
+    proto: new ProtoAgent(protoAI, protoGH, agenticDeps, skillRegistry),
+    trace: new TraceAgent(traceAI, traceGH, agenticDeps, skillRegistry),
+    critic: new CriticAgent(criticAI, skillRegistry),
   };
 }
 
@@ -199,7 +203,14 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
   // Default agents use fallback (platform token) service — used for Scribe (no GitHub needed)
   // Proto/Trace will get per-user adapters at runtime via orchestrator
   const fallbackGH = opts.fallbackGitHubService ?? opts.createGitHubService('');
-  const defaultAgents = createAgentsForModel(opts.aiService, fallbackGH, undefined, opts.agenticDeps);
+  const defaultAgents = createAgentsForModel(
+    opts.aiService,
+    fallbackGH,
+    undefined,
+    opts.agenticDeps,
+    undefined,
+    opts.skillRegistry,
+  );
 
   const orchestrator = new PipelineOrchestrator(
     store,
@@ -210,7 +221,15 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
     opts.getGitHubToken,
     opts.createGitHubService,
     undefined, // emit
-    (model, githubService?, onTokenUsage?) => createAgentsForModel(opts.aiService, githubService ?? fallbackGH, model, opts.agenticDeps, onTokenUsage),
+    (model, githubService?, onTokenUsage?) =>
+      createAgentsForModel(
+        opts.aiService,
+        githubService ?? fallbackGH,
+        model,
+        opts.agenticDeps,
+        onTokenUsage,
+        opts.skillRegistry,
+      ),
   );
 
   // Wire agent activity logging for integrity metrics
@@ -219,7 +238,7 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
 
   // Wire Level 3: CriticAgent for adversarial review
   const criticAI = createCriticAIDeps(opts.aiService);
-  orchestrator.setCriticAgent(new CriticAgent(criticAI));
+  orchestrator.setCriticAgent(new CriticAgent(criticAI, opts.skillRegistry));
 
   // Wire AI service for RepoContextAgent
   orchestrator.setAIService(opts.aiService);

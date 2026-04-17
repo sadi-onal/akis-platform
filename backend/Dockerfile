@@ -25,8 +25,9 @@ RUN pnpm install --frozen-lockfile
 COPY tsconfig.json ./
 COPY drizzle.config.ts ./
 COPY src ./src
+COPY scripts ./scripts
 
-# Build TypeScript
+# Build TypeScript (also copies skill .md assets to dist/)
 RUN pnpm run build
 
 # Remove devDependencies
