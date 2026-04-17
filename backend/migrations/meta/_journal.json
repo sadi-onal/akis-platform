@@ -281,6 +281,13 @@
       "when": 1772300000000,
       "tag": "0038_add_pgvector_rag",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1776384000000,
+      "tag": "0039_repair_pipelines_schema",
+      "breakpoints": true
     }
   ]
 }

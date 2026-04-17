@@ -88,7 +88,7 @@ services:
   # Database - PostgreSQL 16
   # ============================================================================
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: akis-prod-db
     restart: always
     environment:
@@ -160,7 +160,7 @@ services:
   # Database Backup (scheduled via cron in container)
   # ============================================================================
   backup:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: akis-prod-backup
     restart: "no"
     profiles:
