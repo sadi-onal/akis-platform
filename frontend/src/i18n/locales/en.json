@@ -943,7 +943,7 @@
   "settings.plan.free": "Free",
   "settings.plan.jobsPerDay": "Daily Job Limit",
   "settings.plan.tokenBudget": "Monthly Token Budget",
-  "settings.plan.maxAgents": "Max Agents",
+  "settings.plan.maxAgents": "Concurrent Pipelines",
   "settings.plan.depthModes": "Depth Modes",
   "settings.plan.maxOutput": "Max Output Tokens",
   "settings.plan.passes": "Passes",
