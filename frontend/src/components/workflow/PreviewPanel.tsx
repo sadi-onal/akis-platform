@@ -8,6 +8,33 @@ import type { PipelineActivity } from '../../hooks/usePipelineStream';
 type PreviewView = 'web' | 'mobile';
 type PanelTab = 'preview' | 'console' | 'files';
 
+/**
+ * The "Konsol" tab exposes raw pipeline activity logs — useful for debugging
+ * orchestration issues but noisy/confusing for end users. Issue #393 / BUG-13
+ * asked to hide it from the default UI.
+ *
+ * Gating: shown only when one of these is true:
+ *   1. URL has `?debug=1` (ephemeral — clears on full navigation)
+ *   2. localStorage `akis_debug` === 'true' (persistent — set by admin tools)
+ *   3. Vite env `VITE_SHOW_INTERNAL_UI === 'true'` (build-time, dev workstations)
+ *
+ * Admin-role gating is tracked separately because the frontend AuthContext
+ * currently hard-codes role='member' and propagating the real backend role
+ * requires a broader refactor.
+ */
+function isInternalUiVisible(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (new URLSearchParams(window.location.search).get('debug') === '1') return true;
+    if (window.localStorage?.getItem('akis_debug') === 'true') return true;
+  } catch {
+    // SecurityError (e.g., privacy-mode sandbox): fall through
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const env = (import.meta as any)?.env;
+  return env?.VITE_SHOW_INTERNAL_UI === 'true';
+}
+
 interface PreviewPanelProps {
   files: Record<string, string> | null;
   loading?: boolean;
@@ -271,9 +298,12 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
     return { folders, root };
   }, [files]);
 
+  const showConsole = isInternalUiVisible();
   const tabItems: { id: PanelTab; label: string; icon: string; count?: number }[] = [
     { id: 'preview', label: 'Onizleme', icon: '▶' },
-    { id: 'console', label: 'Konsol', icon: '>', count: activities?.length },
+    // Konsol hidden for end users (issue #393). Toggle via ?debug=1, localStorage
+    // akis_debug=true, or VITE_SHOW_INTERNAL_UI env at build.
+    ...(showConsole ? [{ id: 'console' as const, label: 'Konsol', icon: '>', count: activities?.length }] : []),
     { id: 'files', label: 'Dosyalar', icon: '📁', count: files ? Object.keys(files).length : 0 },
   ];
 
