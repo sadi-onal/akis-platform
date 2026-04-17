@@ -186,6 +186,19 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
   // stale entries for users who never reached createSession.
   const discoveredTasksCache = deps.taskCache ?? new Map<string, RealDiscoveredTask[]>();
 
+  /**
+   * Ownership gate — returns 404 (not 403) when the session exists but
+   * belongs to someone else, matching how /pipelines handles the same
+   * concern and preventing probe-by-ID info leaks.
+   */
+  function assertSessionOwnership(request: unknown, sessionId: string): void {
+    const userId = getUserId(request);
+    const session = sessionManager.getSession(sessionId);
+    if (!session || session.userId !== userId) {
+      throw httpError('Oturum bulunamadi', 404);
+    }
+  }
+
   return {
     /** POST /discover — Analyze repo and discover tasks */
     async discover(request: unknown) {
@@ -308,6 +321,7 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
     async startSession(request: unknown) {
       const userId = getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
+      assertSessionOwnership(request, id);
 
       try {
         const session = sessionManager.startSession(id);
@@ -332,8 +346,8 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
 
     /** GET /session/:id — Get session status */
     async getSession(request: unknown) {
-      getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
+      assertSessionOwnership(request, id);
 
       const session = sessionManager.getSession(id);
       if (!session) throw httpError('Oturum bulunamadi', 404);
@@ -344,8 +358,8 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
 
     /** GET /session/:id/progress — Current task + time remaining */
     async getProgress(request: unknown) {
-      getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
+      assertSessionOwnership(request, id);
 
       const session = sessionManager.getSession(id);
       if (!session) throw httpError('Oturum bulunamadi', 404);
@@ -402,8 +416,8 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
 
     /** POST /session/:id/pause — Pause session */
     async pauseSession(request: unknown) {
-      getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
+      assertSessionOwnership(request, id);
 
       try {
         const session = sessionManager.pauseSession(id);
@@ -418,8 +432,8 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
 
     /** POST /session/:id/resume — Resume session */
     async resumeSession(request: unknown) {
-      getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
+      assertSessionOwnership(request, id);
 
       try {
         const session = sessionManager.resumeSession(id);
@@ -434,8 +448,8 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
 
     /** POST /session/:id/cancel — Cancel session */
     async cancelSession(request: unknown) {
-      getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
+      assertSessionOwnership(request, id);
 
       try {
         const summary = sessionManager.endSession(id);
@@ -458,8 +472,8 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
 
     /** GET /session/:id/report — Final session report */
     async getReport(request: unknown) {
-      getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
+      assertSessionOwnership(request, id);
 
       const session = sessionManager.getSession(id);
       if (!session) throw httpError('Oturum bulunamadi', 404);
