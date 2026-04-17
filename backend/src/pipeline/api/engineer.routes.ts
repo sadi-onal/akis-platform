@@ -22,7 +22,9 @@ import {
   SessionStateError,
 } from '../core/session/index.js';
 import type { SelectedTask, EngineerSession as RealSession } from '../core/session/index.js';
+import type { EngineerSessionRunner } from '../core/session/EngineerSessionRunner.js';
 import type { GitHubServiceLike } from '../core/pipeline-factory.js';
+import { logger } from '../../lib/logger.js';
 
 // ─── Request Types ──────────────────────────────────
 
@@ -62,6 +64,8 @@ export interface SessionTaskResponse {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'skipped';
   criticScore: number | null;
   timeSpentSeconds: number;
+  /** Human-readable description from TaskDiscoveryService, if the task had one. */
+  description?: string;
 }
 
 export interface SessionResponse {
@@ -105,6 +109,12 @@ export interface EngineerRouteDeps {
   taskDiscovery: TaskDiscoveryService;
   sessionManager: SessionManager;
   githubService: GitHubServiceLike;
+  /**
+   * Optional session runner — when present, /session/:id/start also kicks
+   * off the actual Scribe→Proto→Trace pipeline per queued task in the
+   * background. Omitted in unit tests that only exercise the HTTP layer.
+   */
+  sessionRunner?: EngineerSessionRunner;
 }
 
 // ─── Helpers ────────────────────────────────────────
@@ -148,6 +158,7 @@ function mapSessionToResponse(session: RealSession, timeRemainingSeconds: number
         if (!completed) return 0;
         return Math.floor((completed.completedAt.getTime() - completed.startedAt.getTime()) / 1000);
       })(),
+      description: t.description,
     })),
     timeBudgetMinutes: session.timeBudgetMinutes,
     timeRemainingSeconds: Math.floor(timeRemainingSeconds * 60),
@@ -163,7 +174,7 @@ function httpError(message: string, statusCode: number): Error {
 // ─── Route Creators ─────────────────────────────────
 
 export function createEngineerRoutes(deps: EngineerRouteDeps) {
-  const { getUserId, taskDiscovery, sessionManager, githubService } = deps;
+  const { getUserId, taskDiscovery, sessionManager, githubService, sessionRunner } = deps;
 
   return {
     /** POST /discover — Analyze repo and discover tasks */
@@ -254,6 +265,9 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
           category: discovered?.category ?? 'feature',
           estimatedMinutes: discovered?.estimatedMinutes ?? 15,
           status: 'queued' as const,
+          // Description flows through the session so EngineerSessionRunner's
+          // taskToScribeInput mapper can hand Scribe more than just a title.
+          description: discovered?.description,
         };
       });
 
@@ -276,13 +290,23 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
       }
     },
 
-    /** POST /session/:id/start — Start session timer */
+    /** POST /session/:id/start — Start session timer and trigger pipeline runs */
     async startSession(request: unknown) {
-      getUserId(request);
+      const userId = getUserId(request);
       const { id } = (request as { params: { id: string } }).params;
 
       try {
         const session = sessionManager.startSession(id);
+
+        // Kick off the actual pipeline work in the background. The runner
+        // observes that the session is already 'running' and skips its own
+        // startSession call, then drives each task to a terminal stage.
+        if (sessionRunner) {
+          sessionRunner.run(id, userId).catch((err) => {
+            logger.error({ err, sessionId: id, userId }, '[engineer.startSession] runner.run rejected');
+          });
+        }
+
         const timeInfo = sessionManager.getTimeRemaining(id);
         return { session: mapSessionToResponse(session, timeInfo.minutes) };
       } catch (err) {
@@ -331,6 +355,7 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
           status: 'running',
           criticScore: null,
           timeSpentSeconds: 0,
+          description: currentTask.description,
         } : null,
         completedTasks: completedTasks.map((t) => ({
           id: t.taskId,
@@ -343,6 +368,7 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
             if (!c) return 0;
             return Math.floor((c.completedAt.getTime() - c.startedAt.getTime()) / 1000);
           })(),
+          description: t.description,
         })),
         queuedTasks: queuedTasks.map((t) => ({
           id: t.taskId,
@@ -351,6 +377,7 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
           status: 'queued' as const,
           criticScore: null,
           timeSpentSeconds: 0,
+          description: t.description,
         })),
         timeRemainingSeconds,
         elapsedSeconds: Math.floor(elapsedMinutes * 60),
@@ -436,7 +463,7 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
             id: t.taskId,
             title: t.title,
             category: t.category,
-            description: '',
+            description: t.description ?? '',
             status: t.status,
             criticScore: completed?.criticScore ?? null,
             timeSpentSeconds: completed

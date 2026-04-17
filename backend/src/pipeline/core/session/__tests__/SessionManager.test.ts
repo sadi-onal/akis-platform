@@ -37,6 +37,33 @@ describe('SessionManager', () => {
     manager = new SessionManager();
   });
 
+  // 0. SelectedTask.description is preserved (optional field, used downstream by
+  //    EngineerSessionRunner's taskToScribeInput mapper for richer specs).
+  it('preserves optional task description across session lifecycle', () => {
+    const tasks: SelectedTask[] = [
+      makeTask({
+        taskId: 'desc-1',
+        title: 'Fix login form validation',
+        description: 'Empty password silently accepted; should show error.',
+      }),
+    ];
+    const session = manager.createSession({
+      userId: 'user-1',
+      owner: 'acme',
+      repo: 'webapp',
+      tasks,
+      timeBudgetMinutes: 60,
+    });
+    assert.equal(
+      session.selectedTasks[0].description,
+      'Empty password silently accepted; should show error.',
+      'description kept on the stored task',
+    );
+    // And survives a round-trip through getSession.
+    const fetched = manager.getSession(session.id);
+    assert.equal(fetched?.selectedTasks[0].description, tasks[0].description);
+  });
+
   // 1. creates session with valid params
   it('creates session with valid params', () => {
     const tasks = makeTasks(3);

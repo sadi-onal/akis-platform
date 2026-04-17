@@ -29,6 +29,12 @@ export interface SelectedTask {
   category: string;
   estimatedMinutes: number;
   status: TaskStatus;
+  /**
+   * Optional human-readable description from TaskDiscoveryService. Propagated
+   * through the session so EngineerSessionRunner can feed it to Scribe as
+   * richer context than the title alone.
+   */
+  description?: string;
 }
 
 export interface CompletedTask extends SelectedTask {

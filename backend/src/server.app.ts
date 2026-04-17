@@ -421,6 +421,7 @@ export async function buildApp() {
       devUserId,
       aiService,
       githubService: pipelineGitHubService,
+      orchestrator: pipelineOrchestrator,
     }),
     { prefix: '/api/engineer' },
   );
