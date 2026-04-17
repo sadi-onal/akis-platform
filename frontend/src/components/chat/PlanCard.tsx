@@ -99,29 +99,29 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
       {/* Body */}
       {(isActive || expanded) && (
         <div className="space-y-3 border-t border-ak-border-subtle px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200">
-          {/* Summary */}
-          <p className="text-xs leading-relaxed text-ak-text-secondary">{plan.summary}</p>
+          {/* Summary — bumped from text-xs for readability (issue #392) */}
+          <p className="text-sm leading-relaxed text-ak-text-secondary">{plan.summary}</p>
 
           {/* Features / Modified Files */}
           {!isChangeRequest && 'features' in plan ? (
             <div>
-              <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-ak-text-tertiary">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-widest text-ak-text-tertiary">
                 Özellikler
               </h4>
               <div className="grid gap-2 sm:grid-cols-2">
                 {(plan as UserFriendlyPlan).features.map((f, i) => (
                   <div
                     key={i}
-                    className="rounded-lg border border-ak-border-subtle bg-ak-surface/60 p-2.5 backdrop-blur-sm transition-colors hover:border-ak-primary/30"
+                    className="rounded-lg border border-ak-border-subtle bg-ak-surface/60 p-3 backdrop-blur-sm transition-colors hover:border-ak-primary/30"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-md bg-ak-primary/15 text-[10px] font-semibold text-ak-primary">
+                      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-ak-primary/15 text-[11px] font-semibold text-ak-primary">
                         {i + 1}
                       </span>
-                      <span className="text-xs font-semibold leading-snug text-ak-text-primary">{f.name}</span>
+                      <span className="text-sm font-semibold leading-snug text-ak-text-primary">{f.name}</span>
                     </div>
                     {f.description && (
-                      <p className="mt-1 text-[11px] text-ak-text-tertiary">{f.description}</p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-ak-text-secondary">{f.description}</p>
                     )}
                   </div>
                 ))}
@@ -162,14 +162,14 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
           {/* Tech Choices — chip badges */}
           {'techChoices' in plan && (plan as UserFriendlyPlan).techChoices.length > 0 && (
             <div>
-              <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-ak-text-tertiary">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-widest text-ak-text-tertiary">
                 Teknik Seçimler
               </h4>
               <div className="flex flex-wrap gap-1.5">
                 {(plan as UserFriendlyPlan).techChoices.map((t, i) => (
                   <span
                     key={i}
-                    className="rounded-full border border-ak-border-subtle bg-ak-surface-2/60 px-2.5 py-0.5 text-[11px] font-medium text-ak-text-secondary"
+                    className="rounded-full border border-ak-primary/20 bg-ak-primary/10 px-3 py-1 text-xs font-medium text-ak-primary"
                   >
                     {t}
                   </span>
@@ -181,27 +181,27 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
           {/* Stats row */}
           <div className="flex flex-wrap items-center gap-2">
             {'estimatedFiles' in plan && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-ak-surface-2/40 px-2.5 py-1">
-                <svg className="h-3 w-3 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="flex items-center gap-1.5 rounded-lg bg-ak-surface-2/40 px-2.5 py-1.5">
+                <svg className="h-3.5 w-3.5 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
-                <span className="text-[11px] text-ak-text-secondary">
+                <span className="text-xs text-ak-text-secondary">
                   ~{(plan as UserFriendlyPlan).estimatedFiles} dosya
                 </span>
               </div>
             )}
-            <div className="flex items-center gap-1.5 rounded-lg bg-ak-surface-2/40 px-2.5 py-1">
-              <svg className="h-3 w-3 text-ak-trace" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <div className="flex items-center gap-1.5 rounded-lg bg-ak-surface-2/40 px-2.5 py-1.5">
+              <svg className="h-3.5 w-3.5 text-ak-trace" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="text-[11px] text-ak-text-secondary">
+              <span className="text-xs text-ak-text-secondary">
                 {plan.requiresTests ? 'Test yazılacak' : 'Test gerekmiyor'}
               </span>
             </div>
           </div>
 
           {plan.testRationale && (
-            <p className="text-[11px] italic text-ak-text-tertiary">{plan.testRationale}</p>
+            <p className="text-xs leading-relaxed italic text-ak-text-tertiary">{plan.testRationale}</p>
           )}
         </div>
       )}
