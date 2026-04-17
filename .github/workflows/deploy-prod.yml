@@ -319,19 +319,26 @@ jobs:
             echo ""
             echo "=== DB volume safety gate ==="
             # Prevent silent data loss during the flat → edge-split architecture migration.
-            # New compose expects volume 'akis-prod_prod_pgdata'. If only a legacy
-            # volume with data exists, a fresh `docker compose up` would create an
-            # empty DB and orphan production data. Halt and require manual migration.
-            NEW_VOL=$(docker volume ls -q --filter name='^akis-prod_prod_pgdata$')
+            # The new compose pins the volume name via `name: akis-prod-pgdata`
+            # (see devops/compose/docker-compose.prod.yml). If only the legacy
+            # `akis-staging-pgdata` volume exists, a fresh `docker compose up`
+            # would create an empty DB and orphan production data. Halt and
+            # require manual migration.
+            #
+            # Name sync note: when docker-compose.prod.yml's top-level
+            # `volumes.prod_pgdata.name` changes, update NEW_VOL_NAME below.
+            NEW_VOL_NAME='akis-prod-pgdata'
+            NEW_VOL=$(docker volume ls -q --filter "name=^${NEW_VOL_NAME}$")
             LEGACY_VOL=$(docker volume ls -q --filter name='^akis-staging-pgdata$')
             if [ -z "$NEW_VOL" ] && [ -n "$LEGACY_VOL" ]; then
               echo "::error::DB volume migration required."
               echo "  Found: akis-staging-pgdata (legacy, has production data)"
-              echo "  Missing: akis-prod_prod_pgdata (new architecture)"
+              echo "  Missing: ${NEW_VOL_NAME} (new architecture)"
               echo "Running the new compose would create an empty DB and orphan live data."
               echo "Resolve by following devops/runbooks/db-volume-migration.md"
               exit 1
             fi
+            echo "NEW_VOL=${NEW_VOL:-<none>}  LEGACY_VOL=${LEGACY_VOL:-<none>}"
 
             echo ""
             echo "=== Port 80/443 binding check (preflight) ==="

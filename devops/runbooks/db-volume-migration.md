@@ -1,4 +1,4 @@
-# DB Volume Migration: `akis-staging-pgdata` → `akis-prod_prod_pgdata`
+# DB Volume Migration: `akis-staging-pgdata` → `akis-prod-pgdata`
 
 ## When this applies
 
@@ -8,7 +8,7 @@ gate halted with:
 ```
 DB volume migration required.
   Found: akis-staging-pgdata (legacy, has production data)
-  Missing: akis-prod_prod_pgdata (new architecture)
+  Missing: akis-prod-pgdata (new architecture)
 ```
 
 ## Background
@@ -20,13 +20,14 @@ edge-split layout:
 - `/opt/akis/prod/docker-compose.yml` — prod app + db
 - `/opt/akis/docker-compose.edge.yml` — edge Caddy (ports 80/443)
 
-The new prod compose declares volume `prod_pgdata` which Docker Compose
-scopes to `akis-prod_prod_pgdata`. The legacy flat compose (also named
-`akis-prod`) was historically seeded from a staging snapshot and carries
-the volume name `akis-staging-pgdata`.
+The new prod compose declares volume `prod_pgdata` with an explicit
+`name: akis-prod-pgdata` override (see
+`devops/compose/docker-compose.prod.yml`). The legacy flat compose was
+historically seeded from a staging snapshot and carries the volume name
+`akis-staging-pgdata`.
 
 Running the new compose without migrating the data would create an empty
-`akis-prod_prod_pgdata` and orphan the live production data.
+`akis-prod-pgdata` and orphan the live production data.
 
 ## Prerequisites
 
@@ -50,11 +51,11 @@ docker compose -f /opt/akis/docker-compose.yml down
 
 # 3. Create the new named volume and load the dump into it via a
 #    throwaway postgres container. The volume name must match what the
-#    new compose expects: akis-prod_prod_pgdata.
-docker volume create akis-prod_prod_pgdata
+#    new compose expects: akis-prod-pgdata.
+docker volume create akis-prod-pgdata
 
 docker run --rm \
-  -v akis-prod_prod_pgdata:/var/lib/postgresql/data \
+  -v akis-prod-pgdata:/var/lib/postgresql/data \
   -v /opt/akis/backups:/backups:ro \
   -e POSTGRES_USER=akis \
   -e POSTGRES_PASSWORD="$(grep ^POSTGRES_PASSWORD /opt/akis/prod/.env | cut -d= -f2-)" \
@@ -69,7 +70,7 @@ docker run --rm \
   '
 
 # 4. Re-run the Deploy workflow. The safety gate will now pass because
-#    akis-prod_prod_pgdata exists.
+#    akis-prod-pgdata exists.
 ```
 
 ## Rollback
