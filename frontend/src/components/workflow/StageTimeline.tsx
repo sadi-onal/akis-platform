@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { cn } from '../../utils/cn';
 import { formatConfidence } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
@@ -185,6 +186,25 @@ export function StageTimeline({ workflow, onApprove, onReject, onRetry, activiti
     return null;
   });
 
+  // Respect the OS-level reduced-motion preference (issue #394): no animations at all
+  // if the user has explicitly asked for reduced motion in their system settings.
+  const reduced = useReducedMotion();
+  const fadeProps = reduced
+    ? {}
+    : {
+        initial: { opacity: 0, y: -4 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -4 },
+        transition: { duration: 0.22, ease: 'easeOut' as const },
+      };
+  const rowProps = reduced
+    ? {}
+    : {
+        initial: { opacity: 0, y: 6 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.18, ease: 'easeOut' as const },
+      };
+
   return (
     <div className="space-y-0">
       {STAGE_META.map((meta, idx) => {
@@ -194,7 +214,7 @@ export function StageTimeline({ workflow, onApprove, onReject, onRetry, activiti
         const hasContent = stage.status !== 'idle';
 
         return (
-          <div key={meta.key} className="relative">
+          <motion.div key={meta.key} className="relative" {...rowProps} layout={!reduced}>
             {/* Connector line */}
             {!isLast && (
               <div
@@ -252,37 +272,43 @@ export function StageTimeline({ workflow, onApprove, onReject, onRetry, activiti
               )}
             </button>
 
-            {/* Expanded content */}
-            {isExpanded && hasContent && (
-              <div className="ml-11 mt-1 mb-3 rounded-lg border border-ak-border bg-ak-surface p-4">
-                <StageContent
-                  stageKey={meta.key}
-                  stage={stage}
-                  workflow={workflow}
-                  onApprove={onApprove}
-                  onReject={onReject}
-                  onRetry={onRetry}
-                />
-                {stage.status === 'running' && meta.key !== 'approve' && (
-                  <>
-                    <ActivityLog
-                      activities={activities ?? []}
-                      currentStep={currentStep ?? null}
-                      isRunning={true}
-                      stageName={meta.key as 'scribe' | 'proto' | 'trace'}
-                      progress={progressByStage?.[meta.key]}
-                    />
-                    {isConnected === false && (
-                      <div className="text-xs opacity-40 flex items-center gap-1 mt-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                        <span>Yeniden bağlanıyor...</span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+            {/* Expanded content — fades in/out smoothly when user toggles or stage transitions */}
+            <AnimatePresence initial={false}>
+              {isExpanded && hasContent && (
+                <motion.div
+                  key={`content-${meta.key}`}
+                  className="ml-11 mt-1 mb-3 rounded-lg border border-ak-border bg-ak-surface p-4 overflow-hidden"
+                  {...fadeProps}
+                >
+                  <StageContent
+                    stageKey={meta.key}
+                    stage={stage}
+                    workflow={workflow}
+                    onApprove={onApprove}
+                    onReject={onReject}
+                    onRetry={onRetry}
+                  />
+                  {stage.status === 'running' && meta.key !== 'approve' && (
+                    <>
+                      <ActivityLog
+                        activities={activities ?? []}
+                        currentStep={currentStep ?? null}
+                        isRunning={true}
+                        stageName={meta.key as 'scribe' | 'proto' | 'trace'}
+                        progress={progressByStage?.[meta.key]}
+                      />
+                      {isConnected === false && (
+                        <div className="text-xs opacity-40 flex items-center gap-1 mt-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                          <span>Yeniden bağlanıyor...</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         );
       })}
     </div>
