@@ -1803,14 +1803,14 @@ function UsageTab() {
           {/* Remaining */}
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-lg bg-ak-surface-2 p-3 text-center">
-              <p className="text-[10px] text-ak-text-tertiary">Kalan Is (Bugun)</p>
-              <p className={cn('text-lg font-bold', planUsage.remaining.jobs <= 0 ? 'text-red-400' : 'text-ak-primary')}>
+              <p className="text-xs text-ak-text-secondary">Kalan Is (Bugun)</p>
+              <p className={cn('text-xl font-bold', planUsage.remaining.jobs <= 0 ? 'text-red-400' : 'text-ak-primary')}>
                 {planUsage.remaining.jobs}
               </p>
             </div>
             <div className="rounded-lg bg-ak-surface-2 p-3 text-center">
-              <p className="text-[10px] text-ak-text-tertiary">Kalan Token (Ay)</p>
-              <p className={cn('text-lg font-bold', planUsage.remaining.tokens <= 0 ? 'text-red-400' : 'text-blue-400')}>
+              <p className="text-xs text-ak-text-secondary">Kalan Token (Ay)</p>
+              <p className={cn('text-xl font-bold', planUsage.remaining.tokens <= 0 ? 'text-red-400' : 'text-blue-400')}>
                 {formatTokens(planUsage.remaining.tokens)}
               </p>
             </div>
@@ -1822,7 +1822,7 @@ function UsageTab() {
       {data && (
         <>
           <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-            <h3 className="mb-3 text-xs font-semibold text-ak-text-primary">Detayli Dagilim</h3>
+            <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">Detayli Dagilim</h3>
             <div className="space-y-2">
               <BreakdownRow label={t('settings.usage.inputTokens')} value={formatTokens(data.usage.inputTokens)} />
               <BreakdownRow label={t('settings.usage.outputTokens')} value={formatTokens(data.usage.outputTokens)} />
@@ -1837,16 +1837,16 @@ function UsageTab() {
           {/* Daily Activity */}
           {data.daily && data.daily.length > 0 && (
             <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-              <h3 className="mb-3 text-xs font-semibold text-ak-text-primary">Gunluk Aktivite</h3>
+              <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">Gunluk Aktivite</h3>
               <DailyChart days={data.daily} />
               <div className="mt-3 space-y-1.5">
                 {data.daily.slice().reverse().map((d) => (
-                  <div key={d.date} className="flex items-center justify-between rounded-lg bg-ak-surface-2 px-3 py-1.5">
-                    <span className="text-[11px] text-ak-text-secondary">{new Date(d.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}</span>
+                  <div key={d.date} className="flex items-center justify-between rounded-lg bg-ak-surface-2 px-3 py-2">
+                    <span className="text-xs text-ak-text-secondary">{new Date(d.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}</span>
                     <div className="flex items-center gap-4">
-                      <span className="text-[10px] font-mono text-ak-text-tertiary">{d.jobs} is</span>
-                      <span className="text-[10px] font-mono text-blue-400">{formatTokens(d.tokens)}</span>
-                      <span className="text-[10px] font-mono text-emerald-400">${d.cost.toFixed(4)}</span>
+                      <span className="text-xs font-mono text-ak-text-secondary">{d.jobs} is</span>
+                      <span className="text-xs font-mono text-blue-400">{formatTokens(d.tokens)}</span>
+                      <span className="text-xs font-mono text-emerald-400">${d.cost.toFixed(4)}</span>
                     </div>
                   </div>
                 ))}
@@ -1871,9 +1871,9 @@ function DailyChart({ days }: { days: Array<{ date: string; tokens: number; cost
               className="w-full rounded-t bg-ak-primary/60 hover:bg-ak-primary transition-colors cursor-default"
               style={{ height: `${h}%`, minHeight: 4 }}
             />
-            <span className="mt-1 text-[8px] text-ak-text-tertiary">{new Date(d.date).getDate()}</span>
+            <span className="mt-1 text-[10px] text-ak-text-secondary">{new Date(d.date).getDate()}</span>
             {/* Tooltip */}
-            <div className="pointer-events-none absolute -top-10 left-1/2 z-10 hidden -translate-x-1/2 rounded bg-ak-bg px-2 py-1 text-[9px] text-ak-text-primary shadow-lg border border-ak-border group-hover:block whitespace-nowrap">
+            <div className="pointer-events-none absolute -top-10 left-1/2 z-10 hidden -translate-x-1/2 rounded bg-ak-bg px-2 py-1 text-xs text-ak-text-primary shadow-lg border border-ak-border group-hover:block whitespace-nowrap">
               {formatTokens(d.tokens)} token &middot; {d.jobs} is
             </div>
           </div>
