@@ -36,23 +36,34 @@ function computeTextareaMaxHeight(expanded: boolean): number {
 
 let _attachId = 0;
 
+// Height in pixels above which we consider the textarea "overflowing" the collapsed
+// view and start offering the expand toggle. Below this threshold the expand button is
+// hidden so it doesn't clutter the UI when the user is writing a one-line prompt.
+// Issue #391 / BUG-11: "expand butonu gerektiğinde çıksın sadece".
+const EXPAND_THRESHOLD_PX = 140;
+
 export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, placeholder }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastSendAtRef = useRef<number>(0);
 
   // Auto-resize textarea; max-height is viewport-aware and grows when expanded.
+  // Also tracks whether the content has grown past EXPAND_THRESHOLD_PX so the
+  // expand button can be hidden until it's actually useful.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     const maxH = computeTextareaMaxHeight(expanded);
     el.style.maxHeight = `${maxH}px`;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, maxH)}px`;
+    const next = Math.min(el.scrollHeight, maxH);
+    el.style.height = `${next}px`;
+    setIsOverflowing(el.scrollHeight > EXPAND_THRESHOLD_PX);
   }, [value, expanded]);
 
   // Focus on mount and when enabled
@@ -252,7 +263,9 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
           aria-hidden
         />
 
-        {/* Expand / collapse toggle */}
+        {/* Expand / collapse toggle — only render when content actually overflows
+            the collapsed view, or the user is already in expanded mode.
+            Issue #391: "büyütme buttonu gerektiğinde çıksın sadece". */}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -265,6 +278,8 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
             'dark:hover:bg-white/[0.08] dark:hover:text-gray-300',
             'transition-colors duration-150 mr-2',
             expanded && 'self-end',
+            // Hidden until content overflows (expanded view always shows the toggle so user can collapse).
+            !expanded && !isOverflowing && 'hidden',
           )}
         >
           {expanded ? (
@@ -295,12 +310,14 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
             onPaste={handlePaste}
             disabled={disabled || isSending}
             placeholder={placeholder ?? 'Projenizi anlatın...'}
-            rows={1}
+            rows={3}
             aria-label="Mesaj yaz"
             className={cn(
-              'w-full border-none outline-none resize-none text-sm bg-transparent placeholder:text-gray-400',
+              'w-full border-none outline-none resize-none text-sm leading-relaxed bg-transparent placeholder:text-gray-400',
               'dark:text-white dark:placeholder:text-gray-500',
-              expanded ? 'min-h-[240px]' : 'min-h-[24px]',
+              // Min-height bumped from 24px → 72px (issue #391 / BUG-11: "mesaj yazma yeri çok ufak").
+              // Users now see roughly 3 lines of breathing room even for a fresh/empty input.
+              expanded ? 'min-h-[240px]' : 'min-h-[72px]',
               (disabled || isSending) && 'cursor-not-allowed opacity-70 saturate-50',
             )}
           />
