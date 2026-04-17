@@ -110,6 +110,13 @@ export interface EngineerRouteDeps {
   sessionManager: SessionManager;
   githubService: GitHubServiceLike;
   /**
+   * Optional per-factory cache for discovered tasks. Injected in tests so
+   * behaviour can be observed; in production `createEngineerRoutes` builds
+   * its own Map so two engineer plugins in the same process do not share
+   * state.
+   */
+  taskCache?: Map<string, RealDiscoveredTask[]>;
+  /**
    * Optional session runner — when present, /session/:id/start also kicks
    * off the actual Scribe→Proto→Trace pipeline per queued task in the
    * background. Omitted in unit tests that only exercise the HTTP layer.
@@ -137,9 +144,6 @@ function mapDiscoveredTask(t: RealDiscoveredTask): DiscoveredTaskResponse {
     priority: t.priority,
   };
 }
-
-// Keep a local cache of discovered tasks per user for session creation
-const discoveredTasksCache = new Map<string, RealDiscoveredTask[]>();
 
 function mapSessionToResponse(session: RealSession, timeRemainingSeconds: number): SessionResponse {
   return {
@@ -175,6 +179,12 @@ function httpError(message: string, statusCode: number): Error {
 
 export function createEngineerRoutes(deps: EngineerRouteDeps) {
   const { getUserId, taskDiscovery, sessionManager, githubService, sessionRunner } = deps;
+
+  // Per-factory cache: discover writes, createSession reads-and-deletes.
+  // Kept inside the closure (not at module scope) so each engineer plugin
+  // instance has its own state and long-running processes don't accumulate
+  // stale entries for users who never reached createSession.
+  const discoveredTasksCache = deps.taskCache ?? new Map<string, RealDiscoveredTask[]>();
 
   return {
     /** POST /discover — Analyze repo and discover tasks */
@@ -279,6 +289,10 @@ export function createEngineerRoutes(deps: EngineerRouteDeps) {
           tasks: selectedTasks,
           timeBudgetMinutes: body.timeBudgetMinutes,
         });
+
+        // Discovered tasks have been frozen into the session — drop the
+        // cache entry so idle discover→no-session flows do not accumulate.
+        discoveredTasksCache.delete(cacheKey);
 
         const timeInfo = sessionManager.getTimeRemaining(session.id);
         return { session: mapSessionToResponse(session, timeInfo.minutes) };
