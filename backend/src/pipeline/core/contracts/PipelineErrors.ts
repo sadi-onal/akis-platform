@@ -193,9 +193,15 @@ export function createPipelineError(
   };
 }
 
+// In tests, retry delays of 5s/15s/30s waste ~50s per retry-path test and
+// bloat CI by several minutes. Zero them in test mode — retry *behavior*
+// (attempt count, failure handling) is what tests assert on, not wall-clock
+// spacing. Anything outside test mode keeps the production backoff.
+const IS_TEST_MODE = process.env.NODE_ENV === 'test';
+
 export const RETRY_CONFIG = {
   maxRetries: 3,
-  backoffDelays: [5_000, 15_000, 30_000],
+  backoffDelays: IS_TEST_MODE ? [0, 0, 0] : [5_000, 15_000, 30_000],
   specValidationMaxRetries: 2,
   stageTimeoutMs: 5 * 60 * 1000,
   /** Trace reads files from GitHub + generates many tests — needs more time */

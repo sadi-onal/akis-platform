@@ -12,15 +12,15 @@
 name: Deploy to Production
 
 on:
-  # DISABLED: Auto-deploy on release publish
-  # release:
-  #   types: [published]
-
-  # DISABLED: Auto-deploy on semver tags
-  # push:
-  #   tags:
-  #     - 'v[0-9]+.[0-9]+.[0-9]+'
-  #     - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  # Auto-deploy when CI succeeds on main.
+  # - Only fires after the CI workflow finishes on main.
+  # - The first deploy job guards on `workflow_run.conclusion == success`
+  #   so a failed CI never reaches the server.
+  # - Manual dispatch is still available for ad-hoc / rollback deploys.
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
 
   workflow_dispatch:
     inputs:
@@ -46,7 +46,12 @@ jobs:
     name: Validate Release
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+    # workflow_run fires on every CI completion (success OR failure).
+    # Skip auto-deploy when CI failed; manual dispatch always runs.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
     outputs:
       version: ${{ steps.version.outputs.version }}
       commit: ${{ steps.version.outputs.commit }}
@@ -571,9 +576,23 @@ jobs:
             echo "Commit: ${{ needs.validate.outputs.commit }}"
             echo "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo ""
-            echo "=== Container Logs ==="
+            echo "=== Container status ==="
             ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
-              "docker compose -f /opt/akis/docker-compose.yml logs --tail=200" 2>&1 || echo "Failed to get logs"
+              "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" 2>&1 || echo "Failed to list containers"
+            echo ""
+            echo "=== Prod stack logs (/opt/akis/prod) ==="
+            # Edge-split layout: app + db live under /opt/akis/prod
+            ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+              "cd /opt/akis/prod && docker compose logs --tail=200" 2>&1 || echo "Failed to get prod stack logs"
+            echo ""
+            echo "=== Backend-only logs (focused on startup errors) ==="
+            # Backend is where boot-time failures manifest (env validation, DB connect, etc.)
+            ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+              "docker logs akis-prod-backend --tail=100 2>&1" || echo "Failed to get backend logs"
+            echo ""
+            echo "=== Edge proxy logs ==="
+            ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} \
+              "docker logs akis-edge-caddy --tail=50 2>&1" || echo "Failed to get edge logs"
             echo ""
             echo "=== Health Check Results ==="
             curl -s https://akisflow.com/health || echo "Health check failed"

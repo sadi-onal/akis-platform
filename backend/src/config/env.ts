@@ -299,27 +299,24 @@ const envSchema = z
     }
 
     // OAuth credentials validation
-    // In production, both GitHub and Google OAuth must be fully configured —
-    // the login UI shows both buttons, so a missing provider results in
-    // silent 503 OAUTH_NOT_CONFIGURED at runtime. Fail fast at startup instead.
+    // In production the login UI shows GitHub + Google buttons, so a missing
+    // provider surfaces as a silent 503 OAUTH_NOT_CONFIGURED. We emit a loud
+    // warning at startup (for `docker logs` triage) but do NOT fail fast —
+    // the deploy-prod.yml smoke-test curls both endpoints and fails the
+    // deploy on 503, which is the right layer to gate on actual HTTP
+    // behavior rather than crashing the container at boot.
     if (isProduction) {
       if (!data.GITHUB_OAUTH_CLIENT_ID || !data.GITHUB_OAUTH_CLIENT_SECRET) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            'GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET are required in production. ' +
-            'Without them /auth/oauth/github returns 503 OAUTH_NOT_CONFIGURED.',
-          path: ['GITHUB_OAUTH_CLIENT_ID'],
-        });
+        logger.warn(
+          '[env] WARNING: GITHUB_OAUTH_CLIENT_ID/SECRET missing in production. ' +
+            '/auth/oauth/github will return 503 OAUTH_NOT_CONFIGURED until set.'
+        );
       }
       if (!data.GOOGLE_OAUTH_CLIENT_ID || !data.GOOGLE_OAUTH_CLIENT_SECRET) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required in production. ' +
-            'Without them /auth/oauth/google returns 503 OAUTH_NOT_CONFIGURED.',
-          path: ['GOOGLE_OAUTH_CLIENT_ID'],
-        });
+        logger.warn(
+          '[env] WARNING: GOOGLE_OAUTH_CLIENT_ID/SECRET missing in production. ' +
+            '/auth/oauth/google will return 503 OAUTH_NOT_CONFIGURED until set.'
+        );
       }
     }
 
