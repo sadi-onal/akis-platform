@@ -80,8 +80,16 @@ const envSchema = z
     // OAuth credentials for user login (separate from GitHub App credentials)
     GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
     GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),
-    GITHUB_OAUTH_CALLBACK_URL: z.string().url().optional(),
-    APP_PUBLIC_URL: z.string().url().optional(),
+    // Preprocess empty string → undefined so compose `${VAR:-}` defaults don't
+    // fail z.url() and crash the boot (observed in prod deploy 2026-04-17).
+    GITHUB_OAUTH_CALLBACK_URL: z.preprocess(
+      (val) => (val === '' || val === undefined ? undefined : val),
+      z.string().url().optional()
+    ),
+    APP_PUBLIC_URL: z.preprocess(
+      (val) => (val === '' || val === undefined ? undefined : val),
+      z.string().url().optional()
+    ),
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
     // Atlassian OAuth 2.0 (3LO) Configuration

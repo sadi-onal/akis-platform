@@ -355,6 +355,26 @@ jobs:
             sudo ss -tlnp | grep ':443 ' || echo "  (none)"
           EOF
 
+      - name: Archive legacy flat compose (one-time migration guard)
+        run: |
+          # Legacy flat compose at /opt/akis/docker-compose.yml + .override.yml
+          # shared the same `name: akis-prod` project label as the new
+          # edge-split stack at /opt/akis/prod/. Result: `docker compose up -d`
+          # from /opt/akis/prod would find the existing containers, skip
+          # recreation, and leave the backend on the old single-network
+          # topology — unable to reach the edge Caddy. Observed in prod on
+          # 2026-04-17 as a 35m deploy that ended in 502s. Rename once so the
+          # old stack can never auto-start again.
+          ssh -i ~/.ssh/deploy_key ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} << 'EOF'
+            set -e
+            for f in /opt/akis/docker-compose.yml /opt/akis/docker-compose.override.yml; do
+              if [ -f "$f" ]; then
+                mv "$f" "${f}.legacy-disabled-$(date -u +%Y%m%d)"
+                echo "Archived: $f"
+              fi
+            done
+          EOF
+
       - name: Stop conflicting services
         run: |
           echo "=== Checking and stopping services that may conflict with port 80/443 ==="

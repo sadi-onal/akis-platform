@@ -69,7 +69,9 @@ services:
       # Without them, getProviderConfig() returns null and /auth/oauth/* fails.
       GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
       GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
-      GITHUB_OAUTH_CALLBACK_URL: ${GITHUB_OAUTH_CALLBACK_URL:-}
+      # Callback URL is derived at runtime from FRONTEND_URL
+      # (see services/auth/OAuthService#getProviderConfig). Injecting an empty
+      # string here used to crash zod URL validation on boot.
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://akisflow.com}

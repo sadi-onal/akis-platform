@@ -246,3 +246,33 @@ describe('MCP base URL preprocess', () => {
     assert.throws(() => mcpUrlSchema.parse('not-a-url'));
   });
 });
+
+// ─── OAuth Callback / public URL preprocess ─────────────────────────
+// Regression guard for 2026-04-17 prod outage: compose injected
+// `GITHUB_OAUTH_CALLBACK_URL=""` (empty string via `${VAR:-}`) which a plain
+// `z.string().url().optional()` treated as an invalid URL and crashed boot.
+// Fix: same preprocess pattern as MCP base URLs.
+
+describe('OAuth URL preprocess', () => {
+  const oauthUrlSchema = z.preprocess(
+    (val) => (val === '' || val === undefined ? undefined : val),
+    z.string().url().optional()
+  );
+
+  test('empty string becomes undefined (does not crash validation)', () => {
+    assert.strictEqual(oauthUrlSchema.parse(''), undefined);
+  });
+
+  test('undefined stays undefined', () => {
+    assert.strictEqual(oauthUrlSchema.parse(undefined), undefined);
+  });
+
+  test('valid https callback URL passes through', () => {
+    const url = 'https://akisflow.com/auth/oauth/github/callback';
+    assert.strictEqual(oauthUrlSchema.parse(url), url);
+  });
+
+  test('invalid URL string still rejects', () => {
+    assert.throws(() => oauthUrlSchema.parse('callback'));
+  });
+});
