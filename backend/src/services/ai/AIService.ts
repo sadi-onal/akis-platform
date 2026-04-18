@@ -188,6 +188,14 @@ export interface AIService {
   /** New structured methods */
   planTask(input: PlanInput): Promise<Plan>;
   generateWorkArtifact(input: WorkerInput): Promise<WorkerResult>;
+  /** Multimodal variant — throws IMAGE_MODEL_UNSUPPORTED when provider lacks vision (issue #402 step 3). */
+  generateMultimodalArtifact?(input: {
+    systemPrompt: string;
+    task: string;
+    images: readonly import('./multimodalClient.js').AnthropicImageBlock[];
+    maxTokens?: number;
+    modelOverride?: string;
+  }): Promise<WorkerResult>;
   reflectOnArtifact(input: ReflectionInput): Promise<Critique>;
   validateWithStrongModel(input: ValidationInput): Promise<ValidationResult>;
 
@@ -859,6 +867,69 @@ class RealAIService implements AIService {
         provider: this.config.provider,
         usage: response.usage,
         durationMs: response.durationMs,
+      },
+    };
+  }
+
+  /**
+   * Multimodal variant of {@link generateWorkArtifact} — sends user images +
+   * text to Anthropic's Messages API. Only Anthropic supports vision in the
+   * AKIS provider set; other providers throw `IMAGE_MODEL_UNSUPPORTED` so
+   * callers fall back to the text-only path.
+   *
+   * Issue #402 step 3. Wraps the standalone {@link callAnthropicMultimodal}
+   * helper shipped in #416 and plugs it into AIServiceLike so the pipeline
+   * factory can detect capability and wire ScribeAIDeps.generateTextWithImages.
+   */
+  async generateMultimodalArtifact(input: {
+    systemPrompt: string;
+    task: string;
+    images: readonly import('./multimodalClient.js').AnthropicImageBlock[];
+    maxTokens?: number;
+    modelOverride?: string;
+  }): Promise<WorkerResult> {
+    if (this.config.provider !== 'anthropic') {
+      throw new (await import('./multimodalClient.js')).AnthropicMultimodalError(
+        `Provider "${this.config.provider}" does not support image input`,
+        'IMAGE_MODEL_UNSUPPORTED',
+      );
+    }
+    if (!this.config.apiKey) {
+      throw new (await import('./multimodalClient.js')).AnthropicMultimodalError(
+        'Anthropic API key is not configured',
+        'IMAGE_API_ERROR',
+      );
+    }
+
+    const { callAnthropicMultimodal } = await import('./multimodalClient.js');
+    const temps = this.getTemperatures();
+    const model = input.modelOverride || this.config.modelDefault;
+    const resolvedModel = resolveAnthropicModel(model);
+    const start = Date.now();
+
+    const result = await callAnthropicMultimodal({
+      apiKey: this.config.apiKey,
+      model: resolvedModel,
+      systemPrompt: input.systemPrompt,
+      userText: input.task,
+      images: input.images,
+      maxTokens: input.maxTokens ?? 4096,
+      temperature: temps.generate,
+      baseUrl: this.config.baseUrl,
+    });
+
+    const durationMs = Date.now() - start;
+    return {
+      content: result.content,
+      metadata: {
+        model,
+        task: input.task,
+        provider: 'anthropic',
+        usage: result.usage,
+        durationMs,
+        stopReason: result.stopReason,
+        multimodal: true,
+        imageCount: input.images.length,
       },
     };
   }
