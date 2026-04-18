@@ -27,6 +27,18 @@ export interface AIServiceLike {
     maxTokens?: number;
     modelOverride?: string;
   }): Promise<{ content: string; metadata?: Record<string, unknown> }>;
+  /**
+   * Optional multimodal path for providers that support image input (currently
+   * Anthropic). When defined, agents with image attachments call this instead
+   * of {@link generateWorkArtifact}. Issue #402 step 2.
+   */
+  generateMultimodalArtifact?(input: {
+    systemPrompt: string;
+    task: string;
+    images: readonly import('../../services/ai/multimodalClient.js').AnthropicImageBlock[];
+    maxTokens?: number;
+    modelOverride?: string;
+  }): Promise<{ content: string; metadata?: Record<string, unknown> }>;
 }
 
 /** Callback type for accumulating token usage per AI call. */
@@ -62,7 +74,32 @@ function makeGenerateText(
 }
 
 function createScribeAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): ScribeAIDeps {
-  return { generateText: makeGenerateText(aiService, 8192, model, onTokenUsage) };
+  const deps: ScribeAIDeps = {
+    generateText: makeGenerateText(aiService, 8192, model, onTokenUsage),
+  };
+  // Wire the multimodal path only when the AIService actually supports it.
+  // Mock stores and non-Anthropic providers leave `generateMultimodalArtifact`
+  // undefined, and Scribe falls back to `generateText`.
+  if (aiService.generateMultimodalArtifact) {
+    const mmFn = aiService.generateMultimodalArtifact.bind(aiService);
+    deps.generateTextWithImages = async (systemPrompt, userPrompt, images) => {
+      const result = await mmFn({
+        systemPrompt,
+        task: userPrompt,
+        images,
+        maxTokens: 8192,
+        modelOverride: model,
+      });
+      if (onTokenUsage && result.metadata?.usage) {
+        const u = result.metadata.usage as { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number };
+        const inp = u.inputTokens ?? u.input_tokens ?? 0;
+        const out = u.outputTokens ?? u.output_tokens ?? 0;
+        if (inp > 0 || out > 0) onTokenUsage({ inputTokens: inp, outputTokens: out });
+      }
+      return result.content;
+    };
+  }
+  return deps;
 }
 
 function createProtoAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): ProtoAIDeps {

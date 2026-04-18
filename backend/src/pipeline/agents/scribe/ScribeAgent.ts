@@ -19,11 +19,24 @@ import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { parseAIJson } from '../../core/json-extract.js';
 import type { SkillRegistry } from '../skills/index.js';
 import { buildSystemPromptWithSkills } from '../skills/index.js';
+import type { AnthropicImageBlock } from '../../../services/ai/multimodalClient.js';
 
 // ─── Types ────────────────────────────────────────
 
 export interface ScribeAIDeps {
   generateText(systemPrompt: string, userPrompt: string): Promise<string>;
+  /**
+   * Optional multimodal path. When the pipeline surfaces image attachments
+   * (issue #402 step 2), Scribe calls this instead of `generateText` so the
+   * model can actually see the pixels. If unset — or if the provider does not
+   * support vision — callers fall back to `generateText`; the ack-forcing
+   * context from FileUploadService still prompts the model to acknowledge.
+   */
+  generateTextWithImages?(
+    systemPrompt: string,
+    userPrompt: string,
+    images: readonly AnthropicImageBlock[],
+  ): Promise<string>;
 }
 
 export interface ScribeState {
@@ -38,6 +51,13 @@ export interface ScribeState {
   answeredQuestionIds: string[];
   /** RAG-injected knowledge context — appended to system prompts */
   knowledgeContext?: string;
+  /**
+   * Image content blocks extracted from user-uploaded attachments. When
+   * non-empty, Scribe will use {@link ScribeAIDeps.generateTextWithImages}
+   * (if the dep is supplied) so the model sees the pixels, not just the
+   * filename list. Issue #402 step 2.
+   */
+  imageBlocks?: readonly AnthropicImageBlock[];
 }
 
 export type ScribeResult =
@@ -365,6 +385,34 @@ export class ScribeAgent {
     return buildSystemPromptWithSkills(basePrompt, 'scribe', this.skillRegistry);
   }
 
+  /**
+   * Dispatch to the multimodal generator when the state carries image blocks
+   * AND the deps supply `generateTextWithImages`; otherwise fall back to the
+   * text-only path. Issue #402 step 2.
+   *
+   * Graceful fallback: if the multimodal call rejects (e.g. the provider
+   * returns IMAGE_MODEL_UNSUPPORTED), we retry once via `generateText` so the
+   * pipeline still progresses — the ack-forcing context string from
+   * FileUploadService still prompts the model to acknowledge the upload.
+   */
+  private async dispatchGenerate(
+    state: ScribeState,
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<string> {
+    const hasImages = state.imageBlocks && state.imageBlocks.length > 0;
+    if (hasImages && this.ai.generateTextWithImages) {
+      try {
+        return await this.ai.generateTextWithImages(systemPrompt, userPrompt, state.imageBlocks!);
+      } catch (err) {
+        // Surface the failure in the text-only retry so Scribe can still respond;
+        // downstream error handling keeps pipeline retry budget intact.
+        console.warn('[scribe] multimodal path failed, falling back to text-only:', err);
+      }
+    }
+    return this.ai.generateText(systemPrompt, userPrompt);
+  }
+
   createInitialState(input: ScribeInput): ScribeState {
     return {
       idea: input.idea,
@@ -396,7 +444,7 @@ export class ScribeAgent {
       const systemPrompt = state.knowledgeContext
         ? `${clarificationBase}\n\n--- RETRIEVED KNOWLEDGE ---\n${state.knowledgeContext}\n--- END KNOWLEDGE ---`
         : clarificationBase;
-      responseText = await this.ai.generateText(systemPrompt, userPrompt);
+      responseText = await this.dispatchGenerate(state, systemPrompt, userPrompt);
     } catch {
       emit?.('error', 'AI çağrısı başarısız oldu', 0);
       return {
@@ -501,7 +549,7 @@ export class ScribeAgent {
         const specSystemPrompt = state.knowledgeContext
           ? `${specBase}\n\n--- RETRIEVED KNOWLEDGE ---\n${state.knowledgeContext}\n--- END KNOWLEDGE ---`
           : specBase;
-        responseText = await this.ai.generateText(specSystemPrompt, userPrompt);
+        responseText = await this.dispatchGenerate(state, specSystemPrompt, userPrompt);
       } catch {
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         emit?.('error', 'Spec üretimi AI çağrısı başarısız', 0);
