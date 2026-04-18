@@ -79,3 +79,52 @@ export function estimateCostUsd(
     (output / 1_000_000) * pricing.outputUsdPer1M;
   return Number(cost.toFixed(6));
 }
+
+/**
+ * Per-model total context-window size in tokens. Used by the chat token gauge
+ * (issue #438) to compute "X / Y tokens · %Z" and to drive threshold colors.
+ *
+ * Sources: Anthropic & OpenAI model docs (as of April 2026). Long-context
+ * GPT-4.1 family uses 1,047,576 (1M) which the API actually reports.
+ */
+const CONTEXT_WINDOW_MAP: Record<string, number> = {
+  'claude-sonnet-4-6':          200_000,
+  'claude-sonnet-4-20250514':   200_000,
+  'claude-haiku-4-5':           200_000,
+  'claude-haiku-4-5-20251001':  200_000,
+  'claude-opus-4-20250514':     200_000,
+  'claude-3-5-sonnet-20241022': 200_000,
+  'claude-3-5-haiku-20241022':  200_000,
+
+  'anthropic/claude-3.5-sonnet': 200_000,
+  'anthropic/claude-3.5-haiku':  200_000,
+  'anthropic/claude-3-opus':     200_000,
+
+  'gpt-4o-mini':   128_000,
+  'gpt-4o':        128_000,
+  'gpt-4.1':       1_047_576,
+  'gpt-4.1-mini':  1_047_576,
+  'gpt-4.1-nano':  1_047_576,
+  'o3-mini':       200_000,
+};
+
+/** Fallback context window when the model is unknown — conservative (GPT-4o class). */
+export const DEFAULT_CONTEXT_WINDOW = 128_000;
+
+/**
+ * Returns the total context-window size (in tokens) for the given model,
+ * reusing the same alias + prefix-match resolution as pricing. Falls back
+ * to {@link DEFAULT_CONTEXT_WINDOW} when the model is unknown.
+ */
+export function getContextWindow(model: string): number {
+  if (CONTEXT_WINDOW_MAP[model]) return CONTEXT_WINDOW_MAP[model];
+
+  const canonical = MODEL_ALIASES[model];
+  if (canonical && CONTEXT_WINDOW_MAP[canonical]) return CONTEXT_WINDOW_MAP[canonical];
+
+  for (const [key, window] of Object.entries(CONTEXT_WINDOW_MAP)) {
+    if (model.startsWith(key) || key.startsWith(model)) return window;
+  }
+
+  return DEFAULT_CONTEXT_WINDOW;
+}

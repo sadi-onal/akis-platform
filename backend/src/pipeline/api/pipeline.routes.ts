@@ -124,6 +124,18 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       // Attach iteration children summary so the chat UI can merge them into the
       // timeline without a second round-trip (see issue #388 / BUG-08).
       const children = await orchestrator.listChildren(id);
+
+      // Compute live token usage for the chat gauge (issue #438). Reuses the
+      // DB-persisted metrics + any in-memory accumulator the orchestrator has
+      // not yet flushed, so the gauge stays accurate mid-stage.
+      const { getContextWindow } = await import('../../services/ai/pricing.js');
+      const model = pipeline.model ?? 'claude-sonnet-4-6';
+      const live = orchestrator.getLiveTokenUsage(id, pipeline.metrics);
+      const contextWindow = getContextWindow(model);
+      const percentUsed = contextWindow > 0
+        ? Number(((live.totalTokens / contextWindow) * 100).toFixed(2))
+        : 0;
+
       return {
         pipeline,
         children: children.map((c) => ({
@@ -137,6 +149,14 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
           traceOutput: c.traceOutput,
           error: c.error,
         })),
+        tokenUsage: {
+          inputTokens: live.inputTokens,
+          outputTokens: live.outputTokens,
+          totalTokens: live.totalTokens,
+          contextWindow,
+          percentUsed,
+          model,
+        },
       };
     },
 

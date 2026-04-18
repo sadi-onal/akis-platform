@@ -70,6 +70,10 @@ function createMockOrchestrator() {
       calls.push({ method: 'listChildren', args: [id] });
       return [];
     },
+    getLiveTokenUsage: (id: string, metrics?: Record<string, unknown>) => {
+      calls.push({ method: 'getLiveTokenUsage', args: [id, metrics] });
+      return { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    },
   };
 
   return { orchestrator: orchestrator as unknown as PipelineRoutesDeps['orchestrator'], calls };

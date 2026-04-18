@@ -257,7 +257,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
   return messages;
 }
 
-export function mapPipelineToWorkflow(pipeline: Pipeline): Workflow {
+export function mapPipelineToWorkflow(pipeline: Pipeline, tokenUsage?: import('../../types/workflow').WorkflowTokenUsage): Workflow {
   const { workflowStatus, stages } = mapStageStatus(pipeline.stage, pipeline.traceEnabled);
 
   // Enrich stages with actual output data
@@ -326,6 +326,7 @@ export function mapPipelineToWorkflow(pipeline: Pipeline): Workflow {
     stages,
     conversation: mapConversation(pipeline),
     engineerSessionId: pipeline.intermediateState?.engineerSessionId,
+    tokenUsage,
   };
 }
 
@@ -343,19 +344,23 @@ interface PipelineChildSummary {
   traceOutput?: unknown;
   error?: unknown;
 }
-interface PipelineResponse { pipeline: Pipeline; children?: PipelineChildSummary[] }
+interface PipelineResponse {
+  pipeline: Pipeline;
+  children?: PipelineChildSummary[];
+  tokenUsage?: import('../../types/workflow').WorkflowTokenUsage;
+}
 interface PipelinesResponse { pipelines: Pipeline[] }
 
 export const workflowsApi = {
   list: async (): Promise<Workflow[]> => {
     const res = await http.get<PipelinesResponse>('/api/pipelines');
     const pipelines = res.pipelines;
-    return (Array.isArray(pipelines) ? pipelines : []).map(mapPipelineToWorkflow);
+    return (Array.isArray(pipelines) ? pipelines : []).map((p) => mapPipelineToWorkflow(p));
   },
 
   get: async (id: string): Promise<Workflow> => {
     const res = await http.get<PipelineResponse>(`/api/pipelines/${id}`);
-    return mapPipelineToWorkflow(res.pipeline);
+    return mapPipelineToWorkflow(res.pipeline, res.tokenUsage);
   },
 
   create: async (data: {

@@ -1016,6 +1016,7 @@ export default function ChatPage() {
                   onTraceToggle={pendingConv ? setTraceEnabled : undefined}
                   repoSelectorSlot={repoSelectorSlot}
                   keySourceBadge={pendingConv ? keySourceBadge : null}
+                  tokenUsage={activeWorkflow?.tokenUsage}
                 />
               </ErrorBoundary>
             </div>

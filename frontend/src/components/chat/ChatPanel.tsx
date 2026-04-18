@@ -51,6 +51,7 @@ interface ChatPanelProps {
   onTraceToggle?: (enabled: boolean) => void;
   repoSelectorSlot?: React.ReactNode;
   keySourceBadge?: { source: 'akis' | 'own'; jobsRemaining: number; jobsLimit: number } | null;
+  tokenUsage?: import('../../types/workflow').WorkflowTokenUsage;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -86,6 +87,7 @@ export const ChatPanel = memo(function ChatPanel({
   onTraceToggle,
   repoSelectorSlot,
   keySourceBadge,
+  tokenUsage,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -165,6 +167,7 @@ export const ChatPanel = memo(function ChatPanel({
           onTogglePreview={onTogglePreview}
           onBack={onBack}
           showBackButton={showBackButton}
+          tokenUsage={tokenUsage}
         />
       )}
 

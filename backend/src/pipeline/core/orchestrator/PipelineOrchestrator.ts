@@ -176,6 +176,25 @@ export class PipelineOrchestrator {
     }
   }
 
+  /**
+   * Return the live token usage for a pipeline by summing the DB-persisted
+   * metrics with any in-memory accumulator that has not been flushed yet.
+   * This lets the chat token gauge (issue #438) show an up-to-date value
+   * even while the pipeline is mid-stage and {@link flushTokenUsage} has
+   * not yet written the latest call's tokens into `pipelines.metrics`.
+   */
+  getLiveTokenUsage(pipelineId: string, persistedMetrics?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }): { inputTokens: number; outputTokens: number; totalTokens: number } {
+    const persisted = persistedMetrics ?? {};
+    const acc = this.tokenAccumulators.get(pipelineId) ?? { inputTokens: 0, outputTokens: 0 };
+    const inputTokens = (persisted.inputTokens ?? 0) + acc.inputTokens;
+    const outputTokens = (persisted.outputTokens ?? 0) + acc.outputTokens;
+    return {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+    };
+  }
+
   // ─── Level 3 Services ───────────────────────────
   private criticAgent?: CriticAgent;
   private fixLoopService = new FixLoopService();

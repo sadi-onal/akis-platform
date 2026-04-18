@@ -1,5 +1,7 @@
 import { cn } from '../../utils/cn';
 import type { ChatMode } from '../../types/chat';
+import type { WorkflowTokenUsage } from '../../types/workflow';
+import { TokenGauge } from './TokenGauge';
 
 const MODE_STYLES: Record<ChatMode, string> = {
   ask: 'bg-blue-500/15 text-blue-400',
@@ -21,6 +23,7 @@ interface ChatHeaderProps {
   onTogglePreview?: () => void;
   onBack?: () => void;
   showBackButton?: boolean;
+  tokenUsage?: WorkflowTokenUsage;
 }
 
 export function ChatHeader({
@@ -36,6 +39,7 @@ export function ChatHeader({
   onTogglePreview,
   onBack,
   showBackButton,
+  tokenUsage,
 }: ChatHeaderProps) {
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-ak-border bg-ak-surface px-4 py-3 z-10">
@@ -121,6 +125,11 @@ export function ChatHeader({
           </svg>
           Preview
         </button>
+      )}
+
+      {/* Token gauge (issue #438) */}
+      {tokenUsage && tokenUsage.totalTokens > 0 && (
+        <TokenGauge usage={tokenUsage} />
       )}
 
       {/* PR badge */}

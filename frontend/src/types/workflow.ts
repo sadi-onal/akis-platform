@@ -134,6 +134,15 @@ export interface FileTreeNode {
   children?: FileTreeNode[];
 }
 
+export interface WorkflowTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  contextWindow: number;
+  percentUsed: number;
+  model: string;
+}
+
 export interface Workflow {
   id: string;
   title: string;
@@ -152,6 +161,13 @@ export interface Workflow {
    * chat row (BUG-24 / #434).
    */
   engineerSessionId?: string;
+  /**
+   * Live chat-level token usage + context-window gauge data. Supplied by
+   * `GET /api/pipelines/:id` response top-level field (not nested under
+   * `pipeline.metrics`) so the gauge can read mid-stage accumulator values
+   * that have not yet been flushed to DB. Issue #438.
+   */
+  tokenUsage?: WorkflowTokenUsage;
 }
 
 export interface WorkflowStats {
