@@ -447,7 +447,18 @@ JSON format (respond with ONLY this, nothing else):
   ): Promise<ProtoResult> {
     emit?.('ai_call', 'Claude AI tool_use ile scaffold oluşturuluyor...', 10);
 
-    // Build tool handlers from GitHub deps
+    // Issue #483 BUG-J: Hard-enforce repo creation BEFORE the agentic loop so the
+    // LLM cannot skip create_repository and call push_files on a non-existent repo.
+    // Tool-orchestration for a deterministic step must not depend on LLM reasoning.
+    emit?.('github_push', 'GitHub repo oluşturuluyor...', 20);
+    const repoResult = await this.createRepo(input);
+    if (repoResult.type === 'error') {
+      emit?.('error', 'GitHub repo oluşturulamadı', 0);
+      return repoResult;
+    }
+
+    // Build tool handlers — create_repository is excluded from the tool list
+    // passed to the loop (repo already exists), only push_files is needed.
     const toolDeps: ProtoToolDeps = {
       createRepository: (owner, name, isPrivate) => this.github.createRepository(owner, name, isPrivate),
       pushFiles: (owner, repo, branch, files, message) => this.github.pushFiles!(owner, repo, branch, files, message),
@@ -459,9 +470,9 @@ JSON format (respond with ONLY this, nothing else):
       ? `\n\nThe user attached ${input.imageBlocks!.length} screenshot(s) alongside the request. Use them as the ground-truth for visuals (colors, layout, labels) when generating the scaffold.`
       : '';
 
-    const userPrompt = `Create a GitHub repository and push a working MVP scaffold.
+    const userPrompt = `Push a working MVP scaffold to the GitHub repository that has already been created.
 
-Repository: owner="${input.owner}", name="${input.repoName}", private=${input.repoVisibility === 'private'}
+Repository: owner="${input.owner}", name="${input.repoName}" (already exists on GitHub)
 
 Spec:
 - Title: ${input.spec.title}
@@ -471,13 +482,14 @@ Spec:
 - Tech: ${input.spec.technicalConstraints?.stack || 'React + Vite'}${input.spec.technicalConstraints?.integrations?.length ? `, integrations: ${input.spec.technicalConstraints.integrations.join(', ')}` : ''}${imageAck}
 
 Steps:
-1. Call create_repository to create the GitHub repo
-2. Generate a working React+Vite scaffold (8-12 files, each under 80 lines)
-3. Call push_files to push ALL files to the "main" branch in one commit
+1. Generate a working React+Vite scaffold (8-12 files, each under 80 lines)
+2. Call push_files to push ALL files to the "main" branch in one commit
 
 After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "totalLinesOfCode": N, "stackUsed": "..." }`;
 
-    const protoTools = [...PROTO_TOOLS];
+    // Exclude create_repository from the tool list — repo was already created above.
+    // This prevents the LLM from attempting a redundant (and potentially failing) second call.
+    const protoTools = PROTO_TOOLS.filter((t) => t.name !== 'create_repository');
     let allHandlers = handlers;
     if (this.skillRegistry) {
       const skillTool = buildUseSkillTool('proto', this.skillRegistry);
@@ -502,7 +514,6 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
           // vision-capable model can reference the mockup while scaffolding.
           initialImages: hasImages ? input.imageBlocks : undefined,
           onToolCall: (name, _input) => {
-            if (name === 'create_repository') emit?.('github_push', 'GitHub repo oluşturuluyor...', 30);
             if (name === 'push_files') emit?.('github_push', 'Dosyalar push ediliyor...', 75);
           },
           onToolResult: (name, _result, isError) => {
