@@ -66,6 +66,8 @@ export interface ProtoGitHubDeps {
     head: string,
     base: string
   ): Promise<{ url: string }>;
+  /** Used for post-push verification: lists blob paths in the repo tree. */
+  listFiles?(owner: string, repo: string, branch: string): Promise<string[]>;
 }
 
 export type ProtoResult =
@@ -511,15 +513,58 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
 
       // Extract files from tool calls
       const pushCall = result.toolCalls.find((tc) => tc.name === 'push_files');
-      const files = pushCall
-        ? (pushCall.input.files as Array<{ path: string; content: string }>).map((f) => ({
-            filePath: f.path,
-            content: f.content,
-            linesOfCode: f.content.split('\n').length,
-          }))
-        : [];
+
+      // BUG-E fix: if push_files was never called or its result indicates an error,
+      // treat as a push failure — do NOT return ok:true based on LLM summary text alone.
+      if (!pushCall) {
+        logger.error('[Proto] executeWithTools: push_files tool was never called — aborting');
+        return {
+          type: 'error',
+          error: createPipelineError(
+            PipelineErrorCode.PROTO_PUSH_FAILED,
+            'Agentic loop completed without calling push_files — scaffold was not committed to GitHub',
+          ),
+        };
+      }
+
+      // AgenticLoop stores the tool result in pushCall.result.
+      // On adapter failure the handler throws, AgenticLoop catches it and stores
+      // the error message string in pushCall.result AND sets is_error:true in the
+      // tool_result block sent back to Claude. Detect both forms of failure.
+      const pushResult = pushCall.result;
+      const pushFailed =
+        typeof pushResult === 'string' && pushResult.startsWith('Error:') ||
+        (typeof pushResult === 'object' &&
+          pushResult !== null &&
+          (pushResult as Record<string, unknown>).success === false);
+
+      if (pushFailed) {
+        const detail = typeof pushResult === 'string' ? pushResult : JSON.stringify(pushResult);
+        logger.error({ detail }, '[Proto] executeWithTools: push_files tool returned an error');
+        return {
+          type: 'error',
+          error: createPipelineError(
+            PipelineErrorCode.PROTO_PUSH_FAILED,
+            `push_files tool error: ${detail}`,
+          ),
+        };
+      }
+
+      const files = (pushCall.input.files as Array<{ path: string; content: string }>).map((f) => ({
+        filePath: f.path,
+        content: f.content,
+        linesOfCode: f.content.split('\n').length,
+      }));
 
       const totalLOC = files.reduce((sum, f) => sum + f.linesOfCode, 0);
+
+      // BUG-E fix: verify the repo actually has files on GitHub before reporting success.
+      emit?.('verification', 'GitHub repo içeriği doğrulanıyor...', 92);
+      const verifyResult = await this.verifyRepoPushed(input.owner, input.repoName, 'main', files.length);
+      if (verifyResult.type === 'error') {
+        emit?.('error', 'GitHub doğrulaması başarısız — repo boş veya bulunamadı', 0);
+        return verifyResult;
+      }
 
       emit?.('complete', `Scaffold hazır: ${files.length} dosya push edildi (tool_use)`, 100);
       return {
@@ -863,6 +908,59 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
       type: 'error',
       error: createPipelineError(PipelineErrorCode.PROTO_PUSH_FAILED, 'Unreachable'),
     };
+  }
+
+  // ─── Post-push GitHub Verification ──────────────
+
+  /**
+   * Verify that the repo actually has files on GitHub after a push attempt.
+   * Without this check, a silent adapter failure lets Proto report ok:true
+   * while the repo stays empty — causing TRACE_EMPTY_CODEBASE downstream.
+   * Issue #470 BUG-E.
+   */
+  private async verifyRepoPushed(
+    owner: string,
+    repo: string,
+    branch: string,
+    expectedFileCount: number,
+  ): Promise<{ type: 'output' } | { type: 'error'; error: PipelineError }> {
+    if (!this.github.listFiles) {
+      // Adapter doesn't support listFiles — skip verification (legacy adapters in tests).
+      logger.warn('[Proto] verifyRepoPushed: listFiles not available on adapter, skipping verification');
+      return { type: 'output' };
+    }
+    try {
+      const files = await this.github.listFiles(owner, repo, branch);
+      if (files.length === 0) {
+        logger.error({ owner, repo, branch, expectedFileCount }, '[Proto] verifyRepoPushed: repo is empty after push');
+        return {
+          type: 'error',
+          error: createPipelineError(
+            PipelineErrorCode.PROTO_PUSH_FAILED,
+            `GitHub repo ${owner}/${repo} is empty after push — ${expectedFileCount} files were expected on branch "${branch}". The push silently failed.`,
+          ),
+        };
+      }
+      logger.info({ owner, repo, branch, fileCount: files.length }, '[Proto] verifyRepoPushed: OK');
+      return { type: 'output' };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err, owner, repo, branch }, '[Proto] verifyRepoPushed: listFiles threw');
+      // 404 means the repo doesn't exist at all — definitive failure
+      if (msg.includes('404') || msg.includes('Not Found') || msg.includes('not found')) {
+        return {
+          type: 'error',
+          error: createPipelineError(
+            PipelineErrorCode.PROTO_PUSH_FAILED,
+            `GitHub repo ${owner}/${repo} does not exist after scaffold push (404). The create_repository or push_files step silently failed.`,
+          ),
+        };
+      }
+      // Other errors (rate limit, transient) — log and let pipeline proceed;
+      // better to surface a partial success than to block on a flaky check.
+      logger.warn({ err }, '[Proto] verifyRepoPushed: non-404 error, treating as soft-pass');
+      return { type: 'output' };
+    }
   }
 
   // ─── Helpers ────────────────────────────────────
