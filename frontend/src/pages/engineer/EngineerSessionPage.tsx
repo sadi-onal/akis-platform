@@ -20,9 +20,9 @@ const POLL_INTERVAL_MS = 3000;
 
 const CATEGORY_STYLES: Record<TaskCategory, { bg: string; text: string; label: string }> = {
   bug:      { bg: 'bg-red-500/20',    text: 'text-red-400',    label: 'Hata' },
-  feature:  { bg: 'bg-[#07D1AF]/20',  text: 'text-[#07D1AF]',  label: 'Ozellik' },
-  docs:     { bg: 'bg-blue-500/20',   text: 'text-blue-400',   label: 'Dokumantasyon' },
-  security: { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Guvenlik' },
+  feature:  { bg: 'bg-[#07D1AF]/20',  text: 'text-[#07D1AF]',  label: 'Özellik' },
+  docs:     { bg: 'bg-blue-500/20',   text: 'text-blue-400',   label: 'Dokümantasyon' },
+  security: { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Güvenlik' },
   test:     { bg: 'bg-purple-500/20', text: 'text-purple-400', label: 'Test' },
   refactor: { bg: 'bg-gray-500/20',   text: 'text-gray-400',   label: 'Refactor' },
 };
@@ -56,7 +56,7 @@ function CategoryBadge({ category }: { category: TaskCategory }) {
 function CountdownTimer({ seconds }: { seconds: number }) {
   return (
     <div className="text-center py-6">
-      <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Kalan Sure</p>
+      <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Kalan Süre</p>
       <p className={`text-6xl font-mono font-bold tabular-nums ${getTimerColor(seconds)}`}>
         {formatTime(seconds)}
       </p>
@@ -72,7 +72,7 @@ function CurrentTaskCard({ task }: { task: SessionTask }) {
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#07D1AF] opacity-75" />
           <span className="relative inline-flex h-3 w-3 rounded-full bg-[#07D1AF]" />
         </div>
-        <span className="text-sm font-medium text-[#07D1AF]">Calisiyor...</span>
+        <span className="text-sm font-medium text-[#07D1AF]">Çalışıyor...</span>
       </div>
       <div className="flex items-center gap-2 mb-2">
         <CategoryBadge category={task.category} />
@@ -151,7 +151,7 @@ function SessionControls({
           onClick={onCancel}
           className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-all"
         >
-          Iptal Et
+          İptal Et
         </button>
       )}
     </div>
@@ -182,7 +182,7 @@ function CompletedReport({
           </svg>
         </div>
         <h2 className="text-2xl font-bold text-white">
-          {report.status === 'completed' ? 'Tamamlandi!' : 'Iptal Edildi'}
+          {report.status === 'completed' ? 'Tamamlandı!' : 'İptal Edildi'}
         </h2>
         <p className="text-white/50 mt-1">
           {report.owner}/{report.repo}
@@ -193,11 +193,11 @@ function CompletedReport({
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-center">
           <p className="text-2xl font-bold text-white">{completedCount}/{report.tasks.length}</p>
-          <p className="text-xs text-white/40 mt-1">Gorev</p>
+          <p className="text-xs text-white/40 mt-1">Görev</p>
         </div>
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-center">
           <p className="text-2xl font-bold text-white">{timeLabel}</p>
-          <p className="text-xs text-white/40 mt-1">Toplam Sure</p>
+          <p className="text-xs text-white/40 mt-1">Toplam Süre</p>
         </div>
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-center">
           <p className="text-2xl font-bold text-white">${report.totalCost.toFixed(2)}</p>
@@ -216,7 +216,7 @@ function CompletedReport({
           <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
           </svg>
-          Pull Request'i Gor
+          Pull Request&apos;i Gör
         </a>
       )}
 
@@ -225,10 +225,10 @@ function CompletedReport({
         <table className="w-full">
           <thead>
             <tr className="border-b border-white/[0.06]">
-              <th className="px-4 py-3 text-left text-xs font-medium text-white/50">Gorev</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-white/50">Görev</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-white/50">Durum</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-white/50">Puan</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-white/50">Sure</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-white/50">Süre</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.06]">
@@ -244,9 +244,9 @@ function CompletedReport({
                   </td>
                   <td className="px-4 py-3 text-center">
                     {task.status === 'completed' ? (
-                      <span className="text-xs text-green-400">Tamamlandi</span>
+                      <span className="text-xs text-green-400">Tamamlandı</span>
                     ) : task.status === 'failed' ? (
-                      <span className="text-xs text-red-400">Basarisiz</span>
+                      <span className="text-xs text-red-400">Başarısız</span>
                     ) : (
                       <span className="text-xs text-white/40">Beklemede</span>
                     )}
@@ -316,7 +316,7 @@ export default function EngineerSessionPage() {
         if (pollRef.current) clearInterval(pollRef.current);
       }
     } catch {
-      setError('Oturum durumu alinamadi');
+      setError('Oturum durumu alınamadı');
     }
   }, [id]);
 
@@ -381,7 +381,7 @@ export default function EngineerSessionPage() {
             onClick={() => navigate('/engineer')}
             className="text-sm text-[#07D1AF] hover:underline"
           >
-            Muhendis Modu'na don
+            Mühendis Modu&apos;na dön
           </button>
         </div>
       </div>
@@ -420,7 +420,7 @@ export default function EngineerSessionPage() {
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
-            Muhendis Modu
+            Mühendis Modu
           </button>
           {progress && (
             <span className={`rounded-full px-3 py-1 text-xs font-medium ${
@@ -428,8 +428,8 @@ export default function EngineerSessionPage() {
               progress.status === 'paused' ? 'bg-orange-500/20 text-orange-400' :
               'bg-white/[0.06] text-white/50'
             }`}>
-              {progress.status === 'running' ? 'Calisiyor' :
-               progress.status === 'paused' ? 'Duraklatildi' :
+              {progress.status === 'running' ? 'Çalışıyor' :
+               progress.status === 'paused' ? 'Duraklatıldı' :
                progress.status}
             </span>
           )}
@@ -450,7 +450,7 @@ export default function EngineerSessionPage() {
         {/* Current task */}
         {currentTask && (
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-white/50 mb-3">Mevcut Gorev</h3>
+            <h3 className="text-sm font-medium text-white/50 mb-3">Mevcut Görev</h3>
             <CurrentTaskCard task={currentTask} />
           </div>
         )}
@@ -464,7 +464,7 @@ export default function EngineerSessionPage() {
             </h3>
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] divide-y divide-white/[0.06]">
               {completedTasks.length === 0 ? (
-                <p className="px-4 py-6 text-center text-sm text-white/30">Henuz tamamlanan gorev yok</p>
+                <p className="px-4 py-6 text-center text-sm text-white/30">Henüz tamamlanan görev yok</p>
               ) : (
                 completedTasks.map((task) => <CompletedTaskItem key={task.id} task={task} />)
               )}
@@ -474,11 +474,11 @@ export default function EngineerSessionPage() {
           {/* Queued */}
           <div>
             <h3 className="text-sm font-medium text-white/50 mb-3">
-              Sirada ({queuedTasks.length})
+              Sırada ({queuedTasks.length})
             </h3>
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] divide-y divide-white/[0.06]">
               {queuedTasks.length === 0 ? (
-                <p className="px-4 py-6 text-center text-sm text-white/30">Tum gorevler islendi</p>
+                <p className="px-4 py-6 text-center text-sm text-white/30">Tüm görevler işlendi</p>
               ) : (
                 queuedTasks.map((task, i) => (
                   <QueuedTaskItem key={task.id} task={task} index={i + 1} />

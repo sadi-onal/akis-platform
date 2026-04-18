@@ -22,9 +22,9 @@ const MAX_TASKS = 5;
 
 const CATEGORY_STYLES: Record<TaskCategory, { bg: string; text: string; label: string }> = {
   bug:      { bg: 'bg-red-500/20',    text: 'text-red-400',    label: 'Hata' },
-  feature:  { bg: 'bg-[#07D1AF]/20',  text: 'text-[#07D1AF]',  label: 'Ozellik' },
-  docs:     { bg: 'bg-blue-500/20',   text: 'text-blue-400',   label: 'Dokumantasyon' },
-  security: { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Guvenlik' },
+  feature:  { bg: 'bg-[#07D1AF]/20',  text: 'text-[#07D1AF]',  label: 'Özellik' },
+  docs:     { bg: 'bg-blue-500/20',   text: 'text-blue-400',   label: 'Dokümantasyon' },
+  security: { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Güvenlik' },
   test:     { bg: 'bg-purple-500/20', text: 'text-purple-400', label: 'Test' },
   refactor: { bg: 'bg-gray-500/20',   text: 'text-gray-400',   label: 'Refactor' },
 };
@@ -130,10 +130,10 @@ function Step1RepoSelection({
       <div className="mb-6">
         <h2 className="text-2xl font-semibold text-white flex items-center gap-3">
           <span className="text-2xl">&#x1F527;</span>
-          Muhendis Modu
+          Mühendis Modu
         </h2>
         <p className="mt-2 text-white/50">
-          Reponuzu secin, AI muhendisiniz calismaya baslasin
+          Reponuzu seçin, AI mühendisiniz çalışmaya başlasın
         </p>
       </div>
 
@@ -164,7 +164,7 @@ function Step1RepoSelection({
       ) : (
         <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
           {filtered.length === 0 ? (
-            <p className="text-center text-white/40 py-8">Repo bulunamadi</p>
+            <p className="text-center text-white/40 py-8">Repo bulunamadı</p>
           ) : (
             filtered.map((repo) => (
               <button
@@ -183,7 +183,7 @@ function Step1RepoSelection({
                   <div>
                     <p className="text-sm font-medium text-white">{repo.fullName}</p>
                     <p className="text-xs text-white/40 mt-0.5">
-                      {repo.private ? 'Ozel' : 'Acik'} &middot; {new Date(repo.updatedAt).toLocaleDateString('tr-TR')}
+                      {repo.private ? 'Özel' : 'Açık'} &middot; {new Date(repo.updatedAt).toLocaleDateString('tr-TR')}
                     </p>
                   </div>
                   {selectedRepo?.fullName === repo.fullName && (
@@ -218,7 +218,7 @@ function Step2TaskDiscovery({
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#07D1AF] border-t-transparent mb-4" />
-        <p className="text-white/50">Muhendis reponuzu analiz ediyor...</p>
+        <p className="text-white/50">Mühendis reponuzu analiz ediyor...</p>
       </div>
     );
   }
@@ -227,14 +227,14 @@ function Step2TaskDiscovery({
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-white">Gorev Secimi</h2>
-          <p className="mt-1 text-white/50">Muhendisin calismasini istediginiz gorevleri secin</p>
+          <h2 className="text-2xl font-semibold text-white">Görev Seçimi</h2>
+          <p className="mt-1 text-white/50">Mühendisin çalışmasını istediğiniz görevleri seçin</p>
         </div>
         <div className="rounded-full bg-white/[0.06] px-3 py-1.5 text-sm text-white/70">
           <span className={selectedIds.size >= MAX_TASKS ? 'text-orange-400' : 'text-[#07D1AF]'}>
             {selectedIds.size}
           </span>
-          /{MAX_TASKS} gorev secildi
+          /{MAX_TASKS} görev seçildi
         </div>
       </div>
 
@@ -289,7 +289,7 @@ function Step2TaskDiscovery({
                     onClick={() => setExpandedId(isExpanded ? null : task.id)}
                     className="mt-2 text-xs text-[#07D1AF]/70 hover:text-[#07D1AF] transition-colors"
                   >
-                    {isExpanded ? 'Dosyalari gizle' : `${task.affectedFiles.length} dosya`}
+                    {isExpanded ? 'Dosyaları gizle' : `${task.affectedFiles.length} dosya`}
                   </button>
 
                   {isExpanded && (
@@ -325,8 +325,8 @@ function Step3TimeBudget({
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-semibold text-white">Zaman ve Butce</h2>
-        <p className="mt-1 text-white/50">Muhendisinize ne kadar sure verin</p>
+        <h2 className="text-2xl font-semibold text-white">Zaman ve Bütçe</h2>
+        <p className="mt-1 text-white/50">Mühendisinize ne kadar süre verin</p>
       </div>
 
       {/* Preset buttons */}
@@ -353,20 +353,20 @@ function Step3TimeBudget({
 
       {/* Summary */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-5">
-        <h3 className="text-sm font-medium text-white/70 mb-4">Ozet</h3>
+        <h3 className="text-sm font-medium text-white/70 mb-4">Özet</h3>
         <div className="space-y-3">
           <div className="flex justify-between text-sm">
-            <span className="text-white/50">Secili gorevler</span>
-            <span className="text-white">{selectedTasks.length} gorev</span>
+            <span className="text-white/50">Seçili görevler</span>
+            <span className="text-white">{selectedTasks.length} görev</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-white/50">Tahmini sure</span>
+            <span className="text-white/50">Tahmini süre</span>
             <span className="text-white">{totalEstimated} dakika</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-white/50">Tahsis edilen sure</span>
+            <span className="text-white/50">Tahsis edilen süre</span>
             <span className={selectedMinutes > 0 ? 'text-[#07D1AF]' : 'text-white/30'}>
-              {selectedMinutes > 0 ? `${selectedMinutes} dakika` : 'Seciniz'}
+              {selectedMinutes > 0 ? `${selectedMinutes} dakika` : 'Seçiniz'}
             </span>
           </div>
           <div className="border-t border-white/[0.06] pt-3 flex justify-between text-sm">
@@ -381,8 +381,8 @@ function Step3TimeBudget({
       {isTimeTight && selectedMinutes > 0 && (
         <div className="mt-4 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3">
           <p className="text-sm text-orange-400">
-            Tahsis edilen sure ({selectedMinutes} dk) tahmini sureden ({totalEstimated} dk) az.
-            Bazi gorevler tamamlanamayabilir.
+            Tahsis edilen süre ({selectedMinutes} dk) tahmini süreden ({totalEstimated} dk) az.
+            Bazı görevler tamamlanamayabilir.
           </p>
         </div>
       )}
@@ -415,13 +415,13 @@ function Step4Confirmation({
     <div>
       <div className="mb-6">
         <h2 className="text-2xl font-semibold text-white">Onay</h2>
-        <p className="mt-1 text-white/50">Hersey hazir mi? Kontrol edin ve baslatin</p>
+        <p className="mt-1 text-white/50">Her şey hazır mı? Kontrol edin ve başlatın</p>
       </div>
 
       {/* Big summary */}
       <div className="rounded-xl border border-[#07D1AF]/30 bg-[#07D1AF]/[0.06] p-6 mb-6 text-center">
         <p className="text-3xl font-bold text-white">
-          {selectedTasks.length} gorev &middot; {timeLabel} &middot; ${cost.toFixed(2)}
+          {selectedTasks.length} görev &middot; {timeLabel} &middot; ${cost.toFixed(2)}
         </p>
       </div>
 
@@ -448,10 +448,10 @@ function Step4Confirmation({
         {confirming ? (
           <span className="flex items-center justify-center gap-2">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-black/30 border-t-black" />
-            Baslatiliyor...
+            Başlatılıyor...
           </span>
         ) : (
-          'Muhendisi Baslat'
+          'Mühendisi Başlat'
         )}
       </button>
     </div>
@@ -653,7 +653,7 @@ export default function EngineerPage() {
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
           </svg>
-          Chat'e don
+          Chat&apos;e dön
         </button>
 
         <StepIndicator current={step} total={4} />
@@ -723,7 +723,7 @@ export default function EngineerPage() {
               onClick={() => setStep(3)}
               className="text-sm text-white/40 hover:text-white/60 transition-colors"
             >
-              Geri don
+              Geri dön
             </button>
           </div>
         )}
