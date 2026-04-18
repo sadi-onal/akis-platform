@@ -82,9 +82,19 @@
 **Anlat:**
 > "Onayla butonuyla kullanici spec'i kabul etti. Simdi Proto agenti devreye giriyor."
 
+**Goster (opsiyonel):** Sag ust kosedeki **model secici pill** (`claude-sonnet-4-6 v`)
+
+**Anlat:**
+> "Kullanici sohbet basina AI modelini secebilir: Haiku (hizli/ucuz), Sonnet (varsayilan, dengeli), Opus (karmasik is). Secim pipeline boyunca kalici — DB'de `pipelines.model` kolonunda tutulur. Token kapasitesi modele gore otomatik ayarlanir (Claude: 200k, GPT-4.1: 1M)."
+
 ---
 
 ### 5. Kod Uretimi — Proto Asamasi (1 dakika)
+
+**Goster:** Sag ust kosedeki **token kapasitesi pilli** — `8.9k / 200.0k · %4.46`
+
+**Anlat:**
+> "Saga ust kosedeki pill baglam penceresinin ne kadarinin doldugunu canli gosterir; hover tooltip'te Giris/Cikis/toplam token ve asama basina dokum var. Esik asilirsa (80%+) renk degisir, kullaniciyi uyarir."
 
 **Goster:**
 - Proto calisirken **SSE ile gercek zamanli dosya olusturma olaylari** — dosyalar birer birer listeleniyor
@@ -280,7 +290,7 @@ Jira           →  PROJE YONETIMI        (MCP entegrasyonu — izlenebilirlik)
 |--------|-------|
 | Concurrent islem yonetimi | Optimistic locking ile cakisma onleme |
 | Gercek zamanli ilerleme izleme | Server-Sent Events (SSE) — her dosya olusumunda canli bildirim |
-| AI maliyeti optimizasyonu | Effort-based model routing (Haiku → hizli isler, Sonnet → kompleks isler) |
+| AI maliyeti optimizasyonu | **Prompt caching** (`cache_control: ephemeral`, 5dk TTL) + effort-based model routing (Haiku → hizli isler, Sonnet → kompleks isler) + cache-hit metrikleri (`cache_read_input_tokens` DB'de izleniyor) |
 | Entegrasyon hatalari | Graceful degradation — Jira veya GitHub hatasi pipeline'i kirmaz |
 | LLM halisinasyonu | Trace'in Proto kodunu dogrudan GitHub'dan okumasi — kendi halusinasyonunu test etmesini engeller |
 | Uzun sureli islemler | Pipeline FSM ile durum yonetimi, her durumdan kurtarma senaryosu |
