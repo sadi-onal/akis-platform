@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat-square" alt="Version" />&nbsp;
+  <img src="https://img.shields.io/badge/version-0.6.0-blue?style=flat-square" alt="Version" />&nbsp;
   <img src="https://img.shields.io/github/actions/workflow/status/OmerYasirOnal/akis-platform/ci.yml?style=flat-square&label=CI" alt="CI Status" />&nbsp;
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
 </p>
