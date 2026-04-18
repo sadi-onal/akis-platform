@@ -215,6 +215,21 @@ const envSchema = z
     FRESHNESS_AGING_THRESHOLD_DAYS: z.coerce.number().int().min(1).max(3650).default(45),
     MCP_GATEWAY_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(8000),
     MCP_GATEWAY_RETRY_COUNT: z.coerce.number().int().min(0).max(5).default(2),
+
+    /**
+     * Issue #462 — wires chat-level conversation memory into pipeline
+     * agent calls (Scribe/Proto/Trace). When enabled, each agent call
+     * assembles the prior chat turns + dedup'd RAG hits into a bounded
+     * "Conversation so far" block that is appended to the cacheable
+     * system prompt prefix. Default `false` → zero behaviour change, so
+     * flag rollout is staging-first → canary → prod flip.
+     */
+    CHAT_CONTEXT_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    /** Maximum tokens reserved for the chat-memory block (default 8K per issue #462 acceptance). */
+    CHAT_CONTEXT_MAX_TOKENS: z.coerce.number().int().min(256).max(32_000).default(8_000),
   })
   .superRefine((data, ctx) => {
     const isProduction = data.NODE_ENV === 'production';
@@ -585,6 +600,16 @@ export function getAIConfig(env: Env): AIConfig {
 }
 
 let validatedEnv: Env | null = null;
+
+/**
+ * Test-only: clear the cached validated env so the next `getEnv()` call
+ * re-reads `process.env`. Used by unit tests that flip feature flags
+ * (e.g. `CHAT_CONTEXT_ENABLED`) mid-suite. Deliberately not exported
+ * via the normal surface — only `test/` callers should invoke it.
+ */
+export function __clearEnvCacheForTests(): void {
+  validatedEnv = null;
+}
 
 /**
  * Get validated environment variables

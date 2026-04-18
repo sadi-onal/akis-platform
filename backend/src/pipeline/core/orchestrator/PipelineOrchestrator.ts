@@ -38,6 +38,11 @@ import { SecurityGate } from '../security-gate/SecurityGate.js';
 import { ExplainabilityService } from '../explainability/ExplainabilityService.js';
 import { LearningService } from '../learning/LearningService.js';
 import { buildUnifiedAgentKnowledgeContext } from '../unifiedPipelineContext.js';
+import {
+  chatMemoryContextService,
+  type ChatMemoryContextService,
+} from '../../../services/knowledge/ChatMemoryContextService.js';
+import { getEnv } from '../../../config/env.js';
 
 // ─── Timeout Guard ───────────────────────────────
 
@@ -224,6 +229,9 @@ export class PipelineOrchestrator {
   private explainability = new ExplainabilityService();
   private learningService = new LearningService();
 
+  // ─── Chat memory (issue #462) ────────────────────
+  private chatMemory: ChatMemoryContextService = chatMemoryContextService;
+
   constructor(
     private store: PipelineStore,
     private scribe: ScribeAgent,
@@ -244,6 +252,64 @@ export class PipelineOrchestrator {
   /** Inject CriticAgent for Level 3 adversarial review (optional — backward-compatible) */
   setCriticAgent(critic: CriticAgent): void {
     this.criticAgent = critic;
+  }
+
+  /**
+   * Issue #462 — allow tests / integration harnesses to swap in a stubbed
+   * ChatMemoryContextService. Production callers never need this; it's
+   * strictly a seam for unit tests that mock retrieval.
+   */
+  setChatMemoryService(svc: ChatMemoryContextService): void {
+    this.chatMemory = svc;
+  }
+
+  /**
+   * Build the chat-memory + retrieval context block for a pipeline turn
+   * (issue #462). Returns the passed-in `existingKnowledgeContext` unchanged
+   * when `CHAT_CONTEXT_ENABLED=false` so rollout is a pure flag flip.
+   *
+   * The returned string is threaded into the agent's existing
+   * `knowledgeContext` plumbing — which is already wrapped into the cacheable
+   * system prompt prefix via `buildCacheableSystemBlocks` (issue #436).
+   * Appending the memory block to the same prefix means subsequent turns
+   * benefit from Anthropic's content-hash cache automatically.
+   */
+  private async applyChatMemory(
+    pipeline: { id: string; scribeConversation?: readonly ScribeMessageType[]; intermediateState?: Record<string, unknown> | null },
+    existingKnowledgeContext: string | undefined,
+    query: string,
+    opts: { messageIndex?: number } = {},
+  ): Promise<string | undefined> {
+    let env: ReturnType<typeof getEnv>;
+    try {
+      env = getEnv();
+    } catch {
+      // If env parsing fails for any reason, behave as if the flag is off.
+      return existingKnowledgeContext?.trim() ? existingKnowledgeContext : undefined;
+    }
+    if (!env.CHAT_CONTEXT_ENABLED) {
+      return existingKnowledgeContext?.trim() ? existingKnowledgeContext : undefined;
+    }
+
+    try {
+      const { block } = await this.chatMemory.build(pipeline, {
+        enabled: true,
+        query,
+        maxTokens: env.CHAT_CONTEXT_MAX_TOKENS,
+        messageIndex: opts.messageIndex,
+      });
+      if (!block) return existingKnowledgeContext?.trim() ? existingKnowledgeContext : undefined;
+      const base = existingKnowledgeContext?.trim() ? existingKnowledgeContext : '';
+      return base ? `${block}\n${base}` : block;
+    } catch (err) {
+      logger.warn({ err, pipelineId: pipeline.id }, '[Pipeline] Chat-memory context build failed (non-fatal)');
+      return existingKnowledgeContext?.trim() ? existingKnowledgeContext : undefined;
+    }
+  }
+
+  /** Read-only accessor for tests — exposes the active chat-memory service. */
+  getChatMemoryService(): ChatMemoryContextService {
+    return this.chatMemory;
   }
 
   /** Access the pipeline metrics service for reporting */
@@ -483,6 +549,18 @@ export class PipelineOrchestrator {
       scribeState.knowledgeContext = (scribeState.knowledgeContext ?? '') + '\n\n' + attachmentContext;
     }
 
+    // Issue #462 — chat-level conversation memory. First turn: no prior
+    // anchors yet, but we still record the hit-set at messageIndex=0 so
+    // subsequent turns can dedup. When `CHAT_CONTEXT_ENABLED=false` this
+    // is a no-op and `scribeState.knowledgeContext` is unchanged.
+    const scribeFirstPipeline = await this.getPipeline(pipelineId);
+    scribeState.knowledgeContext = await this.applyChatMemory(
+      scribeFirstPipeline,
+      scribeState.knowledgeContext,
+      input.idea,
+      { messageIndex: 0 },
+    );
+
     await this.writeCheckpoint(pipelineId, 'scribe', input.idea);
     const result = await withRetry(
       (attempt) => {
@@ -595,6 +673,23 @@ export class PipelineOrchestrator {
     scribeState.pipelineId = pipelineId;
 
     const agents = this.getAgents(model);
+
+    // Issue #462 — inject prior-turn memory for the continuation call. The
+    // query is the most recent user answer in the conversation (latest
+    // user-side message). `conversation.length` doubles as the message
+    // index so anchors are written one-per-turn.
+    const latestUserMsg = [...conversation]
+      .reverse()
+      .find((m) => m.type === 'user_answer' || m.type === 'user_note' || m.type === 'user_idea');
+    const continuationQuery = typeof latestUserMsg?.content === 'string' ? latestUserMsg.content : '';
+    const pipelineForMemory = await this.getPipeline(pipelineId);
+    scribeState.knowledgeContext = await this.applyChatMemory(
+      pipelineForMemory,
+      scribeState.knowledgeContext,
+      continuationQuery,
+      { messageIndex: conversation.length },
+    );
+
     const result = await withRetry(
       (attempt) => {
         if (attempt > 1) emit('retry', `Scribe devamı yeniden deneniyor (deneme ${attempt})...`, 35);
@@ -755,7 +850,17 @@ export class PipelineOrchestrator {
 
     await this.writeCheckpoint(pipelineId, 'proto', `İterasyon: ${iterationRequest.slice(0, 80)}`);
     const iterationKnowledgeRaw = buildUnifiedAgentKnowledgeContext(pipeline, { role: 'proto' });
-    const iterationKnowledge = iterationKnowledgeRaw.trim() ? iterationKnowledgeRaw : undefined;
+    const iterationKnowledgeBase = iterationKnowledgeRaw.trim() ? iterationKnowledgeRaw : undefined;
+    // Issue #462 — prepend chat-memory + anchor-dedup retrieval for this
+    // iteration turn. Uses `resolveChatId` under the hood, so the memory
+    // scope is the PARENT pipeline id (root chat) — matches the anchor
+    // store's collapse rule.
+    const iterationKnowledge = await this.applyChatMemory(
+      pipeline,
+      iterationKnowledgeBase,
+      iterationRequest,
+      { messageIndex: (pipeline.scribeConversation?.length ?? 0) + 1 },
+    );
     const protoResult = await withRetry(
       (attempt) => {
         if (attempt > 1) protoEmit('retry', `Proto yeniden deneniyor (deneme ${attempt})...`, 30);
@@ -894,9 +999,18 @@ export class PipelineOrchestrator {
     // Unified pipeline chat + GitHub/repo signals (Cursor-like single context bundle)
     const pipelineData = await this.getPipeline(pipelineId);
     const protoKnowledgeRaw = buildUnifiedAgentKnowledgeContext(pipelineData, { role: 'proto' });
-    const protoKnowledge = protoKnowledgeRaw.trim() ? protoKnowledgeRaw : undefined;
-    // Pull persisted imageBlocks from intermediateState so downstream Proto +
-    // Trace calls can see the same screenshots Scribe saw. Issue #464 BUG-C.
+    const protoKnowledgeBase = protoKnowledgeRaw.trim() ? protoKnowledgeRaw : undefined;
+    // Issue #462 — prepend chat-level conversation memory for the Proto
+    // turn. Uses the approved spec title as the retrieval query (best
+    // signal for "what is this chat about?" at the Proto phase).
+    const protoKnowledge = await this.applyChatMemory(
+      pipelineData,
+      protoKnowledgeBase,
+      spec.title,
+      { messageIndex: (pipelineData.scribeConversation?.length ?? 0) + 1 },
+    );
+    // Issue #464 BUG-C — pull persisted imageBlocks from intermediateState
+    // so downstream Proto + Trace calls can see the same screenshots Scribe saw.
     const pipelineImageBlocks = readPipelineImageBlocks(pipelineData.intermediateState);
 
     await this.writeCheckpoint(pipelineId, 'proto', spec.title);
@@ -1482,8 +1596,18 @@ export class PipelineOrchestrator {
     const pipelineForCucumber = await this.getPipeline(pipelineId);
     const cucumberEnabled = (pipelineForCucumber.intermediateState as Record<string, unknown> | undefined)?.cucumberEnabled === true;
     const traceKnowledgeRaw = buildUnifiedAgentKnowledgeContext(pipelineForCucumber, { role: 'trace' });
-    const traceKnowledge = traceKnowledgeRaw.trim() ? traceKnowledgeRaw : undefined;
-    // Issue #464 BUG-C: forward user-uploaded screenshots so Trace can see
+    const traceKnowledgeBase = traceKnowledgeRaw.trim() ? traceKnowledgeRaw : undefined;
+    // Issue #462 — prepend chat-memory block for Trace turn. Retrieval
+    // query is the acceptance-criteria-rich spec title (if present),
+    // else repo/branch breadcrumbs.
+    const traceQuery = spec?.title ?? `${owner}/${repo}@${branch}`;
+    const traceKnowledge = await this.applyChatMemory(
+      pipelineForCucumber,
+      traceKnowledgeBase,
+      traceQuery,
+      { messageIndex: (pipelineForCucumber.scribeConversation?.length ?? 0) + 2 },
+    );
+    // Issue #464 BUG-C — forward user-uploaded screenshots so Trace can see
     // the mockup while writing Playwright selectors/assertions.
     const traceImageBlocks = readPipelineImageBlocks(pipelineForCucumber.intermediateState);
     const traceResult = await withRetry(
