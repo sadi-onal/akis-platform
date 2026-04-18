@@ -5,7 +5,7 @@
  * (e.g., before migration 0022/0023 is run) do not crash the app.
  */
 import { db } from '../../db/client.js';
-import { plans, subscriptions, usageCounters, userBillingOverrides, workspaceBillingSettings, billingNotifications } from '../../db/schema.js';
+import { plans, subscriptions, usageCounters, userBillingOverrides, workspaceBillingSettings, billingNotifications, users } from '../../db/schema.js';
 import { logger } from '../../lib/logger.js';
 import { eq, and, sql, desc } from 'drizzle-orm';
 
@@ -143,7 +143,10 @@ export async function getUserPlan(userId: string): Promise<UserPlan> {
  */
 export async function getUsageSummary(userId: string): Promise<UsageSummary> {
   try {
-    const plan = await getUserPlan(userId);
+    const [plan, unlimited] = await Promise.all([
+      getUserPlan(userId),
+      isUserUnlimited(userId),
+    ]);
     const todayKey = new Date().toISOString().slice(0, 10);
     const monthKey = new Date().toISOString().slice(0, 7);
 
@@ -162,13 +165,24 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
     const jobsUsedToday = dailyUsage?.jobsUsed ?? 0;
     const tokensUsedThisMonth = monthlyUsage?.tokensUsed ?? 0;
 
+    // Unlimited users (admin role or billing override): counters still tick for
+    // audit/telemetry, but percent usage is always 0 so UI bars don't go red.
+    // Issue #382 / BUG-02 — previously the UI mixed raw counters with enforced
+    // limits, showing an admin as "7 / 3 jobs" in red despite backend bypass.
+    const percentJobsUsed = unlimited
+      ? 0
+      : (plan.jobsPerDay > 0 ? Math.round((jobsUsedToday / plan.jobsPerDay) * 100) : 0);
+    const percentTokensUsed = unlimited
+      ? 0
+      : (plan.maxTokenBudget > 0 ? Math.round((tokensUsedThisMonth / plan.maxTokenBudget) * 100) : 0);
+
     return {
       jobsUsedToday,
       tokensUsedThisMonth,
       jobsLimit: plan.jobsPerDay,
       tokensLimit: plan.maxTokenBudget,
-      percentJobsUsed: plan.jobsPerDay > 0 ? Math.round((jobsUsedToday / plan.jobsPerDay) * 100) : 0,
-      percentTokensUsed: plan.maxTokenBudget > 0 ? Math.round((tokensUsedThisMonth / plan.maxTokenBudget) * 100) : 0,
+      percentJobsUsed,
+      percentTokensUsed,
     };
   } catch (err) {
     logger.warn(`[Billing] getUsageSummary failed: ${(err as Error).message}`);
@@ -177,9 +191,30 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
 }
 
 /**
- * Check if a user is unlimited (admin override)
+ * Check if a user is unlimited (admin role OR billing override).
+ *
+ * Two paths trigger unlimited status:
+ *  1. `users.role === 'admin'` — platform operators / staff
+ *  2. `user_billing_overrides.isUnlimited = true` — billing-granted override
+ *
+ * Before this change, only path (2) was checked, causing admin users to see
+ * enforced limits in the Usage/Plan UI even though the pipeline route already
+ * bypassed quota checks for `user.role === 'admin'`. See issue #383 / BUG-03.
  */
 export async function isUserUnlimited(userId: string): Promise<boolean> {
+  try {
+    const [userRow] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (userRow?.role === 'admin') {
+      return true;
+    }
+  } catch {
+    // Fall through to override lookup if users table read fails
+  }
+
   try {
     const [override] = await db
       .select({ isUnlimited: userBillingOverrides.isUnlimited })

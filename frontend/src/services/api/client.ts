@@ -147,7 +147,14 @@ export const api = {
       priorityQueue: boolean;
       priceMonthly: number;
     };
-    remaining: { jobs: number; tokens: number };
+    /** Admin role or billing override → the UI should render ∞ instead of numeric limits. */
+    unlimited: boolean;
+    role: string;
+    /**
+     * Remaining quota. Null for unlimited users (Infinity isn't JSON-serializable);
+     * the UI renders ∞ when null.
+     */
+    remaining: { jobs: number | null; tokens: number | null };
     usage: {
       jobsUsedToday: number;
       tokensUsedThisMonth: number;

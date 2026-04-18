@@ -10,7 +10,7 @@ import { db } from '../db/client.js';
 import { pipelines } from '../db/schema.js';
 import { and, eq, gte, sql, ne } from 'drizzle-orm';
 import { requireAuth } from '../utils/auth.js';
-import { getUserPlan, getUsageSummary } from '../services/billing/BillingService.js';
+import { getUserPlan, getUsageSummary, isUserUnlimited } from '../services/billing/BillingService.js';
 
 // Config-driven free tier
 const FREE_TIER = {
@@ -154,8 +154,11 @@ export async function usageRoutes(fastify: FastifyInstance) {
       try {
         const user = await requireAuth(request);
 
-        const plan = await getUserPlan(user.id);
-        const usage = await getUsageSummary(user.id);
+        const [plan, usage, unlimited] = await Promise.all([
+          getUserPlan(user.id),
+          getUsageSummary(user.id),
+          isUserUnlimited(user.id),
+        ]);
 
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -178,15 +181,28 @@ export async function usageRoutes(fastify: FastifyInstance) {
 
         const stats = result[0] || { totalJobs: 0, totalTokens: 0, estimatedCost: '0' };
 
+        // Unlimited users (admin role / billing override) see Infinity for remaining —
+        // prevents the UI bars from showing "0 remaining" / going red when backend
+        // already bypasses quota checks. Issue #382 / BUG-02.
+        const remainingJobs = unlimited
+          ? Number.POSITIVE_INFINITY
+          : Math.max(0, plan.jobsPerDay - usage.jobsUsedToday);
+        const remainingTokens = unlimited
+          ? Number.POSITIVE_INFINITY
+          : Math.max(0, plan.maxTokenBudget - usage.tokensUsedThisMonth);
+
         return reply.code(200).send({
           totalJobs: stats.totalJobs,
           totalTokens: stats.totalTokens,
           estimatedCost: parseFloat(parseFloat(stats.estimatedCost).toFixed(6)),
           period: 'monthly',
           plan,
+          unlimited,
+          role: user.role,
           remaining: {
-            jobs: Math.max(0, plan.jobsPerDay - usage.jobsUsedToday),
-            tokens: Math.max(0, plan.maxTokenBudget - usage.tokensUsedThisMonth),
+            // Infinity isn't JSON-serializable, so expose as null + let UI render ∞.
+            jobs: Number.isFinite(remainingJobs) ? remainingJobs : null,
+            tokens: Number.isFinite(remainingTokens) ? remainingTokens : null,
           },
           usage: {
             jobsUsedToday: usage.jobsUsedToday,

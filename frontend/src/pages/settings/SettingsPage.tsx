@@ -1832,8 +1832,10 @@ function UsageTab() {
     </div>
   );
 
-  const pctJobsDaily = planUsage ? Math.min(100, planUsage.usage.percentJobsUsed) : 0;
-  const pctTokensMonthly = planUsage ? Math.min(100, planUsage.usage.percentTokensUsed) : 0;
+  const isUnlimitedUser = Boolean(planUsage?.unlimited);
+  // Admin / unlimited users never see progress-bar fill (issue #382 / BUG-02).
+  const pctJobsDaily = planUsage && !isUnlimitedUser ? Math.min(100, planUsage.usage.percentJobsUsed) : 0;
+  const pctTokensMonthly = planUsage && !isUnlimitedUser ? Math.min(100, planUsage.usage.percentTokensUsed) : 0;
 
   return (
     <div className="space-y-4">
@@ -1844,12 +1846,13 @@ function UsageTab() {
             <h2 className="text-sm font-semibold text-ak-text-primary">{t('settings.usage.title')}</h2>
             <span className={cn(
               'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-              planUsage.plan.tier === 'free' ? 'bg-ak-surface-2 text-ak-text-tertiary'
+              isUnlimitedUser ? 'bg-ak-primary/10 text-ak-primary'
+                : planUsage.plan.tier === 'free' ? 'bg-ak-surface-2 text-ak-text-tertiary'
                 : planUsage.plan.tier === 'pro' ? 'bg-ak-primary/10 text-ak-primary'
                 : planUsage.plan.tier === 'team' ? 'bg-purple-500/10 text-purple-400'
                 : 'bg-ak-surface-2 text-ak-text-tertiary',
             )}>
-              {planUsage.plan.name} Plan
+              {isUnlimitedUser ? 'Sinirsiz' : `${planUsage.plan.name} Plan`}
             </span>
           </div>
 
@@ -1866,14 +1869,19 @@ function UsageTab() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs text-ak-text-secondary">Gunluk Is Limiti</span>
                 <span className="text-xs font-mono text-ak-text-tertiary">
-                  {planUsage.usage.jobsUsedToday} / {planUsage.usage.jobsLimit}
+                  {isUnlimitedUser
+                    ? `${planUsage.usage.jobsUsedToday} / ∞`
+                    : `${planUsage.usage.jobsUsedToday} / ${planUsage.usage.jobsLimit}`}
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-ak-surface-2">
                 <div
                   className={cn('h-full rounded-full transition-all duration-500',
-                    pctJobsDaily >= 100 ? 'bg-red-500' : pctJobsDaily > 70 ? 'bg-yellow-500' : 'bg-ak-primary')}
-                  style={{ width: `${pctJobsDaily}%` }}
+                    isUnlimitedUser ? 'bg-ak-primary/40'
+                      : pctJobsDaily >= 100 ? 'bg-red-500'
+                      : pctJobsDaily > 70 ? 'bg-yellow-500'
+                      : 'bg-ak-primary')}
+                  style={{ width: isUnlimitedUser ? '100%' : `${pctJobsDaily}%` }}
                 />
               </div>
             </div>
@@ -1883,31 +1891,44 @@ function UsageTab() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs text-ak-text-secondary">Aylik Token Limiti</span>
                 <span className="text-xs font-mono text-ak-text-tertiary">
-                  {formatTokens(planUsage.usage.tokensUsedThisMonth)} / {formatTokens(planUsage.usage.tokensLimit)}
+                  {isUnlimitedUser
+                    ? `${formatTokens(planUsage.usage.tokensUsedThisMonth)} / ∞`
+                    : `${formatTokens(planUsage.usage.tokensUsedThisMonth)} / ${formatTokens(planUsage.usage.tokensLimit)}`}
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-ak-surface-2">
                 <div
                   className={cn('h-full rounded-full transition-all duration-500',
-                    pctTokensMonthly >= 100 ? 'bg-red-500' : pctTokensMonthly > 70 ? 'bg-yellow-500' : 'bg-blue-500')}
-                  style={{ width: `${pctTokensMonthly}%` }}
+                    isUnlimitedUser ? 'bg-blue-500/40'
+                      : pctTokensMonthly >= 100 ? 'bg-red-500'
+                      : pctTokensMonthly > 70 ? 'bg-yellow-500'
+                      : 'bg-blue-500')}
+                  style={{ width: isUnlimitedUser ? '100%' : `${pctTokensMonthly}%` }}
                 />
               </div>
             </div>
           </div>
 
-          {/* Remaining */}
+          {/* Remaining — merges a11y typography (#409, main) with admin-unlimited logic (#401) */}
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-lg bg-ak-surface-2 p-3 text-center">
               <p className="text-xs text-ak-text-secondary">Kalan Is (Bugun)</p>
-              <p className={cn('text-xl font-bold', planUsage.remaining.jobs <= 0 ? 'text-red-400' : 'text-ak-primary')}>
-                {planUsage.remaining.jobs}
+              <p className={cn('text-xl font-bold',
+                isUnlimitedUser ? 'text-ak-primary'
+                  : (planUsage.remaining.jobs ?? 0) <= 0 ? 'text-red-400'
+                  : 'text-ak-primary')}>
+                {isUnlimitedUser || planUsage.remaining.jobs === null ? '∞' : planUsage.remaining.jobs}
               </p>
             </div>
             <div className="rounded-lg bg-ak-surface-2 p-3 text-center">
               <p className="text-xs text-ak-text-secondary">Kalan Token (Ay)</p>
-              <p className={cn('text-xl font-bold', planUsage.remaining.tokens <= 0 ? 'text-red-400' : 'text-blue-400')}>
-                {formatTokens(planUsage.remaining.tokens)}
+              <p className={cn('text-xl font-bold',
+                isUnlimitedUser ? 'text-blue-400'
+                  : (planUsage.remaining.tokens ?? 0) <= 0 ? 'text-red-400'
+                  : 'text-blue-400')}>
+                {isUnlimitedUser || planUsage.remaining.tokens === null
+                  ? '∞'
+                  : formatTokens(planUsage.remaining.tokens)}
               </p>
             </div>
           </div>
@@ -2082,11 +2103,11 @@ function PlanTab() {
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg bg-ak-surface-2 p-3">
               <p className="text-[10px] text-ak-text-tertiary">Bugun</p>
-              <p className="text-sm font-bold text-ak-text-primary">{(usage as Record<string, number>).jobsUsedToday ?? usage.jobsToday ?? 0} <span className="text-[10px] font-normal text-ak-text-tertiary">/ {unlimited ? '∞' : ((usage as Record<string, number>).jobsLimit ?? plan.jobsPerDay)} is</span></p>
+              <p className="text-sm font-bold text-ak-text-primary">{(usage as Record<string, number>).jobsUsedToday ?? usage.jobsToday ?? 0} <span className="text-[10px] font-normal text-ak-text-tertiary">/ {(unlimited || isAdmin) ? '∞' : ((usage as Record<string, number>).jobsLimit ?? plan.jobsPerDay)} is</span></p>
             </div>
             <div className="rounded-lg bg-ak-surface-2 p-3">
               <p className="text-[10px] text-ak-text-tertiary">Bu Ay Token</p>
-              <p className="text-sm font-bold text-ak-text-primary">{formatTokens((usage as Record<string, number>).tokensUsedThisMonth ?? usage.tokensThisMonth ?? 0)} <span className="text-[10px] font-normal text-ak-text-tertiary">/ {unlimited ? '∞' : formatTokens((usage as Record<string, number>).tokensLimit ?? plan.maxTokenBudget)}</span></p>
+              <p className="text-sm font-bold text-ak-text-primary">{formatTokens((usage as Record<string, number>).tokensUsedThisMonth ?? usage.tokensThisMonth ?? 0)} <span className="text-[10px] font-normal text-ak-text-tertiary">/ {(unlimited || isAdmin) ? '∞' : formatTokens((usage as Record<string, number>).tokensLimit ?? plan.maxTokenBudget)}</span></p>
             </div>
           </div>
         )}
@@ -2096,13 +2117,13 @@ function PlanTab() {
       <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
         <h3 className="mb-3 text-xs font-semibold text-ak-text-primary">Plan Limitleri</h3>
         <div className="space-y-2">
-          <PlanLimitRow label={t('settings.plan.jobsPerDay')} value={unlimited ? '∞' : String(plan.jobsPerDay)} />
-          <PlanLimitRow label={t('settings.plan.tokenBudget')} value={unlimited ? '∞' : formatTokens(plan.maxTokenBudget)} />
-          <PlanLimitRow label={t('settings.plan.maxAgents')} value={unlimited ? '∞' : String(plan.maxAgents)} />
+          <PlanLimitRow label={t('settings.plan.jobsPerDay')} value={(unlimited || isAdmin) ? '∞' : String(plan.jobsPerDay)} />
+          <PlanLimitRow label={t('settings.plan.tokenBudget')} value={(unlimited || isAdmin) ? '∞' : formatTokens(plan.maxTokenBudget)} />
+          <PlanLimitRow label={t('settings.plan.maxAgents')} value={(unlimited || isAdmin) ? '∞' : String(plan.maxAgents)} />
           <PlanLimitRow label={t('settings.plan.depthModes')} value={plan.depthModesAllowed.join(', ')} />
-          <PlanLimitRow label={t('settings.plan.maxOutput')} value={unlimited ? '∞' : formatTokens(plan.maxOutputTokensPerJob)} />
-          <PlanLimitRow label={t('settings.plan.passes')} value={unlimited ? '∞' : String(plan.passesAllowed)} />
-          <PlanLimitRow label={t('settings.plan.priorityQueue')} value={plan.priorityQueue || unlimited ? 'Evet' : 'Hayir'} highlight={Boolean(plan.priorityQueue || unlimited)} />
+          <PlanLimitRow label={t('settings.plan.maxOutput')} value={(unlimited || isAdmin) ? '∞' : formatTokens(plan.maxOutputTokensPerJob)} />
+          <PlanLimitRow label={t('settings.plan.passes')} value={(unlimited || isAdmin) ? '∞' : String(plan.passesAllowed)} />
+          <PlanLimitRow label={t('settings.plan.priorityQueue')} value={(plan.priorityQueue || unlimited || isAdmin) ? 'Evet' : 'Hayir'} highlight={Boolean(plan.priorityQueue || unlimited || isAdmin)} />
         </div>
       </div>
 
