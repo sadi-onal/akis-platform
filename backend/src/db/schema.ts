@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, jsonb, timestamp, pgEnum, text, index, boolean, integer, uniqueIndex, numeric, customType } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, jsonb, timestamp, pgEnum, text, index, boolean, integer, uniqueIndex, numeric, customType, real } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // pgvector custom type for embedding columns (1536 dimensions for text-embedding-3-small)
@@ -1614,6 +1614,45 @@ export const knowledgeTagsRelations = relations(knowledgeTags, ({ one }) => ({
   chunk: one(knowledgeChunks, {
     fields: [knowledgeTags.chunkId],
     references: [knowledgeChunks.id],
+  }),
+}));
+
+/**
+ * Chat-level retrieval anchors (issue #439).
+ *
+ * Records which knowledge chunks have been surfaced to a chat so later
+ * messages in the same chat can dedupe (avoid re-surfacing) and, eventually,
+ * the UI can show citation chips back-referencing the anchor.
+ *
+ * `chat_id` = root pipeline id (parent iteration pipelines share the same
+ * chat). `message_index` is monotonic within a chat.
+ */
+export const chatRetrievalAnchors = pgTable('chat_retrieval_anchors', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  chatId: uuid('chat_id').notNull(),
+  chunkId: uuid('chunk_id').notNull().references(() => knowledgeChunks.id, { onDelete: 'cascade' }),
+  documentId: uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  messageIndex: integer('message_index').notNull(),
+  score: real('score').notNull(),
+  retrievalMethod: varchar('retrieval_method', { length: 20 }).notNull(),
+  surfacedContentHash: varchar('surfaced_content_hash', { length: 64 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  chatIdx: index('idx_chat_retrieval_anchors_chat').on(table.chatId, table.messageIndex),
+  chunkIdx: index('idx_chat_retrieval_anchors_chunk').on(table.chunkId),
+}));
+
+export type ChatRetrievalAnchor = typeof chatRetrievalAnchors.$inferSelect;
+export type NewChatRetrievalAnchor = typeof chatRetrievalAnchors.$inferInsert;
+
+export const chatRetrievalAnchorsRelations = relations(chatRetrievalAnchors, ({ one }) => ({
+  chunk: one(knowledgeChunks, {
+    fields: [chatRetrievalAnchors.chunkId],
+    references: [knowledgeChunks.id],
+  }),
+  document: one(knowledgeDocuments, {
+    fields: [chatRetrievalAnchors.documentId],
+    references: [knowledgeDocuments.id],
   }),
 }));
 

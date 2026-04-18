@@ -10,12 +10,82 @@ const DEFAULT_MAX_TOKENS = 4000;
 const DEFAULT_KEYWORD_WEIGHT = 0.55;
 const DEFAULT_SEMANTIC_WEIGHT = 0.45;
 
+import { chatRetrievalAnchorService, type ChatRetrievalAnchorService } from './ChatRetrievalAnchorService.js';
+
+/**
+ * Extra knobs for chat-scoped retrieval (issue #439). When `chatId` is
+ * supplied the service reads prior anchors for that chat, subtracts those
+ * chunks from the fresh hit-set, returns the top-K remaining, and writes
+ * the new hits back as anchors so the next turn can dedupe further.
+ *
+ * `priorChunkIds` is an explicit opt-in — callers that already know some
+ * chunk ids they'd like to exclude (e.g. chat-level RAG reading from a
+ * transient in-memory cache) can pass them without going through the DB.
+ */
+export interface ChatScopedRetrievalOptions extends RetrievalOptions {
+  chatId?: string;
+  messageIndex?: number;
+  priorChunkIds?: readonly string[];
+  /** Window size for anchor lookup (default 10, matches issue #439 spec). */
+  windowSize?: number;
+}
+
 export class KnowledgeRetrievalService {
+  constructor(
+    private readonly anchors: ChatRetrievalAnchorService = chatRetrievalAnchorService,
+  ) {}
+
   async search(
     query: string,
     options: RetrievalOptions = {}
   ): Promise<RetrievalResult[]> {
     return this.searchKeyword(query, options);
+  }
+
+  /**
+   * Chat-scoped retrieval (issue #439). Builds an exclude-set from the
+   * chat's recent anchors (+ any caller-supplied `priorChunkIds`), runs a
+   * hybrid search over a 3x enlarged pool, drops excluded chunks, and
+   * records the surviving hits back to the anchor store so the *next*
+   * turn in the same chat can dedupe further.
+   *
+   * When `chatId` is omitted this degrades to `searchHybrid` exactly —
+   * guaranteeing callers who haven't opted in see zero behaviour change.
+   */
+  async retrieveWithAnchors(
+    query: string,
+    options: ChatScopedRetrievalOptions = {},
+  ): Promise<RetrievalResult[]> {
+    const targetCount = options.maxResults ?? 5;
+
+    // No chat id → plain hybrid path, behaviour-preserving.
+    if (!options.chatId) {
+      return this.searchHybrid(query, { ...options, maxResults: targetCount });
+    }
+
+    const excludeSet = new Set<string>(options.priorChunkIds ?? []);
+    try {
+      const anchorRows = await this.anchors.read(options.chatId, { windowSize: options.windowSize });
+      for (const row of anchorRows) excludeSet.add(row.chunkId);
+    } catch (err) {
+      // Anchor read should never block retrieval — the user's turn is more
+      // important than perfect dedup. Degrade to the caller-supplied
+      // exclude list + a fresh search.
+      logger.warn({ err, chatId: options.chatId }, '[KnowledgeRetrieval] anchor read failed, skipping dedup');
+    }
+
+    const enlargedPool = Math.max(targetCount * 3, 15);
+    const pool = await this.searchHybrid(query, { ...options, maxResults: enlargedPool });
+    const fresh = pool.filter((r) => !excludeSet.has(r.chunkId)).slice(0, targetCount);
+
+    // Persist asynchronously — failures are non-fatal and do NOT throw into
+    // the agent path. We await here for deterministic test behaviour, but
+    // the service itself logs + swallows internal errors.
+    if (typeof options.messageIndex === 'number') {
+      await this.anchors.write(options.chatId, options.messageIndex, fresh);
+    }
+
+    return fresh;
   }
 
   async searchHybrid(
