@@ -173,7 +173,7 @@ export default function SettingsPage() {
 
       <div className="mx-auto w-full max-w-2xl px-4 py-6">
         {/* Tab bar */}
-        <div className="mb-6 flex gap-1 overflow-x-auto rounded-lg border border-ak-border bg-ak-surface p-1 scrollbar-none">
+        <div className="mb-6 flex flex-wrap gap-1 rounded-lg border border-ak-border bg-ak-surface p-1">
           <TabButton active={activeTab === 'profile'} onClick={() => setTab('profile')}>
             {t('settings.tab.profile')}
           </TabButton>

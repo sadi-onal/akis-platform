@@ -208,7 +208,7 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
     <div
       data-expanded={expanded ? 'true' : 'false'}
       className={cn(
-        'shrink-0 mx-auto px-3 sm:px-6 pt-4 pb-2',
+        'shrink-0 mx-auto w-full px-3 sm:px-6 pt-4 pb-2',
         expanded ? 'max-w-5xl' : 'max-w-3xl md:max-w-4xl xl:max-w-5xl',
       )}
       onDragOver={handleDragOver}
