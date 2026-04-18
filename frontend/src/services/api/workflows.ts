@@ -328,6 +328,7 @@ export function mapPipelineToWorkflow(pipeline: Pipeline, tokenUsage?: import('.
     engineerSessionId: pipeline.intermediateState?.engineerSessionId,
     tokenUsage,
     model: pipeline.model ?? tokenUsage?.model,
+    error: pipeline.error,
   };
 }
 

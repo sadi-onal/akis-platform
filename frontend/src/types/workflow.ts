@@ -153,6 +153,8 @@ export interface Workflow {
   updatedAt?: string;
   stages: WorkflowStages;
   conversation?: ConversationMessage[];
+  /** Pipeline error details — present when status is 'failed'. */
+  error?: import('./pipeline').PipelineError;
   /**
    * Set when the pipeline was started by an Engineer Rental Mode session.
    * The chat UI uses this to render an "engineer-owned" badge in the sidebar

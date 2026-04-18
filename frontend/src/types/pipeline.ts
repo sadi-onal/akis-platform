@@ -133,7 +133,7 @@ export interface PipelineError {
   message: string;
   technicalDetail?: string;
   retryable: boolean;
-  recoveryAction?: 'retry' | 'edit_spec' | 'reconnect_github' | 'start_over';
+  recoveryAction?: 'retry' | 'edit_spec' | 'reconnect_github' | 'start_over' | 'skip-trace';
 }
 
 export interface PipelineMetrics {

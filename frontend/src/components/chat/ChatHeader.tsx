@@ -19,6 +19,8 @@ interface ChatHeaderProps {
   prUrl?: string;
   prNumber?: number;
   mode?: ChatMode;
+  /** When true, overrides the mode chip with a red "HATA" badge. */
+  isFailed?: boolean;
   hasPreview?: boolean;
   showPreview?: boolean;
   onTogglePreview?: () => void;
@@ -38,6 +40,7 @@ export function ChatHeader({
   prUrl,
   prNumber,
   mode,
+  isFailed,
   hasPreview,
   showPreview,
   onTogglePreview,
@@ -62,12 +65,16 @@ export function ChatHeader({
         </button>
       )}
 
-      {/* Mode badge */}
-      {mode && (
+      {/* Mode badge — overridden by HATA when pipeline has failed */}
+      {isFailed ? (
+        <span className="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400">
+          HATA
+        </span>
+      ) : mode ? (
         <span className={cn('rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider', MODE_STYLES[mode])}>
           {mode}
         </span>
-      )}
+      ) : null}
 
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-sm font-semibold text-ak-text-primary">{repoShortName}</h1>

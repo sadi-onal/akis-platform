@@ -466,6 +466,11 @@ export default function ChatPage() {
         if (convLen !== prevConvLenRef.current || stageChanged) {
           prevConvLenRef.current = convLen;
           setActiveWorkflow(w);
+          // Keep sidebar list item in sync so status dot reflects failed/running state
+          const item = workflowToListItem(w);
+          setConversations((prev) =>
+            prev.some((c) => c.id === item.id) ? prev.map((c) => (c.id === item.id ? item : c)) : prev,
+          );
           const lastTs = w.conversation?.[convLen - 1]?.timestamp ?? '';
           const key = `${conversationId}:${convLen}:${lastTs}`;
           if (key !== lastMessagesKeyRef.current) {
@@ -1087,6 +1092,7 @@ export default function ChatPage() {
                   tokenUsage={activeWorkflow?.tokenUsage}
                   model={activeWorkflow?.model}
                   onModelChange={!pendingConv ? handleModelChange : undefined}
+                  pipelineError={activeWorkflow?.currentStage === 'failed' ? activeWorkflow?.error : undefined}
                 />
               </ErrorBoundary>
             </div>

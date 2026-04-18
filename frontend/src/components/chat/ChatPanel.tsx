@@ -9,6 +9,8 @@ import { EmptyState } from './EmptyState';
 import { ChatSkeleton } from './ChatSkeleton';
 import { ClarificationCard } from './ClarificationCard';
 import { TraceProgressStepper } from './TraceProgressStepper';
+import { PipelineErrorBanner } from './PipelineErrorBanner';
+import type { PipelineError } from '../../types/pipeline';
 
 function getAgentInfo(uiState: ConversationUIState) {
   if (uiState.includes('scribe')) return { label: 'Scribe', color: 'var(--ak-scribe, #3b82f6)' };
@@ -55,6 +57,8 @@ interface ChatPanelProps {
   model?: string;
   onModelChange?: (modelId: string) => void | Promise<void>;
   modelProviderHint?: 'anthropic' | 'openai' | 'openrouter';
+  /** Pipeline error — present when stage === 'failed'. Renders error banner + disables input. */
+  pipelineError?: PipelineError;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -94,6 +98,7 @@ export const ChatPanel = memo(function ChatPanel({
   model,
   onModelChange,
   modelProviderHint,
+  pipelineError,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -168,6 +173,7 @@ export const ChatPanel = memo(function ChatPanel({
           prUrl={prUrl}
           prNumber={prNumber}
           mode={mode}
+          isFailed={!!pipelineError}
           hasPreview={hasPreview}
           showPreview={showPreview}
           onTogglePreview={onTogglePreview}
@@ -177,6 +183,15 @@ export const ChatPanel = memo(function ChatPanel({
           model={model}
           onModelChange={onModelChange}
           modelProviderHint={modelProviderHint}
+        />
+      )}
+
+      {/* Error banner — rendered immediately below header when pipeline has failed */}
+      {pipelineError && (
+        <PipelineErrorBanner
+          error={pipelineError}
+          onRetry={onRetry}
+          onSkipTrace={onSkip}
         />
       )}
 
