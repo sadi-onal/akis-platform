@@ -292,6 +292,41 @@ Yuksek-risk PR kategorisi (kullanici onayi sart):
 - Pipeline orchestrator veya agent prompt degisikligi
 - CI workflow / deployment script degisikligi
 
+### Smoke-Test → Issue Triage Dongusu (zorunlu)
+
+Prod veya staging smoke-test sirasinda yeni bir bug kesfedildiginde
+ASAGIDAKI ADIMLARI OTOMATIK CALISTIR — kullanicidan tekrar istek beklemeden:
+
+1. **Log**: `docs/ops/PROD_SMOKE_BUGS_<date>.md` dosyasini ac/guncelle:
+   - Her bug icin: `BUG-N`, severity (🔴🟠🟡🟢), konum, semptom, kok neden,
+     onerilen fix, issue ID kolonu (TBD ile basla)
+   - Ustteki "GitHub Issue Haritasi" tablosuna satir ekle
+2. **Duplicate kontrolu**: `gh issue list --state all --limit 100` calistir.
+   Yeni bug mevcut bir open/closed issue ile ortusuyor mu? Ortusuyorsa:
+   - Open issue varsa → yeni yorum olarak "prod re-verify" / "yeni semptom"
+     bilgisini ekle, issue ID'yi log'a yaz (yeni issue acma)
+   - Closed issue varsa ve regresyon varsa → reopen et + yorum bas
+3. **Yeni issue (sadece gercekten yeni bug icin)**: `gh issue create` ile
+   detayli body (Observed, Repro, Root cause, Fix plan, Severity) + `bug`
+   label. Issue numarasini log'a geri yaz.
+4. **Stale issue temizligi**: Ayni anda `gh issue list --state open` cikti-
+   sina bak. 30+ gun updatedAt'i olan, PR linki olmayan, supersede edilmis
+   issue'lari kapat:
+   - "Closing as superseded by #N" veya "No longer reproducible in vX.Y" yorumu
+   - `gh issue close <N> --comment "..."`.
+   - EMIN DEGILSEN kullaniciya sor, otomatik kapatma.
+5. **Rapor**: Oturum sonunda kullaniciya ozet — kac issue acildi, kac
+   yorum dusuldu, kac stale kapandi, acilan issue URL'leri.
+
+Bu dongu **her smoke-test** sonrasi calistirilir (wave-1, wave-2, vb.).
+Her yeni bug-log dosyasi AYNI GUN issue'lara baglanir — hicbir bug "sadece
+markdown'da" kalmaz.
+
+Duplicate issue patlamasini onlemek icin: yeni issue acmadan ONCE
+`gh issue list --search "<key phrase>"` zorunlu. "BUG-N" numarasi kod/log
+dosyasinda, issue numarasi GitHub'da — ikisi farkli namespace, log
+dosyasi kopruyu tutar.
+
 ## AI Provider Yapilandirmasi
 
 Desteklenen provider'lar: `anthropic`, `openai`, `openrouter`, `mock`

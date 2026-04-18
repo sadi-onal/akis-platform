@@ -26,6 +26,11 @@
 | BUG-15 | [#395](https://github.com/OmerYasirOnal/akis-platform-devolopment/issues/395) | 🟠 | `feat/engineer-mode-intro-and-fix` |
 | VERIFY-Jira | [#396](https://github.com/OmerYasirOnal/akis-platform-devolopment/issues/396) | 🟢 | `verify/jira-integration-e2e` |
 | VERIFY-Cucumber | [#397](https://github.com/OmerYasirOnal/akis-platform-devolopment/issues/397) | 🟢 | `verify/cucumber-bdd-e2e` |
+| BUG-19 *(2026-04-18)* | [#427](https://github.com/OmerYasirOnal/akis-platform/issues/427) (BUG-17 kısmı) | 🔴 | `fix/iteration-silence-and-dup-send` branch hazır — **merge+deploy bekliyor** |
+| BUG-20 *(2026-04-18)* | [#427](https://github.com/OmerYasirOnal/akis-platform/issues/427) (BUG-18 kısmı) | 🟠 | aynı PR |
+| BUG-21 *(2026-04-18)* | [#429](https://github.com/OmerYasirOnal/akis-platform/issues/429) | 🔴 | Frontend UX: [PR #433](https://github.com/OmerYasirOnal/akis-platform/pull/433) · Backend prod-infra: #429 investigation comment |
+| BUG-22 *(2026-04-18)* | [#425](https://github.com/OmerYasirOnal/akis-platform/issues/425) | 🟠 | **False positive** — preserve-log artık'ı, düzeltme yorumu #425'e bırakıldı. 41s hang hâlâ #425 kapsamında. |
+| BUG-23 *(2026-04-18)* | [#430](https://github.com/OmerYasirOnal/akis-platform/issues/430) | 🟡 | [PR #432](https://github.com/OmerYasirOnal/akis-platform/pull/432) |
 
 **Kapatılan eski issue'lar:** #333, #316, #315, #314, #313, #312, #311, #310, #250 (hepsi bu sweep ile supersede edildi).
 
@@ -269,6 +274,80 @@ Sonrasında iteration için resim + text prompt gönderildi ("bu resimdeki iconl
 - Tier 1'i **tek mega PR** yapma, her bug ayrı PR (review + rollback kolay olsun)
 - Tier 3'te 5-7 arası tek "polish PR"ında birleşebilir
 - Her PR öncesi `pnpm -C backend typecheck && lint && test:unit && build` + `pnpm -C frontend ...` (CLAUDE.md quality gate)
+
+---
+
+---
+
+# 📸 2026-04-18 Follow-up Smoke — Yeni Bulgular
+
+**Ortam:** `akisflow.com` (prod)
+**Test:** Mevcut chat'te iteration ("bunu düzelt" — `chat/00683e9b-a1f4-4f67-8639-7f7b6bf7a7e4`) + `/engineer` sayfa turu
+**Sonuç:** BUG-08 fix çalışıyor ✅ (iteration aynı chat'te kaldı, yeni sohbet açmadı). Ama yeni kritik sorunlar var.
+
+## Özet
+| Bug | Severity | Durum |
+|---|---|---|
+| BUG-19 | 🔴 | BUG-17 fix prod'a deploy bekliyor (PR #427 merge edilmemiş) |
+| BUG-20 | 🟠 | BUG-18 fix prod'a deploy bekliyor (aynı PR) |
+| BUG-21 | 🔴 | `/api/github/repos` ERR_CONNECTION_REFUSED — prod arıza |
+| BUG-22 | 🟠 | `/api/engineer/discover` 400 Bad Request |
+| BUG-23 | 🟡 | `/engineer` sayfasında Türkçe diakritik eksik |
+
+---
+
+## BUG-19 🔴 Iteration prompt — user bubble hâlâ 2 kere beliriyor (deploy bekliyor)
+- **Konum:** Mevcut chat → alt input "bunu düzelt" gönder
+- **Semptom:** Mesaj tek kere yazıldı, 12:44'te **iki ayrı bubble** olarak çıktı
+- **Kök neden:** BUG-17 fix commit `19e847c` (PR #427) `fix/iteration-silence-and-dup-send` branch'inde hazır ama **main'e merge edilmemiş** → prod eski kodu çalıştırıyor
+- **Aksiyon:** PR #427 review → merge → deploy. Yeni kod değişikliği gerektirmiyor, sadece ship.
+- **Doğrulama sonrası:** Aynı senaryoyu tekrar test et, tek bubble görmeli
+
+## BUG-20 🟠 Iteration sonrası agent sessiz — sadece "İterasyon başlatıldı" diyor
+- **Konum:** Aynı iteration akışı
+- **Semptom:** Chat timeline'ında "İterasyon başlatıldı — Proto mevcut repo üstüne değişiklikleri uyguluyor" mesajı geldi, sonra **hiçbir şey gelmedi**. Preview güncellendi mi, hangi dosyalar değişti, ne oldu — kullanıcıya bilgi yok.
+- **Kök neden:** BUG-18 fix (completion message push) aynı PR #427'de — deploy bekliyor
+- **Aksiyon:** BUG-19 ile birlikte çözülür
+
+## BUG-21 🔴 `/engineer` sayfası çalışmıyor — `/api/github/repos` ERR_CONNECTION_REFUSED
+- **Konum:** `akisflow.com/engineer` → "Reponuzu seçin" spinner
+- **Semptom:**
+  - Infinite spinner, repo listesi hiç yüklenmiyor
+  - Console: `GET https://akisflow.com/api/github/repos net::ERR_CONNECTION_REFUSED` (**3 kere peş peşe**, retry mekanizması da fail ediyor)
+- **Şüpheli yerler:**
+  - `backend/src/api/github.ts:91` `GET /repos` route'u var ve authPreHandler ile korunuyor
+  - ERR_CONNECTION_REFUSED → backend up ama route ulaşılamıyor gibi (Caddy routing? plugin register sırası? auth middleware infinite redirect?)
+  - Aynı anda `/api/pipelines` 200 dönüyor (Screenshot 1'de görünüyor) → backend tamamen down değil, **sadece github route'u bozuk**
+- **Öncelik:** 🔴 — Mühendis Modu tamamen ölü, BUG-15 intro modal fix'inin anlamı kalmadı
+- **Aksiyon:** Prod log'larına bak (github route register ediliyor mu?), Caddy config'i kontrol et, health check yaz
+
+## BUG-22 🟠 `/api/engineer/discover` 400 Bad Request (hem chat hem engineer sayfasında)
+- **Konum:** Hem `/chat/...` hem `/engineer` sayfa yüklenirken
+- **Semptom:** `POST https://akisflow.com/api/engineer/discover 400 (Bad Request)` — iki sayfada da tetikleniyor
+- **Şüpheli yerler:**
+  - `backend/src/pipeline/api/engineer.routes.ts:204` `discover` handler Zod schema ile body valide ediyor
+  - Frontend muhtemelen eksik/yanlış payload yolluyor (owner/repo/branch alanlarından biri eksik?)
+  - Chat sayfasında niye `/engineer/discover` çağrılıyor sorusu ayrı — sızıntı olabilir
+- **Aksiyon:** Backend log'da 400'ün hangi field'dan geldiğine bak; frontend çağrısını `getRepos → discover` sırasını trace et
+
+## BUG-23 🟡 `/engineer` sayfasında Türkçe diakritik eksik
+- **Konum:** `frontend/src/pages/engineer/EngineerPage.tsx:133,136` + `EngineerSessionPage.tsx:384,423`
+- **Semptom:**
+  - "Muhendis Modu" → doğrusu **Mühendis Modu** (ü)
+  - "Reponuzu secin, AI muhendisiniz calismaya baslasin" → doğrusu **Reponuzu seçin, AI mühendisiniz çalışmaya başlasın** (ç, ü, ç, ı, ı, ı)
+  - "Muhendis Modu'na don" → doğrusu **Mühendis Modu'na dön**
+- **Kök neden:** String'ler kodda hard-coded, ASCII-only yazılmış
+- **Aksiyon:** Basit find-replace fix. `fix/engineer-turkish-diacritics` PR'ı — tek dosyada 4 değişiklik
+
+---
+
+## Pipeline "Genel Site Hatası" Teşhisi (user quote: *"şuan genel sitede bir hata var gibi"*)
+
+Kullanıcının hissettiği "genel hata" aslında **iki bağımsız arıza**:
+1. **BUG-21** — `/api/github/repos` route ölü → GitHub bağlı görünse bile repo listesi gelmiyor → Mühendis Modu bozuk
+2. **BUG-22** — `/api/engineer/discover` 400 → task discovery çalışmıyor
+
+Sandpack ERR_CONNECTION_TIMED_OUT (console'da `col.csbops.io/data/sandpack`) **bizim bug değil** — Sandpack telemetry endpoint'i, preview'ı etkilemiyor.
 
 ---
 
