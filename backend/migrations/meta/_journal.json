@@ -309,6 +309,20 @@
       "when": 1776643200000,
       "tag": "0042_add_chat_retrieval_anchors",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1776729600000,
+      "tag": "0043_chat_scope_knowledge_chunks",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1776816000000,
+      "tag": "0044_add_agent_activities",
+      "breakpoints": true
     }
   ]
 }

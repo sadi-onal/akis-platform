@@ -1779,4 +1779,11 @@ export const devMessages = pgTable('dev_messages', {
 export type DevSession = typeof devSessions.$inferSelect;
 export type NewDevSession = typeof devSessions.$inferInsert;
 export type DevMessage = typeof devMessages.$inferSelect;
+
+// ============================================================================
+// Pipeline: Agent Activities (issue #473)
+// Re-exported so Drizzle's generator includes agent_activities in migrations.
+// ============================================================================
+export { agentActivities } from '../pipeline/db/agent-activity-schema.js';
+export type { AgentActivityInsert, AgentActivitySelect } from '../pipeline/db/agent-activity-schema.js';
 export type NewDevMessage = typeof devMessages.$inferInsert;
