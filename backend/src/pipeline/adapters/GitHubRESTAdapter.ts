@@ -23,6 +23,39 @@ interface GitHubRESTAdapterOptions {
 
 const MAX_RATE_LIMIT_RETRIES = 2;
 
+/**
+ * Polls GET /repos/{owner}/{repo}/git/ref/heads/{branch} until it returns 200
+ * or the timeout is exceeded.  Needed because GitHub's auto_init commit can take
+ * 1-3 seconds to become visible on the REST API after createRepository returns.
+ *
+ * Retry schedule (ms): 500, 1000, 1500, 1500, 1500  (≤ 6 s total)
+ */
+async function waitForBranch(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<void> {
+  const delays = [500, 1000, 1500, 1500, 1500];
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    try {
+      await ghFetch<{ object: { sha: string } }>(
+        token, 'GET', `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+      );
+      return; // branch is ready
+    } catch (err) {
+      const is404 = err instanceof GitHubAPIError && err.statusCode === 404;
+      if (!is404 || attempt === delays.length - 1) throw err;
+      logger.info(
+        { repo: `${owner}/${repo}`, branch, attempt: attempt + 1 },
+        '[github_rest_request] waitForBranch: 404 on ref — retrying after %dms',
+        delays[attempt],
+      );
+      await new Promise((r) => setTimeout(r, delays[attempt]));
+    }
+  }
+}
+
 async function ghFetch<T>(
   token: string,
   method: string,
@@ -125,27 +158,31 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
   const { token } = opts;
 
   return {
-    async createRepository(_owner: string, name: string, isPrivate: boolean): Promise<{ url: string }> {
+    async createRepository(owner: string, name: string, isPrivate: boolean): Promise<{ url: string }> {
       validateTargetRepo(name);
-      const result = await ghFetch<{ html_url: string; full_name: string }>(token, 'POST', '/user/repos', {
+      const result = await ghFetch<{ html_url: string; full_name: string; owner?: { login: string } }>(token, 'POST', '/user/repos', {
         name,
         description: `AKIS Pipeline scaffold — ${name}`,
         private: isPrivate,
         auto_init: true,
       });
-      // Read-back verification: confirm the repo is accessible before declaring success.
-      // Protects against cases where the POST returns 201 but the repo is not yet visible
-      // (eventual consistency) or the response body was misleading.
-      const ownerLogin = (result.full_name?.split('/')[0]) ?? _owner;
+      // Layer A — Read-back verification (PR #477): confirm the repo is accessible
+      // before declaring success. Protects against silent-failure cases where the POST
+      // returns 201 but the repo is not yet visible (eventual consistency).
+      const resolvedOwner = result.owner?.login ?? (result.full_name?.split('/')[0]) ?? owner;
       logger.info(
-        { repo: result.full_name ?? `${_owner}/${name}`, url: result.html_url },
+        { repo: result.full_name ?? `${resolvedOwner}/${name}`, url: result.html_url },
         '[GitHubRESTAdapter] createRepository: POST succeeded, verifying read-back',
       );
-      await ghFetch<{ id: number }>(token, 'GET', `/repos/${ownerLogin}/${name}`);
+      await ghFetch<{ id: number }>(token, 'GET', `/repos/${resolvedOwner}/${name}`);
       logger.info(
-        { repo: result.full_name ?? `${_owner}/${name}` },
+        { repo: result.full_name ?? `${resolvedOwner}/${name}` },
         '[GitHubRESTAdapter] createRepository: read-back OK',
       );
+      // Layer B — Wait for GitHub to provision the initial commit / main branch (#478).
+      // Read-back above confirms the repo exists; this confirms the branch ref is usable
+      // before pushFiles GETs it. Without this the immediate ref-fetch can 404.
+      await waitForBranch(token, resolvedOwner, name, 'main');
       return { url: result.html_url };
     },
 
@@ -246,10 +283,28 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
     ): Promise<void> {
       validateTargetRepo(`${owner}/${repo}`);
 
-      // 1. Get latest commit SHA on branch
-      const ref = await ghFetch<{ object: { sha: string } }>(
-        token, 'GET', `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
-      );
+      // 1. Get latest commit SHA on branch.
+      // Retry on 404: a freshly-created repo with auto_init may not have its
+      // main branch visible on the REST API for 1-3 s after creation.
+      const PUSH_REF_DELAYS = [500, 1000, 1500, 1500, 1500];
+      let ref!: { object: { sha: string } };
+      for (let attempt = 0; attempt < PUSH_REF_DELAYS.length; attempt++) {
+        try {
+          ref = await ghFetch<{ object: { sha: string } }>(
+            token, 'GET', `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+          );
+          break;
+        } catch (err) {
+          const is404 = err instanceof GitHubAPIError && err.statusCode === 404;
+          if (!is404 || attempt === PUSH_REF_DELAYS.length - 1) throw err;
+          logger.info(
+            { repo: `${owner}/${repo}`, branch, attempt: attempt + 1 },
+            '[github_rest_request] pushFiles: 404 on ref — retrying after %dms',
+            PUSH_REF_DELAYS[attempt],
+          );
+          await new Promise((r) => setTimeout(r, PUSH_REF_DELAYS[attempt]));
+        }
+      }
       const latestCommitSha = ref.object.sha;
 
       // 2. Get the tree SHA of that commit
