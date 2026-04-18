@@ -363,3 +363,80 @@ describe('TraceAgent — Test Summary Format', () => {
     assert.equal(result.data.testSummary.totalTests, 2);
   });
 });
+
+// ─── Cucumber/BDD Toggle (issue #397) ─────────────
+
+describe('TraceAgent — Cucumber/BDD toggle', () => {
+  it('skips Gherkin generation when cucumberEnabled is false (legacy path, dryRun)', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ dryRun: true, cucumberEnabled: false }));
+    assert.equal(result.type, 'output');
+    if (result.type !== 'output') return;
+    assert.equal(result.data.gherkinFeatures?.length ?? 0, 0);
+    assert.equal(result.data.stepDefinitions?.length ?? 0, 0);
+  });
+
+  it('skips Gherkin generation when cucumberEnabled is undefined', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ dryRun: true }));
+    assert.equal(result.type, 'output');
+    if (result.type !== 'output') return;
+    assert.equal(result.data.gherkinFeatures?.length ?? 0, 0);
+  });
+
+  it('generates Gherkin features + step defs when cucumberEnabled is true (legacy path, dryRun)', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ dryRun: true, cucumberEnabled: true }));
+    assert.equal(result.type, 'output');
+    if (result.type !== 'output') return;
+    assert.ok((result.data.gherkinFeatures?.length ?? 0) > 0, 'should emit .feature files');
+    assert.ok((result.data.stepDefinitions?.length ?? 0) > 0, 'should emit .steps.ts files');
+  });
+
+  it('skips Gherkin when spec is missing even if cucumberEnabled is true', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ dryRun: true, cucumberEnabled: true, spec: undefined }));
+    assert.equal(result.type, 'output');
+    if (result.type !== 'output') return;
+    assert.equal(result.data.gherkinFeatures?.length ?? 0, 0);
+  });
+
+  it('pushes Gherkin files alongside Playwright tests when cucumberEnabled is true', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ cucumberEnabled: true }));
+    assert.equal(result.type, 'output');
+    if (result.type !== 'output') return;
+    // Find the push call that included the test files — it should also
+    // carry the .feature + .steps.ts files generated from the spec.
+    const pushFlatFiles = github.calls.pushFiles.flatMap((c) => (c[3] as Array<{ path: string }>).map((f) => f.path));
+    assert.ok(pushFlatFiles.some((p) => p.endsWith('.feature')), 'expected a .feature file in push');
+    assert.ok(pushFlatFiles.some((p) => p.endsWith('.steps.ts')), 'expected a .steps.ts file in push');
+  });
+
+  it('does NOT push .feature files when cucumberEnabled is false', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ cucumberEnabled: false }));
+    assert.equal(result.type, 'output');
+    const pushFlatFiles = github.calls.pushFiles.flatMap((c) => (c[3] as Array<{ path: string }>).map((f) => f.path));
+    assert.ok(!pushFlatFiles.some((p) => p.endsWith('.feature')), '.feature file must not leak through when toggle is off');
+    assert.ok(!pushFlatFiles.some((p) => p.endsWith('.steps.ts')), '.steps.ts file must not leak through when toggle is off');
+  });
+});

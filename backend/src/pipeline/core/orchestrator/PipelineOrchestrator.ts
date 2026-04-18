@@ -1520,12 +1520,17 @@ export class PipelineOrchestrator {
             const fixAgents = this.getAgents(model);
             const plTrace = await this.getPipeline(pipelineId);
             const traceKb = buildUnifiedAgentKnowledgeContext(plTrace, { role: 'trace' });
+            // Issue #397: preserve the chat-level Cucumber/BDD toggle across
+            // FixLoop retries so the user's preference is not silently
+            // dropped when the first Trace attempt fails.
+            const fixCucumberEnabled = (plTrace.intermediateState as Record<string, unknown> | undefined)?.cucumberEnabled === true;
             const traceRes = await fixAgents.trace.execute({
               repoOwner: owner,
               repo,
               branch,
               spec,
               pipelineId,
+              cucumberEnabled: fixCucumberEnabled,
               knowledgeContext: traceKb.trim() ? traceKb : undefined,
             });
             if (traceRes.type === 'error') throw new Error(traceRes.error.message);

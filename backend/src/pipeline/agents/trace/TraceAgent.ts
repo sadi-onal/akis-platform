@@ -345,12 +345,35 @@ export class TraceAgent {
   ): Promise<TraceResult> {
     emit?.('ai_call', 'Claude AI tool_use ile test yazılıyor...', 10);
 
+    // Issue #397: generate Gherkin features alongside Playwright tests when the
+    // BDD toggle is on. Previously this only ran in the legacy path — the
+    // agentic path (production default) silently ignored `cucumberEnabled`.
+    const gherkin = (input.cucumberEnabled && input.spec)
+      ? generateGherkinFromSpec(input.spec)
+      : { features: [] as ReturnType<typeof generateGherkinFromSpec>['features'], stepDefinitions: [] as ReturnType<typeof generateGherkinFromSpec>['stepDefinitions'] };
+    // We inject the .feature + .steps.ts files into the first successful
+    // push_files call so everything lands in the same branch + commit. The
+    // flag prevents duplicate additions across multi-push loops.
+    let gherkinAttached = false;
+
     const toolDeps: TraceToolDeps = {
       listFiles: (owner, repo, branch) => this.github.listFiles(owner, repo, branch),
       getFileContent: (owner, repo, branch, filePath) => this.github.getFileContent(owner, repo, branch, filePath),
       pushFiles: (owner, repo, branch, files, message) => {
+        const extraFiles: Array<{ path: string; content: string }> = [];
+        if (!gherkinAttached && gherkin.features.length > 0) {
+          extraFiles.push(
+            ...gherkin.features.map((f) => ({ path: f.filePath, content: f.content })),
+            ...gherkin.stepDefinitions.map((s) => ({ path: s.filePath, content: s.content })),
+          );
+          gherkinAttached = true;
+        }
+        const combined = [
+          ...files,
+          ...extraFiles,
+        ];
         const merged = mergeAkisCiWorkflowIntoTestFiles(
-          files.map((f) => ({
+          combined.map((f) => ({
             filePath: f.path,
             content: f.content,
             testCount: 0,
@@ -441,6 +464,8 @@ After pushing, respond with a JSON summary:
             testSummary: parsed.testSummary ?? { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
             branch: 'trace/tests',
             ciWorkflowPath: AKIS_E2E_WORKFLOW_PATH,
+            gherkinFeatures: gherkin.features,
+            stepDefinitions: gherkin.stepDefinitions,
           },
         };
       }
@@ -455,6 +480,8 @@ After pushing, respond with a JSON summary:
         testFiles: [],
         coverageMatrix: {},
         testSummary: { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
+        gherkinFeatures: gherkin.features,
+        stepDefinitions: gherkin.stepDefinitions,
       },
     };
   }
