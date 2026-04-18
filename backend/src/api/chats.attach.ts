@@ -20,6 +20,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import path from 'node:path';
+import { PDFParse } from 'pdf-parse';
 import { requireAuth } from '../utils/auth.js';
 import { chatScopedIngestionService, CHAT_CHUNK_QUOTA } from '../services/knowledge/ingestion/ChatScopedIngestionService.js';
 import { logger } from '../lib/logger.js';
@@ -59,45 +60,19 @@ function isTextFile(filename: string, mimetype: string): boolean {
 }
 
 /**
- * Naive PDF text extraction: skip the binary header/stream sections and
- * extract text from BT/ET blocks.  This handles most simple PDFs that
- * embed text rather than scanning scanned documents.  For complex PDFs the
- * output may be garbled, but the chunker will still produce usable chunks.
+ * Extract text from a document buffer.
  *
- * We deliberately avoid pulling in `pdf-parse` as a dependency — the project
- * already has a strict dependency policy and the task spec says "pdf-parse if
- * already a dep, else text/* only".  Since `pdf-parse` is NOT in package.json
- * we use this lightweight fallback.
+ * - PDF: delegated to `pdf-parse` (PDFParse class, v2 API) which handles
+ *   compressed/complex PDFs including those with embedded fonts and
+ *   cross-reference streams.
+ * - All other accepted text formats: decoded as UTF-8.
  */
-function extractTextFromBuffer(buffer: Buffer, filename: string): string {
+async function extractTextFromBuffer(buffer: Buffer, filename: string): Promise<string> {
   const ext = path.extname(filename).toLowerCase();
   if (ext === '.pdf') {
-    // Extract text between BT (Begin Text) and ET (End Text) PDF operators
-    const raw = buffer.toString('latin1');
-    const textChunks: string[] = [];
-    const btRegex = /BT\s*([\s\S]*?)\s*ET/g;
-    let match;
-    while ((match = btRegex.exec(raw)) !== null) {
-      // Extract string literals from Tj, TJ, ' and " operators
-      const block = match[1];
-      const strRegex = /\(([^)]*)\)/g;
-      let sm;
-      while ((sm = strRegex.exec(block)) !== null) {
-        const decoded = sm[1]
-          .replace(/\\n/g, '\n')
-          .replace(/\\r/g, '\r')
-          .replace(/\\t/g, '\t')
-          .replace(/\\\\/g, '\\')
-          .replace(/\\\(/g, '(')
-          .replace(/\\\)/g, ')');
-        if (decoded.trim()) textChunks.push(decoded);
-      }
-    }
-    const extracted = textChunks.join(' ').replace(/\s{3,}/g, '\n\n');
-    if (extracted.trim().length > 100) return extracted;
-    // Fallback: treat buffer as latin1 and strip non-printable characters
-    // eslint-disable-next-line no-control-regex
-    return raw.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, ' ').trim();
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    return result.text;
   }
   return buffer.toString('utf-8');
 }
@@ -208,7 +183,7 @@ export async function chatAttachRoutes(fastify: FastifyInstance): Promise<void> 
 
           let text: string;
           try {
-            text = extractTextFromBuffer(buffer, filename);
+            text = await extractTextFromBuffer(buffer, filename);
           } catch (err) {
             logger.warn({ err, chatId, filename }, '[ChatAttach] Text extraction error');
             results.push({ filename, documentId: '', chunksCreated: 0, status: 'error', message: 'Metin çıkarımı başarısız' });
