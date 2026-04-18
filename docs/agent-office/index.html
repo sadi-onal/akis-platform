@@ -3,7 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AKIS Agent Office</title>
+  <title>AKIS Agent Office — 3D</title>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://esm.sh/three@0.160.0"
+    }
+  }
+  </script>
+
   <style>
     :root {
       --bg: #0A1215;
@@ -14,9 +23,7 @@
       --text-dim: #8FA3AE;
       --danger: #FF6B6B;
     }
-
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
     html, body {
       height: 100%;
       background: var(--bg);
@@ -24,23 +31,21 @@
       font-family: 'SF Mono', Monaco, Consolas, monospace;
       overflow: hidden;
     }
-
     .office {
       display: grid;
       grid-template-rows: 1fr auto;
       height: 100vh;
       width: 100vw;
     }
-
     .stage {
       position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       overflow: hidden;
-      background: linear-gradient(180deg, #1A2C38 0%, #0E1820 100%);
+      background: radial-gradient(ellipse at center, #1A2C38 0%, #0A1215 100%);
     }
-
+    #three-container {
+      position: absolute;
+      inset: 0;
+    }
     .header {
       position: absolute;
       top: 14px;
@@ -51,10 +56,10 @@
       font-size: 14px;
       letter-spacing: 0.3em;
       font-weight: bold;
-      text-shadow: 0 0 8px rgba(7, 209, 175, 0.4);
-      z-index: 3;
+      text-shadow: 0 0 12px rgba(7, 209, 175, 0.5);
+      z-index: 5;
+      pointer-events: none;
     }
-
     .subheader {
       position: absolute;
       top: 36px;
@@ -64,62 +69,104 @@
       color: var(--text-dim);
       font-size: 10px;
       letter-spacing: 0.2em;
-      z-index: 3;
-    }
-
-    .viewport {
-      position: relative;
-      width: min(calc(100vw - 40px), 1600px);
-      aspect-ratio: 2 / 1;
-      margin: 56px auto 0;
-    }
-
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-      image-rendering: -moz-crisp-edges;
-    }
-
-    .bubbles {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      z-index: 5;
       pointer-events: none;
     }
+    .status-dot {
+      position: absolute;
+      top: 14px;
+      right: 20px;
+      color: var(--text-dim);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      z-index: 5;
+      pointer-events: none;
+    }
+    .status-dot::before {
+      content: "●";
+      color: var(--primary);
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .overlay-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .nameplate {
+      position: absolute;
+      transform: translate(-50%, 0);
+      background: rgba(10, 18, 21, 0.92);
+      border-radius: 6px;
+      padding: 4px 10px 5px;
+      font-size: 10px;
+      font-weight: bold;
+      color: var(--text);
+      white-space: nowrap;
+      letter-spacing: 0.06em;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(6px);
+      border-top: 2px solid var(--primary);
+    }
+    .nameplate .role-subtitle {
+      display: block;
+      font-size: 8px;
+      font-weight: normal;
+      color: var(--text-dim);
+      letter-spacing: 0.04em;
+      margin-top: 2px;
+    }
+    .nameplate.pm { border-top-color: #F5C76C; }
+    .nameplate.frontend { border-top-color: #E8823E; }
+    .nameplate.backend { border-top-color: #3FA85E; }
+    .nameplate.ai { border-top-color: #8B5CF6; }
+    .nameplate.qa { border-top-color: #FF6B6B; }
+    .nameplate.dev { border-top-color: #9AA0A6; }
 
     .bubble {
       position: absolute;
-      background: var(--surface-2);
-      border: 1px solid var(--primary);
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-size: 11px;
+      transform: translate(-50%, -100%);
+      background: rgba(18, 32, 42, 0.95);
+      border-radius: 10px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
       color: var(--text);
       white-space: nowrap;
-      max-width: 200px;
+      max-width: 280px;
       overflow: hidden;
       text-overflow: ellipsis;
-      box-shadow: 0 2px 10px rgba(7, 209, 175, 0.25);
-      transform: translate(-50%, -100%);
-      transition: opacity 200ms;
+      box-shadow: 0 4px 16px rgba(7, 209, 175, 0.35), 0 0 0 1px rgba(7, 209, 175, 0.2);
+      backdrop-filter: blur(10px);
+      transition: left 220ms ease-out, top 220ms ease-out, opacity 220ms;
+      border: 1px solid var(--primary);
     }
-
     .bubble::after {
       content: "";
       position: absolute;
-      bottom: -5px;
+      bottom: -7px;
       left: 50%;
       transform: translateX(-50%);
-      border: 5px solid transparent;
+      border: 7px solid transparent;
       border-top-color: var(--primary);
     }
+    .bubble.pm { border-color: #F5C76C; box-shadow: 0 4px 16px rgba(245, 199, 108, 0.4), 0 0 0 1px rgba(245, 199, 108, 0.25); }
+    .bubble.pm::after { border-top-color: #F5C76C; }
+    .bubble.frontend { border-color: #E8823E; box-shadow: 0 4px 16px rgba(232, 130, 62, 0.4), 0 0 0 1px rgba(232, 130, 62, 0.25); }
+    .bubble.frontend::after { border-top-color: #E8823E; }
+    .bubble.backend { border-color: #3FA85E; box-shadow: 0 4px 16px rgba(63, 168, 94, 0.4), 0 0 0 1px rgba(63, 168, 94, 0.25); }
+    .bubble.backend::after { border-top-color: #3FA85E; }
+    .bubble.ai { border-color: #8B5CF6; box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4), 0 0 0 1px rgba(139, 92, 246, 0.25); }
+    .bubble.ai::after { border-top-color: #8B5CF6; }
+    .bubble.qa { border-color: #FF6B6B; box-shadow: 0 4px 16px rgba(255, 107, 107, 0.4), 0 0 0 1px rgba(255, 107, 107, 0.25); }
+    .bubble.qa::after { border-top-color: #FF6B6B; }
 
     .log {
       background: var(--surface);
@@ -130,56 +177,42 @@
       font-size: 12px;
       line-height: 1.6;
     }
-
     .log-title {
       color: var(--primary);
       font-weight: bold;
       margin-bottom: 6px;
       letter-spacing: 0.1em;
     }
-
     .log-entry {
       color: var(--text-dim);
       font-family: 'SF Mono', Monaco, monospace;
     }
+    .log-entry.recent { color: var(--text); }
 
-    .log-entry.recent {
-      color: var(--text);
-    }
-
-    .status-dot {
+    .webgl-error {
       position: absolute;
-      top: 14px;
-      right: 20px;
-      color: var(--text-dim);
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      z-index: 3;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: var(--danger);
+      font-size: 16px;
+      text-align: center;
+      padding: 40px;
+      z-index: 10;
     }
-
-    .status-dot::before {
-      content: "●";
-      color: var(--primary);
-      margin-right: 6px;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
+    .webgl-error.show { display: flex; }
   </style>
 </head>
 <body>
   <div class="office">
     <div class="stage">
       <div class="header">AKIS AGENT OFFICE</div>
-      <div class="subheader">PM → SENIOR → DEVELOPER · LIVE</div>
+      <div class="subheader">PM → SENIOR → DEVELOPER · 3D LIVE</div>
       <div class="status-dot" id="status-dot">LIVE</div>
-      <div class="viewport">
-        <canvas id="canvas"></canvas>
-        <div class="bubbles" id="bubbles"></div>
-      </div>
+      <div id="three-container"></div>
+      <div class="overlay-layer" id="overlay"></div>
+      <div class="webgl-error" id="webgl-error">WebGL not available. Please use a modern browser.</div>
     </div>
     <div class="log">
       <div class="log-title">▸ ACTIVITY LOG</div>
@@ -187,287 +220,638 @@
     </div>
   </div>
 
-  <script>
-  /* ═════════════════════════════ CONSTANTS ═════════════════════════════ */
-  const TILE = 32;                // logical tile size (canvas pixels)
-  const SPRITE = 16;              // sprite logical size
-  const SPRITE_SCALE = 2;         // 16x16 sprite drawn as 32x32 canvas pixels
-  const COLS = 30;
-  const ROWS = 15;
+  <script type="module">
+  import * as THREE from 'three';
 
-  /* Character slot positions (col, row) — anchor = sprite top-left */
+  /* ═════════════════════════════ CONFIG ═════════════════════════════ */
+  const CHAR = {
+    pm:       { label: 'PM',          subtitle: 'Product Manager',   color: 0x2E4A7D, accent: 0xF5C76C, cssColor: '#F5C76C', prop: 'briefcase' },
+    frontend: { label: 'Sr Frontend', subtitle: 'React · Tailwind',  color: 0xE8823E, accent: 0xFFFFFF, cssColor: '#E8823E', prop: 'palette' },
+    backend:  { label: 'Sr Backend',  subtitle: 'Fastify · Drizzle', color: 0x3FA85E, accent: 0x1A1A1A, cssColor: '#3FA85E', prop: 'laptop' },
+    ai:       { label: 'Sr AI',       subtitle: 'Claude · Pipeline', color: 0x8B5CF6, accent: 0xE0D4F7, cssColor: '#8B5CF6', prop: 'antenna' },
+    qa:       { label: 'Sr QA',       subtitle: 'Playwright · Smoke',color: 0xF0F0F0, accent: 0xFF6B6B, cssColor: '#FF6B6B', prop: 'magnifier' },
+    dev:      { label: 'Dev',         subtitle: '',                  color: 0x9AA0A6, accent: 0x607D8B, cssColor: '#9AA0A6', prop: 'cap' }
+  };
+
+  /* World positions in 3D (x, z) — y is up. 1 unit ~ 1 meter. */
   const SLOTS = {
-    pm:       { col: 14, row: 3 },
-    frontend: { col: 3,  row: 8 },
-    backend:  { col: 10, row: 8 },
-    ai:       { col: 17, row: 8 },
-    qa:       { col: 24, row: 8 },
+    pm:       { x:  0,    z: -3 },
+    frontend: { x: -9,    z:  2 },
+    backend:  { x: -3,    z:  2 },
+    ai:       { x:  3,    z:  2 },
+    qa:       { x:  9,    z:  2 },
     devSlots: {
-      frontend: [{col:2,row:11},{col:4,row:11},{col:6,row:11}],
-      backend:  [{col:9,row:11},{col:11,row:11},{col:13,row:11}],
-      ai:       [{col:16,row:11},{col:18,row:11},{col:20,row:11}],
-      qa:       [{col:23,row:11},{col:25,row:11},{col:27,row:11}]
+      frontend: [ {x:-10.2,z:4.5}, {x:-9,z:4.5},  {x:-7.8,z:4.5} ],
+      backend:  [ {x:-4.2,z:4.5},  {x:-3,z:4.5},  {x:-1.8,z:4.5} ],
+      ai:       [ {x: 1.8,z:4.5},  {x: 3,z:4.5},  {x: 4.2,z:4.5} ],
+      qa:       [ {x: 7.8,z:4.5},  {x: 9,z:4.5},  {x:10.2,z:4.5} ]
     }
   };
 
-  const ROLE_LABELS = {
-    pm: 'PM',
-    frontend: 'FE',
-    backend: 'BE',
-    ai: 'AI',
-    qa: 'QA'
-  };
+  const ROOMS = [
+    { name: 'MEETING ROOM',   x: -3,   z: -3, w: 6,   d: 3, color: 0x2E4A7D, roleKey: 'pm' },
+    { name: 'FRONTEND POD',   x:-10.5, z:  2, w: 3.5, d: 3.2, color: 0xE8823E, roleKey: 'frontend' },
+    { name: 'BACKEND POD',    x: -4.5, z:  2, w: 3.5, d: 3.2, color: 0x3FA85E, roleKey: 'backend' },
+    { name: 'AI · PLATFORM',  x:  1.5, z:  2, w: 3.5, d: 3.2, color: 0x8B5CF6, roleKey: 'ai' },
+    { name: 'QA POD',         x:  7.5, z:  2, w: 3.5, d: 3.2, color: 0xFF6B6B, roleKey: 'qa' }
+  ];
 
-  /* Per-role color palette */
-  const PALETTE = {
-    pm:       { primary: '#2E4A7D', secondary: '#F5C76C', skin: '#F2C199', accent: '#FFFFFF' },
-    frontend: { primary: '#E8823E', secondary: '#FFFFFF', skin: '#F2C199', accent: '#3A2A1A' },
-    backend:  { primary: '#3FA85E', secondary: '#1A1A1A', skin: '#F2C199', accent: '#07D1AF' },
-    ai:       { primary: '#8B5CF6', secondary: '#E0D4F7', skin: '#F2C199', accent: '#FFFFFF' },
-    qa:       { primary: '#F0F0F0', secondary: '#FF6B6B', skin: '#F2C199', accent: '#1A1A1A' },
-    dev:      { primary: '#9AA0A6', secondary: '#607D8B', skin: '#F2C199', accent: '#455A64' }
-  };
-
-  /* ═════════════════════════════ SPRITES ═════════════════════════════
-   * 16x16 grid, 2-frame animation.
-   * Letters:
-   *   . = transparent, P = primary, S = secondary, K = skin, A = accent, O = outline (#000)
-   */
-  const SPRITE_DEF = {
-    /* PM — navy suit + gold tie */
-    pm: [
-      /* frame A — idle */
-      [
-        "................",
-        "....OOOOOO......",
-        "...OKKKKKKO.....",
-        "...OKKKKKKO.....",
-        "...OKKKKKKO.....",
-        "....OOOOOO......",
-        "...OPPPPPPO.....",
-        "..OPPSPSPPO.....",
-        "..OPPPPPPPO.....",
-        "..OPPPPPPPO.....",
-        "..OPPPPPPPO.....",
-        "..OAAAAAAAO.....",
-        "...OP..POP......",
-        "...OP..POP......",
-        "...OP..POP......",
-        "..OOO..OOO......"
-      ],
-      /* frame B — breathe (raised 1px) */
-      [
-        "....OOOOOO......",
-        "...OKKKKKKO.....",
-        "...OKKKKKKO.....",
-        "...OKKKKKKO.....",
-        "....OOOOOO......",
-        "...OPPPPPPO.....",
-        "..OPPSPSPPO.....",
-        "..OPPPPPPPO.....",
-        "..OPPPPPPPO.....",
-        "..OPPPPPPPO.....",
-        "..OAAAAAAAO.....",
-        "...OP..POP......",
-        "...OP..POP......",
-        "...OP..POP......",
-        "..OOO..OOO......",
-        "................"
-      ]
-    ],
-    /* Senior — primary jacket, secondary stripe on chest */
-    senior: [
-      [
-        "................",
-        "....OOOOOO......",
-        "...OKKKKKKO.....",
-        "..OKKAAKAAKO....",
-        "...OKKKKKKO.....",
-        "....OOOOOO......",
-        "...OPPPPPPO.....",
-        "..OPPPPPPPPO....",
-        "..OPPSSSSPPO....",
-        "..OPPPPPPPPO....",
-        "..OPPPPPPPPO....",
-        "..OPPPPPPPPO....",
-        "...OP..POP......",
-        "...OP..POP......",
-        "...OP..POP......",
-        "..OOO..OOO......"
-      ],
-      [
-        "....OOOOOO......",
-        "...OKKKKKKO.....",
-        "..OKKAAKAAKO....",
-        "...OKKKKKKO.....",
-        "....OOOOOO......",
-        "...OPPPPPPO.....",
-        "..OPPPPPPPPO....",
-        "..OPPSSSSPPO....",
-        "..OPPPPPPPPO....",
-        "..OPPPPPPPPO....",
-        "..OPPPPPPPPO....",
-        "..OPPPPPPPPO....",
-        "...OP..POP......",
-        "...OP..POP......",
-        "...OP..POP......",
-        "..OOO..OOO......"
-      ]
-    ],
-    /* Developer — smaller, gray + blue */
-    dev: [
-      [
-        "................",
-        ".....OOOOO......",
-        "....OKKKKKO.....",
-        "....OKKKKKO.....",
-        "....OKKKKKO.....",
-        ".....OOOOO......",
-        "....OPPPPPO.....",
-        "...OPPPPPPPO....",
-        "...OPPAAAPPO....",
-        "...OPPPPPPPO....",
-        "...OPPPPPPPO....",
-        "...OPPPPPPPO....",
-        "....OP.POP......",
-        "....OP.POP......",
-        "....OP.POP......",
-        "...OOO.OOO......"
-      ],
-      [
-        ".....OOOOO......",
-        "....OKKKKKO.....",
-        "....OKKKKKO.....",
-        "....OKKKKKO.....",
-        ".....OOOOO......",
-        "....OPPPPPO.....",
-        "...OPPPPPPPO....",
-        "...OPPAAAPPO....",
-        "...OPPPPPPPO....",
-        "...OPPPPPPPO....",
-        "...OPPPPPPPO....",
-        "...OPPPPPPPO....",
-        "....OP.POP......",
-        "....OP.POP......",
-        "....OP.POP......",
-        "...OOO.OOO......"
-      ]
-    ]
-  };
-
-  /* ═════════════════════════════ STATE ═════════════════════════════ */
-  let currentState = null;
-  let frameCounter = 0;
-  let idlePhase = 0;     // 0/1 — toggles ~600ms (idle breathing)
-  let workPhase = 0;     // 0/1 — toggles ~200ms (typing)
-
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  canvas.width = COLS * TILE;            // 960
-  canvas.height = ROWS * TILE;           // 480
-  ctx.imageSmoothingEnabled = false;
-
-  const bubblesEl = document.getElementById('bubbles');
-  const logEl = document.getElementById('log-entries');
+  /* ═════════════════════════════ SCENE ═════════════════════════════ */
+  const container = document.getElementById('three-container');
+  const overlay = document.getElementById('overlay');
+  const errorEl = document.getElementById('webgl-error');
   const statusDot = document.getElementById('status-dot');
+  const logEl = document.getElementById('log-entries');
 
-  /* ═════════════════════════════ DRAW ═════════════════════════════ */
-  function drawSprite(kind, palette, col, row, frame, alpha) {
-    if (!SPRITE_DEF[kind] || !SPRITE_DEF[kind][frame]) return;
-    const sprite = SPRITE_DEF[kind][frame];
-    const baseX = col * TILE;
-    const baseY = row * TILE;
-    ctx.save();
-    ctx.globalAlpha = alpha ?? 1;
-    for (let y = 0; y < SPRITE; y++) {
-      const line = sprite[y];
-      if (!line) continue;
-      for (let x = 0; x < SPRITE; x++) {
-        const ch = line[x];
-        let color = null;
-        switch (ch) {
-          case 'P': color = palette.primary; break;
-          case 'S': color = palette.secondary; break;
-          case 'K': color = palette.skin; break;
-          case 'A': color = palette.accent; break;
-          case 'O': color = '#000'; break;
-          default: continue;
-        }
-        ctx.fillStyle = color;
-        ctx.fillRect(baseX + x * SPRITE_SCALE, baseY + y * SPRITE_SCALE, SPRITE_SCALE, SPRITE_SCALE);
-      }
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  } catch (e) {
+    errorEl.classList.add('show');
+    throw e;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setClearColor(0x0a1215, 0);
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x0A1215, 20, 45);
+
+  /* Isometric-ish orthographic camera */
+  let camera;
+  function buildCamera() {
+    const aspect = container.clientWidth / container.clientHeight;
+    const viewSize = 10;
+    camera = new THREE.OrthographicCamera(
+      -viewSize * aspect, viewSize * aspect,
+      viewSize, -viewSize,
+      0.1, 100
+    );
+    camera.position.set(14, 13, 14);
+    camera.lookAt(0, 0, 2);
+  }
+  buildCamera();
+
+  function onResize() {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    renderer.setSize(w, h, false);
+    renderer.domElement.style.width = w + 'px';
+    renderer.domElement.style.height = h + 'px';
+    const aspect = w / h;
+    const viewSize = 10;
+    camera.left = -viewSize * aspect;
+    camera.right = viewSize * aspect;
+    camera.top = viewSize;
+    camera.bottom = -viewSize;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', onResize);
+  onResize();
+
+  /* ═════════════════════════════ LIGHTING ═════════════════════════════ */
+  scene.add(new THREE.AmbientLight(0xBCCED6, 0.55));
+  const keyLight = new THREE.DirectionalLight(0xFFFAF0, 0.95);
+  keyLight.position.set(8, 16, 10);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(1024, 1024);
+  keyLight.shadow.camera.left = -18;
+  keyLight.shadow.camera.right = 18;
+  keyLight.shadow.camera.top = 18;
+  keyLight.shadow.camera.bottom = -18;
+  keyLight.shadow.bias = -0.0004;
+  scene.add(keyLight);
+  const rimLight = new THREE.DirectionalLight(0x7AE5DA, 0.35);
+  rimLight.position.set(-10, 8, -6);
+  scene.add(rimLight);
+
+  /* ═════════════════════════════ FLOOR ═════════════════════════════ */
+  // Main floor
+  const floorGeo = new THREE.PlaneGeometry(30, 16);
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0x0E1820,
+    roughness: 0.9,
+    metalness: 0.1
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // Grid accent lines (subtle tile pattern)
+  const gridHelper = new THREE.GridHelper(30, 20, 0x1A2C38, 0x12202A);
+  gridHelper.position.y = 0.005;
+  scene.add(gridHelper);
+
+  /* ═════════════════════════════ ROOMS ═════════════════════════════ */
+  ROOMS.forEach((r) => {
+    // Room floor tile with color tint
+    const tileGeo = new THREE.PlaneGeometry(r.w, r.d);
+    const tileMat = new THREE.MeshStandardMaterial({
+      color: r.color,
+      transparent: true,
+      opacity: 0.22,
+      roughness: 1,
+      emissive: r.color,
+      emissiveIntensity: 0.08
+    });
+    const tile = new THREE.Mesh(tileGeo, tileMat);
+    tile.rotation.x = -Math.PI / 2;
+    tile.position.set(r.x, 0.01, r.z);
+    tile.receiveShadow = true;
+    scene.add(tile);
+
+    // Room border (low walls on 2 sides only — open design for visibility)
+    const borderMat = new THREE.MeshStandardMaterial({ color: r.color, emissive: r.color, emissiveIntensity: 0.15 });
+    // Back wall
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.15, 0.08), borderMat);
+    backWall.position.set(r.x, 0.075, r.z - r.d / 2);
+    backWall.receiveShadow = true;
+    scene.add(backWall);
+    // Left wall
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, r.d), borderMat);
+    leftWall.position.set(r.x - r.w / 2, 0.075, r.z);
+    scene.add(leftWall);
+    // Right wall
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, r.d), borderMat);
+    rightWall.position.set(r.x + r.w / 2, 0.075, r.z);
+    scene.add(rightWall);
+    // Front corner accents
+    const cornerGeo = new THREE.BoxGeometry(0.3, 0.5, 0.08);
+    const cornerLeft = new THREE.Mesh(cornerGeo, borderMat);
+    cornerLeft.position.set(r.x - r.w / 2 + 0.15, 0.25, r.z + r.d / 2);
+    scene.add(cornerLeft);
+    const cornerRight = new THREE.Mesh(cornerGeo, borderMat);
+    cornerRight.position.set(r.x + r.w / 2 - 0.15, 0.25, r.z + r.d / 2);
+    scene.add(cornerRight);
+  });
+
+  /* ═════════════════════════════ CHARACTER FACTORY ═════════════════════════════ */
+  const SKIN_COLORS = [0xF2C199, 0xE8B18A, 0xD4937C];
+
+  function buildCharacter(roleKey) {
+    const char = CHAR[roleKey] || CHAR.dev;
+    const group = new THREE.Group();
+    group.userData = { roleKey, char, bobBase: 0, walkPhase: 0 };
+
+    const bodyMat = new THREE.MeshStandardMaterial({ color: char.color, roughness: 0.65, metalness: 0.1 });
+    const darkBodyMat = new THREE.MeshStandardMaterial({ color: 0x1A1A1A, roughness: 0.7 });
+    const skinColor = SKIN_COLORS[Math.floor(Math.random() * SKIN_COLORS.length)];
+    const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.6 });
+
+    // Legs
+    const legGeo = new THREE.CylinderGeometry(0.12, 0.13, 0.6, 10);
+    const leftLeg = new THREE.Mesh(legGeo, darkBodyMat);
+    leftLeg.position.set(-0.12, 0.3, 0);
+    leftLeg.castShadow = true;
+    group.add(leftLeg);
+    const rightLeg = new THREE.Mesh(legGeo, darkBodyMat);
+    rightLeg.position.set(0.12, 0.3, 0);
+    rightLeg.castShadow = true;
+    group.add(rightLeg);
+    group.userData.leftLeg = leftLeg;
+    group.userData.rightLeg = rightLeg;
+
+    // Torso (slightly tapered)
+    const torsoGeo = new THREE.CylinderGeometry(0.26, 0.32, 0.75, 12);
+    const torso = new THREE.Mesh(torsoGeo, bodyMat);
+    torso.position.y = 1.0;
+    torso.castShadow = true;
+    group.add(torso);
+
+    // Neck
+    const neckGeo = new THREE.CylinderGeometry(0.09, 0.11, 0.1, 8);
+    const neck = new THREE.Mesh(neckGeo, skinMat);
+    neck.position.y = 1.42;
+    neck.castShadow = true;
+    group.add(neck);
+
+    // Head
+    const headGeo = new THREE.SphereGeometry(0.28, 16, 14);
+    const head = new THREE.Mesh(headGeo, skinMat);
+    head.position.y = 1.72;
+    head.castShadow = true;
+    group.add(head);
+
+    // Hair/cap
+    const hairGeo = new THREE.SphereGeometry(0.29, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+    const hairColor = roleKey === 'qa' ? 0xF5E6D3 : 0x2A1F18;
+    const hair = new THREE.Mesh(hairGeo, new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.8 }));
+    hair.position.y = 1.74;
+    hair.castShadow = true;
+    group.add(hair);
+
+    // Arms
+    const armGeo = new THREE.CylinderGeometry(0.09, 0.1, 0.65, 10);
+    const leftArm = new THREE.Mesh(armGeo, bodyMat);
+    leftArm.position.set(-0.34, 1.05, 0);
+    leftArm.castShadow = true;
+    group.add(leftArm);
+    const rightArm = new THREE.Mesh(armGeo, bodyMat);
+    rightArm.position.set(0.34, 1.05, 0);
+    rightArm.castShadow = true;
+    group.add(rightArm);
+    group.userData.leftArm = leftArm;
+    group.userData.rightArm = rightArm;
+
+    // Role-specific accessory
+    if (char.prop === 'briefcase') {
+      const brief = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25, 0.18, 0.12),
+        new THREE.MeshStandardMaterial({ color: char.accent, roughness: 0.5, metalness: 0.2 })
+      );
+      brief.position.set(0.48, 0.9, 0);
+      brief.castShadow = true;
+      group.add(brief);
+      group.userData.prop = brief;
+    } else if (char.prop === 'palette') {
+      const pal = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, 0.04, 16),
+        new THREE.MeshStandardMaterial({ color: 0xF0E0C0, roughness: 0.5 })
+      );
+      pal.rotation.z = Math.PI / 2;
+      pal.position.set(0.5, 1.05, 0);
+      group.add(pal);
+      // Paint dots
+      [0xFF6B6B, 0x5BC0EB, 0xFDE74C, 0x9BC53D].forEach((c, i) => {
+        const dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.045, 8, 8),
+          new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.3 })
+        );
+        const a = (i / 4) * Math.PI * 2;
+        dot.position.set(0.52, 1.05 + Math.sin(a) * 0.12, Math.cos(a) * 0.12);
+        group.add(dot);
+      });
+      group.userData.prop = pal;
+    } else if (char.prop === 'laptop') {
+      const lap = new THREE.Group();
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(0.32, 0.03, 0.24),
+        new THREE.MeshStandardMaterial({ color: 0x222, roughness: 0.4 })
+      );
+      const screen = new THREE.Mesh(
+        new THREE.BoxGeometry(0.32, 0.22, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0x07D1AF, emissive: 0x07D1AF, emissiveIntensity: 0.5 })
+      );
+      screen.position.set(0, 0.11, -0.11);
+      screen.rotation.x = -0.3;
+      lap.add(base);
+      lap.add(screen);
+      lap.position.set(0.42, 1.02, 0);
+      lap.rotation.y = -0.3;
+      group.add(lap);
+      group.userData.prop = lap;
+    } else if (char.prop === 'antenna') {
+      const stalk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.015, 0.015, 0.18, 6),
+        new THREE.MeshStandardMaterial({ color: 0x666 })
+      );
+      stalk.position.y = 2.09;
+      group.add(stalk);
+      const orb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 10, 10),
+        new THREE.MeshStandardMaterial({ color: char.color, emissive: char.color, emissiveIntensity: 0.8 })
+      );
+      orb.position.y = 2.21;
+      group.add(orb);
+      group.userData.prop = orb;
+    } else if (char.prop === 'magnifier') {
+      const handle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.03, 0.3, 8),
+        new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.5 })
+      );
+      handle.rotation.z = -0.6;
+      handle.position.set(0.4, 1.0, 0);
+      group.add(handle);
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.13, 0.025, 8, 20),
+        new THREE.MeshStandardMaterial({ color: 0xC0C0C0, roughness: 0.4, metalness: 0.6 })
+      );
+      ring.position.set(0.58, 1.2, 0);
+      ring.rotation.y = Math.PI / 2;
+      group.add(ring);
+      const lens = new THREE.Mesh(
+        new THREE.CircleGeometry(0.12, 20),
+        new THREE.MeshStandardMaterial({ color: 0xAEEAFF, transparent: true, opacity: 0.35 })
+      );
+      lens.position.set(0.58, 1.2, 0);
+      lens.rotation.y = Math.PI / 2;
+      group.add(lens);
+      group.userData.prop = ring;
+    } else if (char.prop === 'cap') {
+      // Grad cap (mortarboard)
+      const capBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, 0.05, 16),
+        new THREE.MeshStandardMaterial({ color: 0x1A1A1A })
+      );
+      capBase.position.y = 2.0;
+      group.add(capBase);
+      const board = new THREE.Mesh(
+        new THREE.BoxGeometry(0.45, 0.025, 0.45),
+        new THREE.MeshStandardMaterial({ color: 0x1A1A1A })
+      );
+      board.position.y = 2.04;
+      group.add(board);
+      const tassel = new THREE.Mesh(
+        new THREE.SphereGeometry(0.025, 6, 6),
+        new THREE.MeshStandardMaterial({ color: 0xFFD700, emissive: 0xFFD700, emissiveIntensity: 0.4 })
+      );
+      tassel.position.set(0.2, 2.01, 0.2);
+      group.add(tassel);
+      group.userData.prop = tassel;
     }
-    ctx.restore();
+
+    // Glow ring on the floor (soft)
+    const ringGeo = new THREE.RingGeometry(0.4, 0.55, 24);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: char.color,
+      transparent: true,
+      opacity: 0.15,
+      side: THREE.DoubleSide
+    });
+    const glowRing = new THREE.Mesh(ringGeo, ringMat);
+    glowRing.rotation.x = -Math.PI / 2;
+    glowRing.position.y = 0.015;
+    group.add(glowRing);
+    group.userData.glowRing = glowRing;
+
+    return group;
   }
 
-  function drawDesk(col, row, color) {
-    const baseX = col * TILE;
-    const baseY = row * TILE + SPRITE * SPRITE_SCALE + 2;  // just below sprite feet
-    ctx.fillStyle = color;
-    ctx.fillRect(baseX + 2, baseY, SPRITE * SPRITE_SCALE - 4, 4);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(baseX + 4, baseY + 4, 3, 8);
-    ctx.fillRect(baseX + SPRITE * SPRITE_SCALE - 7, baseY + 4, 3, 8);
+  /* ═════════════════════════════ DESKS ═════════════════════════════ */
+  function buildDesk(x, z, color) {
+    const deskGroup = new THREE.Group();
+    const topMat = new THREE.MeshStandardMaterial({ color: 0x6B5A4B, roughness: 0.6 });
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x3A2E22, roughness: 0.8 });
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.7), topMat);
+    top.position.y = 0.7;
+    top.castShadow = true;
+    top.receiveShadow = true;
+    deskGroup.add(top);
+    [[-0.6, -0.3], [0.6, -0.3], [-0.6, 0.3], [0.6, 0.3]].forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), legMat);
+      leg.position.set(lx, 0.35, lz);
+      leg.castShadow = true;
+      deskGroup.add(leg);
+    });
+    // Monitor on desk
+    const monStand = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.12, 8), legMat);
+    monStand.position.set(0, 0.8, -0.15);
+    deskGroup.add(monStand);
+    const mon = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.28, 0.04),
+      new THREE.MeshStandardMaterial({ color: 0x111, emissive: color, emissiveIntensity: 0.6 })
+    );
+    mon.position.set(0, 1.0, -0.15);
+    deskGroup.add(mon);
+    deskGroup.position.set(x, 0, z);
+    return deskGroup;
   }
 
-  function drawRoleLabel(col, row, text, color) {
-    const baseX = col * TILE;
-    const baseY = row * TILE + SPRITE * SPRITE_SCALE + 22;
-    ctx.fillStyle = color;
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(text, baseX + (SPRITE * SPRITE_SCALE) / 2, baseY);
+  /* ═════════════════════════════ SPAWN ═════════════════════════════ */
+  const characters = {};
+  const nameplates = {};
+  const bubbles = {};
+
+  function spawnCharacter(key, roleKey, slot) {
+    const char = buildCharacter(roleKey);
+    char.position.set(slot.x, 0, slot.z);
+    scene.add(char);
+    characters[key] = char;
   }
 
-  function drawFloor() {
-    // dark base
-    ctx.fillStyle = '#0A1820';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // checkered tiles
-    ctx.fillStyle = '#0E1C26';
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        if ((r + c) % 2 === 0) {
-          ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
-        }
-      }
+  function spawnNameplate(key, roleKey, text, subtitle) {
+    const el = document.createElement('div');
+    el.className = 'nameplate ' + roleKey;
+    const main = document.createElement('span');
+    main.textContent = text;
+    el.appendChild(main);
+    if (subtitle) {
+      const sub = document.createElement('span');
+      sub.className = 'role-subtitle';
+      sub.textContent = subtitle;
+      el.appendChild(sub);
     }
-    // horizon line between PM zone (top) and senior zone (bottom)
-    ctx.fillStyle = '#1A2C38';
-    ctx.fillRect(0, 6 * TILE - 2, canvas.width, 2);
-    // meeting room outline around PM
-    ctx.strokeStyle = 'rgba(7, 209, 175, 0.15)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(12 * TILE, 2 * TILE, 6 * TILE, 4 * TILE);
+    overlay.appendChild(el);
+    nameplates[key] = el;
   }
+
+  // PM
+  spawnCharacter('pm', 'pm', SLOTS.pm);
+  spawnNameplate('pm', 'pm', CHAR.pm.label, CHAR.pm.subtitle);
+
+  // Seniors + desks
+  ['frontend', 'backend', 'ai', 'qa'].forEach((role) => {
+    const slot = SLOTS[role];
+    const desk = buildDesk(slot.x, slot.z + 0.9, CHAR[role].color);
+    scene.add(desk);
+    spawnCharacter(role, role, slot);
+    spawnNameplate(role, role, CHAR[role].label, CHAR[role].subtitle);
+  });
 
   /* ═════════════════════════════ BUBBLES ═════════════════════════════ */
-  function setBubble(key, col, row, text) {
-    let el = document.getElementById('bubble-' + key);
+  function setBubble(key, roleKey, text) {
+    let el = bubbles[key];
     if (!text) {
-      if (el) el.remove();
+      if (el) { el.remove(); delete bubbles[key]; }
       return;
     }
     if (!el) {
       el = document.createElement('div');
-      el.id = 'bubble-' + key;
-      el.className = 'bubble';
-      bubblesEl.appendChild(el);
+      el.className = 'bubble ' + roleKey;
+      overlay.appendChild(el);
+      bubbles[key] = el;
     }
-    el.textContent = text.length > 24 ? text.slice(0, 22) + '…' : text;
-    // Position in canvas logical space (left%, top%)
-    const xPct = ((col * TILE + (SPRITE * SPRITE_SCALE) / 2) / canvas.width) * 100;
-    const yPct = ((row * TILE - 2) / canvas.height) * 100;
-    el.style.left = xPct + '%';
-    el.style.top = yPct + '%';
+    el.className = 'bubble ' + roleKey;
+    el.textContent = text;
   }
 
-  function cleanupStaleBubbles(validKeys) {
-    Array.from(bubblesEl.children).forEach((b) => {
-      const key = b.id.replace('bubble-', '');
-      if (!validKeys.has(key)) b.remove();
-    });
+  /* ═════════════════════════════ PROJECT 3D → 2D ═════════════════════════════ */
+  const projectVec = new THREE.Vector3();
+  function project(worldPos, offsetY = 0) {
+    projectVec.copy(worldPos);
+    projectVec.y += offsetY;
+    projectVec.project(camera);
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    return {
+      x: (projectVec.x * 0.5 + 0.5) * w,
+      y: (projectVec.y * -0.5 + 0.5) * h
+    };
   }
+
+  /* ═════════════════════════════ WALKING ═════════════════════════════ */
+  function walkTarget(slot, walkTo) {
+    if (!walkTo || !SLOTS[walkTo]) return null;
+    const target = SLOTS[walkTo];
+    return {
+      x: slot.x + (target.x - slot.x) * 0.55,
+      z: slot.z + (target.z - slot.z) * 0.55
+    };
+  }
+
+  /* ═════════════════════════════ RENDER LOOP ═════════════════════════════ */
+  let currentState = null;
+  let time = 0;
+
+  function updateCharacter(group, slot, status, walkTo) {
+    const t = time;
+    const char = group.userData.char;
+    let targetX = slot.x, targetZ = slot.z;
+    const walkT = walkTarget(slot, walkTo);
+    if (walkT) {
+      const cycle = (t * 0.3) % 1; // 0..1 over ~3.3s
+      let p;
+      if (cycle < 0.35) p = cycle / 0.35;
+      else if (cycle < 0.65) p = 1;
+      else p = 1 - (cycle - 0.65) / 0.35;
+      p = 0.5 * (1 - Math.cos(p * Math.PI));
+      targetX = slot.x + (walkT.x - slot.x) * p;
+      targetZ = slot.z + (walkT.z - slot.z) * p;
+    }
+    // Smooth lerp
+    group.position.x += (targetX - group.position.x) * 0.08;
+    group.position.z += (targetZ - group.position.z) * 0.08;
+
+    // Orientation: face target while walking
+    if (walkT && Math.abs(targetX - group.position.x) > 0.02) {
+      const dx = walkT.x - slot.x;
+      const dz = walkT.z - slot.z;
+      const angle = Math.atan2(dx, dz);
+      group.rotation.y += (angle - group.rotation.y) * 0.1;
+    } else {
+      group.rotation.y += (0 - group.rotation.y) * 0.05;
+    }
+
+    // Idle bob / working jitter / walking bounce
+    let bobY = 0;
+    if (status === 'working') bobY = Math.abs(Math.sin(t * 4)) * 0.02;
+    else if (status === 'walking' || walkT) bobY = Math.abs(Math.sin(t * 8)) * 0.06;
+    else bobY = Math.sin(t * 1.5) * 0.01;
+    group.position.y = bobY;
+
+    // Leg swing while walking
+    if (walkT) {
+      const s = Math.sin(t * 10);
+      group.userData.leftLeg.rotation.x = s * 0.4;
+      group.userData.rightLeg.rotation.x = -s * 0.4;
+      group.userData.leftArm.rotation.x = -s * 0.5;
+      group.userData.rightArm.rotation.x = s * 0.5;
+    } else {
+      group.userData.leftLeg.rotation.x *= 0.9;
+      group.userData.rightLeg.rotation.x *= 0.9;
+      group.userData.leftArm.rotation.x *= 0.85;
+      group.userData.rightArm.rotation.x *= 0.85;
+    }
+
+    // Working: subtle arm type motion
+    if (status === 'working' && !walkT) {
+      const s = Math.sin(t * 12);
+      group.userData.leftArm.rotation.x = -0.3 + s * 0.1;
+      group.userData.rightArm.rotation.x = -0.3 + -s * 0.1;
+    }
+
+    // Glow ring pulse
+    const ring = group.userData.glowRing;
+    if (ring) {
+      if (status === 'working') {
+        ring.material.opacity = 0.25 + Math.sin(t * 4) * 0.12;
+        ring.scale.setScalar(1 + Math.sin(t * 4) * 0.08);
+      } else if (status === 'walking' || walkT) {
+        ring.material.opacity = 0.3;
+        ring.scale.setScalar(1);
+      } else if (status && status !== 'idle') {
+        ring.material.opacity = 0.2;
+        ring.scale.setScalar(1);
+      } else {
+        ring.material.opacity = 0.1;
+        ring.scale.setScalar(1);
+      }
+    }
+  }
+
+  function render() {
+    time += 0.033;
+
+    // Apply state
+    if (currentState) {
+      const pm = currentState.pm || { status: 'idle' };
+      updateCharacter(characters.pm, SLOTS.pm, pm.status, pm.walkTo);
+      if (pm.status && pm.status !== 'idle' && pm.task) {
+        setBubble('pm', 'pm', pm.task);
+      } else {
+        setBubble('pm', 'pm', null);
+      }
+
+      ['frontend', 'backend', 'ai', 'qa'].forEach((role) => {
+        const sr = (currentState.seniors && currentState.seniors[role]) || { status: 'idle', devs: [] };
+        updateCharacter(characters[role], SLOTS[role], sr.status, sr.walkTo);
+        if (sr.status && sr.status !== 'idle' && sr.task) {
+          setBubble('sr-' + role, role, sr.task);
+        } else {
+          setBubble('sr-' + role, role, null);
+        }
+        // Devs
+        const devSlots = SLOTS.devSlots[role];
+        const activeDevKeys = new Set();
+        (sr.devs || []).slice(0, devSlots.length).forEach((dev, i) => {
+          const key = 'dev-' + role + '-' + dev.id;
+          activeDevKeys.add(key);
+          if (!characters[key]) {
+            spawnCharacter(key, 'dev', devSlots[i]);
+            spawnNameplate(key, 'dev', 'Dev', dev.id);
+          }
+          updateCharacter(characters[key], devSlots[i], dev.status, null);
+          const alpha = dev.status === 'spawning' ? 0.55 : (dev.status === 'done' ? 0.35 : 1);
+          characters[key].traverse((m) => {
+            if (m.material) {
+              if (!Array.isArray(m.material)) m.material.transparent = true;
+              if (!Array.isArray(m.material)) m.material.opacity = alpha;
+            }
+          });
+          if (dev.task) setBubble(key, role, dev.task);
+          else setBubble(key, role, null);
+        });
+        // Cleanup disappeared devs
+        Object.keys(characters).filter(k => k.startsWith('dev-' + role + '-') && !activeDevKeys.has(k)).forEach((k) => {
+          scene.remove(characters[k]);
+          delete characters[k];
+          if (nameplates[k]) { nameplates[k].remove(); delete nameplates[k]; }
+          if (bubbles[k]) { bubbles[k].remove(); delete bubbles[k]; }
+        });
+      });
+    }
+
+    // Update nameplate positions
+    Object.keys(characters).forEach((key) => {
+      const group = characters[key];
+      const p = project(group.position, -0.05);
+      if (nameplates[key]) {
+        nameplates[key].style.left = p.x + 'px';
+        nameplates[key].style.top = p.y + 'px';
+      }
+    });
+
+    // Update bubble positions (above head)
+    Object.keys(bubbles).forEach((key) => {
+      let group;
+      if (key === 'pm') group = characters.pm;
+      else if (key.startsWith('sr-')) group = characters[key.replace('sr-', '')];
+      else if (key.startsWith('dev-')) group = characters[key];
+      if (group && bubbles[key]) {
+        const p = project(group.position, 2.4);
+        bubbles[key].style.left = p.x + 'px';
+        bubbles[key].style.top = p.y + 'px';
+      }
+    });
+
+    renderer.render(scene, camera);
+  }
+
+  setInterval(render, 33);
 
   /* ═════════════════════════════ LOG ═════════════════════════════ */
   function renderLog(entries) {
@@ -481,64 +865,6 @@
       logEl.appendChild(div);
     });
     logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  /* ═════════════════════════════ RENDER ═════════════════════════════ */
-  function pickFrame(status) {
-    if (status === 'working') return workPhase;
-    return idlePhase;
-  }
-
-  function render() {
-    frameCounter++;
-    if (frameCounter % 36 === 0) idlePhase = 1 - idlePhase;   // ~600ms at 60fps
-    if (frameCounter % 12 === 0) workPhase = 1 - workPhase;   // ~200ms
-
-    drawFloor();
-
-    if (!currentState) return;
-
-    const validBubbleKeys = new Set();
-
-    /* PM */
-    const pm = currentState.pm || { status: 'idle' };
-    drawDesk(SLOTS.pm.col, SLOTS.pm.row, '#2E4A7D');
-    drawSprite('pm', PALETTE.pm, SLOTS.pm.col, SLOTS.pm.row, pickFrame(pm.status), 1);
-    drawRoleLabel(SLOTS.pm.col, SLOTS.pm.row, 'PM', '#F5C76C');
-    if (pm.status && pm.status !== 'idle' && pm.task) {
-      setBubble('pm', SLOTS.pm.col, SLOTS.pm.row, pm.task);
-      validBubbleKeys.add('pm');
-    }
-
-    /* Seniors + devs */
-    ['frontend', 'backend', 'ai', 'qa'].forEach((role) => {
-      const sr = (currentState.seniors && currentState.seniors[role]) || { status: 'idle', devs: [] };
-      const slot = SLOTS[role];
-      drawDesk(slot.col, slot.row, PALETTE[role].primary);
-      drawSprite('senior', PALETTE[role], slot.col, slot.row, pickFrame(sr.status), 1);
-      drawRoleLabel(slot.col, slot.row, 'Sr ' + ROLE_LABELS[role], PALETTE[role].primary);
-
-      if (sr.status && sr.status !== 'idle' && sr.task) {
-        const key = 'sr-' + role;
-        setBubble(key, slot.col, slot.row, sr.task);
-        validBubbleKeys.add(key);
-      }
-
-      /* devs */
-      const devSlots = SLOTS.devSlots[role];
-      (sr.devs || []).slice(0, devSlots.length).forEach((dev, i) => {
-        const ds = devSlots[i];
-        const alpha = dev.status === 'spawning' ? 0.5 : (dev.status === 'done' ? 0.4 : 1);
-        drawSprite('dev', PALETTE.dev, ds.col, ds.row, pickFrame(dev.status), alpha);
-        if (dev.task) {
-          const key = 'dev-' + role + '-' + dev.id;
-          setBubble(key, ds.col, ds.row, dev.task);
-          validBubbleKeys.add(key);
-        }
-      });
-    });
-
-    cleanupStaleBubbles(validBubbleKeys);
   }
 
   /* ═════════════════════════════ POLLING ═════════════════════════════ */
@@ -566,12 +892,10 @@
     }
   }
 
-  /* ═════════════════════════════ BOOT ═════════════════════════════ */
-  /* setInterval keeps running even when tab is hidden (unlike requestAnimationFrame) */
   poll();
   setInterval(poll, 500);
-  setInterval(render, 33);  // ~30fps, tab-background safe
-  console.log('AKIS Agent Office ready');
+
+  console.log('AKIS Agent Office 3D (Three.js) ready');
   </script>
 </body>
 </html>

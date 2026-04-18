@@ -38,8 +38,25 @@ mcp__Claude_in_Chrome__navigate url="file:///<repo>/docs/agent-office/index.html
 - `idle` → masasında oturur, nefes animasyonu
 - `planning` / `triaging` / `reviewing` → düşünme bubble'ı
 - `working` → typing animasyonu + task bubble
+- `walking` → hızlı bacak salınımı (bir sonraki delegation'a yürüyor)
 - `spawning` (dev) → fade-in
 - `done` (dev) → fade-out, log'a satır düşer
+
+## Walking animation (delegation moments)
+
+Her karakter isteğe bağlı olarak `walkTo: "<role-key>"` field'ı taşıyabilir.
+Set edildiğinde karakter hedefin %40'ı kadar o yöne sinüzoidal oscillate
+eder + küçük dikey bob (2s döngü).
+
+Kullanım: PM delegation anı için aşağıdaki gibi:
+
+```json
+"pm":      { "status": "walking", "task": "delegating #429", "walkTo": "backend" }
+"backend": { "status": "walking", "task": "meeting PM",      "walkTo": "pm" }
+```
+
+İki karakter birbirine doğru oscillate eder (toplantı efekti). İş başlayınca
+`walkTo: null` + `status: "working"` yap — karakter masasına döner.
 
 ## State protokolü
 
