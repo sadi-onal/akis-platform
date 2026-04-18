@@ -247,7 +247,7 @@ pnpm -C frontend typecheck && pnpm -C frontend lint && pnpm -C frontend test && 
 ### Kod Kalitesi
 - Commit oncesi: `typecheck + lint + test:unit + build`
 - Commit prefix: `feat()`, `fix()`, `refactor()`, `docs()`, `chore()`
-- Co-author: `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
+- Co-author: `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` (otomatik — Claude Code oturumu hangi sürümü kullaniyorsa ona göre yazar)
 - Hatalari lint kurallarini devre disi birakarak susturma — tamamen gerekcelenmeden
 - Minimum kod yorumu (sadece acik olmayan mantik)
 
