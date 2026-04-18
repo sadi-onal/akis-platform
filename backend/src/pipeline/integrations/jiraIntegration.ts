@@ -99,6 +99,55 @@ export async function commentJiraWithProtoResult(
 }
 
 /**
+ * Add a failure comment to the Jira Epic when a pipeline stage errors out.
+ *
+ * This closes a gap surfaced by the 2026-04-17 code review of the Jira
+ * integration verify task (issue #396): success paths were instrumented,
+ * but failures left the Epic silently "In Progress" forever. Now the Epic
+ * gets an explicit failure log with the stage + error code so a Jira
+ * watcher immediately sees what went wrong and can retry from AKIS.
+ *
+ * Stage/code/message are all optional — callers inside the orchestrator
+ * may not have full context depending on where the failure bubbles up.
+ * All field joins use "\n" so Jira renders them as separate lines.
+ */
+export async function commentJiraWithFailure(
+  jira: JiraMCPService,
+  epicKey: string,
+  result: {
+    stage: 'Scribe' | 'Proto' | 'Trace' | 'Critic' | 'FixLoop' | string;
+    errorCode?: string;
+    errorMessage?: string;
+    retryable?: boolean;
+    pipelineId?: string;
+  },
+): Promise<void> {
+  try {
+    const lines = [
+      `*AKIS pipeline failed*`,
+      `- Stage: ${result.stage}`,
+    ];
+    if (result.errorCode) lines.push(`- Error code: \`${result.errorCode}\``);
+    if (result.errorMessage) {
+      // Trim long error messages so Jira doesn't reject the comment payload.
+      const trimmed = result.errorMessage.length > 500
+        ? `${result.errorMessage.slice(0, 500)}…`
+        : result.errorMessage;
+      lines.push(`- Error: ${trimmed}`);
+    }
+    if (typeof result.retryable === 'boolean') {
+      lines.push(`- Retryable: ${result.retryable ? 'yes — can be restarted from AKIS' : 'no — manual intervention required'}`);
+    }
+    if (result.pipelineId) lines.push(`- Pipeline: \`${result.pipelineId}\``);
+
+    await withTimeout(jira.addComment(epicKey, lines.join('\n')), JIRA_CALL_TIMEOUT);
+    logger.info(`[Jira] Commented failure on ${epicKey} (stage=${result.stage})`);
+  } catch (err) {
+    logger.warn({ err }, `[Jira] Failed to post failure comment on ${epicKey}`);
+  }
+}
+
+/**
  * Add a comment to the Jira Epic with Trace test results.
  * Optionally transitions the Epic to "Done" if all tests passed.
  */
