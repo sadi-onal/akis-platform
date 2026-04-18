@@ -1,6 +1,12 @@
 import { getEnv } from '../../config/env.js';
 import type { AIKeyProvider } from './user-ai-keys.js';
 
+export const DEFAULT_ANTHROPIC_MODELS = [
+  'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-20250514',
+  'claude-opus-4-20250514',
+];
+
 export const DEFAULT_OPENAI_MODELS = [
   'gpt-4o-mini',
   'gpt-4o',
@@ -51,7 +57,26 @@ export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): str
   if (provider === 'openrouter') {
     return DEFAULT_OPENROUTER_MODELS;
   }
+  if (provider === 'anthropic') {
+    return DEFAULT_ANTHROPIC_MODELS;
+  }
   return DEFAULT_OPENAI_MODELS;
+}
+
+/**
+ * Combined allowlist across every provider — used by the per-chat model
+ * picker (issue #437) to validate PATCH /api/pipelines/:id/model input
+ * without the caller having to know which provider the pipeline is bound
+ * to. Any model that appears in _any_ provider's default list is accepted;
+ * provider compatibility is then a client-side gating concern based on
+ * which provider keys the user has configured.
+ */
+export function getAllKnownModels(): string[] {
+  return [
+    ...DEFAULT_ANTHROPIC_MODELS,
+    ...DEFAULT_OPENAI_MODELS,
+    ...DEFAULT_OPENROUTER_MODELS,
+  ];
 }
 
 /** Returns the recommended default model for a given AI provider. */
@@ -77,6 +102,9 @@ export function detectProviderFromModel(model: string): AIKeyProvider | null {
   }
   if (model.includes('/') || model.includes(':free') || model.includes(':nitro')) {
     return 'openrouter';
+  }
+  if (model.startsWith('claude-')) {
+    return 'anthropic';
   }
   return null;
 }

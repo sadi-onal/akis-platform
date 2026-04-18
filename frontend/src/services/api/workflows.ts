@@ -327,6 +327,7 @@ export function mapPipelineToWorkflow(pipeline: Pipeline, tokenUsage?: import('.
     conversation: mapConversation(pipeline),
     engineerSessionId: pipeline.intermediateState?.engineerSessionId,
     tokenUsage,
+    model: pipeline.model ?? tokenUsage?.model,
   };
 }
 
@@ -424,6 +425,18 @@ export const workflowsApi = {
   toggleTrace: async (id: string, enabled: boolean): Promise<Workflow> => {
     const res = await http.patch<PipelineResponse>(`/api/pipelines/${id}/trace-toggle`, { enabled });
     return mapPipelineToWorkflow(res.pipeline);
+  },
+
+  updateModel: async (id: string, model: string): Promise<Workflow> => {
+    const res = await http.patch<PipelineResponse>(`/api/pipelines/${id}/model`, { model });
+    return mapPipelineToWorkflow(res.pipeline);
+  },
+
+  listSupportedModels: async (
+    provider?: 'anthropic' | 'openai' | 'openrouter',
+  ): Promise<{ provider: string; models: Array<{ id: string; name: string; provider: string; recommended: boolean }> }> => {
+    const qs = provider ? `?provider=${provider}` : '';
+    return http.get(`/api/ai/supported-models${qs}`);
   },
 
   rename: async (id: string, title: string): Promise<void> => {

@@ -1254,6 +1254,22 @@ export class PipelineOrchestrator {
     return this.store.update(pipelineId, { title });
   }
 
+  /**
+   * Persist the per-chat model selection (issue #437). The dropdown calls
+   * this between turns so the next Scribe continuation / Proto retry /
+   * iteration child picks up the new model via `pipeline.model`.
+   *
+   * Allowlist + provider compatibility are validated at the route layer
+   * before we get here, so this method is intentionally minimal.
+   */
+  async setModel(pipelineId: string, userId: string, model: string): Promise<PipelineState> {
+    const pipeline = await this.getPipeline(pipelineId);
+    if (pipeline.userId !== userId) {
+      throw new Error('UNAUTHORIZED');
+    }
+    return this.store.update(pipelineId, { model });
+  }
+
   // ─── Private: Scribe Result Handler ──────────
 
   private async handleScribeResult(

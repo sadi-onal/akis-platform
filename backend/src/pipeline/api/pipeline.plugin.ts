@@ -305,6 +305,16 @@ export async function pipelinePlugin(
     },
   });
 
+  // PATCH /api/pipelines/:id/model — switch this chat's AI model (issue #437)
+  fastify.route({
+    method: 'PATCH',
+    url: '/:id/model',
+    preHandler: [authPreHandler, ownershipPreHandler],
+    handler: async (request: FastifyRequest) => {
+      return routes.setModel(request);
+    },
+  });
+
   // DELETE /api/pipelines/:id — cancel pipeline
   fastify.route({
     method: 'DELETE',

@@ -52,6 +52,9 @@ interface ChatPanelProps {
   repoSelectorSlot?: React.ReactNode;
   keySourceBadge?: { source: 'akis' | 'own'; jobsRemaining: number; jobsLimit: number } | null;
   tokenUsage?: import('../../types/workflow').WorkflowTokenUsage;
+  model?: string;
+  onModelChange?: (modelId: string) => void | Promise<void>;
+  modelProviderHint?: 'anthropic' | 'openai' | 'openrouter';
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -88,6 +91,9 @@ export const ChatPanel = memo(function ChatPanel({
   repoSelectorSlot,
   keySourceBadge,
   tokenUsage,
+  model,
+  onModelChange,
+  modelProviderHint,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -168,6 +174,9 @@ export const ChatPanel = memo(function ChatPanel({
           onBack={onBack}
           showBackButton={showBackButton}
           tokenUsage={tokenUsage}
+          model={model}
+          onModelChange={onModelChange}
+          modelProviderHint={modelProviderHint}
         />
       )}
 

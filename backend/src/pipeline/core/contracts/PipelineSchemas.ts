@@ -256,7 +256,12 @@ export const StartPipelineRequestSchema = z.object({
   skipScribe: z.boolean().optional().default(false),
   /** When true, run Trace (test generation) after Proto. Default: false (skip Trace). */
   traceEnabled: z.boolean().optional().default(false),
-  model: z.enum(['claude-sonnet-4-6', 'claude-haiku-4-5']).optional().default('claude-haiku-4-5'),
+  /**
+   * Preferred AI model for this pipeline. Validated downstream via
+   * `isModelAllowed` + `isModelCompatibleWithProvider` so the per-chat
+   * model picker (issue #437) can send any provider's model ID.
+   */
+  model: z.string().min(1).max(255).optional().default('claude-haiku-4-5'),
   jiraConfig: JiraConfigSchema,
 });
 

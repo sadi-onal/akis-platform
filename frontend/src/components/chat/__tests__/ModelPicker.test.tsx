@@ -1,0 +1,101 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { ModelPicker } from '../ModelPicker';
+import { shortModelLabel } from '../../../utils/modelLabel';
+
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
+
+vi.mock('../../../services/api/workflows', () => ({
+  workflowsApi: {
+    listSupportedModels: vi.fn().mockResolvedValue({
+      provider: 'anthropic',
+      models: [
+        { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku', provider: 'anthropic', recommended: true },
+        { id: 'gpt-4o-mini', name: 'GPT-4o mini', provider: 'openai', recommended: false },
+      ],
+    }),
+  },
+}));
+
+describe('ModelPicker — trigger', () => {
+  it('renders auto label when value is undefined', () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    expect(screen.getByText('chat.model.auto')).toBeInTheDocument();
+  });
+
+  it('renders shortened model label when value is provided', () => {
+    render(<ModelPicker value="claude-haiku-4-5-20251001" onSelect={vi.fn()} />);
+    expect(screen.getByText('claude-haiku-4-5')).toBeInTheDocument();
+  });
+
+  it('strips OpenRouter org prefix', () => {
+    render(<ModelPicker value="anthropic/claude-3.5-sonnet" onSelect={vi.fn()} />);
+    expect(screen.getByText('claude-3.5-sonnet')).toBeInTheDocument();
+  });
+
+  it('shows aria-expanded=false initially', () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'chat.model.ariaLabel' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('flips aria-expanded after click', () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    const btn = screen.getByRole('button', { name: 'chat.model.ariaLabel' });
+    fireEvent.click(btn);
+    expect(btn).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('opens the listbox after click', () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.model.ariaLabel' }));
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('hides the listbox again after a second click', () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    const btn = screen.getByRole('button', { name: 'chat.model.ariaLabel' });
+    fireEvent.click(btn);
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('closes the listbox when Escape is pressed', () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.model.ariaLabel' }));
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('disables the trigger button when disabled prop is set', () => {
+    render(<ModelPicker disabled onSelect={vi.fn()} />);
+    const btn = screen.getByRole('button', { name: 'chat.model.ariaLabel' });
+    expect(btn).toBeDisabled();
+  });
+});
+
+describe('shortModelLabel', () => {
+  it('strips Anthropic date suffix', () => {
+    expect(shortModelLabel('claude-haiku-4-5-20251001')).toBe('claude-haiku-4-5');
+    expect(shortModelLabel('claude-sonnet-4-20250514')).toBe('claude-sonnet-4');
+  });
+
+  it('takes the tail of OpenRouter slug format', () => {
+    expect(shortModelLabel('anthropic/claude-3.5-sonnet')).toBe('claude-3.5-sonnet');
+    expect(shortModelLabel('google/gemini-2.5-flash')).toBe('gemini-2.5-flash');
+  });
+
+  it('leaves plain OpenAI IDs untouched', () => {
+    expect(shortModelLabel('gpt-4o-mini')).toBe('gpt-4o-mini');
+    expect(shortModelLabel('gpt-4.1')).toBe('gpt-4.1');
+  });
+});

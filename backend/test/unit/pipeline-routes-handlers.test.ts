@@ -74,6 +74,10 @@ function createMockOrchestrator() {
       calls.push({ method: 'getLiveTokenUsage', args: [id, metrics] });
       return { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     },
+    setModel: async (id: string, userId: string, model: string) => {
+      calls.push({ method: 'setModel', args: [id, userId, model] });
+      return { ...mockPipeline, id, model };
+    },
   };
 
   return { orchestrator: orchestrator as unknown as PipelineRoutesDeps['orchestrator'], calls };
@@ -260,6 +264,62 @@ describe('Pipeline Routes — Error propagation', () => {
     await assert.rejects(
       () => routes.getStatus(makeRequest({ id: 'pipe-999' }, {})),
       { message: /Pipeline not found/ },
+    );
+  });
+});
+
+// ─── setModel (issue #437) ──────────────────────
+
+describe('Pipeline Routes — setModel', () => {
+  it('calls orchestrator.setModel when model is in allowlist', async () => {
+    const { routes, calls } = createRoutes();
+    const result = await routes.setModel(
+      makeRequest({ id: 'pipe-1' }, { model: 'claude-haiku-4-5-20251001' }),
+    );
+    assert.equal((result as { pipeline: { model?: string } }).pipeline.model, 'claude-haiku-4-5-20251001');
+    const setCalls = calls.filter((c) => c.method === 'setModel');
+    assert.equal(setCalls.length, 1);
+    assert.equal(setCalls[0].args[0], 'pipe-1');
+    assert.equal(setCalls[0].args[1], 'user-1');
+    assert.equal(setCalls[0].args[2], 'claude-haiku-4-5-20251001');
+  });
+
+  it('rejects empty model string', async () => {
+    const { routes } = createRoutes();
+    await assert.rejects(
+      () => routes.setModel(makeRequest({ id: 'pipe-1' }, { model: '' })),
+      { message: /non-empty/ },
+    );
+  });
+
+  it('rejects non-string model field', async () => {
+    const { routes } = createRoutes();
+    await assert.rejects(
+      () => routes.setModel(makeRequest({ id: 'pipe-1' }, { model: 42 })),
+      { message: /non-empty string/ },
+    );
+  });
+
+  it('rejects model not in allowlist', async () => {
+    const { routes } = createRoutes();
+    await assert.rejects(
+      () => routes.setModel(makeRequest({ id: 'pipe-1' }, { model: 'gpt-9000-unobtainium' })),
+      { message: /not in the allowlist/ },
+    );
+  });
+
+  it('trims whitespace before validating', async () => {
+    const { routes, calls } = createRoutes();
+    await routes.setModel(makeRequest({ id: 'pipe-1' }, { model: '  gpt-4o-mini  ' }));
+    const setCalls = calls.filter((c) => c.method === 'setModel');
+    assert.equal(setCalls[setCalls.length - 1].args[2], 'gpt-4o-mini');
+  });
+
+  it('rejects model longer than 255 chars', async () => {
+    const { routes } = createRoutes();
+    await assert.rejects(
+      () => routes.setModel(makeRequest({ id: 'pipe-1' }, { model: 'x'.repeat(300) })),
+      { message: /too long/ },
     );
   });
 });

@@ -18,7 +18,7 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
         querystring: {
           type: 'object',
           properties: {
-            provider: { type: 'string', enum: ['openai', 'openrouter'] },
+            provider: { type: 'string', enum: ['anthropic', 'openai', 'openrouter'] },
           },
         },
         response: {
@@ -49,7 +49,7 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
       // If explicit provider param, use it
       const query = request.query as Record<string, string> | undefined;
       const providerParam = query?.provider;
-      if (providerParam === 'openai' || providerParam === 'openrouter') {
+      if (providerParam === 'anthropic' || providerParam === 'openai' || providerParam === 'openrouter') {
         provider = providerParam;
       } else {
         // Try to get user's active provider from DB

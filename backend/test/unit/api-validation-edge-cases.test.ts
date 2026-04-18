@@ -1055,20 +1055,33 @@ describe('API Validation Edge Cases — StartPipelineRequest', () => {
     assert.equal(result.success, true);
   });
 
-  it('rejects invalid model value', () => {
+  it('rejects empty model string', () => {
+    // Issue #437: model is now a permissive string (validated downstream
+    // by isModelAllowed + isModelCompatibleWithProvider) so any provider
+    // can ship its own model IDs. Zod only enforces non-empty + length cap.
     const result = StartPipelineRequestSchema.safeParse({
       idea: 'Build a todo application with authentication',
-      model: 'gpt-4',
+      model: '',
     });
     assert.equal(result.success, false);
   });
 
-  it('accepts valid model claude-sonnet-4-6', () => {
+  it('accepts any non-empty model string (validated downstream)', () => {
+    for (const m of ['claude-sonnet-4-6', 'gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'claude-haiku-4-5-20251001']) {
+      const result = StartPipelineRequestSchema.safeParse({
+        idea: 'Build a todo application with authentication',
+        model: m,
+      });
+      assert.equal(result.success, true, `expected ${m} to be accepted by the schema`);
+    }
+  });
+
+  it('rejects model longer than 255 chars', () => {
     const result = StartPipelineRequestSchema.safeParse({
       idea: 'Build a todo application with authentication',
-      model: 'claude-sonnet-4-6',
+      model: 'x'.repeat(256),
     });
-    assert.equal(result.success, true);
+    assert.equal(result.success, false);
   });
 
   it('defaults model to claude-haiku-4-5 when omitted', () => {

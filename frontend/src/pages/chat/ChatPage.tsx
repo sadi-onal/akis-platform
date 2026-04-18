@@ -894,6 +894,23 @@ export default function ChatPage() {
     catch (e) { toast(localizeError(e), 'error'); }
   }, [conversationId, refreshWorkflow]);
 
+  // Per-chat model picker (issue #437). No-op when pipeline is the "pending"
+  // placeholder (not yet created) — user can only change the model once the
+  // pipeline exists in the DB.
+  const handleModelChange = useCallback(
+    async (modelId: string) => {
+      if (!conversationId || conversationId === 'pending') return;
+      try {
+        await workflowsApi.updateModel(conversationId, modelId);
+        await refreshWorkflow();
+        toast(`Model güncellendi: ${modelId}`, 'info');
+      } catch (e) {
+        toast(localizeError(e), 'error');
+      }
+    },
+    [conversationId, refreshWorkflow],
+  );
+
   return (
     <div className="flex h-dvh overflow-hidden bg-ak-bg" role="application" aria-label="AKIS Chat">
       {/* Mobile overlay */}
@@ -1017,6 +1034,8 @@ export default function ChatPage() {
                   repoSelectorSlot={repoSelectorSlot}
                   keySourceBadge={pendingConv ? keySourceBadge : null}
                   tokenUsage={activeWorkflow?.tokenUsage}
+                  model={activeWorkflow?.model}
+                  onModelChange={!pendingConv ? handleModelChange : undefined}
                 />
               </ErrorBoundary>
             </div>

@@ -222,6 +222,36 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       return { pipeline };
     },
 
+    /**
+     * PATCH /api/pipelines/:id/model — switch this chat's AI model between
+     * turns (issue #437). Validates the model against the combined allowlist
+     * and provider compatibility before persisting; subsequent Scribe /
+     * Proto / Trace calls pick up the new model via `pipeline.model`.
+     */
+    async setModel(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      const userId = getUserId(request);
+      await assertOwnership(request, id);
+      const body = (request as { body: { model?: unknown } }).body ?? {};
+      const rawModel = body.model;
+      if (typeof rawModel !== 'string' || rawModel.trim().length === 0) {
+        throw Object.assign(new Error('model field must be a non-empty string'), { statusCode: 400 });
+      }
+      const model = rawModel.trim();
+      if (model.length > 255) {
+        throw Object.assign(new Error('model too long (max 255 chars)'), { statusCode: 400 });
+      }
+
+      const { getAllKnownModels, isModelAllowed } = await import('../../services/ai/modelAllowlist.js');
+      const allowlist = getAllKnownModels();
+      if (!isModelAllowed(model, allowlist)) {
+        throw Object.assign(new Error(`Model '${model}' is not in the allowlist`), { statusCode: 400, code: 'MODEL_NOT_ALLOWED' });
+      }
+
+      const pipeline = await orchestrator.setModel(id, userId, model);
+      return { pipeline };
+    },
+
     /** Level 4: Get pipeline explanation (explainability interface) */
     async getExplanation(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;

@@ -8,6 +8,8 @@ import {
   detectProviderFromModel,
   isModelCompatibleWithProvider,
   getRecommendedModel,
+  getAllKnownModels,
+  DEFAULT_ANTHROPIC_MODELS,
   DEFAULT_OPENAI_MODELS,
   DEFAULT_OPENROUTER_MODELS,
   RECOMMENDED_MODELS,
@@ -67,6 +69,12 @@ describe('detectProviderFromModel', () => {
     assert.strictEqual(detectProviderFromModel('anthropic/claude-3:nitro'), 'openrouter');
   });
 
+  test('detects Anthropic models by claude- prefix', () => {
+    assert.strictEqual(detectProviderFromModel('claude-haiku-4-5-20251001'), 'anthropic');
+    assert.strictEqual(detectProviderFromModel('claude-sonnet-4-20250514'), 'anthropic');
+    assert.strictEqual(detectProviderFromModel('claude-opus-4-20250514'), 'anthropic');
+  });
+
   test('returns null for unknown model format', () => {
     assert.strictEqual(detectProviderFromModel('some-unknown-model'), null);
     assert.strictEqual(detectProviderFromModel('custom-model-v2'), null);
@@ -113,12 +121,26 @@ describe('getRecommendedModel', () => {
 // ─── Default constants ─────────────────────────────────────────────────
 
 describe('Default model lists', () => {
+  test('DEFAULT_ANTHROPIC_MODELS is non-empty', () => {
+    assert.ok(DEFAULT_ANTHROPIC_MODELS.length > 0);
+  });
+
   test('DEFAULT_OPENAI_MODELS is non-empty', () => {
     assert.ok(DEFAULT_OPENAI_MODELS.length > 0);
   });
 
   test('DEFAULT_OPENROUTER_MODELS is non-empty', () => {
     assert.ok(DEFAULT_OPENROUTER_MODELS.length > 0);
+  });
+
+  test('all default Anthropic models are detected as Anthropic', () => {
+    for (const model of DEFAULT_ANTHROPIC_MODELS) {
+      assert.strictEqual(
+        detectProviderFromModel(model),
+        'anthropic',
+        `${model} should be detected as anthropic`
+      );
+    }
   });
 
   test('all default OpenAI models are detected as OpenAI', () => {
@@ -137,6 +159,27 @@ describe('Default model lists', () => {
         detectProviderFromModel(model),
         'openrouter',
         `${model} should be detected as openrouter`
+      );
+    }
+  });
+});
+
+// ─── getAllKnownModels (issue #437) ────────────────────────────────────
+
+describe('getAllKnownModels', () => {
+  test('returns union of all provider default lists', () => {
+    const all = getAllKnownModels();
+    for (const m of DEFAULT_ANTHROPIC_MODELS) assert.ok(all.includes(m), `${m} missing`);
+    for (const m of DEFAULT_OPENAI_MODELS) assert.ok(all.includes(m), `${m} missing`);
+    for (const m of DEFAULT_OPENROUTER_MODELS) assert.ok(all.includes(m), `${m} missing`);
+  });
+
+  test('all entries pass detectProviderFromModel', () => {
+    for (const m of getAllKnownModels()) {
+      const p = detectProviderFromModel(m);
+      assert.ok(
+        p === 'anthropic' || p === 'openai' || p === 'openrouter',
+        `model '${m}' must be detectable`
       );
     }
   });

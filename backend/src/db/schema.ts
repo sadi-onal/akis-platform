@@ -1652,6 +1652,8 @@ export const pipelines = pgTable('pipelines', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   stage: pipelineStageEnum('stage').notNull().default('scribe_clarifying'),
   title: text('title'),
+  /** AI model chosen for this chat (issue #437). Null = fall back to default. */
+  model: varchar('model', { length: 255 }),
   scribeConversation: jsonb('scribe_conversation').default([]),
   scribeOutput: jsonb('scribe_output'),
   approvedSpec: jsonb('approved_spec'),

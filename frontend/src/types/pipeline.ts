@@ -169,6 +169,8 @@ export interface Pipeline {
   userId: string;
   stage: PipelineStage;
   title?: string;
+  /** Per-chat AI model selection (issue #437). */
+  model?: string;
   traceEnabled: boolean;
   scribeConversation: ScribeMessageType[];
   scribeOutput?: ScribeOutput;

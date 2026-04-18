@@ -168,6 +168,8 @@ export interface Workflow {
    * that have not yet been flushed to DB. Issue #438.
    */
   tokenUsage?: WorkflowTokenUsage;
+  /** Per-chat AI model selection (issue #437). */
+  model?: string;
 }
 
 export interface WorkflowStats {
