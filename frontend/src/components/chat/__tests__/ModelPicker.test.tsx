@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ModelPicker } from '../ModelPicker';
 import { shortModelLabel } from '../../../utils/modelLabel';
 
@@ -80,6 +80,19 @@ describe('ModelPicker — trigger', () => {
     render(<ModelPicker disabled onSelect={vi.fn()} />);
     const btn = screen.getByRole('button', { name: 'chat.model.ariaLabel' });
     expect(btn).toBeDisabled();
+  });
+
+  it('renders model option buttons after fetch resolves (issue #465 — no permanent loading state)', async () => {
+    // Guards against the regression where `loading` in the useEffect dep array
+    // caused a re-run/cleanup immediately after setLoading(true), permanently
+    // cancelling the in-flight fetch and leaving the popover stuck on
+    // "chat.model.loading" with zero <option> elements ever rendered.
+    render(<ModelPicker onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.model.ariaLabel' }));
+    // findAllByRole internally polls until the query resolves or times out.
+    // If `loading` never clears (the bug), this assertion will time out / fail.
+    const options = await screen.findAllByRole('option');
+    expect(options.length).toBeGreaterThanOrEqual(1);
   });
 });
 

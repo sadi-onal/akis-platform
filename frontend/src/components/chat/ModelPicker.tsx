@@ -39,7 +39,11 @@ export function ModelPicker({ value, onSelect, providerHint, disabled, className
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open || options.length > 0 || loading) return;
+    // NOTE: `loading` is intentionally excluded from deps — including it would
+    // cause a re-run (and cleanup) immediately after setLoading(true), which
+    // sets `cancelled=true` on the in-flight fetch and permanently stalls the
+    // dropdown on "loading…" (issue #465).
+    if (!open || options.length > 0) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -58,7 +62,7 @@ export function ModelPicker({ value, onSelect, providerHint, disabled, className
     return () => {
       cancelled = true;
     };
-  }, [open, options.length, loading, providerHint]);
+  }, [open, options.length, providerHint]);
 
   useEffect(() => {
     if (!open) return;
