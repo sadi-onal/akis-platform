@@ -34,7 +34,6 @@ import { requireAuth } from '../utils/auth.js';
 import { db } from '../db/client.js';
 import { oauthAccounts, integrationCredentials } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { DEV_GITHUB_BOOTSTRAP_TOKEN_PLACEHOLDER } from '../core/orchestrator/AgentOrchestrator.js';
 import { encryptSecret, decryptSecret } from '../utils/crypto.js';
 import { atlassianOAuthService } from '../services/atlassian/index.js';
 import { McpGateway } from '../services/mcp/McpGateway.js';
@@ -42,6 +41,7 @@ import {
   oauthTokenCrypto,
   OAuthTokenCryptoError,
 } from '../services/auth/OAuthTokenCrypto.js';
+import { getGitHubToken } from '../services/auth/githubToken.js';
 import { logger } from '../lib/logger.js';
 
 // GitHub API helper
@@ -55,37 +55,8 @@ async function fetchFromGitHub<T>(
   return mcpGateway.fetchGitHubJson<T>(endpoint, accessToken, correlationId);
 }
 
-// Helper to get user's GitHub OAuth token
-async function getGitHubToken(userId: string): Promise<string | null> {
-  const githubOAuth = await db.query.oauthAccounts.findFirst({
-    where: and(
-      eq(oauthAccounts.userId, userId),
-      eq(oauthAccounts.provider, 'github')
-    ),
-  });
-
-  const rawToken = githubOAuth?.accessToken || null;
-  if (rawToken && rawToken !== DEV_GITHUB_BOOTSTRAP_TOKEN_PLACEHOLDER) {
-    try {
-      return oauthTokenCrypto.decryptForUse({
-        userId,
-        provider: 'github',
-        rawToken,
-        kind: 'access',
-      });
-    } catch (error) {
-      logger.warn(`[integrations] Failed to decrypt stored GitHub OAuth token: ${error}`);
-      return null;
-    }
-  }
-
-  if (rawToken === DEV_GITHUB_BOOTSTRAP_TOKEN_PLACEHOLDER && process.env.SCRIBE_DEV_GITHUB_BOOTSTRAP === 'true') {
-    const env = getEnv();
-    return env.SCRIBE_DEV_BOOTSTRAP_GITHUB_TOKEN || env.GITHUB_TOKEN || null;
-  }
-
-  return rawToken;
-}
+// GitHub token resolution moved to services/auth/githubToken.ts (unified resolver).
+// See issue #381 / BUG-01 — dual storage caused UI inconsistency.
 
 export async function integrationsRoutes(fastify: FastifyInstance) {
   // Resolve frontend URL for redirects (APP_PUBLIC_URL is optional, fallback to FRONTEND_URL)

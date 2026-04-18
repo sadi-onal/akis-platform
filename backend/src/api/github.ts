@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { users } from '../db/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { getEnv } from '../config/env.js';
+import { getGitHubToken as resolveGitHubToken } from '../services/auth/githubToken.js';
 
 const GITHUB_API = 'https://api.github.com';
 
@@ -42,25 +42,9 @@ async function ghFetch<T>(token: string, method: string, path: string, body?: un
   return (await res.json()) as T;
 }
 
-export async function getGitHubToken(userId: string): Promise<string | null> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    columns: { githubToken: true },
-  });
-
-  if (user?.githubToken) return user.githubToken;
-
-  // DEV_MODE fallback: use env GITHUB_TOKEN
-  if (process.env.DEV_MODE === 'true') {
-    const env = getEnv();
-    const envToken = env.GITHUB_TOKEN;
-    if (envToken && !envToken.startsWith('<') && envToken.length > 10) {
-      return envToken;
-    }
-  }
-
-  return null;
-}
+// Re-export the unified resolver so existing call-sites (server.app.ts, pipeline factory)
+// continue to work without changes. See services/auth/githubToken.ts for priority order.
+export const getGitHubToken = resolveGitHubToken;
 
 export async function githubRoutes(fastify: FastifyInstance) {
   const isDevMode = process.env.DEV_MODE === 'true';
