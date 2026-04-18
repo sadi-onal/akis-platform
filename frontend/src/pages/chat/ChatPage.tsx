@@ -722,19 +722,15 @@ export default function ChatPage() {
               skipScribe: true,
             }, attachments);
 
-            // Show the user's iteration request + a marker in the root chat timeline.
-            const nowIso = new Date().toISOString();
+            // Show only the iteration marker — the user message was already pushed
+            // optimistically at the top of handleSend (line ~648), so we must NOT
+            // add it a second time here. (BUG-17: duplicate send on iteration.)
             setMessages((prev) => [
               ...prev,
               {
-                type: 'user',
-                content,
-                timestamp: nowIso,
-              },
-              {
                 type: 'info',
                 content: `İterasyon başlatıldı — Proto mevcut repo üstüne değişiklikleri uyguluyor.`,
-                timestamp: nowIso,
+                timestamp: new Date().toISOString(),
               },
             ]);
 
@@ -764,6 +760,27 @@ export default function ChatPage() {
                 if (terminal) {
                   pollChildRef.current = null;
                   refreshList();
+                  // BUG-18: push a completion info message so the chat timeline doesn't
+                  // stay stuck on "İterasyon başlatıldı…" forever after child finishes.
+                  const protoStage = (w.stages as { proto?: { files?: unknown[]; filesCreated?: number; branch?: string } } | undefined)?.proto;
+                  const fileCount = protoStage?.filesCreated ?? protoStage?.files?.length;
+                  const branchName = protoStage?.branch;
+                  const summary =
+                    childStage === 'completed' || childStage === 'completed_partial'
+                      ? fileCount
+                        ? `Değişiklikler uygulandı — ${fileCount} dosya güncellendi${branchName ? ` (${branchName})` : ''}. Önizleme yenileyerek sonucu görebilirsiniz.`
+                        : 'İterasyon tamamlandı. Önizleme yenileyerek sonucu görebilirsiniz.'
+                      : childStage === 'failed'
+                        ? 'İterasyon başarısız oldu. Tekrar deneyebilirsiniz.'
+                        : 'İterasyon iptal edildi.';
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      type: 'info',
+                      content: summary,
+                      timestamp: new Date().toISOString(),
+                    },
+                  ]);
                   return;
                 }
               } catch {
