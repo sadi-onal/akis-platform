@@ -4,6 +4,11 @@
  * GET /api/usage - Consolidated usage with plan data
  *
  * Queries the pipelines table (not legacy jobs table) for real pipeline data.
+ *
+ * Cost accounting (Issue #449):
+ *   - Admins (user.role === 'admin') see the REAL wholesale cost we pay the
+ *     provider, plus a breakdown (input / output / margin).
+ *   - Regular users see retail price = wholesale × AI_COST_MARKUP (default 1.5).
  */
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { db } from '../db/client.js';
@@ -11,6 +16,7 @@ import { pipelines } from '../db/schema.js';
 import { and, eq, gte, sql, ne } from 'drizzle-orm';
 import { requireAuth } from '../utils/auth.js';
 import { getUserPlan, getUsageSummary, isUserUnlimited } from '../services/billing/BillingService.js';
+import { aggregateCost, type CostBreakdown } from '../services/billing/CostCalculator.js';
 
 // Config-driven free tier
 const FREE_TIER = {
@@ -63,13 +69,23 @@ export async function usageRoutes(fastify: FastifyInstance) {
         const outputTokens = stats.outputTokens || 0;
         const totalTokens = stats.totalTokens || 0;
 
-        // Estimate cost from tokens if no explicit cost stored
+        // Wholesale cost — either from stored per-pipeline metrics or estimated from tokens.
+        // This is what the provider actually charges us; it is the basis for role-aware display.
         const storedCost = parseFloat(stats.estimatedCost) || 0;
-        const estimatedCostUsd = storedCost > 0
+        const wholesaleCostUsd = storedCost > 0
           ? storedCost
           : (inputTokens * COST_PER_INPUT_TOKEN) + (outputTokens * COST_PER_OUTPUT_TOKEN);
 
-        // Calculate remaining free quota
+        // Role-aware display cost: admin → wholesale, user → retail (wholesale × markup).
+        // Breakdown is only echoed to admins below.
+        const { displayCost: estimatedCostUsd, breakdown } = aggregateCost(
+          wholesaleCostUsd,
+          { role: user.role },
+        );
+        const userIsAdmin = user.role === 'admin';
+
+        // Free quota + on-demand calculations are based on the *displayed* cost so the UI
+        // stays coherent with what the user sees at the top of the page.
         const remainingTokens = Math.max(0, FREE_TIER.tokens - totalTokens);
         const remainingCostUsd = Math.max(0, FREE_TIER.costUsd - estimatedCostUsd);
 
@@ -95,12 +111,32 @@ export async function usageRoutes(fastify: FastifyInstance) {
           .groupBy(sql`TO_CHAR(${pipelines.createdAt}, 'YYYY-MM-DD')`)
           .orderBy(sql`TO_CHAR(${pipelines.createdAt}, 'YYYY-MM-DD')`);
 
-        const daily = dailyResult.map(d => ({
-          date: d.day,
-          tokens: d.tokens,
-          cost: parseFloat(parseFloat(d.cost).toFixed(6)),
-          jobs: d.jobCount,
-        }));
+        // Daily rows — apply same role-aware cost transform per day so the UI
+        // chart and the totals line up.
+        const daily = dailyResult.map(d => {
+          const dailyWholesale = parseFloat(d.cost) || 0;
+          const { displayCost: dailyDisplay } = aggregateCost(dailyWholesale, { role: user.role });
+          return {
+            date: d.day,
+            tokens: d.tokens,
+            cost: parseFloat(dailyDisplay.toFixed(6)),
+            jobs: d.jobCount,
+          };
+        });
+
+        // Admin-only breakdown payload — strip for non-admins so wholesale
+        // prices don't leak to end users.
+        const adminCostPayload: {
+          breakdown: CostBreakdown;
+          wholesaleCostUsd: number;
+          userIsAdmin: true;
+        } | { userIsAdmin: false } = userIsAdmin
+          ? {
+              userIsAdmin: true,
+              wholesaleCostUsd: parseFloat(wholesaleCostUsd.toFixed(6)),
+              breakdown,
+            }
+          : { userIsAdmin: false };
 
         return reply.code(200).send({
           period: {
@@ -135,6 +171,7 @@ export async function usageRoutes(fastify: FastifyInstance) {
             cost: Math.min(100, (estimatedCostUsd / FREE_TIER.costUsd) * 100),
           },
           daily,
+          ...adminCostPayload,
         });
       } catch (err: unknown) {
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {
@@ -181,6 +218,16 @@ export async function usageRoutes(fastify: FastifyInstance) {
 
         const stats = result[0] || { totalJobs: 0, totalTokens: 0, estimatedCost: '0' };
 
+        // Role-aware cost accounting — stored pipeline cost is the wholesale
+        // amount we pay the provider; admins see that as-is, users see retail
+        // (wholesale × AI_COST_MARKUP). Issue #449.
+        const wholesaleCostUsd = parseFloat(stats.estimatedCost) || 0;
+        const { displayCost: estimatedCostDisplay, breakdown } = aggregateCost(
+          wholesaleCostUsd,
+          { role: user.role },
+        );
+        const userIsAdmin = user.role === 'admin';
+
         // Unlimited users (admin role / billing override) see Infinity for remaining —
         // prevents the UI bars from showing "0 remaining" / going red when backend
         // already bypasses quota checks. Issue #382 / BUG-02.
@@ -191,10 +238,22 @@ export async function usageRoutes(fastify: FastifyInstance) {
           ? Number.POSITIVE_INFINITY
           : Math.max(0, plan.maxTokenBudget - usage.tokensUsedThisMonth);
 
+        const adminCostPayload: {
+          breakdown: CostBreakdown;
+          wholesaleCostUsd: number;
+          userIsAdmin: true;
+        } | { userIsAdmin: false } = userIsAdmin
+          ? {
+              userIsAdmin: true,
+              wholesaleCostUsd: parseFloat(wholesaleCostUsd.toFixed(6)),
+              breakdown,
+            }
+          : { userIsAdmin: false };
+
         return reply.code(200).send({
           totalJobs: stats.totalJobs,
           totalTokens: stats.totalTokens,
-          estimatedCost: parseFloat(parseFloat(stats.estimatedCost).toFixed(6)),
+          estimatedCost: parseFloat(estimatedCostDisplay.toFixed(6)),
           period: 'monthly',
           plan,
           unlimited,
@@ -212,6 +271,7 @@ export async function usageRoutes(fastify: FastifyInstance) {
             percentJobsUsed: usage.percentJobsUsed,
             percentTokensUsed: usage.percentTokensUsed,
           },
+          ...adminCostPayload,
         });
       } catch (err: unknown) {
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {

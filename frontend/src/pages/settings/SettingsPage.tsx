@@ -1869,6 +1869,13 @@ function UsageTab() {
   const pctJobsDaily = planUsage && !isUnlimitedUser ? Math.min(100, planUsage.usage.percentJobsUsed) : 0;
   const pctTokensMonthly = planUsage && !isUnlimitedUser ? Math.min(100, planUsage.usage.percentTokensUsed) : 0;
 
+  // Role-aware cost label (Issue #449) — admins see the real wholesale cost we
+  // pay the AI provider; regular users see our retail price. `userIsAdmin` /
+  // `breakdown` are only set by the backend when the caller is an admin.
+  const userIsAdmin = Boolean(planUsage?.userIsAdmin || data?.userIsAdmin);
+  const costBreakdown = planUsage?.breakdown ?? data?.breakdown;
+  const costLabel = userIsAdmin ? 'Gercek Maliyet (Wholesale)' : 'Tahmini Maliyet';
+
   return (
     <div className="space-y-4">
       {/* Plan-aware usage summary */}
@@ -1892,8 +1899,59 @@ function UsageTab() {
           <div className="grid grid-cols-3 gap-3 mb-5">
             <UsageStatCard label="Calistirilan Is" value={String(planUsage.totalJobs)} icon="&#9889;" color="text-yellow-400" />
             <UsageStatCard label="Token Kullanimi" value={formatTokens(planUsage.totalTokens)} icon="&#9881;" color="text-blue-400" />
-            <UsageStatCard label="Tahmini Maliyet" value={`$${planUsage.estimatedCost.toFixed(4)}`} icon="&#36;" color="text-emerald-400" />
+            <UsageStatCard label={costLabel} value={`$${planUsage.estimatedCost.toFixed(4)}`} icon="&#36;" color="text-emerald-400" />
           </div>
+
+          {/* Admin-only: wholesale vs retail breakdown */}
+          {userIsAdmin && costBreakdown && (
+            <div className="mb-5 rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-300">
+                  Admin
+                </span>
+                <span className="text-xs text-ak-text-secondary">
+                  Maliyet Dagilimi (markup {costBreakdown.markup.toFixed(2)}x)
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded bg-ak-surface-2 p-2">
+                  <p className="text-[10px] uppercase text-ak-text-tertiary">Wholesale</p>
+                  <p className="font-mono text-sm text-ak-text-primary">
+                    ${costBreakdown.wholesale.toFixed(4)}
+                  </p>
+                </div>
+                <div className="rounded bg-ak-surface-2 p-2">
+                  <p className="text-[10px] uppercase text-ak-text-tertiary">Retail</p>
+                  <p className="font-mono text-sm text-ak-text-primary">
+                    ${costBreakdown.retail.toFixed(4)}
+                  </p>
+                </div>
+                <div className="rounded bg-ak-surface-2 p-2">
+                  <p className="text-[10px] uppercase text-ak-text-tertiary">Margin</p>
+                  <p className="font-mono text-sm text-emerald-400">
+                    ${costBreakdown.margin.toFixed(4)}
+                  </p>
+                </div>
+              </div>
+              {/* Per-token breakdown only available from /api/usage/current-month (data.breakdown) */}
+              {data?.breakdown && (data.breakdown.input > 0 || data.breakdown.output > 0) && (
+                <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded bg-ak-surface-2 p-2">
+                    <p className="text-[10px] uppercase text-ak-text-tertiary">Input Cost</p>
+                    <p className="font-mono text-xs text-blue-400">
+                      ${data.breakdown.input.toFixed(4)}
+                    </p>
+                  </div>
+                  <div className="rounded bg-ak-surface-2 p-2">
+                    <p className="text-[10px] uppercase text-ak-text-tertiary">Output Cost</p>
+                    <p className="font-mono text-xs text-blue-400">
+                      ${data.breakdown.output.toFixed(4)}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Daily job limit progress */}
           <div className="space-y-3">

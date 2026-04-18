@@ -128,7 +128,14 @@ const envSchema = z
       .default('true')
       .transform((value) => value === 'true'),
     AI_SCRIBE_MODEL_ALLOWLIST: z.string().optional(),
-    
+    /**
+     * Multiplier applied to wholesale AI provider cost when displaying retail
+     * price to end users (non-admins). Default 1.5 = 50% margin.
+     * Admin users see the raw wholesale cost (+ margin breakdown) regardless.
+     * Issue #449.
+     */
+    AI_COST_MARKUP: z.coerce.number().positive().default(1.5),
+
     // API Keys - supports both new names and legacy OPENROUTER_*/OPENAI_* names
     AI_API_KEY: z.string().optional(),
     OPENROUTER_API_KEY: z.string().optional(),

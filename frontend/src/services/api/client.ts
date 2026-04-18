@@ -97,6 +97,17 @@ export const api = {
     onDemand: { tokens: number; costUsd: number };
     percentUsed: { tokens: number; cost: number };
     daily?: Array<{ date: string; tokens: number; cost: number; jobs: number }>;
+    /** True when the caller is an admin. Admins also receive `breakdown` + `wholesaleCostUsd`. */
+    userIsAdmin?: boolean;
+    wholesaleCostUsd?: number;
+    breakdown?: {
+      wholesale: number;
+      retail: number;
+      input: number;
+      output: number;
+      margin: number;
+      markup: number;
+    };
   }> => {
     return httpClient.get('/api/usage/current-month');
   },
@@ -162,6 +173,23 @@ export const api = {
       tokensLimit: number;
       percentJobsUsed: number;
       percentTokensUsed: number;
+    };
+    /**
+     * Role-aware cost (Issue #449).
+     *  - Admin → `estimatedCost` is the wholesale price we pay the AI provider.
+     *    Also receives `breakdown` + `wholesaleCostUsd`.
+     *  - Regular user → `estimatedCost` is retail (wholesale × markup).
+     *    `breakdown` / `wholesaleCostUsd` are NOT included.
+     */
+    userIsAdmin?: boolean;
+    wholesaleCostUsd?: number;
+    breakdown?: {
+      wholesale: number;
+      retail: number;
+      input: number;
+      output: number;
+      margin: number;
+      markup: number;
     };
   }> => {
     return httpClient.get('/api/usage');
