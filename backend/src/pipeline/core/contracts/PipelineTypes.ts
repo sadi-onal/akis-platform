@@ -109,6 +109,14 @@ export interface ProtoInput {
   iterationRequest?: string;
   /** Iteration mode: existing files read from GitHub to modify instead of building from scratch */
   existingFiles?: Array<{ path: string; content: string }>;
+  /**
+   * Iteration mode: image blocks forwarded when the user attaches screenshots
+   * to their follow-up request. When present and the provider exposes a
+   * multimodal path, Proto dispatches to {@link ProtoAIDeps.generateTextWithImages}
+   * so the model can see the screenshots alongside the change request.
+   * Issue #427 BUG-19.
+   */
+  imageBlocks?: readonly import('../../../services/ai/multimodalClient.js').AnthropicImageBlock[];
 }
 
 export interface ProtoOutput {

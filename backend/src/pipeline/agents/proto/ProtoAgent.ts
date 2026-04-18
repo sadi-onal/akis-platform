@@ -3,6 +3,7 @@ import type {
   ProtoInput,
   ProtoOutput,
 } from '../../core/contracts/PipelineTypes.js';
+import type { AnthropicImageBlock } from '../../../services/ai/multimodalClient.js';
 import {
   PipelineErrorCode,
   createPipelineError,
@@ -26,6 +27,17 @@ import {
 
 export interface ProtoAIDeps {
   generateText(systemPrompt: string, userPrompt: string): Promise<string>;
+  /**
+   * Optional multimodal path. When iteration requests carry image attachments
+   * (issue #427 BUG-19), Proto calls this instead of `generateText` so the
+   * model sees the screenshots the user uploaded. Providers without
+   * multimodal support leave this undefined and Proto falls back gracefully.
+   */
+  generateTextWithImages?(
+    systemPrompt: string,
+    userPrompt: string,
+    images: readonly AnthropicImageBlock[],
+  ): Promise<string>;
 }
 
 export interface ProtoGitHubDeps {
@@ -284,6 +296,30 @@ export class ProtoAgent {
 
   // ─── Iteration Mode: Modify existing code ────────────
 
+  /**
+   * Dispatch Proto iteration's single AI call to either the multimodal or
+   * text-only path. Mirrors Scribe's dispatchGenerate pattern so providers
+   * without multimodal support keep working. Issue #427 BUG-19.
+   */
+  private async dispatchIterationGenerate(
+    systemPrompt: string,
+    userPrompt: string,
+    images?: readonly AnthropicImageBlock[],
+  ): Promise<string> {
+    const hasImages = images && images.length > 0;
+    if (hasImages && this.ai.generateTextWithImages) {
+      try {
+        return await this.ai.generateTextWithImages(systemPrompt, userPrompt, images);
+      } catch (err) {
+        logger.warn(
+          { err, imageCount: images.length },
+          '[proto] multimodal iteration path failed, falling back to text-only',
+        );
+      }
+    }
+    return this.ai.generateText(systemPrompt, userPrompt);
+  }
+
   private async executeIteration(
     input: ProtoInput,
     emit?: ReturnType<typeof createActivityEmitter>,
@@ -294,6 +330,11 @@ export class ProtoAgent {
       .map(f => `--- ${f.path} ---\n${f.content}`)
       .join('\n\n');
 
+    const hasImages = (input.imageBlocks?.length ?? 0) > 0;
+    const imageAckSection = hasImages
+      ? `\n\nUSER-UPLOADED SCREENSHOTS:\nThe user attached ${input.imageBlocks!.length} screenshot(s) that illustrate the change they want. Inspect them to locate the elements (buttons, labels, colors, layouts) the user is describing. Treat the screenshots as authoritative context — if the change request is ambiguous, defer to what the screenshots show.`
+      : '';
+
     const iterationPrompt = `You are Proto, an iteration specialist. You have an EXISTING codebase and the user wants a SPECIFIC CHANGE.
 
 ORIGINAL SPEC (for context):
@@ -302,7 +343,7 @@ Problem: ${input.spec.problemStatement}
 Features: ${input.spec.userStories.map(s => `${s.persona}: ${s.action} → ${s.benefit}`).join('\n')}
 
 USER'S CHANGE REQUEST:
-"${input.iterationRequest}"
+"${input.iterationRequest}"${imageAckSection}
 
 EXISTING CODEBASE (these files are ALREADY in the GitHub repo):
 ${existingFilesContext}
@@ -319,11 +360,14 @@ RULES:
 JSON format (respond with ONLY this, nothing else):
 {"files":[{"filePath":"...","content":"...","linesOfCode":N}],"setupCommands":["npm install","npm run dev"],"metadata":{"filesCreated":N,"totalLinesOfCode":N,"stackUsed":"..."},"verificationReport":{"specCoverage":"...","integrityIssues":[],"missingDependencies":[],"unresolvedImports":[],"confidenceScore":0.9}}`;
 
+    const iterationSystemPrompt = 'You are Proto, an iteration specialist. Output ONLY valid JSON. No markdown, no explanations.';
+
     let raw: string;
     try {
-      raw = await this.ai.generateText(
-        'You are Proto, an iteration specialist. Output ONLY valid JSON. No markdown, no explanations.',
+      raw = await this.dispatchIterationGenerate(
+        iterationSystemPrompt,
         iterationPrompt,
+        input.imageBlocks,
       );
     } catch (err) {
       return {

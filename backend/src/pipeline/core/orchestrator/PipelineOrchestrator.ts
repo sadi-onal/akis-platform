@@ -340,6 +340,7 @@ export class PipelineOrchestrator {
           input.existingRepo,
           input.idea,
           model,
+          input.imageBlocks,
         ).catch((err) => {
           logger.error({ err, pipelineId: pipeline.id }, '[Pipeline] Background iteration Proto+Trace failed');
           this.failPipeline(pipeline.id, 'Proto', err).catch((e) => logger.error({ err: e }, '[Pipeline] failPipeline also failed'));
@@ -663,9 +664,14 @@ export class PipelineOrchestrator {
     existingRepo: { owner: string; repo: string; branch: string },
     iterationRequest: string,
     model?: string,
+    imageBlocks?: readonly import('../../../services/ai/multimodalClient.js').AnthropicImageBlock[],
   ): Promise<void> {
     const protoEmit = createActivityEmitter(pipelineId, 'proto');
     protoEmit('start', 'Mevcut kod okunuyor...', 5);
+    logger.info(
+      { pipelineId, imageCount: imageBlocks?.length ?? 0 },
+      '[Pipeline] Iteration Proto dispatch',
+    );
 
     // Resolve GitHub access
     const pipeline = await this.getPipeline(pipelineId);
@@ -717,6 +723,7 @@ export class PipelineOrchestrator {
             iterationRequest,
             existingFiles,
             knowledgeContext: iterationKnowledge,
+            imageBlocks: imageBlocks && imageBlocks.length > 0 ? imageBlocks : undefined,
           }),
           STAGE_TIMEOUT,
           'Proto',

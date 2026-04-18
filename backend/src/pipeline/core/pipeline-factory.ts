@@ -103,7 +103,32 @@ function createScribeAIDeps(aiService: AIServiceLike, model?: string, onTokenUsa
 }
 
 function createProtoAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): ProtoAIDeps {
-  return { generateText: makeGenerateText(aiService, 16384, model, onTokenUsage) };
+  const deps: ProtoAIDeps = {
+    generateText: makeGenerateText(aiService, 16384, model, onTokenUsage),
+  };
+  // Wire the multimodal path only when the AIService actually supports it.
+  // Mock stores and non-Anthropic providers leave `generateMultimodalArtifact`
+  // undefined, and Proto falls back to `generateText`. Issue #427 BUG-19.
+  if (aiService.generateMultimodalArtifact) {
+    const mmFn = aiService.generateMultimodalArtifact.bind(aiService);
+    deps.generateTextWithImages = async (systemPrompt, userPrompt, images) => {
+      const result = await mmFn({
+        systemPrompt,
+        task: userPrompt,
+        images,
+        maxTokens: 16384,
+        modelOverride: model,
+      });
+      if (onTokenUsage && result.metadata?.usage) {
+        const u = result.metadata.usage as { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number };
+        const inp = u.inputTokens ?? u.input_tokens ?? 0;
+        const out = u.outputTokens ?? u.output_tokens ?? 0;
+        if (inp > 0 || out > 0) onTokenUsage({ inputTokens: inp, outputTokens: out });
+      }
+      return result.content;
+    };
+  }
+  return deps;
 }
 
 function createTraceAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): TraceAIDeps {
