@@ -111,12 +111,16 @@ function Step1RepoSelection({
   selectedRepo,
   onSelect,
   githubNotConnected,
+  networkError,
+  onRetry,
 }: {
   repos: GitHubRepo[];
   loading: boolean;
   selectedRepo: GitHubRepo | null;
   onSelect: (repo: GitHubRepo) => void;
   githubNotConnected: boolean;
+  networkError: boolean;
+  onRetry: () => void;
 }) {
   const { t } = useI18n();
   const [search, setSearch] = useState('');
@@ -150,6 +154,19 @@ function Step1RepoSelection({
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#07D1AF] border-t-transparent" />
+        </div>
+      ) : networkError ? (
+        <div className="rounded-xl border border-red-500/25 bg-red-500/[0.06] p-6 text-center">
+          <p className="text-sm text-white/85">
+            Sunucuya şu anda erişilemiyor. GitHub servisiniz geçici olarak yanıt vermiyor
+            olabilir — birkaç saniye sonra tekrar deneyin.
+          </p>
+          <button
+            onClick={onRetry}
+            className="mt-4 inline-flex items-center justify-center rounded-lg bg-[#07D1AF]/15 px-4 py-2 text-sm font-medium text-[#07D1AF] hover:bg-[#07D1AF]/25 transition-colors"
+          >
+            Tekrar dene
+          </button>
         </div>
       ) : githubNotConnected ? (
         <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-6 text-center">
@@ -538,6 +555,7 @@ export default function EngineerPage() {
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [reposLoading, setReposLoading] = useState(true);
   const [githubNotConnected, setGithubNotConnected] = useState(false);
+  const [reposNetworkError, setReposNetworkError] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
 
   // Step 2 — Tasks
@@ -551,32 +569,42 @@ export default function EngineerPage() {
   // Step 4 — Confirm
   const [confirming, setConfirming] = useState(false);
 
-  // Fetch repos on mount
+  // Fetch repos — extracted so the user can retry after a network failure.
+  // Distinguishes GITHUB_NOT_CONNECTED (403 with code) from raw network errors
+  // (ERR_CONNECTION_REFUSED, DNS fail, timeout) so the UI can show the right
+  // message instead of a misleading "Repo bulunamadı".
+  const [fetchToken, setFetchToken] = useState(0);
+  const retryFetchRepos = useCallback(() => setFetchToken((n) => n + 1), []);
+
   useEffect(() => {
     let cancelled = false;
+    setReposLoading(true);
+    setReposNetworkError(false);
+    setGithubNotConnected(false);
+
     githubApi
       .listRepos()
       .then((data) => {
-        if (!cancelled) {
-          setRepos(data);
-          setGithubNotConnected(false);
-        }
+        if (!cancelled) setRepos(data);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          const code =
-            err && typeof err === 'object' && 'code' in err
-              ? String((err as { code: string }).code)
-              : '';
+        if (cancelled) return;
+        const errObj = err && typeof err === 'object' ? (err as Record<string, unknown>) : null;
+        const hasHttpStatus = errObj !== null && 'statusCode' in errObj;
+        if (hasHttpStatus) {
+          const code = typeof errObj.code === 'string' ? errObj.code : '';
           if (code === 'GITHUB_NOT_CONNECTED') setGithubNotConnected(true);
-          setRepos([]);
+        } else {
+          // Network / fetch-level failure (no HTTP response reached us).
+          setReposNetworkError(true);
         }
+        setRepos([]);
       })
       .finally(() => {
         if (!cancelled) setReposLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [fetchToken]);
 
   // Discover tasks when repo changes
   const discoverTasks = useCallback(async (repo: GitHubRepo) => {
@@ -667,6 +695,8 @@ export default function EngineerPage() {
               selectedRepo={selectedRepo}
               onSelect={handleRepoSelect}
               githubNotConnected={githubNotConnected}
+              networkError={reposNetworkError}
+              onRetry={retryFetchRepos}
             />
           )}
 
