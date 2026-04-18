@@ -452,6 +452,11 @@ JSON format (respond with ONLY this, nothing else):
     };
     const handlers = createProtoToolHandlers(toolDeps);
 
+    const hasImages = (input.imageBlocks?.length ?? 0) > 0;
+    const imageAck = hasImages
+      ? `\n\nThe user attached ${input.imageBlocks!.length} screenshot(s) alongside the request. Use them as the ground-truth for visuals (colors, layout, labels) when generating the scaffold.`
+      : '';
+
     const userPrompt = `Create a GitHub repository and push a working MVP scaffold.
 
 Repository: owner="${input.owner}", name="${input.repoName}", private=${input.repoVisibility === 'private'}
@@ -461,7 +466,7 @@ Spec:
 - Problem: ${input.spec.problemStatement}
 - User Stories: ${input.spec.userStories.slice(0, 6).map((s) => `${s.persona}: ${s.action} → ${s.benefit}`).join('\n  ')}
 - Acceptance Criteria: ${input.spec.acceptanceCriteria.slice(0, 8).map((ac) => `${ac.id}: ${ac.when} → ${ac.then}`).join('\n  ')}
-- Tech: ${input.spec.technicalConstraints?.stack || 'React + Vite'}${input.spec.technicalConstraints?.integrations?.length ? `, integrations: ${input.spec.technicalConstraints.integrations.join(', ')}` : ''}
+- Tech: ${input.spec.technicalConstraints?.stack || 'React + Vite'}${input.spec.technicalConstraints?.integrations?.length ? `, integrations: ${input.spec.technicalConstraints.integrations.join(', ')}` : ''}${imageAck}
 
 Steps:
 1. Call create_repository to create the GitHub repo
@@ -491,6 +496,9 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
           maxIterations: 10,
           maxTokens: 16384,
           temperature: 0,
+          // Issue #464 BUG-C: forward user-uploaded screenshots so the
+          // vision-capable model can reference the mockup while scaffolding.
+          initialImages: hasImages ? input.imageBlocks : undefined,
           onToolCall: (name, _input) => {
             if (name === 'create_repository') emit?.('github_push', 'GitHub repo oluşturuluyor...', 30);
             if (name === 'push_files') emit?.('github_push', 'Dosyalar push ediliyor...', 75);

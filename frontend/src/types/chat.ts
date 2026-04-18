@@ -21,8 +21,32 @@ export type ChatMode = 'ask' | 'plan' | 'act' | 'review';
 
 export type AgentName = 'scribe' | 'proto' | 'trace';
 
+/**
+ * Thumbnail metadata for an image attached to a user chat message.
+ * Populated on the client from the original `ChatAttachment` so the message
+ * bubble can render a preview inline, and optionally opened full-size in a
+ * modal on click. Issue #464 BUG-C.
+ */
+export interface UserMessageImage {
+  /** Stable id per attachment — reused from the input's attachment id. */
+  id: string;
+  /** Original filename for alt text + modal caption. */
+  name: string;
+  /** URL usable by <img src>. In the current client this is the blob URL
+   * created from `URL.createObjectURL(file)` so it renders without re-fetching. */
+  previewUrl: string;
+  /** MIME type (kept for future format-specific rendering). */
+  mimeType: string;
+}
+
 export type ChatMessage =
-  | { type: 'user'; content: string; timestamp: string }
+  | {
+      type: 'user';
+      content: string;
+      timestamp: string;
+      /** User-attached images, rendered as thumbnail grid below the text. */
+      images?: UserMessageImage[];
+    }
   | {
       type: 'agent';
       agent: AgentName;

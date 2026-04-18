@@ -646,7 +646,23 @@ export default function ChatPage() {
     sendingRef.current = true;
 
     try {
-      const userMsg: ChatMessage = { type: 'user', content, timestamp: new Date().toISOString() };
+      // Thread image attachments onto the user message so the bubble can
+      // render thumbnails + click-to-preview (issue #464 BUG-C). Non-image
+      // attachments (PDFs, txt, etc.) stay text-only in the transcript.
+      const userImages = (attachments ?? [])
+        .filter((a) => a.type === 'image' && a.preview)
+        .map((a) => ({
+          id: a.id,
+          name: a.file.name,
+          previewUrl: a.preview!,
+          mimeType: a.file.type || 'image/png',
+        }));
+      const userMsg: ChatMessage = {
+        type: 'user',
+        content,
+        timestamp: new Date().toISOString(),
+        ...(userImages.length > 0 && { images: userImages }),
+      };
       setMessages((prev) => [...prev, userMsg]);
 
       const currentPending = pendingConvRef.current;

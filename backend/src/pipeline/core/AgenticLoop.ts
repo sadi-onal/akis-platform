@@ -13,6 +13,7 @@ import type {
   AnthropicResponse,
 } from '../../services/ai/tool-schemas.js';
 import { extractToolUseBlocks, extractText } from '../../services/ai/tool-schemas.js';
+import type { AnthropicImageBlock } from '../../services/ai/multimodalClient.js';
 
 export interface AgenticLoopDeps {
   /** Calls Claude API with tools and returns raw response */
@@ -27,6 +28,13 @@ export interface AgenticLoopOptions {
   maxIterations?: number;
   onToolCall?: (toolName: string, input: Record<string, unknown>) => void;
   onToolResult?: (toolName: string, result: unknown, isError: boolean) => void;
+  /**
+   * Optional image content blocks prepended to the INITIAL user message.
+   * Used when the agent needs the model to see user-uploaded screenshots
+   * alongside the first instruction (e.g. Trace seeing a UI mockup).
+   * Subsequent tool-result turns stay text-only. Issue #464 BUG-C.
+   */
+  initialImages?: readonly AnthropicImageBlock[];
 }
 
 export interface AgenticLoopResult {
@@ -50,9 +58,21 @@ export async function runAgenticLoop(
   const toolCalls: AgenticLoopResult['toolCalls'] = [];
   const totalUsage = { inputTokens: 0, outputTokens: 0 };
 
-  // Build initial messages
+  // Build initial messages. When image blocks are attached, the first user
+  // message becomes a content-block array (images first, text last), mirroring
+  // the shape Anthropic's multimodal client uses. Issue #464 BUG-C.
+  const initialImages = options.initialImages;
+  const hasInitialImages = initialImages && initialImages.length > 0;
   const messages: AnthropicMessage[] = [
-    { role: 'user', content: userPrompt },
+    hasInitialImages
+      ? {
+          role: 'user',
+          content: [
+            ...initialImages!,
+            { type: 'text', text: userPrompt },
+          ],
+        }
+      : { role: 'user', content: userPrompt },
   ];
 
   let lastText = '';

@@ -54,6 +54,24 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 const STAGE_TIMEOUT = RETRY_CONFIG.stageTimeoutMs;
 const TRACE_TIMEOUT = RETRY_CONFIG.traceStageTimeoutMs;
 
+/**
+ * Pull persisted image blocks out of a pipeline's intermediateState. The
+ * orchestrator stashes user-uploaded screenshots here on startPipeline so
+ * background Proto + Trace runs (which wake up hours later on approve) can
+ * forward the same images to their multimodal calls. Issue #464 BUG-C.
+ *
+ * Returns `undefined` when the field is absent or empty so downstream
+ * agents can treat it as "no images" and skip the multimodal dispatch.
+ */
+function readPipelineImageBlocks(
+  intermediateState: Record<string, unknown> | undefined | null,
+): readonly import('../../../services/ai/multimodalClient.js').AnthropicImageBlock[] | undefined {
+  if (!intermediateState) return undefined;
+  const raw = (intermediateState as Record<string, unknown>).imageBlocks;
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw as readonly import('../../../services/ai/multimodalClient.js').AnthropicImageBlock[];
+}
+
 const PIPELINE_TITLE_MAX = 100;
 
 /**
@@ -324,6 +342,15 @@ export class PipelineOrchestrator {
       updateData.intermediateState = {
         ...updateData.intermediateState,
         attachmentContext: input.attachmentContext,
+      };
+    }
+    // Persist imageBlocks in intermediateState so Proto/Trace (background
+    // stages running after approve) can forward the same screenshots to
+    // their multimodal paths. Issue #464 BUG-C.
+    if (input.imageBlocks && input.imageBlocks.length > 0) {
+      updateData.intermediateState = {
+        ...updateData.intermediateState,
+        imageBlocks: input.imageBlocks,
       };
     }
 
@@ -868,13 +895,24 @@ export class PipelineOrchestrator {
     const pipelineData = await this.getPipeline(pipelineId);
     const protoKnowledgeRaw = buildUnifiedAgentKnowledgeContext(pipelineData, { role: 'proto' });
     const protoKnowledge = protoKnowledgeRaw.trim() ? protoKnowledgeRaw : undefined;
+    // Pull persisted imageBlocks from intermediateState so downstream Proto +
+    // Trace calls can see the same screenshots Scribe saw. Issue #464 BUG-C.
+    const pipelineImageBlocks = readPipelineImageBlocks(pipelineData.intermediateState);
 
     await this.writeCheckpoint(pipelineId, 'proto', spec.title);
     const protoResult = await withRetry(
       (attempt) => {
         if (attempt > 1) protoEmit('retry', `Proto yeniden deneniyor (deneme ${attempt})...`, 25);
         return withTimeout(
-          agents.proto.execute({ spec, repoName, repoVisibility, owner, pipelineId, knowledgeContext: protoKnowledge }),
+          agents.proto.execute({
+            spec,
+            repoName,
+            repoVisibility,
+            owner,
+            pipelineId,
+            knowledgeContext: protoKnowledge,
+            imageBlocks: pipelineImageBlocks,
+          }),
           STAGE_TIMEOUT,
           'Proto',
         );
@@ -1445,6 +1483,9 @@ export class PipelineOrchestrator {
     const cucumberEnabled = (pipelineForCucumber.intermediateState as Record<string, unknown> | undefined)?.cucumberEnabled === true;
     const traceKnowledgeRaw = buildUnifiedAgentKnowledgeContext(pipelineForCucumber, { role: 'trace' });
     const traceKnowledge = traceKnowledgeRaw.trim() ? traceKnowledgeRaw : undefined;
+    // Issue #464 BUG-C: forward user-uploaded screenshots so Trace can see
+    // the mockup while writing Playwright selectors/assertions.
+    const traceImageBlocks = readPipelineImageBlocks(pipelineForCucumber.intermediateState);
     const traceResult = await withRetry(
       (attempt) => {
         if (attempt > 1) traceEmit('retry', `Trace yeniden deneniyor (deneme ${attempt})...`, 30);
@@ -1457,6 +1498,7 @@ export class PipelineOrchestrator {
             pipelineId,
             cucumberEnabled,
             knowledgeContext: traceKnowledge,
+            imageBlocks: traceImageBlocks,
           }),
           TRACE_TIMEOUT,
           'Trace',
@@ -1496,6 +1538,10 @@ export class PipelineOrchestrator {
             const baseCtx = buildUnifiedAgentKnowledgeContext(pl, { role: 'proto' });
             const fb = feedback ? `\n--- FIX LOOP FEEDBACK ---\n${feedback}\n--- END FEEDBACK ---\n` : '';
             const merged = [baseCtx, fb].filter(Boolean).join('\n');
+            // Issue #464 BUG-C: forward user-uploaded screenshots to FixLoop
+            // Proto retries so the regenerated scaffold stays aligned with
+            // the original mockup intent.
+            const fixProtoImages = readPipelineImageBlocks(pl.intermediateState);
             const protoRes = await fixAgents.proto.execute({
               spec,
               repoName: repo,
@@ -1503,6 +1549,7 @@ export class PipelineOrchestrator {
               owner,
               pipelineId,
               knowledgeContext: merged.trim() ? merged : undefined,
+              imageBlocks: fixProtoImages,
             });
             if (protoRes.type === 'error') throw new Error(protoRes.error.message);
             return protoRes.data;
@@ -1524,6 +1571,10 @@ export class PipelineOrchestrator {
             // FixLoop retries so the user's preference is not silently
             // dropped when the first Trace attempt fails.
             const fixCucumberEnabled = (plTrace.intermediateState as Record<string, unknown> | undefined)?.cucumberEnabled === true;
+            // Issue #464 BUG-C: forward user-uploaded screenshots to Trace
+            // during FixLoop retries too, so selector generation stays
+            // visually anchored even after a failure bounce.
+            const fixTraceImages = readPipelineImageBlocks(plTrace.intermediateState);
             const traceRes = await fixAgents.trace.execute({
               repoOwner: owner,
               repo,
@@ -1532,6 +1583,7 @@ export class PipelineOrchestrator {
               pipelineId,
               cucumberEnabled: fixCucumberEnabled,
               knowledgeContext: traceKb.trim() ? traceKb : undefined,
+              imageBlocks: fixTraceImages,
             });
             if (traceRes.type === 'error') throw new Error(traceRes.error.message);
             return traceRes.data;

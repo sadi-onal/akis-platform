@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
-import type { ChatMessage as ChatMessageType, AgentName } from '../../types/chat';
+import type { ChatMessage as ChatMessageType, AgentName, UserMessageImage } from '../../types/chat';
 import { PlanCard } from './PlanCard';
 import { AgentStartedLine } from './AgentStartedLine';
 
@@ -138,17 +139,138 @@ function ClarificationMessage({
   );
 }
 
+/**
+ * User chat bubble — renders the text and any attached image thumbnails.
+ *
+ * Thumbnails:
+ * - Max 200x200 per image (object-fit: cover)
+ * - Rounded corners, subtle border, hover scale
+ * - Click → full-size preview modal (portal-less; fixed-overlay close on Esc or backdrop click)
+ * - 2+ images: CSS grid layout (2 columns on mobile, up to 3 on wider rows)
+ * Issue #464 BUG-C.
+ */
+function UserBubble({ message }: { message: Extract<ChatMessageType, { type: 'user' }> }) {
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const images = message.images ?? [];
+  const hasImages = images.length > 0;
+
+  useEffect(() => {
+    if (previewIndex === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewIndex(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [previewIndex]);
+
+  return (
+    <div className="flex justify-end animate-in fade-in slide-in-from-right-2 duration-200">
+      <div className="max-w-[85%] rounded-2xl bg-ak-primary px-4 py-2.5 text-sm text-[color:var(--ak-on-primary,#fff)]">
+        {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
+        {hasImages && (
+          <UserImageThumbnails
+            images={images}
+            hasText={message.content.length > 0}
+            onOpen={(i) => setPreviewIndex(i)}
+          />
+        )}
+        <span className="mt-1 block text-right text-[10px] text-[color:var(--ak-on-primary,#fff)] opacity-60">{formatTime(message.timestamp)}</span>
+      </div>
+      {previewIndex !== null && images[previewIndex] && (
+        <UserImagePreviewModal
+          image={images[previewIndex]}
+          onClose={() => setPreviewIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function UserImageThumbnails({
+  images,
+  hasText,
+  onOpen,
+}: {
+  images: UserMessageImage[];
+  hasText: boolean;
+  onOpen: (index: number) => void;
+}) {
+  // Layout decision: single image → max 200x200 block; multiple → grid
+  const isSingle = images.length === 1;
+  return (
+    <div
+      className={cn(
+        hasText ? 'mt-2' : '',
+        isSingle
+          ? 'flex'
+          : 'grid grid-cols-2 gap-1.5 sm:grid-cols-3',
+      )}
+    >
+      {images.map((img, i) => (
+        <button
+          key={img.id}
+          type="button"
+          onClick={() => onOpen(i)}
+          aria-label={`${img.name} — büyüt`}
+          className={cn(
+            'group relative overflow-hidden rounded-lg border border-white/20 bg-black/10',
+            'transition-transform duration-150 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
+            isSingle ? 'max-h-[200px] max-w-[200px]' : 'aspect-square w-full',
+          )}
+        >
+          <img
+            src={img.previewUrl}
+            alt={img.name}
+            className={cn(
+              'h-full w-full',
+              isSingle ? 'object-contain max-h-[200px] max-w-[200px]' : 'object-cover',
+            )}
+            loading="lazy"
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function UserImagePreviewModal({ image, onClose }: { image: UserMessageImage; onClose: () => void }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={image.name}
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-h-[90vh] max-w-[90vw]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={image.previewUrl}
+          alt={image.name}
+          className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+        />
+        <div className="mt-2 flex items-center justify-between gap-3 text-white">
+          <span className="truncate text-xs text-white/70">{image.name}</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Kapat"
+            className="rounded-lg border border-white/20 bg-black/40 px-3 py-1 text-xs hover:bg-white/10"
+          >
+            Kapat
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: ChatMessageProps) {
   switch (message.type) {
     case 'user':
-      return (
-        <div className="flex justify-end animate-in fade-in slide-in-from-right-2 duration-200">
-          <div className="max-w-[85%] rounded-2xl bg-ak-primary px-4 py-2.5 text-sm text-[color:var(--ak-on-primary,#fff)]">
-            <p className="whitespace-pre-wrap">{message.content}</p>
-            <span className="mt-1 block text-right text-[10px] text-[color:var(--ak-on-primary,#fff)] opacity-60">{formatTime(message.timestamp)}</span>
-          </div>
-        </div>
-      );
+      return <UserBubble message={message} />;
 
     case 'agent': {
       const c = AGENT_COLORS[message.agent];

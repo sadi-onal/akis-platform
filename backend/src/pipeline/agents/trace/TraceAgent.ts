@@ -4,6 +4,7 @@ import type {
   TraceOutput,
 } from '../../core/contracts/PipelineTypes.js';
 import type { PipelineError } from '../../core/contracts/PipelineTypes.js';
+import type { AnthropicImageBlock } from '../../../services/ai/multimodalClient.js';
 import {
   PipelineErrorCode,
   createPipelineError,
@@ -31,6 +32,18 @@ import {
 
 export interface TraceAIDeps {
   generateText(systemPrompt: string, userPrompt: string): Promise<string>;
+  /**
+   * Optional multimodal path. When the pipeline forwarded user-uploaded
+   * screenshots (e.g. UI mockups), Trace calls this instead of `generateText`
+   * so the model can see the pixels while writing Playwright selectors.
+   * Providers without multimodal support leave this undefined and Trace falls
+   * back gracefully. Issue #464 BUG-C.
+   */
+  generateTextWithImages?(
+    systemPrompt: string,
+    userPrompt: string,
+    images: readonly AnthropicImageBlock[],
+  ): Promise<string>;
 }
 
 export interface TraceGitHubDeps {
@@ -215,6 +228,30 @@ export class TraceAgent {
     return buildSystemPromptWithSkills(basePrompt, 'trace', this.skillRegistry);
   }
 
+  /**
+   * Route Trace's test-generation AI call to either the multimodal or
+   * text-only path. Mirrors Proto's dispatchIterationGenerate pattern so
+   * providers without multimodal support keep working. Issue #464 BUG-C.
+   */
+  private async dispatchGenerate(
+    systemPrompt: string,
+    userPrompt: string,
+    images?: readonly AnthropicImageBlock[],
+  ): Promise<string> {
+    const hasImages = images && images.length > 0;
+    if (hasImages && this.ai.generateTextWithImages) {
+      try {
+        return await this.ai.generateTextWithImages(systemPrompt, userPrompt, images);
+      } catch (err) {
+        logger.warn(
+          { err, imageCount: images.length },
+          '[trace] multimodal path failed, falling back to text-only',
+        );
+      }
+    }
+    return this.ai.generateText(systemPrompt, userPrompt);
+  }
+
   async execute(input: TraceInput): Promise<TraceResult> {
     const emit = input.pipelineId
       ? createActivityEmitter(input.pipelineId, 'trace')
@@ -254,7 +291,7 @@ export class TraceAgent {
     // Step 2: Generate tests via AI (with dedicated timeout)
     const totalChars = files.reduce((sum, f) => sum + f.content.length, 0);
     emit?.('ai_call', `Claude AI ile Playwright testleri oluşturuluyor (${files.length} dosya, ${Math.round(totalChars / 1024)}KB)...`, 45);
-    const testsResult = await this.generateTests(files, input.spec, emit, input.knowledgeContext);
+    const testsResult = await this.generateTests(files, input.spec, emit, input.knowledgeContext, input.imageBlocks);
     if (testsResult.type === 'error') {
       emit?.('error', 'Test üretimi başarısız oldu', 0);
       return testsResult;
@@ -399,8 +436,13 @@ export class TraceAgent {
       ? `\n--- FULL PIPELINE CONTEXT (chat + GitHub signals) ---\n${input.knowledgeContext.trim()}\n--- END FULL PIPELINE CONTEXT ---\n\n`
       : '';
 
+    const hasImages = (input.imageBlocks?.length ?? 0) > 0;
+    const imageAck = hasImages
+      ? `\n\nThe user attached ${input.imageBlocks!.length} screenshot(s) — treat them as authoritative for visible labels and layout when writing selectors/assertions.`
+      : '';
+
     const userPrompt = `${pipelineKnowledge}Write Playwright e2e tests for the project at GitHub: ${input.repoOwner}/${input.repo} (branch: ${input.branch})
-${specContext}
+${specContext}${imageAck}
 
 Steps:
 1. Call list_files to see what source files exist
@@ -436,6 +478,10 @@ After pushing, respond with a JSON summary:
         maxIterations: 15,
         maxTokens: 32768,
         temperature: 0,
+        // Issue #464 BUG-C: forward user-uploaded screenshots into the initial
+        // user message so the vision-capable model can reference them while
+        // writing test selectors. Non-multimodal providers ignore these.
+        initialImages: hasImages ? input.imageBlocks : undefined,
         onToolCall: (name) => {
           if (name === 'list_files') emit?.('fetching', 'Dosya listesi okunuyor...', 20);
           if (name === 'read_file') emit?.('fetching', 'Kaynak dosya okunuyor...', 40);
@@ -564,6 +610,7 @@ After pushing, respond with a JSON summary:
     spec?: StructuredSpec,
     emit?: ReturnType<typeof createActivityEmitter>,
     knowledgeContext?: string,
+    imageBlocks?: readonly AnthropicImageBlock[],
   ): Promise<
     | { type: 'output'; data: Pick<TraceOutput, 'testFiles' | 'coverageMatrix' | 'testSummary'> }
     | { type: 'error'; error: PipelineError }
@@ -572,7 +619,11 @@ After pushing, respond with a JSON summary:
       .map((f) => `--- ${f.filePath} ---\n${f.content}`)
       .join('\n\n');
     const specContext = spec ? JSON.stringify(spec, null, 2) : 'No specification provided.';
-    const userPrompt = `## Codebase\n\n${codebaseContext}\n\n## Specification\n\n${specContext}`;
+    const hasImages = (imageBlocks?.length ?? 0) > 0;
+    const imageAckSection = hasImages
+      ? `\n\n## User-Uploaded Screenshots\n\nThe user attached ${imageBlocks!.length} screenshot(s) alongside the original request. Use them to disambiguate selectors, expected visible labels, and assertion text. Treat the screenshots as authoritative for what the UI is supposed to look like — if a label appears in the screenshot, prefer matching that exact text in your Playwright selectors.\n`
+      : '';
+    const userPrompt = `## Codebase\n\n${codebaseContext}\n\n## Specification\n\n${specContext}${imageAckSection}`;
 
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
@@ -585,7 +636,7 @@ After pushing, respond with a JSON summary:
         const traceSystemPrompt = knowledgeContext
           ? `${this.enhance(TEST_GENERATION_PROMPT)}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
           : this.enhance(TEST_GENERATION_PROMPT);
-        const aiPromise = this.ai.generateText(traceSystemPrompt, userPrompt);
+        const aiPromise = this.dispatchGenerate(traceSystemPrompt, userPrompt, imageBlocks);
         responseText = await withAiTimeout(aiPromise, AI_CALL_TIMEOUT_MS);
         emit?.('parsing', 'AI yanıtı alındı, ayrıştırılıyor...', 65);
       } catch (err) {

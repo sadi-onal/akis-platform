@@ -42,7 +42,24 @@ export interface AnthropicTextBlock {
   text: string;
 }
 
-export type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock;
+/**
+ * Anthropic image content block (base64 source). Mirrors the shape defined
+ * in multimodalClient — we re-declare it here to keep tool-schemas.ts free
+ * of cross-module imports. Issue #464 BUG-C.
+ */
+export interface AnthropicImageContentBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+    data: string;
+  };
+}
+
+export type AnthropicContentBlock =
+  | AnthropicTextBlock
+  | AnthropicToolUseBlock
+  | AnthropicImageContentBlock;
 
 export interface AnthropicMessage {
   role: 'user' | 'assistant';

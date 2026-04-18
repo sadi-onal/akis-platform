@@ -150,6 +150,16 @@ export interface TraceInput {
   pipelineId?: string;
   cucumberEnabled?: boolean;
   knowledgeContext?: string;
+  /**
+   * Anthropic image content blocks forwarded from the user-uploaded
+   * screenshots (e.g. UI mockups) that originally travelled with the pipeline
+   * idea or iteration request. When present and the provider exposes a
+   * multimodal path, Trace dispatches to {@link TraceAIDeps.generateTextWithImages}
+   * so the test-writing model can see the screenshots and generate
+   * selectors/assertions that match what the user expected to see.
+   * Issue #464 BUG-C.
+   */
+  imageBlocks?: readonly import('../../../services/ai/multimodalClient.js').AnthropicImageBlock[];
 }
 
 export interface TraceOutput {

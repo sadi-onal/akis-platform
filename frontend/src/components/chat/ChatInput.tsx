@@ -71,14 +71,12 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
     if (!disabled) textareaRef.current?.focus();
   }, [disabled]);
 
-  // Cleanup preview URLs
-  useEffect(() => {
-    return () => {
-      attachments.forEach((a) => {
-        if (a.preview) URL.revokeObjectURL(a.preview);
-      });
-    };
-  }, [attachments]);
+  // NOTE: blob preview URLs are intentionally NOT revoked when attachments
+  // change or on send — the sent user message bubble reuses the same URL to
+  // render its inline thumbnail (issue #464 BUG-C). They are revoked only
+  // when the user explicitly removes a chip before sending (see
+  // `removeAttachment`), and we rely on the browser reclaiming blob URLs on
+  // tab/document unload for the rest.
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const fileArray = Array.from(files);

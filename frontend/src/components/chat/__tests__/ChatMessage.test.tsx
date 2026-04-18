@@ -51,6 +51,91 @@ describe('ChatMessage — user', () => {
   });
 });
 
+// ─── 1b. User message with image attachments (issue #464 BUG-C) ────────────
+
+describe('ChatMessage — user with images', () => {
+  const singleImage: ChatMessageType = {
+    type: 'user',
+    content: 'Buna benzer yap',
+    timestamp: TS,
+    images: [
+      {
+        id: 'img-1',
+        name: 'mockup.png',
+        previewUrl: 'blob:http://local/mockup',
+        mimeType: 'image/png',
+      },
+    ],
+  };
+
+  const threeImages: ChatMessageType = {
+    type: 'user',
+    content: 'Bu 3 ekranı birleştir',
+    timestamp: TS,
+    images: [
+      { id: 'img-1', name: 'a.png', previewUrl: 'blob:a', mimeType: 'image/png' },
+      { id: 'img-2', name: 'b.png', previewUrl: 'blob:b', mimeType: 'image/png' },
+      { id: 'img-3', name: 'c.png', previewUrl: 'blob:c', mimeType: 'image/png' },
+    ],
+  };
+
+  it('renders a thumbnail img tag for a single image', () => {
+    render(<ChatMessage message={singleImage} />);
+    const img = screen.getByAltText('mockup.png') as HTMLImageElement;
+    expect(img).toBeInTheDocument();
+    expect(img.src).toBe('blob:http://local/mockup');
+  });
+
+  it('does not render image block when images array is absent', () => {
+    const plain: ChatMessageType = { type: 'user', content: 'just text', timestamp: TS };
+    render(<ChatMessage message={plain} />);
+    // No img elements should exist in a plain user bubble
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('renders a grid with all 3 images when multi-image message', () => {
+    render(<ChatMessage message={threeImages} />);
+    expect(screen.getByAltText('a.png')).toBeInTheDocument();
+    expect(screen.getByAltText('b.png')).toBeInTheDocument();
+    expect(screen.getByAltText('c.png')).toBeInTheDocument();
+    // 3 images → 3 img tags
+    expect(screen.getAllByRole('img')).toHaveLength(3);
+  });
+
+  it('each thumbnail is wrapped in a button to trigger full-size preview', () => {
+    render(<ChatMessage message={singleImage} />);
+    const btn = screen.getByRole('button', { name: /mockup\.png.*büyüt/ });
+    expect(btn).toBeInTheDocument();
+  });
+
+  it('clicking a thumbnail opens the preview modal with the same image', () => {
+    render(<ChatMessage message={singleImage} />);
+    const btn = screen.getByRole('button', { name: /mockup\.png.*büyüt/ });
+    fireEvent.click(btn);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    // Modal img uses the same src
+    const imgs = screen.getAllByAltText('mockup.png');
+    expect(imgs.length).toBeGreaterThanOrEqual(2); // thumb + modal
+  });
+
+  it('clicking the close button dismisses the preview modal', () => {
+    render(<ChatMessage message={singleImage} />);
+    fireEvent.click(screen.getByRole('button', { name: /mockup\.png.*büyüt/ }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Kapat' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('Escape key dismisses the preview modal', () => {
+    render(<ChatMessage message={singleImage} />);
+    fireEvent.click(screen.getByRole('button', { name: /mockup\.png.*büyüt/ }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
 // ─── 2. Agent message ────────────────────────────────────────────────────────
 
 describe('ChatMessage — agent', () => {
