@@ -202,6 +202,255 @@
       z-index: 10;
     }
     .webgl-error.show { display: flex; }
+
+    /* ─── Interactive overlay (hover hint + click cursor) ─── */
+    #three-container canvas {
+      cursor: default;
+      transition: filter 200ms;
+    }
+    #three-container canvas.hovering {
+      cursor: pointer;
+    }
+
+    /* ─── Detail panel (slide-in from right when character clicked) ─── */
+    .detail-panel {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(420px, 92vw);
+      background: linear-gradient(180deg, rgba(18, 32, 42, 0.96) 0%, rgba(10, 18, 21, 0.97) 100%);
+      backdrop-filter: blur(24px) saturate(1.2);
+      -webkit-backdrop-filter: blur(24px) saturate(1.2);
+      border-left: 1px solid rgba(7, 209, 175, 0.3);
+      box-shadow: -20px 0 40px rgba(0, 0, 0, 0.45);
+      transform: translateX(100%);
+      transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .detail-panel.open { transform: translateX(0); }
+    .detail-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 150ms, transform 150ms;
+      z-index: 2;
+    }
+    .detail-close:hover {
+      background: rgba(255, 107, 107, 0.15);
+      transform: scale(1.05);
+    }
+    .detail-hero {
+      padding: 28px 24px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(180deg, rgba(7, 209, 175, 0.08) 0%, transparent 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .detail-portrait {
+      width: 92px;
+      height: 92px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(7, 209, 175, 0.3), rgba(139, 92, 246, 0.3));
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border: 3px solid rgba(255, 255, 255, 0.15);
+    }
+    .detail-portrait img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .detail-portrait.pm       { border-color: #F5C76C; box-shadow: 0 8px 24px rgba(245, 199, 108, 0.35); }
+    .detail-portrait.frontend { border-color: #E8823E; box-shadow: 0 8px 24px rgba(232, 130, 62, 0.35); }
+    .detail-portrait.backend  { border-color: #3FA85E; box-shadow: 0 8px 24px rgba(63, 168, 94, 0.35); }
+    .detail-portrait.ai       { border-color: #8B5CF6; box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35); }
+    .detail-portrait.qa       { border-color: #FF6B6B; box-shadow: 0 8px 24px rgba(255, 107, 107, 0.35); }
+    .detail-portrait.dev      { border-color: #9AA0A6; box-shadow: 0 8px 24px rgba(154, 160, 166, 0.35); }
+    .detail-title {
+      font-size: 18px;
+      font-weight: bold;
+      letter-spacing: 0.05em;
+      color: var(--text);
+    }
+    .detail-subtitle {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .detail-body {
+      padding: 20px 24px 24px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .detail-section-title {
+      font-size: 10px;
+      color: var(--primary);
+      letter-spacing: 0.15em;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .detail-task {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .detail-task.idle {
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .detail-bio {
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .detail-btn {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--primary);
+      background: transparent;
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 180ms;
+      font-family: inherit;
+    }
+    .detail-btn:hover {
+      background: var(--primary);
+      color: #0A1215;
+    }
+    .detail-btn.primary {
+      background: var(--primary);
+      color: #0A1215;
+    }
+    .detail-btn.primary:hover {
+      opacity: 0.85;
+    }
+    .detail-log {
+      max-height: 180px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: 'SF Mono', monospace;
+      font-size: 10.5px;
+      line-height: 1.55;
+    }
+    .detail-log-empty {
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .detail-log-entry {
+      color: var(--text);
+      padding: 2px 0;
+    }
+
+    /* ─── Talk bubble (preset system response, short-lived) ─── */
+    .talk-bubble {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      background: rgba(255, 255, 255, 0.96);
+      color: #0A1215;
+      border-radius: 16px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      max-width: 300px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+      pointer-events: none;
+      animation: talkIn 260ms cubic-bezier(0.16, 1, 0.3, 1), talkOut 260ms 3.5s forwards;
+      z-index: 6;
+    }
+    .talk-bubble::after {
+      content: "";
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 8px solid transparent;
+      border-top-color: rgba(255, 255, 255, 0.96);
+    }
+    @keyframes talkIn {
+      from { opacity: 0; transform: translate(-50%, -80%) scale(0.7); }
+      to   { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+    }
+    @keyframes talkOut {
+      from { opacity: 1; }
+      to   { opacity: 0; transform: translate(-50%, -120%) scale(0.9); }
+    }
+
+    /* ─── Thinking cloud (drifts up from character head) ─── */
+    .thinking-cloud {
+      position: absolute;
+      font-size: 20px;
+      pointer-events: none;
+      animation: thinkFloat 2.4s ease-out forwards;
+      z-index: 5;
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+    }
+    @keyframes thinkFloat {
+      0%   { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
+      15%  { opacity: 1; transform: translate(-50%, -20px) scale(1); }
+      85%  { opacity: 0.9; transform: translate(-55%, -70px) scale(1.1); }
+      100% { opacity: 0; transform: translate(-60%, -100px) scale(1.2); }
+    }
+
+    /* ─── Hint card ─── */
+    .hint-card {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(18, 32, 42, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 6px 14px;
+      border-radius: 999px;
+      color: var(--text-dim);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      z-index: 5;
+      animation: hintPulse 3s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes hintPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
   </style>
 </head>
 <body>
@@ -212,6 +461,33 @@
       <div class="status-dot" id="status-dot">LIVE</div>
       <div id="three-container"></div>
       <div class="overlay-layer" id="overlay"></div>
+      <div class="hint-card" id="hint-card">💡 KARAKTERLERE TIKLA</div>
+      <aside class="detail-panel" id="detail-panel" aria-hidden="true">
+        <button class="detail-close" id="detail-close" aria-label="Kapat">✕</button>
+        <div class="detail-hero">
+          <div class="detail-portrait" id="detail-portrait"></div>
+          <div class="detail-title" id="detail-title">—</div>
+          <div class="detail-subtitle" id="detail-subtitle">—</div>
+        </div>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">GÜNCEL TASK</div>
+            <div class="detail-task" id="detail-task">Boşta</div>
+          </div>
+          <div>
+            <div class="detail-section-title">ROL</div>
+            <div class="detail-bio" id="detail-bio">—</div>
+          </div>
+          <div class="detail-actions">
+            <button class="detail-btn primary" id="detail-talk-btn">💬 Konuş</button>
+            <button class="detail-btn" id="detail-think-btn">💭 Düşün</button>
+          </div>
+          <div>
+            <div class="detail-section-title">BU ROLÜN SON AKTİVİTELERİ</div>
+            <div class="detail-log" id="detail-log"></div>
+          </div>
+        </div>
+      </aside>
       <div class="webgl-error" id="webgl-error">WebGL not available. Please use a modern browser.</div>
     </div>
     <div class="log">
@@ -232,6 +508,64 @@
     qa:       { label: 'Sr QA',       subtitle: 'Playwright · Smoke',color: 0xF0F0F0, accent: 0xFF6B6B, cssColor: '#FF6B6B', prop: 'magnifier' },
     dev:      { label: 'Dev',         subtitle: '',                  color: 0x9AA0A6, accent: 0x607D8B, cssColor: '#9AA0A6', prop: 'cap' }
   };
+
+  /* ─── Role bios (detail panel) ─── */
+  const ROLE_BIOS = {
+    pm:       'Fikri triage eden, kapsam ve öncelik belirleyen, senior\'ları spawn eden main Claude oturumu. PR açar, review tetikler, smoke-test yapar. Hiyerarşinin tepesi.',
+    frontend: 'React 19 + Tailwind 4 + Vite 7 tarafının sorumlusu. UI bug\'ları, chat UI, auth sayfaları, pipeline görselleri. Vitest ile test yazar.',
+    backend:  'Fastify 4 + Drizzle ORM + PostgreSQL. REST API, auth, multipart, GitHub adapter. Migration yazar, performansı optimize eder.',
+    ai:       'Claude API (Anthropic SDK), Scribe/Proto/Trace pipeline agent\'ları, pgvector RAG, prompt caching, streaming. Maliyet/latency optimizasyonu.',
+    qa:       'Playwright e2e, Cucumber/BDD, post-deploy smoke testleri Chrome MCP ile. Raporu docs/ops/\'a yazar. Regresyon koruyucusu.',
+    dev:      'Bir senior tarafından spawn edilen atomik kod birimi. Tek dosya / tek hedef odaklı. Test dahil kendi scope\'unu tamamlar, senior\'a döner.'
+  };
+
+  /* ─── Preset "system responses" — her role için karakter repliği ─── */
+  const RESPONSE_POOL = {
+    pm: [
+      'Issue backlog\'u triage ediyorum, risk ve bağımlılık çıkarıyorum.',
+      'Bu task için doğru senior\'ı seçmem lazım — kapsam full-stack mi?',
+      'PR review loop\'u tetikledim, code-reviewer verdict\'ini bekliyorum.',
+      'Smoke-test yeşil, issue\'yu kapatıyorum ve bir sonrakine geçiyorum.',
+      'Concurrency kuralı: aynı dosya ise sequential. Paralel agent konusunda dikkatli ol.'
+    ],
+    frontend: [
+      'Önce mevcut pattern\'lere bakıyorum — AKIS liquid-glass temasına uydur.',
+      'Bu bileşen için vitest case\'leri yazıyorum, a11y unutma.',
+      'Tailwind class\'ları tokenize, tema değişkenleri üzerinden git.',
+      'Bundle size\'a dikkat — lazy route ise sorun değil.',
+      'React 19 transitions ile loading state\'i daha akıcı olabilir.'
+    ],
+    backend: [
+      'Drizzle schema\'yı okuyorum, migration gerekiyor mu bakıyorum.',
+      'Fastify plugin register sırası önemli, onu doğrulayım.',
+      'Bu endpoint için unit test yazıp sonra integration ekleyeceğim.',
+      'Auth middleware\'ı bypass etmediğimden emin oluyorum.',
+      'GitHub REST adapter\'da retry policy ne durumda, bakıyorum.'
+    ],
+    ai: [
+      'Prompt cache key\'ini scope\'lamak lazım — user mı, chat mi, pipeline mı?',
+      'Claude API\'de temperature=0 kurallı, onu unutma.',
+      'Token sayımı streaming sonrası doğru gelsin diye usage metrics ekleyeceğim.',
+      'Model fallback: sk-ant- prefix auto-detect ediyor, kontrol et.',
+      'RAG için chunk size ve top-k deneyeceğim, recall metriklerine bakalım.'
+    ],
+    qa: [
+      'Smoke scenario\'yu hazırlıyorum — Chrome MCP ile akisflow.com\'a gireceğim.',
+      'Playwright case\'leri için data-testid lazım mı kontrol ediyorum.',
+      'Cucumber feature dosyası: Given/When/Then, kullanıcı senaryosu olarak yaz.',
+      'Regresyon testi: bu issue tekrar etmesin diye kalıcı guard ekleyeceğim.',
+      'Post-deploy rapor formatı: docs/ops/DEPLOY_SMOKE_N.md.'
+    ],
+    dev: [
+      'Senior\'ın planına göre çalışıyorum — dosya yolu ve acceptance criteria elimde.',
+      'Testi önce yazayım — TDD doğru tercih.',
+      'Kod küçük kalsın, YAGNI — scope\'u genişletmiyorum.',
+      'Bitince senior\'a diff döneceğim, entegrasyon onun işi.'
+    ]
+  };
+
+  /* ─── Thinking cloud emoji pool ─── */
+  const THINKING_EMOJI = ['💭', '☁️', '🤔', '⚙️', '💡', '🔍'];
 
   /* World positions in 3D (x, z) — y is up. 1 unit ~ 1 meter. */
   const SLOTS = {
@@ -652,6 +986,220 @@
     spawnNameplate(role, role, CHAR[role].label, CHAR[role].subtitle);
   });
 
+  /* ═════════════════════════════ INTERACTION ═════════════════════════════ */
+  const raycaster = new THREE.Raycaster();
+  const mouseNDC = new THREE.Vector2();
+  let hoveredKey = null;
+  let selectedKey = null;
+
+  const detailPanel = document.getElementById('detail-panel');
+  const detailClose = document.getElementById('detail-close');
+  const detailPortrait = document.getElementById('detail-portrait');
+  const detailTitle = document.getElementById('detail-title');
+  const detailSubtitle = document.getElementById('detail-subtitle');
+  const detailTask = document.getElementById('detail-task');
+  const detailBio = document.getElementById('detail-bio');
+  const detailTalkBtn = document.getElementById('detail-talk-btn');
+  const detailThinkBtn = document.getElementById('detail-think-btn');
+  const detailLog = document.getElementById('detail-log');
+  const hintCard = document.getElementById('hint-card');
+
+  /* Find character group under pointer */
+  function pickCharacterAt(clientX, clientY) {
+    const rect = container.getBoundingClientRect();
+    mouseNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouseNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouseNDC, camera);
+    const meshes = [];
+    Object.entries(characters).forEach(([key, group]) => {
+      group.traverse((obj) => {
+        if (obj.isMesh) {
+          obj.userData._charKey = key;
+          meshes.push(obj);
+        }
+      });
+    });
+    const hits = raycaster.intersectObjects(meshes, false);
+    if (!hits.length) return null;
+    return hits[0].object.userData._charKey;
+  }
+
+  /* Resolve a character key (pm / frontend / backend / … / dev-<role>-<id>) into
+     the role key used by CHAR/RESPONSE_POOL/ROLE_BIOS. */
+  function resolveRole(key) {
+    if (key === 'pm') return 'pm';
+    if (['frontend', 'backend', 'ai', 'qa'].includes(key)) return key;
+    if (key && key.startsWith('dev-')) return 'dev';
+    return 'dev';
+  }
+
+  function openDetail(key) {
+    if (!key || !characters[key]) return;
+    selectedKey = key;
+    const role = resolveRole(key);
+    const char = CHAR[role] || CHAR.dev;
+
+    detailPortrait.className = 'detail-portrait ' + role;
+    detailPortrait.innerHTML = '';
+    const img = document.createElement('img');
+    img.alt = char.label;
+    // DiceBear Avataaars — deterministic, CC0, free
+    img.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=akis-${key}&radius=50&size=120`;
+    img.onerror = () => {
+      // Fallback to emoji if CDN unreachable
+      detailPortrait.innerHTML = `<span style="font-size:48px;">${
+        role === 'pm' ? '🧑‍💼' : role === 'frontend' ? '🎨' : role === 'backend' ? '🧑‍💻'
+        : role === 'ai' ? '🤖' : role === 'qa' ? '🔬' : '🎓'
+      }</span>`;
+    };
+    detailPortrait.appendChild(img);
+
+    detailTitle.textContent = char.label + (key.startsWith('dev-') ? ' · ' + key.replace('dev-', '') : '');
+    detailSubtitle.textContent = char.subtitle || (role === 'dev' ? 'Developer' : '');
+    detailBio.textContent = ROLE_BIOS[role] || '';
+
+    // Current task from state
+    updateDetailTaskFromState();
+
+    // Activity log filtered to this role
+    updateDetailLogFromState();
+
+    detailPanel.classList.add('open');
+    detailPanel.setAttribute('aria-hidden', 'false');
+    hintCard.style.display = 'none';
+  }
+
+  function closeDetail() {
+    selectedKey = null;
+    detailPanel.classList.remove('open');
+    detailPanel.setAttribute('aria-hidden', 'true');
+  }
+
+  function updateDetailTaskFromState() {
+    if (!selectedKey || !currentState) return;
+    const role = resolveRole(selectedKey);
+    let task = null, status = 'idle';
+    if (role === 'pm') {
+      task = currentState.pm?.task;
+      status = currentState.pm?.status || 'idle';
+    } else if (selectedKey.startsWith('dev-')) {
+      // find dev in seniors.X.devs
+      const parts = selectedKey.split('-');           // dev, role, ...id
+      const srKey = parts[1];
+      const devId = parts.slice(2).join('-');
+      const dev = currentState.seniors?.[srKey]?.devs?.find(d => d.id === devId);
+      task = dev?.task;
+      status = dev?.status || 'idle';
+    } else {
+      task = currentState.seniors?.[role]?.task;
+      status = currentState.seniors?.[role]?.status || 'idle';
+    }
+    detailTask.classList.toggle('idle', !task || status === 'idle');
+    detailTask.textContent = task ? `[${status.toUpperCase()}] ${task}` : 'Boşta — herhangi bir task atanmış değil.';
+  }
+
+  function updateDetailLogFromState() {
+    if (!selectedKey || !currentState) return;
+    const role = resolveRole(selectedKey);
+    const keywords = role === 'pm' ? ['PM'] :
+      role === 'frontend' ? ['Sr FE', 'Frontend', 'FE '] :
+      role === 'backend'  ? ['Sr BE', 'Backend', 'BE '] :
+      role === 'ai'       ? ['Sr AI', 'AI '] :
+      role === 'qa'       ? ['Sr QA', 'QA '] :
+      ['dev-', 'Dev'];
+    const lines = (currentState.log || []).filter(
+      l => keywords.some(k => l.includes(k))
+    ).slice(-15);
+    if (!lines.length) {
+      detailLog.innerHTML = '<div class="detail-log-empty">Henüz aktivite yok.</div>';
+    } else {
+      detailLog.innerHTML = lines.map(l => `<div class="detail-log-entry">${l.replace(/</g, '&lt;')}</div>`).join('');
+      detailLog.scrollTop = detailLog.scrollHeight;
+    }
+  }
+
+  /* Talk bubble (preset system response). Lives for ~3.7s via CSS animation. */
+  function speakAt(key, line) {
+    if (!characters[key]) return;
+    const el = document.createElement('div');
+    el.className = 'talk-bubble';
+    el.textContent = line;
+    overlay.appendChild(el);
+    el.dataset.key = key;
+    el.dataset.createdAt = String(performance.now());
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 3900);
+  }
+
+  function randomResponseFor(role) {
+    const pool = RESPONSE_POOL[role] || RESPONSE_POOL.dev;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  /* Thinking cloud — spawns one emoji that floats up and fades. */
+  function thinkCloudAt(key) {
+    if (!characters[key]) return;
+    const el = document.createElement('div');
+    el.className = 'thinking-cloud';
+    el.textContent = THINKING_EMOJI[Math.floor(Math.random() * THINKING_EMOJI.length)];
+    overlay.appendChild(el);
+    el.dataset.key = key;
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 2500);
+  }
+
+  /* Auto-emit thinking clouds every ~1.2s for planning/triaging characters */
+  setInterval(() => {
+    if (!currentState) return;
+    const pm = currentState.pm || {};
+    if (pm.status === 'planning' || pm.status === 'triaging') thinkCloudAt('pm');
+    ['frontend', 'backend', 'ai', 'qa'].forEach(r => {
+      const sr = currentState.seniors?.[r];
+      if (sr && (sr.status === 'planning' || sr.status === 'triaging')) thinkCloudAt(r);
+    });
+  }, 1200);
+
+  /* Event wiring */
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    const key = pickCharacterAt(e.clientX, e.clientY);
+    hoveredKey = key;
+    renderer.domElement.classList.toggle('hovering', !!key);
+  });
+  renderer.domElement.addEventListener('click', (e) => {
+    const key = pickCharacterAt(e.clientX, e.clientY);
+    if (key) {
+      openDetail(key);
+      // Also speak a line on click (feels responsive)
+      speakAt(key, randomResponseFor(resolveRole(key)));
+    }
+  });
+  detailClose.addEventListener('click', closeDetail);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDetail();
+  });
+  detailTalkBtn.addEventListener('click', () => {
+    if (!selectedKey) return;
+    const role = resolveRole(selectedKey);
+    speakAt(selectedKey, randomResponseFor(role));
+  });
+  detailThinkBtn.addEventListener('click', () => {
+    if (!selectedKey) return;
+    // Emit 3 thinking clouds staggered
+    thinkCloudAt(selectedKey);
+    setTimeout(() => thinkCloudAt(selectedKey), 250);
+    setTimeout(() => thinkCloudAt(selectedKey), 500);
+  });
+
+  /* Hide hint card after first click or 8s */
+  let hintHidden = false;
+  function hideHint() {
+    if (hintHidden) return;
+    hintHidden = true;
+    hintCard.style.transition = 'opacity 500ms';
+    hintCard.style.opacity = '0';
+    setTimeout(() => hintCard.style.display = 'none', 500);
+  }
+  renderer.domElement.addEventListener('click', hideHint, { once: true });
+  setTimeout(hideHint, 8000);
+
   /* ═════════════════════════════ BUBBLES ═════════════════════════════ */
   function setBubble(key, roleKey, text) {
     let el = bubbles[key];
@@ -848,10 +1396,55 @@
       }
     });
 
+    // Position talk-bubbles (short-lived speech)
+    overlay.querySelectorAll('.talk-bubble').forEach((el) => {
+      const key = el.dataset.key;
+      const group = characters[key];
+      if (group) {
+        const p = project(group.position, 3.0);
+        el.style.left = p.x + 'px';
+        el.style.top = p.y + 'px';
+      }
+    });
+
+    // Position thinking-clouds at character head
+    overlay.querySelectorAll('.thinking-cloud').forEach((el) => {
+      const key = el.dataset.key;
+      const group = characters[key];
+      if (group) {
+        const p = project(group.position, 2.3);
+        el.style.left = p.x + 'px';
+        el.style.top = p.y + 'px';
+      }
+    });
+
+    // Hover highlight: scale the hovered character slightly
+    Object.keys(characters).forEach((key) => {
+      const group = characters[key];
+      const targetScale = (key === hoveredKey) ? 1.08 : (key === selectedKey ? 1.05 : 1);
+      group.scale.x += (targetScale - group.scale.x) * 0.18;
+      group.scale.y += (targetScale - group.scale.y) * 0.18;
+      group.scale.z += (targetScale - group.scale.z) * 0.18;
+    });
+
+    // Keep detail panel fresh when state polling updates
+    if (selectedKey && currentState) {
+      updateDetailTaskFromState();
+    }
+
     renderer.render(scene, camera);
   }
 
   setInterval(render, 33);
+
+  /* Refresh detail-panel log whenever poll changes (not every frame) */
+  let _lastLogLenForDetail = -1;
+  setInterval(() => {
+    if (selectedKey && currentState && (currentState.log?.length ?? 0) !== _lastLogLenForDetail) {
+      _lastLogLenForDetail = currentState.log?.length ?? 0;
+      updateDetailLogFromState();
+    }
+  }, 500);
 
   /* ═════════════════════════════ LOG ═════════════════════════════ */
   function renderLog(entries) {
