@@ -1052,10 +1052,10 @@ function PipelineStatsTab() {
         </div>
       )}
 
-      {/* ── Analytics: Model Distribution ──────────────────────────── */}
-      {data.modelDistribution && data.modelDistribution.length > 0 && (
-        <div className="mt-6">
-          <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.stats.models')}</h2>
+      {/* ── Analytics: Model Distribution — always shown ───────────── */}
+      <div className="mt-6">
+        <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.stats.models')}</h2>
+        {data.modelDistribution && data.modelDistribution.length > 0 ? (
           <div className="rounded-xl border border-ak-border bg-ak-surface p-4 flex items-center gap-6">
             {(() => {
               const total = data.modelDistribution!.reduce((s, m) => s + m.count, 0) || 1;
@@ -1093,13 +1093,17 @@ function PipelineStatsTab() {
               );
             })()}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-6 text-center">
+            <p className="text-xs text-ak-text-tertiary">{t('settings.stats.empty')}</p>
+          </div>
+        )}
+      </div>
 
-      {/* ── Analytics: Token Usage ─────────────────────────────────── */}
-      {data.tokenUsage && data.tokenUsage.length > 0 && (
-        <div className="mt-6">
-          <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.stats.tokens')}</h2>
+      {/* ── Analytics: Token Usage — always shown ─────────────────── */}
+      <div className="mt-6">
+        <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.stats.tokens')}</h2>
+        {data.tokenUsage && data.tokenUsage.length > 0 ? (
           <div className="overflow-x-auto rounded-xl border border-ak-border">
             <table className="w-full text-xs min-w-[400px]">
               <thead>
@@ -1122,8 +1126,12 @@ function PipelineStatsTab() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-6 text-center">
+            <p className="text-xs text-ak-text-tertiary">{t('settings.stats.empty')}</p>
+          </div>
+        )}
+      </div>
 
       {/* ── Analytics: Retry Heatmap ──────────────────────────────── */}
       {data.retryPatterns && data.retryPatterns.length > 0 && (
@@ -1226,26 +1234,21 @@ function IntegrityTab() {
     || data.assumptionStats.totalTracked > 0;
   const hasMeaningful = data.hasMeaningfulData ?? legacyHasMetrics;
 
-  if (!hasMeaningful) {
-    return (
-      <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-8 text-center">
-        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-ak-surface-2">
-          <svg className="h-5 w-5 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
-        </div>
-        <p className="text-xs font-medium text-ak-text-secondary">{t('integrity.noData')}</p>
-        <p className="mt-2 text-xs leading-relaxed text-ak-text-tertiary">{t('integrity.empty.howDataBuilds')}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      {/* Explanation banner */}
-      <div className="rounded-xl border border-ak-primary/20 bg-ak-primary/5 p-4">
-        <p className="text-xs leading-relaxed text-ak-text-secondary">
-          <span className="font-semibold text-ak-primary">Agent Kalite Metrikleri</span> — Pipeline'larinizda calisan 3 agent'in (Scribe, Proto, Trace) performansini izleyin. Spec uyumlulugu agent ciktisinin isteklerinize ne kadar uygun oldugunu, guven trendi ise zamana gore kalite degisimini gosterir.
-        </p>
-      </div>
+      {/* Explanation banner — or no-data notice when no signal yet */}
+      {hasMeaningful ? (
+        <div className="rounded-xl border border-ak-primary/20 bg-ak-primary/5 p-4">
+          <p className="text-xs leading-relaxed text-ak-text-secondary">
+            <span className="font-semibold text-ak-primary">Agent Kalite Metrikleri</span> — Pipeline'larinizda calisan 3 agent'in (Scribe, Proto, Trace) performansini izleyin. Spec uyumlulugu agent ciktisinin isteklerinize ne kadar uygun oldugunu, guven trendi ise zamana gore kalite degisimini gosterir.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-4 text-center">
+          <p className="text-xs font-medium text-ak-text-secondary">{t('integrity.noData')}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-ak-text-tertiary">{t('integrity.empty.howDataBuilds')}</p>
+        </div>
+      )}
 
       {/* Spec Compliance */}
       <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
@@ -1258,14 +1261,15 @@ function IntegrityTab() {
         </div>
       </div>
 
-      {/* Confidence Trend */}
-      {data.confidenceTrend.length > 0 && (
-        <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-          <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.confidence')}</h2>
-          <p className="mb-3 text-[11px] text-ak-text-tertiary">Son 30 gunde her agent'in guven skorundaki degisim</p>
-          <ConfidenceChart trend={data.confidenceTrend} />
-        </div>
-      )}
+      {/* Confidence Trend — always shown; empty state when no signal */}
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+        <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.confidence')}</h2>
+        <p className="mb-3 text-[11px] text-ak-text-tertiary">Son 30 gunde her agent'in guven skorundaki degisim</p>
+        {data.confidenceTrend.length > 0
+          ? <ConfidenceChart trend={data.confidenceTrend} />
+          : <p className="py-6 text-center text-xs text-ak-text-tertiary">{t('integrity.noData')}</p>
+        }
+      </div>
 
       {/* Criteria Coverage */}
       {data.criteriaStats.totalCriteria > 0 && (
@@ -1284,21 +1288,25 @@ function IntegrityTab() {
         </div>
       )}
 
-      {/* Top Assumptions */}
-      {data.assumptionStats.topAssumptions.length > 0 && (
-        <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-          <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.assumptions')}</h2>
-          <p className="mb-3 text-[11px] text-ak-text-tertiary">Agent'larin pipeline sirasinda yaptigi en sik varsayimlar</p>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ak-text-tertiary">
-            Toplam: {data.assumptionStats.totalTracked} (pipeline basina ort. {data.assumptionStats.avgPerPipeline.toFixed(1)})
-          </p>
-          <ol className="list-decimal list-inside space-y-1.5">
-            {data.assumptionStats.topAssumptions.map((a, i) => (
-              <li key={i} className="text-xs text-ak-text-secondary leading-relaxed">{a}</li>
-            ))}
-          </ol>
-        </div>
-      )}
+      {/* Top Assumptions — always shown; empty state when no signal */}
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+        <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.assumptions')}</h2>
+        <p className="mb-3 text-[11px] text-ak-text-tertiary">Agent'larin pipeline sirasinda yaptigi en sik varsayimlar</p>
+        {data.assumptionStats.topAssumptions.length > 0 ? (
+          <>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ak-text-tertiary">
+              Toplam: {data.assumptionStats.totalTracked} (pipeline basina ort. {data.assumptionStats.avgPerPipeline.toFixed(1)})
+            </p>
+            <ol className="list-decimal list-inside space-y-1.5">
+              {data.assumptionStats.topAssumptions.map((a, i) => (
+                <li key={i} className="text-xs text-ak-text-secondary leading-relaxed">{a}</li>
+              ))}
+            </ol>
+          </>
+        ) : (
+          <p className="py-4 text-center text-xs text-ak-text-tertiary">{t('integrity.noData')}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1327,7 +1335,7 @@ function ComplianceCircle({ label, value }: { label: string; value: number }) {
           strokeLinecap="round"
         />
         <text x="18" y="20" textAnchor="middle" className="fill-ak-text-primary text-[8px] font-bold">
-          {pct}%
+          {pct > 0 ? `${pct}%` : '—'}
         </text>
       </svg>
       <span className="text-xs font-medium capitalize text-ak-text-secondary">{label}</span>
