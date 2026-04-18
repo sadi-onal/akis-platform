@@ -553,6 +553,8 @@ export const users = pgTable('users', {
   githubUsername: text('github_username'),
   /** GitHub avatar URL (cached from API validation) */
   githubAvatarUrl: text('github_avatar_url'),
+  /** User-uploaded profile picture (data URL for MVP; OCI Object Storage follow-up). */
+  avatarUrl: text('avatar_url'),
   createdAt: timestamp('created_at', { withTimezone: false }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: false }).defaultNow(),
 }, (table) => ({

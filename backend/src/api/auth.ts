@@ -31,6 +31,9 @@ const sanitizeUser = (user: User) => ({
   id: user.id,
   name: user.name,
   email: user.email,
+  // Avatar priority: user-uploaded > GitHub-cached > null (UI falls back to initials).
+  // Issue #385 / BUG-05.
+  avatarUrl: user.avatarUrl ?? user.githubAvatarUrl ?? null,
 });
 
 function clearSessionCookie(reply: FastifyReply) {
@@ -254,6 +257,37 @@ export async function authRoutes(fastify: FastifyInstance) {
   const UpdateProfileSchema = z.object({
     name: z.string().min(2).max(100).optional(),
     email: z.string().email().optional(),
+  });
+
+  // ─── Avatar upload (issue #385 / BUG-05) ─────────────────
+  // MVP stores the image as a data URL directly in users.avatar_url. This
+  // avoids bringing OCI Object Storage into the MVP path and is fine for
+  // <=1MB encoded payloads at demo scale. The client enforces the same cap.
+  const MAX_AVATAR_DATA_URL_CHARS = 1_700_000; // ~1.25 MB raw image encoded
+  const AVATAR_DATA_URL_PREFIX = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+  const UploadAvatarSchema = z.object({
+    avatarUrl: z
+      .string()
+      .min(10)
+      .max(MAX_AVATAR_DATA_URL_CHARS, 'Avatar too large — resize under ~1MB')
+      .regex(AVATAR_DATA_URL_PREFIX, 'Must be a data:image/{png,jpeg,webp,gif};base64 URL')
+      .nullable(),
+  });
+
+  // PUT /auth/avatar — set or clear the user-uploaded avatar
+  fastify.put('/avatar', { preHandler: authPreHandler }, async (request, reply) => {
+    const authUser = getUser(request);
+    const body = UploadAvatarSchema.parse(request.body);
+    await db
+      .update(users)
+      .set({ avatarUrl: body.avatarUrl, updatedAt: new Date() })
+      .where(eq(users.id, authUser.id));
+    const updated = await db.query.users.findFirst({ where: eq(users.id, authUser.id) });
+    if (!updated) {
+      return sendError(reply, request, 'UNAUTHORIZED', 'User not found');
+    }
+    return sanitizeUser(updated);
   });
 
   // PUT /auth/profile — update name/email

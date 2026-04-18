@@ -54,6 +54,8 @@ export type AuthUser = {
   id: string;
   name: string;
   email: string;
+  /** User-uploaded avatar or cached GitHub avatar; null → UI renders initials. Issue #385. */
+  avatarUrl?: string | null;
   status?: string;
   emailVerified?: boolean;
   dataSharingConsent?: boolean | null;
@@ -193,6 +195,16 @@ export const AuthAPI = {
     request<AuthUser>('/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
+    }),
+  /**
+   * Set (or clear with null) the user-uploaded avatar. Issue #385.
+   * `avatarUrl` must be a data URL (`data:image/png;base64,...`) encoded client-side
+   * from a file picker, or null to revert to the GitHub-cached avatar / initials.
+   */
+  updateAvatar: (avatarUrl: string | null) =>
+    request<AuthUser>('/auth/avatar', {
+      method: 'PUT',
+      body: JSON.stringify({ avatarUrl }),
     }),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     request<{ ok: boolean }>('/auth/password', {

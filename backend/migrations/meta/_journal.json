@@ -288,6 +288,13 @@
       "when": 1776384000000,
       "tag": "0039_repair_pipelines_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1776470400000,
+      "tag": "0040_add_user_avatar",
+      "breakpoints": true
     }
   ]
 }

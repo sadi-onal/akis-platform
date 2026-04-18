@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,6 +7,7 @@ import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { toast } from '../../components/ui/Toast';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { api } from '../../services/api/client';
+import { AuthAPI } from '../../services/api/auth';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -21,6 +22,10 @@ interface ProfileData {
   emailVerified: boolean;
   status: string;
   createdAt: string;
+  /** GitHub OAuth avatar (cached); used as fallback when user hasn't uploaded their own. */
+  githubAvatarUrl?: string | null;
+  /** User-uploaded avatar (data URL). Takes priority over githubAvatarUrl. Issue #385. */
+  avatarUrl?: string | null;
 }
 
 type Provider = 'anthropic' | 'openai' | 'openrouter';
@@ -239,6 +244,63 @@ function ProfileTab() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  // Avatar upload state — issue #385 / BUG-05.
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+
+  const MAX_AVATAR_BYTES = 1_000_000; // 1 MB raw — data URL bloat still fits backend 1.7M-char cap.
+  const AVATAR_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif';
+
+  async function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === 'string') resolve(result);
+        else reject(new Error('Failed to read file'));
+      };
+      reader.onerror = () => reject(reader.error ?? new Error('FileReader error'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    if (file.size > MAX_AVATAR_BYTES) {
+      toast('Resim 1MB limitini aşıyor — daha küçük bir resim seçin.', 'error');
+      return;
+    }
+    if (!AVATAR_ACCEPT.split(',').includes(file.type)) {
+      toast('JPG, PNG, WebP veya GIF yükleyin.', 'error');
+      return;
+    }
+    setAvatarSaving(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const updated = await AuthAPI.updateAvatar(dataUrl);
+      setUser({ ...user!, avatarUrl: updated.avatarUrl ?? null });
+      toast('Profil resmi güncellendi.', 'success');
+    } catch {
+      toast('Yükleme başarısız, tekrar deneyin.', 'error');
+    } finally {
+      setAvatarSaving(false);
+    }
+  }
+
+  async function handleAvatarClear() {
+    setAvatarSaving(true);
+    try {
+      const updated = await AuthAPI.updateAvatar(null);
+      setUser({ ...user!, avatarUrl: updated.avatarUrl ?? null });
+      toast('Profil resmi kaldırıldı.', 'success');
+    } catch {
+      toast('İşlem başarısız, tekrar deneyin.', 'error');
+    } finally {
+      setAvatarSaving(false);
+    }
+  }
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -315,7 +377,8 @@ function ProfileTab() {
     return <div className="space-y-3 rounded-xl border border-ak-border bg-ak-surface p-6"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/2" /></div>;
   }
 
-  const avatarUrl = user?.email ? undefined : undefined; // no GitHub avatar on AuthUser
+  // Priority: user-uploaded > GitHub-cached > initials fallback (issue #385)
+  const avatarUrl = user?.avatarUrl ?? profile?.githubAvatarUrl ?? undefined;
   const initials = (profile?.name ?? user?.name ?? '?')[0]?.toUpperCase() ?? '?';
 
   return (
@@ -324,13 +387,36 @@ function ProfileTab() {
       <h2 className="mb-3 text-sm font-semibold text-ak-text-primary">{t('settings.profile.title')}</h2>
       <div className="rounded-xl border border-ak-border bg-ak-surface p-4 mb-6">
         <div className="flex items-center gap-4 mb-4">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="h-14 w-14 rounded-full object-cover" />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ak-primary/20 text-lg font-semibold text-ak-primary">
-              {initials}
-            </div>
-          )}
+          <div className="relative group">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="h-14 w-14 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ak-primary/20 text-lg font-semibold text-ak-primary">
+                {initials}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => avatarFileInputRef.current?.click()}
+              disabled={avatarSaving}
+              title="Profil resmi değiştir"
+              aria-label="Profil resmi değiştir"
+              className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-all group-hover:bg-black/50 group-hover:opacity-100 disabled:cursor-not-allowed"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+            <input
+              ref={avatarFileInputRef}
+              type="file"
+              accept={AVATAR_ACCEPT}
+              className="hidden"
+              onChange={handleAvatarPick}
+              aria-hidden
+            />
+          </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-ak-text-primary">{profile?.name ?? user?.name}</p>
             <div className="flex items-center gap-1.5">
@@ -341,6 +427,16 @@ function ProfileTab() {
                 </span>
               )}
             </div>
+            {user?.avatarUrl && (
+              <button
+                type="button"
+                onClick={handleAvatarClear}
+                disabled={avatarSaving}
+                className="mt-1 text-[11px] text-ak-text-tertiary hover:text-red-400 transition-colors disabled:opacity-50"
+              >
+                Yüklediğim resmi kaldır
+              </button>
+            )}
           </div>
         </div>
 
