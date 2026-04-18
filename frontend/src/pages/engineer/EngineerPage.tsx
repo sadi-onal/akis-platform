@@ -218,24 +218,88 @@ function Step1RepoSelection({
   );
 }
 
+/**
+ * Multi-stage loading message for /api/engineer/discover (issue #425).
+ *
+ * The discover endpoint genuinely takes 20-45s because it crawls the repo
+ * file list from GitHub and runs Claude-powered task discovery. Until we
+ * wire a real SSE progress stream (backend followup), we rotate a stable
+ * sequence of stages so the user sees movement instead of a frozen spinner.
+ *
+ * Stages are advisory-only — they run on a client-side timer and do NOT
+ * reflect true backend progress. Ordering reflects what the backend actually
+ * does (listFiles → analyze → finalize) so the copy stays honest.
+ */
+const DISCOVER_STAGES: ReadonlyArray<{ afterMs: number; label: string }> = [
+  { afterMs: 0,     label: 'Mühendis reponuzu analiz ediyor...' },
+  { afterMs: 5000,  label: 'Repo dosyaları okunuyor...' },
+  { afterMs: 15000, label: 'Görevler sınıflandırılıyor...' },
+  { afterMs: 30000, label: 'Son rötuşlar yapılıyor...' },
+];
+
 function Step2TaskDiscovery({
   tasks,
   loading,
+  error,
   selectedIds,
   onToggle,
+  onRetry,
 }: {
   tasks: DiscoveredTask[];
   loading: boolean;
+  error: 'timeout' | 'network' | null;
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
+  onRetry: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [stageIndex, setStageIndex] = useState(0);
 
-  if (loading) {
+  // Advance the stage message while loading. Resets when loading starts fresh.
+  useEffect(() => {
+    if (!loading) {
+      setStageIndex(0);
+      return;
+    }
+    const timers = DISCOVER_STAGES.slice(1).map((stage, i) =>
+      window.setTimeout(() => setStageIndex(i + 1), stage.afterMs),
+    );
+    return () => {
+      timers.forEach((id) => window.clearTimeout(id));
+    };
+  }, [loading]);
+
+  if (error) {
+    const message = error === 'timeout'
+      ? 'Repo analizi 60 saniyeyi geçti. Büyük repolarda bu uzun sürebilir — tekrar deneyin veya farklı bir repo seçin.'
+      : 'Repo analizi sırasında bir hata oluştu. Lütfen tekrar deneyin.';
     return (
       <div className="flex flex-col items-center justify-center py-16">
+        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-red-500/15">
+          <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z" />
+          </svg>
+        </div>
+        <p className="mb-4 max-w-md text-center text-sm text-white/70">{message}</p>
+        <button
+          onClick={onRetry}
+          className="inline-flex items-center justify-center rounded-lg bg-[#07D1AF]/15 px-4 py-2 text-sm font-medium text-[#07D1AF] hover:bg-[#07D1AF]/25 transition-colors"
+        >
+          Tekrar dene
+        </button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    const stageLabel = DISCOVER_STAGES[stageIndex]?.label ?? DISCOVER_STAGES[0].label;
+    return (
+      <div className="flex flex-col items-center justify-center py-16" aria-live="polite">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#07D1AF] border-t-transparent mb-4" />
-        <p className="text-white/50">Mühendis reponuzu analiz ediyor...</p>
+        <p className="text-white/70">{stageLabel}</p>
+        <p className="mt-2 text-xs text-white/40">
+          Büyük repolarda bu 30-60 saniye sürebilir
+        </p>
       </div>
     );
   }
@@ -561,6 +625,7 @@ export default function EngineerPage() {
   // Step 2 — Tasks
   const [tasks, setTasks] = useState<DiscoveredTask[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState<'timeout' | 'network' | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
 
   // Step 3 — Time
@@ -606,17 +671,37 @@ export default function EngineerPage() {
     return () => { cancelled = true; };
   }, [fetchToken]);
 
-  // Discover tasks when repo changes
+  /**
+   * Discover tasks for a repo. Wraps the API call in a 60s client-side
+   * timeout (issue #425) so the UI is not stuck on the spinner if the
+   * backend takes longer than usual. Sets a `tasksError` flag the Step2
+   * component renders as a retry screen instead of an empty "no tasks" list.
+   */
+  const DISCOVER_TIMEOUT_MS = 60_000;
   const discoverTasks = useCallback(async (repo: GitHubRepo) => {
     setTasksLoading(true);
+    setTasksError(null);
     setTasks([]);
     setSelectedTaskIds(new Set());
+
+    const [owner, name] = repo.fullName.split('/');
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      window.setTimeout(
+        () => reject(new Error('DISCOVER_TIMEOUT')),
+        DISCOVER_TIMEOUT_MS,
+      );
+    });
+
     try {
-      const [owner, name] = repo.fullName.split('/');
-      const res = await engineerApi.discoverTasks(owner, name);
+      const res = await Promise.race([
+        engineerApi.discoverTasks(owner, name),
+        timeoutPromise,
+      ]);
       setTasks(res.tasks);
-    } catch {
-      // Error handling
+      setTasksError(null);
+    } catch (err) {
+      const isTimeout = err instanceof Error && err.message === 'DISCOVER_TIMEOUT';
+      setTasksError(isTimeout ? 'timeout' : 'network');
     } finally {
       setTasksLoading(false);
     }
@@ -628,6 +713,13 @@ export default function EngineerPage() {
     setStep(2);
     discoverTasks(repo);
   }, [discoverTasks]);
+
+  // Retry discover if the previous call timed out or errored. No-op when
+  // no repo is selected (shouldn't happen from the UI, but guards anyway).
+  const retryDiscover = useCallback(() => {
+    if (!selectedRepo) return;
+    discoverTasks(selectedRepo);
+  }, [selectedRepo, discoverTasks]);
 
   // Toggle task selection
   const handleTaskToggle = useCallback((id: string) => {
@@ -704,8 +796,10 @@ export default function EngineerPage() {
             <Step2TaskDiscovery
               tasks={tasks}
               loading={tasksLoading}
+              error={tasksError}
               selectedIds={selectedTaskIds}
               onToggle={handleTaskToggle}
+              onRetry={retryDiscover}
             />
           )}
 
