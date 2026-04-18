@@ -30,7 +30,17 @@
 | BUG-20 *(2026-04-18)* | [#427](https://github.com/OmerYasirOnal/akis-platform/issues/427) (BUG-18 kısmı) | 🟠 | aynı PR |
 | BUG-21 *(2026-04-18)* | [#429](https://github.com/OmerYasirOnal/akis-platform/issues/429) | 🔴 | Frontend UX: [PR #433](https://github.com/OmerYasirOnal/akis-platform/pull/433) · Backend prod-infra: #429 investigation comment |
 | BUG-22 *(2026-04-18)* | [#425](https://github.com/OmerYasirOnal/akis-platform/issues/425) | 🟠 | **False positive** — preserve-log artık'ı, düzeltme yorumu #425'e bırakıldı. 41s hang hâlâ #425 kapsamında. |
-| BUG-23 *(2026-04-18)* | [#430](https://github.com/OmerYasirOnal/akis-platform/issues/430) | 🟡 | [PR #432](https://github.com/OmerYasirOnal/akis-platform/pull/432) |
+| BUG-23 *(2026-04-18)* | [#430](https://github.com/OmerYasirOnal/akis-platform/issues/430) | 🟡 | [PR #432](https://github.com/OmerYasirOnal/akis-platform/pull/432) — **✅ merged + verified prod** |
+| BUG-24 *(2026-04-18 wave-2 post-deploy)* | [#434](https://github.com/OmerYasirOnal/akis-platform/issues/434) | 🟠 | Engineer → Chat context kopması (route + banner fix gerek) |
+| BUG-25 *(2026-04-18 wave-2 post-deploy)* | [#435](https://github.com/OmerYasirOnal/akis-platform/issues/435) | 🟡 | Chat header title+desc concatenation truncation |
+
+### Vision-gap feature requests (wave-2 post-deploy, user Q&A turned into issues)
+| # | Feature | Issue |
+|---|---|---|
+| FEAT-1 | Anthropic prompt caching (chat-level cost/latency) | [#436](https://github.com/OmerYasirOnal/akis-platform/issues/436) |
+| FEAT-2 | Per-chat model picker (frontend UI) | [#437](https://github.com/OmerYasirOnal/akis-platform/issues/437) |
+| FEAT-3 | Real-time per-chat token counter + context-window gauge | [#438](https://github.com/OmerYasirOnal/akis-platform/issues/438) |
+| FEAT-4 | Chat-level RAG retrieval (cross-message coherence) | [#439](https://github.com/OmerYasirOnal/akis-platform/issues/439) |
 
 **Kapatılan eski issue'lar:** #333, #316, #315, #314, #313, #312, #311, #310, #250 (hepsi bu sweep ile supersede edildi).
 
