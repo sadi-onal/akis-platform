@@ -123,7 +123,7 @@ describe('FileUploadService', () => {
       assert.ok(result.includes('--- END FILE ---'));
     });
 
-    it('should include image placeholder notes', () => {
+    it('should list uploaded images and force acknowledgement (issue #389)', () => {
       const attachments: ProcessedAttachment[] = [
         {
           originalName: 'screenshot.png',
@@ -136,8 +136,11 @@ describe('FileUploadService', () => {
 
       const result = service.buildContextString(attachments);
 
-      assert.ok(result.includes('--- UPLOADED IMAGE: screenshot.png'));
-      assert.ok(result.includes('2KB'));
+      assert.ok(result.includes('UPLOADED IMAGES (1)'));
+      assert.ok(result.includes('- screenshot.png'));
+      // Ack-forcing instruction must be present so the agent cannot silently ignore the image.
+      assert.ok(result.includes('MUTLAKA'));
+      assert.ok(result.includes('Görselleri yok sayma'));
     });
 
     it('should combine multiple attachments', () => {
@@ -161,7 +164,23 @@ describe('FileUploadService', () => {
       const result = service.buildContextString(attachments);
 
       assert.ok(result.includes('--- UPLOADED FILE: index.ts ---'));
-      assert.ok(result.includes('--- UPLOADED IMAGE: design.png'));
+      assert.ok(result.includes('UPLOADED IMAGES (1)'));
+      assert.ok(result.includes('- design.png'));
+    });
+
+    it('should group multiple images into one block with correct count', () => {
+      const attachments: ProcessedAttachment[] = [
+        { originalName: 'a.png', mimeType: 'image/png', sizeBytes: 100, type: 'image', base64Data: 'data:image/png;base64,a' },
+        { originalName: 'b.jpg', mimeType: 'image/jpeg', sizeBytes: 100, type: 'image', base64Data: 'data:image/jpeg;base64,b' },
+        { originalName: 'c.webp', mimeType: 'image/webp', sizeBytes: 100, type: 'image', base64Data: 'data:image/webp;base64,c' },
+      ];
+
+      const result = service.buildContextString(attachments);
+
+      assert.ok(result.includes('UPLOADED IMAGES (3)'));
+      assert.ok(result.includes('- a.png'));
+      assert.ok(result.includes('- b.jpg'));
+      assert.ok(result.includes('- c.webp'));
     });
 
     it('should return empty string for no attachments', () => {
@@ -183,6 +202,78 @@ describe('FileUploadService', () => {
 
       // Should not include file marker since there's no text content
       assert.ok(!result.includes('--- UPLOADED FILE: empty.txt ---'));
+    });
+  });
+
+  // ─── buildImageBlocks ─────────────────────────────
+
+  describe('buildImageBlocks (issue #389 — Anthropic multimodal helper)', () => {
+    it('returns [] when no attachments', () => {
+      assert.deepStrictEqual(service.buildImageBlocks([]), []);
+    });
+
+    it('ignores text attachments', () => {
+      const atts: ProcessedAttachment[] = [
+        { originalName: 'a.ts', mimeType: 'text/typescript', sizeBytes: 5, type: 'text', extractedText: 'x' },
+      ];
+      assert.deepStrictEqual(service.buildImageBlocks(atts), []);
+    });
+
+    it('strips the data URL prefix and produces raw base64 blocks', () => {
+      const atts: ProcessedAttachment[] = [
+        {
+          originalName: 'hero.png',
+          mimeType: 'image/png',
+          sizeBytes: 4,
+          type: 'image',
+          base64Data: 'data:image/png;base64,AAECAw==',
+        },
+      ];
+
+      const blocks = service.buildImageBlocks(atts);
+
+      assert.strictEqual(blocks.length, 1);
+      assert.strictEqual(blocks[0].type, 'image');
+      assert.strictEqual(blocks[0].source.type, 'base64');
+      assert.strictEqual(blocks[0].source.media_type, 'image/png');
+      // Raw base64 only — no "data:" prefix.
+      assert.strictEqual(blocks[0].source.data, 'AAECAw==');
+    });
+
+    it('preserves order and media_type for a mix of supported formats', () => {
+      const atts: ProcessedAttachment[] = [
+        { originalName: 'a.png', mimeType: 'image/png', sizeBytes: 1, type: 'image', base64Data: 'data:image/png;base64,AA' },
+        { originalName: 'b.jpeg', mimeType: 'image/jpeg', sizeBytes: 1, type: 'image', base64Data: 'data:image/jpeg;base64,BB' },
+        { originalName: 'c.webp', mimeType: 'image/webp', sizeBytes: 1, type: 'image', base64Data: 'data:image/webp;base64,CC' },
+      ];
+
+      const blocks = service.buildImageBlocks(atts);
+
+      assert.strictEqual(blocks.length, 3);
+      assert.strictEqual(blocks[0].source.media_type, 'image/png');
+      assert.strictEqual(blocks[1].source.media_type, 'image/jpeg');
+      assert.strictEqual(blocks[2].source.media_type, 'image/webp');
+    });
+
+    it('skips images with non-Anthropic-supported mime types', () => {
+      const atts: ProcessedAttachment[] = [
+        // bmp isn't in the Anthropic image_supported set; must be filtered out.
+        { originalName: 'bad.bmp', mimeType: 'image/bmp', sizeBytes: 1, type: 'image', base64Data: 'data:image/bmp;base64,ZZ' },
+        { originalName: 'ok.png', mimeType: 'image/png', sizeBytes: 1, type: 'image', base64Data: 'data:image/png;base64,YY' },
+      ];
+
+      const blocks = service.buildImageBlocks(atts);
+
+      assert.strictEqual(blocks.length, 1);
+      assert.strictEqual(blocks[0].source.media_type, 'image/png');
+    });
+
+    it('skips images missing base64 data (defensive)', () => {
+      const atts: ProcessedAttachment[] = [
+        { originalName: 'broken.png', mimeType: 'image/png', sizeBytes: 1, type: 'image' /* no base64Data */ },
+      ];
+
+      assert.deepStrictEqual(service.buildImageBlocks(atts), []);
     });
   });
 

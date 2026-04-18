@@ -93,9 +93,12 @@ describe('FileUploadService.buildContextString — extended', () => {
     assert.ok(result.includes('# Hello World'));
     assert.ok(result.includes('--- END FILE ---'));
 
-    // Images get placeholders with size, not base64 content
-    assert.ok(result.includes('--- UPLOADED IMAGE: screenshot.png (49KB) ---'));
-    assert.ok(result.includes('--- UPLOADED IMAGE: diagram.jpg (117KB) ---'));
+    // Images grouped into a single block with filename list + ack instruction.
+    // Size is no longer inlined — the ack forces the agent to explain what it sees.
+    assert.ok(result.includes('UPLOADED IMAGES (2)'));
+    assert.ok(result.includes('- screenshot.png'));
+    assert.ok(result.includes('- diagram.jpg'));
+    assert.ok(result.includes('MUTLAKA'));
 
     // Base64 data must NOT appear in the context string
     assert.ok(!result.includes('iVBORw0KGgoAAAANS'));
@@ -142,7 +145,8 @@ describe('FileUploadService.buildContextString — extended', () => {
 
     const result = service.buildContextString(attachments);
 
-    assert.ok(result.includes('--- UPLOADED IMAGE: photo.png (8KB) ---'));
+    assert.ok(result.includes('UPLOADED IMAGES (1)'));
+    assert.ok(result.includes('- photo.png'));
     assert.ok(!result.includes('--- END FILE ---'));
   });
 
@@ -280,7 +284,8 @@ describe('File upload → context string → orchestrator shape', () => {
     assert.ok(typeof context === 'string');
     assert.ok(context.includes('export function getUser() {}'));
     assert.ok(context.includes('CREATE TABLE users'));
-    assert.ok(context.includes('--- UPLOADED IMAGE: wireframe.png'));
+    assert.ok(context.includes('UPLOADED IMAGES'));
+    assert.ok(context.includes('- wireframe.png'));
     // Image content should not leak
     assert.ok(!context.includes('base64'));
   });

@@ -17,6 +17,20 @@ export interface ProcessedAttachment {
   base64Data?: string;
 }
 
+/**
+ * Anthropic Messages API image content block. When an image is uploaded and
+ * we call a multimodal-capable model, this is the shape expected inside
+ * `messages[*].content` arrays.
+ */
+export interface AnthropicImageBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+    data: string; // raw base64 — NOT the data: URL
+  };
+}
+
 // ─── Constants ───────────────────────────────────
 
 const TEXT_MIME_TYPES = new Set([
@@ -86,12 +100,19 @@ export class FileUploadService {
 
   /**
    * Build a context string from all processed attachments.
-   * Text files are included inline; images get a placeholder note.
+   * Text files are included inline; images get a placeholder note that
+   * instructs the agent to acknowledge them (see issue #389 / BUG-09).
+   *
+   * Downstream, the agent should ALSO receive image content blocks via
+   * {@link buildImageBlocks} so multimodal models can actually see the pixels.
+   * This string is the fallback when the model is text-only, and also acts as
+   * the "ack prompt" even for multimodal callers.
    */
   buildContextString(attachments: ProcessedAttachment[]): string {
     if (attachments.length === 0) return '';
 
     const parts: string[] = [];
+    const imageNames: string[] = [];
 
     for (const att of attachments) {
       if (att.type === 'text' && att.extractedText) {
@@ -101,14 +122,58 @@ export class FileUploadService {
           `\n--- END FILE ---`,
         );
       } else if (att.type === 'image') {
-        const sizeKB = Math.round(att.sizeBytes / 1024);
-        parts.push(
-          `--- UPLOADED IMAGE: ${att.originalName} (${sizeKB}KB) ---`,
-        );
+        imageNames.push(att.originalName);
       }
     }
 
+    if (imageNames.length > 0) {
+      const list = imageNames.map((n) => `- ${n}`).join('\n');
+      parts.push(
+        `--- UPLOADED IMAGES (${imageNames.length}) ---\n` +
+        list +
+        `\n\nKullanıcı yukarıdaki görsel(ler)i yükledi. İlk cevabında ` +
+        `MUTLAKA görselde ne gördüğünü 1-2 cümleyle özetle ve kullanıcının ` +
+        `isteğini nasıl yorumladığını açıkla. Görselleri yok sayma.\n` +
+        `--- END IMAGES ---`,
+      );
+    }
+
     return parts.join('\n\n');
+  }
+
+  /**
+   * Build Anthropic multimodal image blocks from processed attachments.
+   * Returns [] when there are no images — the caller can then skip the
+   * multimodal code path entirely and fall back to plain `generateText`.
+   *
+   * The `data:` URL prefix present on {@link ProcessedAttachment.base64Data}
+   * is stripped because the Anthropic API expects raw base64 in
+   * `source.data` plus `media_type` as a separate field.
+   */
+  buildImageBlocks(attachments: ProcessedAttachment[]): AnthropicImageBlock[] {
+    const blocks: AnthropicImageBlock[] = [];
+
+    for (const att of attachments) {
+      if (att.type !== 'image' || !att.base64Data) continue;
+
+      // base64Data is "data:image/png;base64,AAAA..." — strip the prefix.
+      const commaIdx = att.base64Data.indexOf(',');
+      const raw = commaIdx >= 0 ? att.base64Data.slice(commaIdx + 1) : att.base64Data;
+
+      // Only the Anthropic-supported subset is allowed; validated at upload.
+      const mediaType = att.mimeType as AnthropicImageBlock['source']['media_type'];
+      if (!IMAGE_MIME_TYPES.has(mediaType)) {
+        logger.warn({ file: att.originalName, mimeType: att.mimeType }, '[FileUpload] skipping unsupported mime for multimodal block');
+        continue;
+      }
+
+      blocks.push({
+        type: 'image',
+        source: { type: 'base64', media_type: mediaType, data: raw },
+      });
+    }
+
+    return blocks;
   }
 
   /**
