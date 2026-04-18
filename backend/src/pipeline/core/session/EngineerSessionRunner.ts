@@ -39,6 +39,7 @@ export interface EngineerSessionOrchestrator {
     userId: string,
     input: ScribeInput,
     model?: string,
+    engineerSessionId?: string,
   ): Promise<PipelineState>;
 
   getStatus(pipelineId: string): Promise<PipelineState>;
@@ -172,6 +173,7 @@ export class EngineerSessionRunner {
       userId,
       scribeInput,
       this.deps.model,
+      session.id,
     );
 
     return this.driveToTerminal(started.id, session);

@@ -12,7 +12,42 @@ import {
 } from '../core/session/EngineerSessionRunner.js';
 import type { EngineerSession, SelectedTask } from '../core/session/SessionTypes.js';
 import type { ScribeInput } from '../core/contracts/PipelineTypes.js';
+import { PipelineOrchestrator } from '../core/orchestrator/PipelineOrchestrator.js';
 import type { AIServiceLike, GitHubServiceLike } from '../core/pipeline-factory.js';
+
+/**
+ * Adapt a full PipelineOrchestrator to the narrow EngineerSessionOrchestrator
+ * surface, threading the new `engineerSessionId` through the orchestrator's
+ * `startPipeline` call (which takes it as its 8th optional argument). Keeping
+ * the adapter here means server.app.ts can continue to pass the orchestrator
+ * directly without knowing about the metadata convention.
+ */
+function isFullOrchestrator(
+  o: PipelineOrchestrator | EngineerSessionOrchestrator,
+): o is PipelineOrchestrator {
+  return o instanceof PipelineOrchestrator;
+}
+
+export function toEngineerSessionOrchestrator(
+  orchestrator: PipelineOrchestrator,
+): EngineerSessionOrchestrator {
+  return {
+    startPipeline: (userId, input, model, engineerSessionId) =>
+      orchestrator.startPipeline(
+        userId,
+        input,
+        model,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        engineerSessionId,
+      ),
+    getStatus: (id) => orchestrator.getStatus(id),
+    approveSpec: (id, repoName, visibility, editedSpec) =>
+      orchestrator.approveSpec(id, repoName, visibility, editedSpec),
+  };
+}
 
 /**
  * Default mapping from an engineer session task to a ScribeInput. Exported
@@ -47,10 +82,12 @@ export interface EngineerPluginOptions {
   githubService: GitHubServiceLike;
   /**
    * Pipeline orchestrator — required for running actual Scribe→Proto→Trace
-   * pipelines per engineer task. Optional for unit/smoke tests that only
-   * exercise HTTP shape.
+   * pipelines per engineer task. Accepts either the full PipelineOrchestrator
+   * (wired up in production) or a test-side stub matching the narrow
+   * EngineerSessionOrchestrator surface. Optional for unit/smoke tests that
+   * only exercise HTTP shape.
    */
-  orchestrator?: EngineerSessionOrchestrator;
+  orchestrator?: PipelineOrchestrator | EngineerSessionOrchestrator;
 }
 
 export async function engineerPlugin(
@@ -70,7 +107,9 @@ export async function engineerPlugin(
   const sessionRunner = orchestrator
     ? new EngineerSessionRunner({
         sessionManager,
-        orchestrator,
+        orchestrator: isFullOrchestrator(orchestrator)
+          ? toEngineerSessionOrchestrator(orchestrator)
+          : orchestrator,
         taskToScribeInput: defaultTaskToScribeInput,
       })
     : undefined;

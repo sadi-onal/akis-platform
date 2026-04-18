@@ -181,6 +181,7 @@ export interface Pipeline {
   intermediateState?: {
     criticSpecOutput?: CriticReviewOutput;
     criticCodeOutput?: CriticReviewOutput;
+    engineerSessionId?: string;
     [key: string]: unknown;
   };
   createdAt: string;

@@ -265,6 +265,7 @@ export class PipelineOrchestrator {
     parentPipelineId?: string,
     skipScribe?: boolean,
     traceEnabled?: boolean,
+    engineerSessionId?: string,
   ): Promise<PipelineState> {
     const pipeline = await this.store.create(userId);
 
@@ -288,6 +289,15 @@ export class PipelineOrchestrator {
         ...updateData.intermediateState,
         existingRepo: input.existingRepo,
         parentPipelineId,
+      };
+    }
+    // Record engineer-session ownership so the chat UI can surface
+    // "this pipeline belongs to Mühendis Modu session <X>" and deep-link
+    // back to the live session page (BUG-24 / #434).
+    if (engineerSessionId) {
+      updateData.intermediateState = {
+        ...updateData.intermediateState,
+        engineerSessionId,
       };
     }
     // Store attachment context for Scribe knowledge injection

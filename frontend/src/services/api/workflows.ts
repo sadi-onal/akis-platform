@@ -325,6 +325,7 @@ export function mapPipelineToWorkflow(pipeline: Pipeline): Workflow {
     updatedAt: pipeline.updatedAt,
     stages,
     conversation: mapConversation(pipeline),
+    engineerSessionId: pipeline.intermediateState?.engineerSessionId,
   };
 }
 

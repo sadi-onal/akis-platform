@@ -57,13 +57,23 @@ function makeTask(id: string, title: string): SelectedTask {
  * sequence of commands.
  */
 class StubOrchestrator implements EngineerSessionOrchestrator {
-  readonly startCalls: Array<{ userId: string; input: ScribeInput }> = [];
+  readonly startCalls: Array<{
+    userId: string;
+    input: ScribeInput;
+    model?: string;
+    engineerSessionId?: string;
+  }> = [];
   readonly approveCalls: string[] = [];
   private readonly pipelines = new Map<string, PipelineState>();
   private seq = 0;
 
-  async startPipeline(userId: string, input: ScribeInput): Promise<PipelineState> {
-    this.startCalls.push({ userId, input });
+  async startPipeline(
+    userId: string,
+    input: ScribeInput,
+    model?: string,
+    engineerSessionId?: string,
+  ): Promise<PipelineState> {
+    this.startCalls.push({ userId, input, model, engineerSessionId });
     const id = `pipe-${++this.seq}`;
     const state = makePipelineState(id, userId, 'awaiting_approval');
     this.pipelines.set(id, state);
@@ -187,6 +197,12 @@ describe('EngineerSessionRunner', () => {
     assert.ok(
       final.completedTasks.every((t) => t.prUrl?.includes('/pull/1')),
       'each completed task records prUrl from orchestrator',
+    );
+    // BUG-24 / #434 — each pipeline is tagged with the owning engineer session
+    // so the chat UI can deep-link back to /engineer/session/:id.
+    assert.ok(
+      orchestrator.startCalls.every((c) => c.engineerSessionId === session.id),
+      'every startPipeline call receives the session id as engineerSessionId',
     );
   });
 

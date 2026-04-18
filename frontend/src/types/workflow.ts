@@ -144,6 +144,14 @@ export interface Workflow {
   updatedAt?: string;
   stages: WorkflowStages;
   conversation?: ConversationMessage[];
+  /**
+   * Set when the pipeline was started by an Engineer Rental Mode session.
+   * The chat UI uses this to render an "engineer-owned" badge in the sidebar
+   * and a banner linking back to `/engineer/session/:engineerSessionId`, so
+   * the session context is not lost when the user drifts to the pipeline's
+   * chat row (BUG-24 / #434).
+   */
+  engineerSessionId?: string;
 }
 
 export interface WorkflowStats {
