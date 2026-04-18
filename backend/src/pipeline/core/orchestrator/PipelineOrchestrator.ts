@@ -15,6 +15,7 @@ import {
   createJiraEpicFromSpec,
   commentJiraWithProtoResult,
   commentJiraWithTraceResult,
+  commentJiraWithFailure,
 } from '../../integrations/jiraIntegration.js';
 import { RETRY_CONFIG, createPipelineError, PipelineErrorCode, PipelineNotFoundError, InvalidStageError } from '../contracts/PipelineErrors.js';
 import { createActivityEmitter, emitActivity, cleanupPipelineListeners } from '../activityEmitter.js';
@@ -1730,11 +1731,13 @@ export class PipelineOrchestrator {
 
     // Retry with exponential backoff — pipeline must not stay stuck in running state
     const retryDelays = [1_000, 5_000, 15_000];
+    let persisted = false;
     for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
       try {
         await this.store.update(pipelineId, { stage: 'failed', error });
         this.emitEvent(pipelineId, 'error', 'failed', error);
-        return; // success
+        persisted = true;
+        break;
       } catch (storeErr) {
         if (attempt < retryDelays.length) {
           logger.warn({ err: storeErr, pipelineId, attempt: attempt + 1 }, `[Pipeline] failPipeline attempt failed, retrying in ${retryDelays[attempt]}ms`);
@@ -1746,6 +1749,49 @@ export class PipelineOrchestrator {
         }
       }
     }
+
+    // Post a failure comment to the linked Jira Epic when there is one. Guarded
+    // behind the persistent flag so a transient DB outage doesn't spam Jira.
+    // Helper is non-throwing so we can fire-and-forget.
+    if (persisted) {
+      this.postJiraFailureComment(pipelineId, label, error).catch((jiraErr) => {
+        logger.warn({ err: jiraErr, pipelineId }, '[Pipeline] Jira failure comment handler itself threw');
+      });
+    }
+  }
+
+  /**
+   * Fetches the pipeline's linked Jira Epic (if any) and posts a failure
+   * comment via `commentJiraWithFailure` (#396). Safe to call unconditionally —
+   * returns silently when no Epic is linked or Atlassian isn't connected.
+   * Introduced to close the gap where failed pipelines left their Epic silently
+   * In Progress (see 2026-04-17 Jira verify task review).
+   */
+  private async postJiraFailureComment(
+    pipelineId: string,
+    label: string,
+    error: { code: string; message: string; retryable: boolean },
+  ): Promise<void> {
+    let pipeline;
+    try {
+      pipeline = await this.store.getById(pipelineId);
+    } catch {
+      return;
+    }
+    const epicKey = pipeline?.jiraConfig?.epicKey;
+    const userId = pipeline?.userId;
+    if (!epicKey || !userId) return;
+
+    const jira = await JiraMCPService.fromOAuth(userId);
+    if (!jira) return;
+
+    await commentJiraWithFailure(jira, epicKey, {
+      stage: label,
+      errorCode: error.code,
+      errorMessage: error.message,
+      retryable: error.retryable,
+      pipelineId,
+    });
   }
 
   private emitEvent(
