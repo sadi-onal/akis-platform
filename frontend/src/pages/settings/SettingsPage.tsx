@@ -8,6 +8,7 @@ import { toast } from '../../components/ui/Toast';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { api } from '../../services/api/client';
 import { AuthAPI } from '../../services/api/auth';
+import AvatarCropModal from '../../components/settings/AvatarCropModal';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -244,49 +245,61 @@ function ProfileTab() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
-  // Avatar upload state — issue #385 / BUG-05.
+  // Avatar upload state — issue #385 / BUG-05, #447 (crop), #448 (remove button).
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
+  // Object URL for the file the user just picked — becomes the source for
+  // <AvatarCropModal/>. Null ⇒ modal hidden. Revoked on unmount / next pick.
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
 
-  const MAX_AVATAR_BYTES = 1_000_000; // 1 MB raw — data URL bloat still fits backend 1.7M-char cap.
+  // Raw file cap is generous (8MB) — the crop modal downscales to ≤200KB
+  // before upload, so server-side we only persist the optimized JPEG.
+  const MAX_AVATAR_RAW_BYTES = 8_000_000;
   const AVATAR_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif';
 
-  async function fileToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result;
-        if (typeof result === 'string') resolve(result);
-        else reject(new Error('Failed to read file'));
-      };
-      reader.onerror = () => reject(reader.error ?? new Error('FileReader error'));
-      reader.readAsDataURL(file);
-    });
-  }
+  // Revoke the object URL when the modal closes so we don't leak blobs.
+  useEffect(() => {
+    return () => {
+      if (cropImageSrc?.startsWith('blob:')) URL.revokeObjectURL(cropImageSrc);
+    };
+  }, [cropImageSrc]);
 
-  async function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleAvatarPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-picking the same file
     if (!file) return;
-    if (file.size > MAX_AVATAR_BYTES) {
-      toast('Resim 1MB limitini aşıyor — daha küçük bir resim seçin.', 'error');
+    if (file.size > MAX_AVATAR_RAW_BYTES) {
+      toast('Resim 8MB limitini aşıyor — daha küçük bir resim seçin.', 'error');
       return;
     }
     if (!AVATAR_ACCEPT.split(',').includes(file.type)) {
       toast('JPG, PNG, WebP veya GIF yükleyin.', 'error');
       return;
     }
+    // Revoke previous blob before replacing.
+    if (cropImageSrc?.startsWith('blob:')) URL.revokeObjectURL(cropImageSrc);
+    setCropImageSrc(URL.createObjectURL(file));
+  }
+
+  async function handleAvatarCropConfirm(dataUrl: string) {
     setAvatarSaving(true);
     try {
-      const dataUrl = await fileToDataUrl(file);
       const updated = await AuthAPI.updateAvatar(dataUrl);
       setUser({ ...user!, avatarUrl: updated.avatarUrl ?? null });
-      toast('Profil resmi güncellendi.', 'success');
+      toast(t('settings.profile.avatarUpdated'), 'success');
+      // Close modal only on success — keep open on failure so user can retry.
+      if (cropImageSrc?.startsWith('blob:')) URL.revokeObjectURL(cropImageSrc);
+      setCropImageSrc(null);
     } catch {
-      toast('Yükleme başarısız, tekrar deneyin.', 'error');
+      toast(t('settings.profile.avatarUploadFailed'), 'error');
     } finally {
       setAvatarSaving(false);
     }
+  }
+
+  function handleAvatarCropCancel() {
+    if (cropImageSrc?.startsWith('blob:')) URL.revokeObjectURL(cropImageSrc);
+    setCropImageSrc(null);
   }
 
   async function handleAvatarClear() {
@@ -294,9 +307,9 @@ function ProfileTab() {
     try {
       const updated = await AuthAPI.updateAvatar(null);
       setUser({ ...user!, avatarUrl: updated.avatarUrl ?? null });
-      toast('Profil resmi kaldırıldı.', 'success');
+      toast(t('settings.profile.avatarRemoved'), 'success');
     } catch {
-      toast('İşlem başarısız, tekrar deneyin.', 'error');
+      toast(t('settings.profile.avatarRemoveFailed'), 'error');
     } finally {
       setAvatarSaving(false);
     }
@@ -432,9 +445,18 @@ function ProfileTab() {
                 type="button"
                 onClick={handleAvatarClear}
                 disabled={avatarSaving}
-                className="mt-1 text-[11px] text-ak-text-tertiary hover:text-red-400 transition-colors disabled:opacity-50"
+                aria-label={t('settings.profile.avatarRemove')}
+                className={cn(
+                  'mt-2 inline-flex items-center gap-1 rounded-md border border-ak-border bg-ak-surface-2 px-2 py-1',
+                  'text-[11px] font-medium text-ak-text-secondary',
+                  'hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-400 transition-colors',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                )}
               >
-                Yüklediğim resmi kaldır
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                </svg>
+                {t('settings.profile.avatarRemove')}
               </button>
             )}
           </div>
@@ -553,6 +575,16 @@ function ProfileTab() {
           </div>
         </div>
       </div>
+
+      {/* Avatar crop modal — issue #447. Shown whenever cropImageSrc is set. */}
+      {cropImageSrc && (
+        <AvatarCropModal
+          imageSrc={cropImageSrc}
+          onConfirm={handleAvatarCropConfirm}
+          onCancel={handleAvatarCropCancel}
+          busy={avatarSaving}
+        />
+      )}
     </>
   );
 }

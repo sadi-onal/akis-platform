@@ -15,12 +15,49 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const mockSetUser = vi.fn();
 
+// Default user: no uploaded avatar (so the Remove button is absent).
+let mockUser: {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+} = { id: 'u1', name: 'Omer Yasir', email: 'omer@example.com' };
+
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: 'u1', name: 'Omer Yasir', email: 'omer@example.com' },
+    user: mockUser,
     setUser: mockSetUser,
     loading: false,
   }),
+}));
+
+// The crop modal is covered in its own spec — stub it to a thin test
+// double so the avatar-pick flow can be asserted without dragging in
+// react-easy-crop's DOM assumptions.
+vi.mock('../../../components/settings/AvatarCropModal', () => ({
+  __esModule: true,
+  default: ({
+    onConfirm,
+    onCancel,
+  }: {
+    onConfirm: (url: string) => void;
+    onCancel: () => void;
+  }) => (
+    <div data-testid="avatar-crop-modal">
+      <button onClick={() => onConfirm('data:image/jpeg;base64,FAKE')}>
+        mock-confirm
+      </button>
+      <button onClick={onCancel}>mock-cancel</button>
+    </div>
+  ),
+}));
+
+// AuthAPI.updateAvatar is exercised by the remove-button + crop-confirm tests.
+const mockUpdateAvatar = vi.fn();
+vi.mock('../../../services/api/auth', () => ({
+  AuthAPI: {
+    updateAvatar: (url: string | null) => mockUpdateAvatar(url),
+  },
 }));
 
 vi.mock('../../../i18n/useI18n', () => ({
@@ -217,3 +254,57 @@ describe('ProfileTab', () => {
     });
   });
 });
+
+describe('ProfileTab — avatar remove button (#448)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    globalThis.fetch = mockFetchProfile() as unknown as typeof fetch;
+    mockUser = { id: 'u1', name: 'Omer Yasir', email: 'omer@example.com' };
+  });
+
+  it('is hidden when the user has no uploaded avatar', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => {
+      expect(screen.getAllByDisplayValue('Omer Yasir').length).toBeGreaterThan(0);
+    });
+    // Remove button appears only when avatarUrl is set.
+    expect(screen.queryByText('settings.profile.avatarRemove')).toBeNull();
+  });
+
+  it('is visible when the user has an uploaded avatar', async () => {
+    mockUser = {
+      id: 'u1',
+      name: 'Omer Yasir',
+      email: 'omer@example.com',
+      avatarUrl: 'data:image/jpeg;base64,AAAA',
+    };
+    render(<SettingsPage />);
+    await waitFor(() => {
+      expect(screen.getByText('settings.profile.avatarRemove')).toBeInTheDocument();
+    });
+  });
+
+  it('clicking Remove calls updateAvatar(null) and notifies parent', async () => {
+    mockUser = {
+      id: 'u1',
+      name: 'Omer Yasir',
+      email: 'omer@example.com',
+      avatarUrl: 'data:image/jpeg;base64,AAAA',
+    };
+    mockUpdateAvatar.mockResolvedValue({
+      id: 'u1',
+      name: 'Omer Yasir',
+      email: 'omer@example.com',
+      avatarUrl: null,
+    });
+    render(<SettingsPage />);
+    await waitFor(() => {
+      expect(screen.getByText('settings.profile.avatarRemove')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('settings.profile.avatarRemove'));
+    await waitFor(() => {
+      expect(mockUpdateAvatar).toHaveBeenCalledWith(null);
+    });
+  });
+});
+
