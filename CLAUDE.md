@@ -251,6 +251,47 @@ pnpm -C frontend typecheck && pnpm -C frontend lint && pnpm -C frontend test && 
 - Hatalari lint kurallarini devre disi birakarak susturma — tamamen gerekcelenmeden
 - Minimum kod yorumu (sadece acik olmayan mantik)
 
+### PR Review + Deploy Smoke Otomasyonu (zorunlu)
+
+Her PR acildiginda ve CI yesile dondugunde, ASAGIDAKI DONGUYU OTOMATIK
+CALISTIR — kullanicidan tekrar istek beklemeden:
+
+1. **Review**: `superpowers:code-reviewer` alt-ajanina PR diff'ini ver;
+   READY/NEEDS-WORK/BLOCKED sonucunu al. NEEDS-WORK ise PR'a yorum bas,
+   fix-up commit plani ver, durur.
+2. **Merge** (sadece READY + dusuk-risk kategori): UI/UX, i18n, typography,
+   flag-gated degisikler otomatik merge. Backend migration / billing /
+   auth / pipeline orchestrator degisiklikleri KULLANICI onayi bekler.
+3. **Deploy bekle**: merge sonrasi GitHub Actions "Deploy to Production"
+   workflow calismasini gozle. `success` olana kadar ~2-3 dk bekle.
+4. **Chrome smoke-test**: prod deploy bitince **mutlaka** `claude-in-chrome`
+   MCP'si ile `akisflow.com`'u ac. PR kapsamindaki degisikligi dogrudan
+   ekrandan test et:
+   - UI degisikliklerinde: ilgili sayfayi ziyaret et, screenshot cek
+   - Davranis degisikliklerinde: kullanici akisini simule et (tikla, formdoldur)
+   - Her PR icin en az 1 before/after screenshot PR yorumu olarak eklenir
+5. **Rapor**: `docs/ops/DEPLOY_SMOKE_<pr-num>_<date>.md` olarak kaydet.
+   Ekran goruntuleri + gozlemler + regresyon var mi notu. PR'a link olarak bagla.
+6. **Regresyon varsa**: revert hazirla, PR yorumu ile kullaniciyi haberdar et.
+   OTOMATIK revert yapma — kullanici onayi bekle.
+
+Bu dongu ceviri: oturum basinda acik PR varsa once gerekli adima atla
+(ornegin PR halihazirda merge edildiyse dogrudan adim 3'ten devam).
+
+Dusuk-risk PR kategorisi (otomatik mergelenebilir):
+- Pure i18n (sadece tr.json/en.json)
+- CSS/typography/a11y degisikleri (no logic)
+- Flag-gated yeni ozellikler (default off)
+- Yalniz yeni bilesen ekleyen PR'lar (mevcut bilesenleri degistirmeyen)
+
+Yuksek-risk PR kategorisi (kullanici onayi sart):
+- DB migration/schema degisikligi
+- Backend API contract degisikligi (response shape)
+- Auth/OAuth/token degisikligi
+- Billing/quota/limit logic
+- Pipeline orchestrator veya agent prompt degisikligi
+- CI workflow / deployment script degisikligi
+
 ## AI Provider Yapilandirmasi
 
 Desteklenen provider'lar: `anthropic`, `openai`, `openrouter`, `mock`
