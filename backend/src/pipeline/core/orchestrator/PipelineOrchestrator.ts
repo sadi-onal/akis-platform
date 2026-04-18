@@ -65,7 +65,21 @@ function toEpoch(d: Date | string | undefined): number {
 export interface PipelineStore {
   create(userId: string): Promise<PipelineState>;
   getById(id: string): Promise<PipelineState | null>;
+  /**
+   * List all pipelines for a user, regardless of parent-child relationship.
+   * For the chat sidebar, prefer {@link listRootsByUser} which filters out iteration children.
+   */
   listByUser(userId: string): Promise<PipelineState[]>;
+  /**
+   * List only "root" pipelines (those without `intermediateState.parentPipelineId`).
+   * Iteration child pipelines are hidden — they belong to their parent's chat timeline.
+   */
+  listRootsByUser?(userId: string): Promise<PipelineState[]>;
+  /**
+   * List child pipelines (iterations) of a given root, oldest first.
+   * Used to merge iteration activities into the chat timeline.
+   */
+  listChildrenOf?(parentPipelineId: string): Promise<PipelineState[]>;
   update(id: string, data: Partial<PipelineStateUpdate>, opts?: { expectedStageVersion?: number }): Promise<PipelineState>;
 }
 
@@ -1154,8 +1168,34 @@ export class PipelineOrchestrator {
     return this.getPipeline(pipelineId);
   }
 
+  /**
+   * Default pipeline list for the chat sidebar. Filters out iteration children
+   * (see issue #388 / BUG-08) so the sidebar shows one entry per root chat.
+   * If the store does not implement {@link PipelineStore.listRootsByUser}, falls
+   * back to the unfiltered list for backward compatibility with mock stores.
+   */
   async listPipelines(userId: string): Promise<PipelineState[]> {
+    if (this.store.listRootsByUser) {
+      return this.store.listRootsByUser(userId);
+    }
     return this.store.listByUser(userId);
+  }
+
+  /** List all pipelines for a user including iteration children (admin/internal use). */
+  async listAllPipelines(userId: string): Promise<PipelineState[]> {
+    return this.store.listByUser(userId);
+  }
+
+  /**
+   * Return the iteration child pipelines of a given parent (ordered oldest-first).
+   * Returns [] if the store does not implement {@link PipelineStore.listChildrenOf}
+   * or the parent has no iterations yet.
+   */
+  async listChildren(parentPipelineId: string): Promise<PipelineState[]> {
+    if (this.store.listChildrenOf) {
+      return this.store.listChildrenOf(parentPipelineId);
+    }
+    return [];
   }
 
   async updateTitle(pipelineId: string, userId: string, title: string): Promise<PipelineState> {

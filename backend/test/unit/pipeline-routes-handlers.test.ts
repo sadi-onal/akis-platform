@@ -66,6 +66,10 @@ function createMockOrchestrator() {
       calls.push({ method: 'updateTitle', args: [id, userId, title] });
       return { ...mockPipeline, id, title };
     },
+    listChildren: async (id: string) => {
+      calls.push({ method: 'listChildren', args: [id] });
+      return [];
+    },
   };
 
   return { orchestrator: orchestrator as unknown as PipelineRoutesDeps['orchestrator'], calls };

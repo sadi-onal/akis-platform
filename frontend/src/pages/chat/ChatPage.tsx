@@ -343,6 +343,18 @@ export default function ChatPage() {
   const activeWorkflowRef = useRef(activeWorkflow);
   activeWorkflowRef.current = activeWorkflow;
   const pendingConvRef = useRef(pendingConv);
+  // Tracks an in-flight iteration child pipeline so we can poll for completion
+  // without a new SSE subscription (issue #388 / BUG-08).
+  const pollChildRef = useRef<{ childId: string; ticks: number } | null>(null);
+
+  // Poll loop observes pollChildRef.current === null to bail out, so clearing
+  // it on unmount is enough — any in-flight setTimeout will abort on its next
+  // tick. This prevents leaks when the user navigates away mid-iteration.
+  useEffect(() => {
+    return () => {
+      pollChildRef.current = null;
+    };
+  }, []);
   pendingConvRef.current = pendingConv;
 
   const isRunning = activeWorkflow ? isRunningStage(activeWorkflow.currentStage) : false;
@@ -689,7 +701,10 @@ export default function ChatPage() {
 
       if (!conversationId) return;
 
-      // ─── Iteration Mode: completed pipeline + protoOutput → create follow-up pipeline in same chat ───
+      // ─── Iteration Mode: completed pipeline + protoOutput → create follow-up pipeline, stay in same chat ───
+      // Issue #388 / BUG-08: previously this navigated to the new pipeline URL, creating a
+      // duplicate sidebar entry and losing the chat context. Now we keep `conversationId`
+      // pointing at the root pipeline and let the child stream into the same timeline.
       const isTerminal = currentWorkflow?.currentStage === 'completed' || currentWorkflow?.currentStage === 'completed_partial';
       const protoRepo = currentWorkflow?.stages.proto?.repo;
       const protoBranch = currentWorkflow?.stages.proto?.branch;
@@ -699,19 +714,74 @@ export default function ChatPage() {
         if (repoOwner && repoName) {
           try {
             setCreating(true);
-            const w = await workflowsApi.create({
+            const child = await workflowsApi.create({
               idea: content,
               traceEnabled,
               existingRepo: { owner: repoOwner, repo: repoName, branch: protoBranch },
               parentPipelineId: conversationId,
               skipScribe: true,
             }, attachments);
-            loadedIdRef.current = w.id;
-            setActiveWorkflow(w);
-            setMessages((prev) => [...prev, ...conversationToChatMessages(w.conversation ?? [], w.currentStage)]);
-            syncFromStage(w.currentStage ?? 'completed');
+
+            // Show the user's iteration request + a marker in the root chat timeline.
+            const nowIso = new Date().toISOString();
+            setMessages((prev) => [
+              ...prev,
+              {
+                type: 'user',
+                content,
+                timestamp: nowIso,
+              },
+              {
+                type: 'info',
+                content: `İterasyon başlatıldı — Proto mevcut repo üstüne değişiklikleri uyguluyor.`,
+                timestamp: nowIso,
+              },
+            ]);
+
+            // Kick off an exponential-backoff poll so the child pipeline's progress is
+            // reflected in the root workflow view without requiring a new SSE subscription.
+            // When refreshWorkflow hits GET /api/pipelines/:rootId the backend now returns
+            // `children` alongside the root; the UI can render iteration state from that.
+            //
+            // Backoff schedule: 2s, 3s, 5s, 8s, 13s, 21s … capped at 30s. A hard watchdog
+            // at 15 minutes total covers Trace's 10-minute timeout with slack (was 4 min
+            // which prematurely killed long pipelines per code review of #400).
+            const POLL_MAX_DURATION_MS = 15 * 60 * 1000; // 15 min
+            const POLL_MAX_INTERVAL_MS = 30_000;
+            pollChildRef.current = { childId: child.id, ticks: 0 };
+            const startedAt = Date.now();
+            const pollIterationChild = async () => {
+              if (!pollChildRef.current || pollChildRef.current.childId !== child.id) return;
+              pollChildRef.current.ticks += 1;
+              try {
+                const w = await workflowsApi.get(child.id);
+                await refreshWorkflow();
+                const childStage = w.currentStage;
+                const terminal = childStage === 'completed'
+                  || childStage === 'completed_partial'
+                  || childStage === 'failed'
+                  || childStage === 'cancelled';
+                if (terminal) {
+                  pollChildRef.current = null;
+                  refreshList();
+                  return;
+                }
+              } catch {
+                // Transient network/auth glitch — fall through to schedule next tick.
+              }
+              const elapsed = Date.now() - startedAt;
+              if (!pollChildRef.current || elapsed >= POLL_MAX_DURATION_MS) {
+                pollChildRef.current = null;
+                return;
+              }
+              // Exponential-ish backoff with 30s cap; Fibonacci gives smoother ramp than 2^n.
+              const fibStep = (n: number) => (n < 2 ? 2_000 : Math.min(Math.round(2000 * Math.pow(1.6, n - 1)), POLL_MAX_INTERVAL_MS));
+              setTimeout(pollIterationChild, fibStep(pollChildRef.current.ticks));
+            };
+            setTimeout(pollIterationChild, 2000);
             refreshList();
-            navigate(`/chat/${w.id}`);
+            // Deliberately NO navigate() and NO loadedIdRef change — the URL stays at
+            // the root pipeline so the sidebar + bookmarks continue to work.
           } catch (e) {
             if (import.meta.env.DEV) console.error('Failed to create iteration:', e);
             toast(localizeError(e), 'error');

@@ -241,6 +241,11 @@ export async function pipelinePlugin(
     return routes.getActivities(request);
   });
 
+  // GET /api/pipelines/:id/children — iteration children (issue #388 / BUG-08)
+  fastify.get('/:id/children', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
+    return routes.listChildren(request);
+  });
+
   // POST /api/pipelines/:id/message — send message to Scribe
   // Supports both JSON and multipart/form-data (with file attachments)
   fastify.post('/:id/message', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {

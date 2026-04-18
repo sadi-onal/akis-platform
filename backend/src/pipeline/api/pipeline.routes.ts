@@ -121,7 +121,30 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
     async getStatus(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
       const pipeline = await assertOwnership(request, id);
-      return { pipeline };
+      // Attach iteration children summary so the chat UI can merge them into the
+      // timeline without a second round-trip (see issue #388 / BUG-08).
+      const children = await orchestrator.listChildren(id);
+      return {
+        pipeline,
+        children: children.map((c) => ({
+          id: c.id,
+          stage: c.stage,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          iterationRequest:
+            (c.intermediateState as Record<string, unknown> | null)?.iterationRequest ?? null,
+          protoOutput: c.protoOutput,
+          traceOutput: c.traceOutput,
+          error: c.error,
+        })),
+      };
+    },
+
+    async listChildren(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const children = await orchestrator.listChildren(id);
+      return { children };
     },
 
     async getActivities(request: unknown) {

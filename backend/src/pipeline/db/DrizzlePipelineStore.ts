@@ -116,6 +116,45 @@ export class DrizzlePipelineStore implements PipelineStore {
     return rows.map(rowToState);
   }
 
+  /**
+   * List only root pipelines — those without an `intermediateState.parentPipelineId`.
+   * Iteration children belong to their parent's chat timeline and must not appear
+   * as separate sidebar entries (see issue #388 / BUG-08).
+   */
+  async listRootsByUser(userId: string): Promise<PipelineState[]> {
+    const rows = await this.db
+      .select()
+      .from(pipelines)
+      .where(
+        and(
+          eq(pipelines.userId, userId),
+          // intermediate_state is NULL OR does not contain a parent pointer.
+          // Using jsonb ->> operator; NULL coalesces safely.
+          sql`(${pipelines.intermediateState} IS NULL
+               OR ${pipelines.intermediateState} ->> 'parentPipelineId' IS NULL)`,
+        ),
+      )
+      .orderBy(desc(pipelines.updatedAt));
+
+    return rows.map(rowToState);
+  }
+
+  /**
+   * List iteration children of a given parent pipeline, oldest first (chronological
+   * order for chat timeline merge).
+   */
+  async listChildrenOf(parentPipelineId: string): Promise<PipelineState[]> {
+    const rows = await this.db
+      .select()
+      .from(pipelines)
+      .where(
+        sql`${pipelines.intermediateState} ->> 'parentPipelineId' = ${parentPipelineId}`,
+      )
+      .orderBy(pipelines.createdAt);
+
+    return rows.map(rowToState);
+  }
+
   async update(
     id: string,
     data: Partial<PipelineState>,

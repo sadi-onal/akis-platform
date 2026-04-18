@@ -322,7 +322,20 @@ export function mapPipelineToWorkflow(pipeline: Pipeline): Workflow {
 }
 
 // Backend wraps responses: { pipeline: ... } or { pipelines: [...] }
-interface PipelineResponse { pipeline: Pipeline }
+// Since #388 (BUG-08) the single-pipeline response also carries the pipeline's
+// iteration children so the chat UI can render their progress without a second
+// round-trip. Older callers that only read `.pipeline` continue to work.
+interface PipelineChildSummary {
+  id: string;
+  stage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  iterationRequest?: string | null;
+  protoOutput?: unknown;
+  traceOutput?: unknown;
+  error?: unknown;
+}
+interface PipelineResponse { pipeline: Pipeline; children?: PipelineChildSummary[] }
 interface PipelinesResponse { pipelines: Pipeline[] }
 
 export const workflowsApi = {
