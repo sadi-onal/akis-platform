@@ -127,14 +127,20 @@ export async function runAgenticLoop(
       try {
         const result = await handler(block.input);
         const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+        logger.info(
+          { tool: block.name, resultPreview: resultStr.slice(0, 300) },
+          '[AgenticLoop] tool_result content',
+        );
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultStr });
         toolCalls.push({ name: block.name, input: block.input, result });
         options.onToolResult?.(block.name, result, false);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        logger.error({ err, tool: block.name }, '[AgenticLoop] Tool execution failed');
-        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: `Error: ${errMsg}`, is_error: true });
-        toolCalls.push({ name: block.name, input: block.input, result: errMsg });
+        logger.error({ err, tool: block.name, errMsg }, '[AgenticLoop] Tool execution failed');
+        const errContent = `Error: ${errMsg}`;
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: errContent, is_error: true });
+        // Store the prefixed string so callers can detect failure via startsWith('Error:')
+        toolCalls.push({ name: block.name, input: block.input, result: errContent });
         options.onToolResult?.(block.name, errMsg, true);
       }
     }

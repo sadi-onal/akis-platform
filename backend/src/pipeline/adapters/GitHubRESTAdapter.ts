@@ -110,12 +110,25 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
   return {
     async createRepository(_owner: string, name: string, isPrivate: boolean): Promise<{ url: string }> {
       validateTargetRepo(name);
-      const result = await ghFetch<{ html_url: string }>(token, 'POST', '/user/repos', {
+      const result = await ghFetch<{ html_url: string; full_name: string }>(token, 'POST', '/user/repos', {
         name,
         description: `AKIS Pipeline scaffold — ${name}`,
         private: isPrivate,
         auto_init: true,
       });
+      // Read-back verification: confirm the repo is accessible before declaring success.
+      // Protects against cases where the POST returns 201 but the repo is not yet visible
+      // (eventual consistency) or the response body was misleading.
+      const ownerLogin = (result.full_name?.split('/')[0]) ?? _owner;
+      logger.info(
+        { repo: result.full_name ?? `${_owner}/${name}`, url: result.html_url },
+        '[GitHubRESTAdapter] createRepository: POST succeeded, verifying read-back',
+      );
+      await ghFetch<{ id: number }>(token, 'GET', `/repos/${ownerLogin}/${name}`);
+      logger.info(
+        { repo: result.full_name ?? `${_owner}/${name}` },
+        '[GitHubRESTAdapter] createRepository: read-back OK',
+      );
       return { url: result.html_url };
     },
 
@@ -254,6 +267,26 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       await ghFetch(
         token, 'PATCH', `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
         { sha: newCommit.sha },
+      );
+
+      // 7. Post-push read-back: verify the commit SHA is now the branch tip.
+      // This catches silent failures where the PATCH silently dropped due to
+      // a transient 5xx that ghFetch retried past without surfacing the error.
+      const updatedRef = await ghFetch<{ object: { sha: string } }>(
+        token, 'GET', `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+      );
+      if (updatedRef.object.sha !== newCommit.sha) {
+        logger.error(
+          { owner, repo, branch, expectedSha: newCommit.sha, actualSha: updatedRef.object.sha },
+          '[GitHubRESTAdapter] pushFiles: branch tip SHA mismatch after push — commit did not land',
+        );
+        throw new GitHubAPIError(
+          `pushFiles: branch "${branch}" tip is ${updatedRef.object.sha} but expected ${newCommit.sha} — files were not committed`,
+        );
+      }
+      logger.info(
+        { owner, repo, branch, commitSha: newCommit.sha, fileCount: files.length },
+        '[GitHubRESTAdapter] pushFiles: push verified OK',
       );
     },
   };

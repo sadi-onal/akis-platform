@@ -559,8 +559,10 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
       const totalLOC = files.reduce((sum, f) => sum + f.linesOfCode, 0);
 
       // BUG-E fix: verify the repo actually has files on GitHub before reporting success.
+      // Pass pushedPaths so verifyRepoPushed can detect auto_init false-positives.
       emit?.('verification', 'GitHub repo içeriği doğrulanıyor...', 92);
-      const verifyResult = await this.verifyRepoPushed(input.owner, input.repoName, 'main', files.length);
+      const pushedPaths = files.map((f) => f.filePath);
+      const verifyResult = await this.verifyRepoPushed(input.owner, input.repoName, 'main', files.length, pushedPaths);
       if (verifyResult.type === 'error') {
         emit?.('error', 'GitHub doğrulaması başarısız — repo boş veya bulunamadı', 0);
         return verifyResult;
@@ -913,16 +915,19 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
   // ─── Post-push GitHub Verification ──────────────
 
   /**
-   * Verify that the repo actually has files on GitHub after a push attempt.
-   * Without this check, a silent adapter failure lets Proto report ok:true
-   * while the repo stays empty — causing TRACE_EMPTY_CODEBASE downstream.
-   * Issue #470 BUG-E.
+   * Verify that the repo actually contains the pushed files on GitHub.
+   *
+   * The previous implementation only checked `files.length > 0`, which always
+   * passed because GitHub auto_init creates a README.md — even when push_files
+   * silently failed. This version cross-checks that at least one of the PUSHED
+   * file paths is actually present in the repo tree. Issue #470 BUG-E re-open.
    */
   private async verifyRepoPushed(
     owner: string,
     repo: string,
     branch: string,
     expectedFileCount: number,
+    pushedPaths?: string[],
   ): Promise<{ type: 'output' } | { type: 'error'; error: PipelineError }> {
     if (!this.github.listFiles) {
       // Adapter doesn't support listFiles — skip verification (legacy adapters in tests).
@@ -930,18 +935,63 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
       return { type: 'output' };
     }
     try {
-      const files = await this.github.listFiles(owner, repo, branch);
-      if (files.length === 0) {
-        logger.error({ owner, repo, branch, expectedFileCount }, '[Proto] verifyRepoPushed: repo is empty after push');
+      const repoFiles = await this.github.listFiles(owner, repo, branch);
+      const repoFileSet = new Set(repoFiles);
+
+      logger.info(
+        {
+          owner,
+          repo,
+          branch,
+          expectedFileCount,
+          actualFileCount: repoFiles.length,
+          sampleFiles: repoFiles.slice(0, 5),
+        },
+        '[Proto] verifyRepoPushed: listFiles result',
+      );
+
+      // If we know which paths were pushed, require at least one to be present.
+      // This catches the auto_init false-positive: repo has only README.md from
+      // GitHub init, but none of the scaffold files we tried to push.
+      if (pushedPaths && pushedPaths.length > 0) {
+        const matchedCount = pushedPaths.filter((p) => repoFileSet.has(p)).length;
+        if (matchedCount === 0) {
+          logger.error(
+            { owner, repo, branch, expectedFileCount, actualFileCount: repoFiles.length, pushedPaths: pushedPaths.slice(0, 5) },
+            '[Proto] verifyRepoPushed: none of the pushed paths found in repo — push_files silently failed (auto_init false-positive)',
+          );
+          return {
+            type: 'error',
+            error: createPipelineError(
+              PipelineErrorCode.PROTO_PUSH_FAILED,
+              `GitHub repo ${owner}/${repo} does not contain any of the ${expectedFileCount} scaffold files on branch "${branch}". The push_files step silently failed (repo may only have GitHub auto_init README).`,
+            ),
+          };
+        }
+        logger.info(
+          { owner, repo, branch, matchedCount, expectedFileCount },
+          '[Proto] verifyRepoPushed: OK — scaffold files confirmed in repo',
+        );
+        return { type: 'output' };
+      }
+
+      // Fallback (no pushedPaths available): require more than the auto_init file count (1).
+      const AUTO_INIT_FILE_COUNT = 1;
+      if (repoFiles.length <= AUTO_INIT_FILE_COUNT) {
+        logger.error(
+          { owner, repo, branch, expectedFileCount, actualFileCount: repoFiles.length },
+          '[Proto] verifyRepoPushed: repo has only auto_init files — push_files silently failed',
+        );
         return {
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.PROTO_PUSH_FAILED,
-            `GitHub repo ${owner}/${repo} is empty after push — ${expectedFileCount} files were expected on branch "${branch}". The push silently failed.`,
+            `GitHub repo ${owner}/${repo} has only ${repoFiles.length} file(s) after push — ${expectedFileCount} scaffold files were expected on branch "${branch}". The push_files step silently failed.`,
           ),
         };
       }
-      logger.info({ owner, repo, branch, fileCount: files.length }, '[Proto] verifyRepoPushed: OK');
+
+      logger.info({ owner, repo, branch, fileCount: repoFiles.length }, '[Proto] verifyRepoPushed: OK');
       return { type: 'output' };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -455,9 +455,13 @@ import { createGitHubRESTAdapter } from '../../src/pipeline/adapters/GitHubRESTA
 
 describe('GitHub REST Adapter — createRepository', () => {
   it('creates repo and returns html_url on success', async () => {
-    const restore = stubFetch(async () =>
-      jsonResponse({ html_url: 'https://github.com/user/my-app' }, 201),
-    );
+    // POST /user/repos → 201 created, then GET /repos/user/my-app → 200 read-back
+    const restore = stubFetch(async (_url, init) => {
+      if ((init.method ?? 'GET') === 'GET') {
+        return jsonResponse({ id: 123, full_name: 'user/my-app' });
+      }
+      return jsonResponse({ html_url: 'https://github.com/user/my-app', full_name: 'user/my-app' }, 201);
+    });
 
     try {
       const adapter = createGitHubRESTAdapter({ token: 'ghp_valid' });
@@ -693,15 +697,18 @@ describe('GitHub REST Adapter — pushFiles (batch commit)', () => {
   it('creates blobs, tree, commit, and updates ref for multiple files', async () => {
     const calls: Array<{ method: string; path: string }> = [];
     let blobCount = 0;
+    let refGetCount = 0;
 
     const restore = stubFetch(async (url, init) => {
       const path = url.replace('https://api.github.com', '');
       const method = init.method ?? 'GET';
       calls.push({ method, path });
 
-      // GET ref
+      // GET ref — first call returns old SHA, second call (post-push read-back) returns new commit SHA
       if (method === 'GET' && path.includes('/git/ref/heads/')) {
-        return jsonResponse({ object: { sha: 'ref-sha-abc' } });
+        refGetCount += 1;
+        const sha = refGetCount === 1 ? 'ref-sha-abc' : 'new-commit-sha';
+        return jsonResponse({ object: { sha } });
       }
       // GET commit
       if (method === 'GET' && path.includes('/git/commits/')) {
@@ -738,11 +745,13 @@ describe('GitHub REST Adapter — pushFiles (batch commit)', () => {
 
       // Should create 3 blobs (one per file)
       assert.strictEqual(blobCount, 3);
-      // Verify the sequence: GET ref, GET commit, 3x POST blob, POST tree, POST commit, PATCH ref
-      assert.strictEqual(calls.length, 8);
-      assert.strictEqual(calls[0].method, 'GET'); // ref
-      assert.strictEqual(calls[1].method, 'GET'); // commit
+      // Sequence: GET ref (1), GET commit (2), 3x POST blob (3-5), POST tree (6),
+      //           POST commit (7), PATCH ref (8), GET ref read-back (9)
+      assert.strictEqual(calls.length, 9);
+      assert.strictEqual(calls[0].method, 'GET');   // initial ref
+      assert.strictEqual(calls[1].method, 'GET');   // commit lookup
       assert.strictEqual(calls[7].method, 'PATCH'); // update ref
+      assert.strictEqual(calls[8].method, 'GET');   // post-push read-back verification
     } finally {
       restore();
     }
