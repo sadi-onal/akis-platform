@@ -303,15 +303,22 @@ export function mapPipelineToWorkflow(pipeline: Pipeline): Workflow {
     }
   }
 
+  const fallbackTitle = (() => {
+    const first = pipeline.scribeConversation?.[0];
+    if (first?.type !== 'user_idea') return 'Isimsiz Is Akisi';
+    const content = (first as Record<string, unknown>).content;
+    if (typeof content !== 'string') return 'Isimsiz Is Akisi';
+    // Engineer-started pipelines inline title + description separated by '\n\n';
+    // keep only the first line so the chat header doesn't render them concatenated
+    // mid-word (BUG-25).
+    const firstLine = content.split('\n')[0].trim();
+    return firstLine.slice(0, 60) || 'Isimsiz Is Akisi';
+  })();
+
   return {
     id: pipeline.id,
     traceEnabled: pipeline.traceEnabled ?? false,
-    title: pipeline.title || (
-      pipeline.scribeConversation?.[0]?.type === 'user_idea' &&
-      typeof (pipeline.scribeConversation[0] as Record<string, unknown>)?.content === 'string'
-        ? ((pipeline.scribeConversation[0] as Record<string, unknown>).content as string).slice(0, 60)
-        : 'Isimsiz Is Akisi'
-    ),
+    title: pipeline.title || fallbackTitle,
     status: workflowStatus,
     currentStage: pipeline.stage,
     createdAt: pipeline.createdAt,

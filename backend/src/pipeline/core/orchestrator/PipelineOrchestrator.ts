@@ -54,6 +54,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 const STAGE_TIMEOUT = RETRY_CONFIG.stageTimeoutMs;
 const TRACE_TIMEOUT = RETRY_CONFIG.traceStageTimeoutMs;
 
+const PIPELINE_TITLE_MAX = 100;
+
+/**
+ * Derive a single-line pipeline title from a user idea. Engineer-started
+ * pipelines inline the task title + description separated by `\n\n`; without
+ * this split the chat header would render them concatenated mid-word (BUG-25).
+ */
+export function ideaToTitle(idea: string): string {
+  const firstLine = idea.split('\n')[0]?.trim() ?? '';
+  return firstLine.slice(0, PIPELINE_TITLE_MAX);
+}
+
 /** Safely get epoch ms from a Date or ISO string (JSONB stores dates as strings). */
 function toEpoch(d: Date | string | undefined): number {
   if (!d) return Date.now();
@@ -261,7 +273,7 @@ export class PipelineOrchestrator {
     ];
 
     const updateData: Partial<PipelineStateUpdate> = {
-      title: input.idea.slice(0, 100),
+      title: ideaToTitle(input.idea),
       model,
       traceEnabled: traceEnabled ?? false,
       scribeConversation: conversation,

@@ -121,6 +121,20 @@ describe('mapPipelineToWorkflow', () => {
       }));
       expect(w.title).toBe('Build a todo app with React');
     });
+
+    it('uses only the first line when idea is multi-line (BUG-25)', () => {
+      const w = mapPipelineToWorkflow(makePipeline({
+        title: undefined,
+        scribeConversation: [
+          {
+            type: 'user_idea',
+            content:
+              'Implement proper logging and monitoring infrastructure\n\nSet up structured logging (Winston, Pino, or similar)...',
+          },
+        ],
+      }));
+      expect(w.title).toBe('Implement proper logging and monitoring infrastructure');
+    });
   });
 
   describe('error mapping to stage', () => {
