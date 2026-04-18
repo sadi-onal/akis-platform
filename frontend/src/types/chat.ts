@@ -75,6 +75,19 @@ export type ChatMessage =
     }
   | { type: 'info'; content: string; timestamp: string }
   | {
+      /**
+       * Claude-Code-style "Background agent started/running/finished" marker
+       * inserted into the chat timeline on each stage transition.
+       * Issue #390 / BUG-10 MVP.
+       */
+      type: 'agent_started';
+      agent: AgentName;
+      task?: string;
+      state: 'started' | 'running' | 'completed';
+      meta?: string;
+      timestamp: string;
+    }
+  | {
       type: 'pipeline_complete';
       status: 'completed' | 'completed_partial';
       repoUrl: string;

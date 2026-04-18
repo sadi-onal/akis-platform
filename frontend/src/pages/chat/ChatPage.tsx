@@ -122,9 +122,45 @@ function specToUserFriendlyPlan(spec: StructuredSpec): UserFriendlyPlan {
   };
 }
 
+/**
+ * Stage → agent name mapping for Claude-Code-style "Background agent started"
+ * markers injected into the chat timeline (issue #390 / BUG-10 MVP).
+ */
+const STAGE_TO_AGENT: Partial<Record<PipelineStage, 'scribe' | 'proto' | 'trace'>> = {
+  scribe_clarifying: 'scribe',
+  scribe_generating: 'scribe',
+  proto_building: 'proto',
+  trace_testing: 'trace',
+};
+
+const AGENT_RUNNING_TASK: Record<'scribe' | 'proto' | 'trace', string> = {
+  scribe: 'Spec yazıyor',
+  proto: 'Scaffold üretiyor',
+  trace: 'Testleri yazıyor',
+};
+
 function conversationToChatMessages(conv: ConversationMessage[], currentStage?: PipelineStage): ChatMessage[] {
   const msgs: ChatMessage[] = [];
   let specSeen = false;
+  // Track whether we've already emitted a marker for each agent in this render
+  // so we don't duplicate when the conversation already contained a transition
+  // signal (e.g. spec_approved → proto marker).
+  const agentMarked = new Set<'scribe' | 'proto' | 'trace'>();
+  const pushAgentStarted = (
+    agent: 'scribe' | 'proto' | 'trace',
+    state: 'started' | 'running' | 'completed',
+    timestamp: string,
+  ) => {
+    if (state === 'running' && agentMarked.has(agent)) return;
+    if (state === 'running') agentMarked.add(agent);
+    msgs.push({
+      type: 'agent_started',
+      agent,
+      task: AGENT_RUNNING_TASK[agent],
+      state,
+      timestamp,
+    });
+  };
 
   for (const m of conv) {
     const ts = m.timestamp ?? new Date().toISOString();
@@ -193,11 +229,24 @@ function conversationToChatMessages(conv: ConversationMessage[], currentStage?: 
               break;
             }
           }
+          // Scribe → Proto transition marker when user approved the spec.
+          if (m.content.includes('onaylandı')) {
+            pushAgentStarted('proto', 'started', ts);
+          }
         }
         msgs.push({ type: 'info', content: m.content, timestamp: ts });
         break;
     }
   }
+
+  // Append a live "running" marker for the currently-active agent so users
+  // see a Claude-Code-style status line while the pipeline progresses.
+  const activeAgent = currentStage ? STAGE_TO_AGENT[currentStage] : undefined;
+  if (activeAgent && !agentMarked.has(activeAgent)) {
+    const nowIso = new Date().toISOString();
+    pushAgentStarted(activeAgent, 'running', nowIso);
+  }
+
   return msgs;
 }
 

@@ -1,6 +1,7 @@
 import { cn } from '../../utils/cn';
 import type { ChatMessage as ChatMessageType, AgentName } from '../../types/chat';
 import { PlanCard } from './PlanCard';
+import { AgentStartedLine } from './AgentStartedLine';
 
 /** Lightweight inline markdown renderer — no external deps, handles code blocks, bold, inline code */
 function SimpleMarkdown({ text }: { text: string }) {
@@ -430,6 +431,18 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip }: C
           <div className="rounded-full border border-ak-border-subtle bg-ak-surface-2 px-4 py-1.5 text-xs text-ak-text-tertiary">
             {message.content}
           </div>
+        </div>
+      );
+
+    case 'agent_started':
+      return (
+        <div className="animate-in fade-in slide-in-from-left-1 duration-200">
+          <AgentStartedLine
+            agent={message.agent}
+            task={message.task}
+            state={message.state}
+            meta={message.meta}
+          />
         </div>
       );
 
