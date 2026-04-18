@@ -31,17 +31,26 @@ async function ghFetch<T>(
 ): Promise<T> {
   const url = `${GITHUB_API}${path}`;
 
+  logger.debug({ method, path }, 'github_rest_request');
+
   for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
-    const res = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ method, path, err: msg }, 'github_rest_fetch_error');
+      throw err;
+    }
 
     // Rate limit: back off and retry
     if (res.status === 429 || res.status === 403) {
@@ -50,7 +59,7 @@ async function ghFetch<T>(
       if (res.status === 429 || remaining === '0') {
         if (attempt < MAX_RATE_LIMIT_RETRIES) {
           const waitSec = retryAfter ? Math.min(parseInt(retryAfter, 10), 60) : 10 * (attempt + 1);
-          logger.warn(`[GitHub] Rate limited on ${method} ${path}, waiting ${waitSec}s (attempt ${attempt + 1})`);
+          logger.warn({ method, path, status: res.status, attempt: attempt + 1, waitSec }, 'github_rest_rate_limited');
           await new Promise((r) => setTimeout(r, waitSec * 1000));
           continue;
         }
@@ -59,6 +68,7 @@ async function ghFetch<T>(
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      const bodySnippet = text.slice(0, 500);
       let detail = '';
       try {
         const json = JSON.parse(text);
@@ -66,6 +76,7 @@ async function ghFetch<T>(
       } catch {
         detail = text;
       }
+      logger.error({ method, path, status: res.status, body: bodySnippet }, 'github_rest_error_response');
       throw new GitHubAPIError(`GitHub API ${method} ${path} → ${res.status}: ${detail}`, res.status);
     }
 
@@ -73,17 +84,23 @@ async function ghFetch<T>(
 
     const contentType = res.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json')) {
-      const body = await res.text().catch(() => '');
+      const responseBody = await res.text().catch(() => '');
+      logger.error(
+        { method, path, status: res.status, contentType, body: responseBody.slice(0, 500) },
+        'github_rest_unexpected_content_type',
+      );
       throw new GitHubAPIError(
-        `GitHub API ${method} ${path} → ${res.status}: Expected JSON, got Content-Type "${contentType}". Body: ${body.slice(0, 200)}`,
+        `GitHub API ${method} ${path} → ${res.status}: Expected JSON, got Content-Type "${contentType}". Body: ${responseBody.slice(0, 200)}`,
         res.status,
       );
     }
 
+    logger.debug({ method, path, status: res.status }, 'github_rest_response_ok');
     return (await res.json()) as T;
   }
 
   // Rate limit exhausted — non-retryable so outer withRetry doesn't compound retries
+  logger.error({ method, path, attempts: MAX_RATE_LIMIT_RETRIES + 1 }, 'github_rest_rate_limit_exhausted');
   throw new GitHubRateLimitError(`GitHub API ${method} ${path} → rate limited after ${MAX_RATE_LIMIT_RETRIES + 1} attempts`);
 }
 
