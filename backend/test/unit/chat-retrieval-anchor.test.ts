@@ -158,8 +158,12 @@ describe('KnowledgeRetrievalService.retrieveWithAnchors', () => {
   it('enlarges the search pool ~3x when chat id is supplied', async () => {
     svc.hybridResponder = () => [makeResult('a'), makeResult('b'), makeResult('c')];
     await svc.retrieveWithAnchors('q', { chatId: 'chat-1', messageIndex: 0, maxResults: 5 });
-    assert.equal(svc.hybridCalls.length, 1);
-    assert.ok((svc.hybridCalls[0].maxResults ?? 0) >= 15, 'pool should be ≥3× target');
+    // Issue #463: now makes 2 parallel calls (workspace + chat-scoped)
+    assert.ok(svc.hybridCalls.length >= 1, 'Expected at least one searchHybrid call');
+    assert.ok(
+      svc.hybridCalls.some((c) => (c.maxResults ?? 0) >= 15),
+      'pool should be ≥3× target in at least one call',
+    );
   });
 
   it('writes fresh hits back as anchors', async () => {

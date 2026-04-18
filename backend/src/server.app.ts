@@ -31,6 +31,7 @@ import { feedbackRoutes } from './api/feedback.js';
 import { conversationsRoutes } from './api/conversations.js';
 import { studioRoutes } from './api/studio.js';
 import { knowledgeRoutes } from './api/knowledge.js';
+import { chatAttachRoutes } from './api/chats.attach.js';
 import { marketplaceRoutes } from './api/marketplace.js';
 import { crewRoutes, initCrewRunManager } from './api/crew.js';
 import { ragRoutes } from './api/rag.js';
@@ -283,6 +284,7 @@ export async function buildApp() {
   await app.register(conversationsRoutes);
   await app.register(studioRoutes, { prefix: '/api/studio' });
   await app.register(knowledgeRoutes);
+  await app.register(chatAttachRoutes);
   await app.register(marketplaceRoutes);
   await app.register(crewRoutes);
   await app.register(ragRoutes);

@@ -22,6 +22,7 @@ import type { RepoContext } from '../../services/api/github';
 import { LOGO_MARK_SVG } from '../../theme/brand';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
 import { ChatSkeleton } from '../../components/chat/ChatSkeleton';
+import { attachDocumentsToChat } from '../../services/api/chatAttach';
 
 function localizeError(e: unknown): string {
   if (e instanceof Error) {
@@ -831,6 +832,40 @@ export default function ChatPage() {
             setCreating(false);
           }
           return;
+        }
+      }
+
+      // Issue #463: index document attachments for chat-scoped RAG before
+      // forwarding the message. Images are silently skipped (handled by BUG-C).
+      const docAttachments = (attachments ?? []).filter((a) => a.type === 'document');
+      if (docAttachments.length > 0) {
+        try {
+          const attachResp = await attachDocumentsToChat(
+            conversationId,
+            docAttachments.map((a) => a.file),
+          );
+          const indexed = attachResp.results.filter((r) => r.status === 'ok' && !r.deduplicated);
+          const deduped = attachResp.results.filter((r) => r.deduplicated);
+          const failed = attachResp.results.filter((r) => r.status === 'error');
+          const quota = attachResp.results.filter((r) => r.status === 'quota_exceeded');
+
+          if (indexed.length > 0) {
+            const totalChunks = indexed.reduce((s, r) => s + r.chunksCreated, 0);
+            toast(`${indexed.length} dosya indexlendi (${totalChunks} parça)`, 'success');
+          }
+          if (deduped.length > 0) {
+            toast(`${deduped.length} dosya zaten indexliydi, atlandı`, 'info');
+          }
+          if (quota.length > 0) {
+            toast(`${quota.length} dosya çok büyük — 100 parça limitini aşıyor`, 'error');
+          }
+          if (failed.length > 0) {
+            toast(`${failed.length} dosya indexlenemedi`, 'error');
+          }
+        } catch (err) {
+          // Non-fatal: indexing failure should not block the message send
+          if (import.meta.env.DEV) console.warn('[ChatPage] attach failed (non-fatal):', err);
+          toast('Dosya indexleme başarısız, mesaj gönderilmeye devam ediyor', 'error');
         }
       }
 

@@ -4,6 +4,8 @@ export interface RetrievalFilter {
   agentType?: string;
   docType?: 'repo_doc' | 'job_artifact' | 'manual';
   status?: 'proposed' | 'approved' | 'deprecated';
+  /** When set, restrict results to chunks whose chat_id matches (issue #463). */
+  chatId?: string;
 }
 
 export interface RetrievalResult {

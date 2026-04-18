@@ -1,6 +1,6 @@
 import { db } from '../../../db/client.js';
 import { knowledgeDocuments, knowledgeChunks } from '../../../db/schema.js';
-import { eq, and, ilike, desc, sql } from 'drizzle-orm';
+import { eq, and, ilike, desc, sql, isNull } from 'drizzle-orm';
 import type { RetrievalResult, RetrievalOptions, RetrievalFilter } from './types.js';
 import { getEmbeddingService } from '../../embedding/EmbeddingService.js';
 import { logger } from '../../../lib/logger.js';
@@ -43,11 +43,16 @@ export class KnowledgeRetrievalService {
   }
 
   /**
-   * Chat-scoped retrieval (issue #439). Builds an exclude-set from the
-   * chat's recent anchors (+ any caller-supplied `priorChunkIds`), runs a
-   * hybrid search over a 3x enlarged pool, drops excluded chunks, and
-   * records the surviving hits back to the anchor store so the *next*
-   * turn in the same chat can dedupe further.
+   * Chat-scoped retrieval (issues #439 + #463).
+   *
+   * When `chatId` is given:
+   *   1. Reads anchor exclude-set from DB (dedup across turns, issue #439).
+   *   2. Runs two parallel hybrid searches:
+   *        a. workspace-scope (chat_id IS NULL) — existing global knowledge base
+   *        b. chat-scope (chat_id = chatId) — documents uploaded via /attach (issue #463)
+   *   3. Merges both result sets, deduplicates against the exclude-set,
+   *      re-ranks by score, and returns the top-K.
+   *   4. Persists surviving hits as anchors for the next turn.
    *
    * When `chatId` is omitted this degrades to `searchHybrid` exactly —
    * guaranteeing callers who haven't opted in see zero behaviour change.
@@ -75,8 +80,43 @@ export class KnowledgeRetrievalService {
     }
 
     const enlargedPool = Math.max(targetCount * 3, 15);
-    const pool = await this.searchHybrid(query, { ...options, maxResults: enlargedPool });
-    const fresh = pool.filter((r) => !excludeSet.has(r.chunkId)).slice(0, targetCount);
+
+    // Issue #463: run workspace-scope search AND chat-scoped search in parallel,
+    // then merge. Chat-scoped results receive a +0.1 score bonus so user-uploaded
+    // documents are preferred over generic knowledge base entries.
+    const [workspaceResults, chatResults] = await Promise.all([
+      this.searchHybrid(query, { ...options, maxResults: enlargedPool }).catch((err) => {
+        logger.warn({ err, chatId: options.chatId }, '[KnowledgeRetrieval] workspace search failed');
+        return [] as RetrievalResult[];
+      }),
+      this.searchHybrid(query, {
+        ...options,
+        maxResults: enlargedPool,
+        filters: { ...options.filters, chatId: options.chatId },
+      }).catch((err) => {
+        logger.warn({ err, chatId: options.chatId }, '[KnowledgeRetrieval] chat-scoped search failed');
+        return [] as RetrievalResult[];
+      }),
+    ]);
+
+    // Boost chat-scoped results and merge
+    const boostedChatResults = chatResults.map((r) => ({
+      ...r,
+      score: Math.min(1, r.score + 0.10),
+    }));
+
+    const allResults = [...boostedChatResults, ...workspaceResults];
+    // Dedupe by chunkId (chat-scope wins when both channels surface the same chunk)
+    const deduped = new Map<string, RetrievalResult>();
+    for (const r of allResults) {
+      const existing = deduped.get(r.chunkId);
+      if (!existing || r.score > existing.score) {
+        deduped.set(r.chunkId, r);
+      }
+    }
+
+    const merged = Array.from(deduped.values()).sort((a, b) => b.score - a.score);
+    const fresh = merged.filter((r) => !excludeSet.has(r.chunkId)).slice(0, targetCount);
 
     // Persist asynchronously — failures are non-fatal and do NOT throw into
     // the agent path. We await here for deterministic test behaviour, but
@@ -139,6 +179,15 @@ export class KnowledgeRetrievalService {
 
     if (filters.docType) {
       conditions.push(eq(knowledgeDocuments.docType, filters.docType));
+    }
+
+    // Chat-scoped filter (issue #463): when chatId is given, only return
+    // chunks that belong to that chat. When not given, exclude chat-scoped
+    // chunks (workspace/pipeline scope only) for backward-compat.
+    if (filters.chatId) {
+      conditions.push(eq(knowledgeChunks.chatId, filters.chatId));
+    } else {
+      conditions.push(isNull(knowledgeChunks.chatId));
     }
 
     if (includeProposed) {
@@ -241,6 +290,13 @@ export class KnowledgeRetrievalService {
       }
       if (filters?.agentType) {
         conditions.push(sql`d.agent_type = ${filters.agentType}`);
+      }
+
+      // Chat-scoped filter (issue #463)
+      if (filters?.chatId) {
+        conditions.push(sql`c.chat_id = ${filters.chatId}::uuid`);
+      } else {
+        conditions.push(sql`c.chat_id IS NULL`);
       }
 
       const whereClause = sql.join(conditions, sql` AND `);

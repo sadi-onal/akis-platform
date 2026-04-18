@@ -1458,6 +1458,8 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
   id: uuid('id').defaultRandom().primaryKey(),
   workspaceId: uuid('workspace_id'),
   projectId: uuid('project_id'),
+  /** Chat-scoped ingestion (issue #463). NULL = workspace/pipeline scope; set = chat-private. */
+  chatId: uuid('chat_id'),
   title: varchar('title', { length: 500 }).notNull(),
   content: text('content').notNull(),
   docType: knowledgeDocTypeEnum('doc_type').notNull(),
@@ -1472,6 +1474,7 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
 }, (table) => ({
   workspaceIdx: index('idx_knowledge_documents_workspace').on(table.workspaceId),
   projectIdx: index('idx_knowledge_documents_project').on(table.projectId),
+  chatIdx: index('idx_knowledge_documents_chat').on(table.chatId),
   statusIdx: index('idx_knowledge_documents_status').on(table.status),
   docTypeIdx: index('idx_knowledge_documents_doc_type').on(table.docType),
   agentTypeIdx: index('idx_knowledge_documents_agent_type').on(table.agentType),
@@ -1483,6 +1486,8 @@ export type NewKnowledgeDocument = typeof knowledgeDocuments.$inferInsert;
 export const knowledgeChunks = pgTable('knowledge_chunks', {
   id: uuid('id').defaultRandom().primaryKey(),
   documentId: uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  /** Chat-scoped ingestion (issue #463). NULL = workspace/pipeline scope; set = chat-private. */
+  chatId: uuid('chat_id'),
   chunkIndex: integer('chunk_index').notNull(),
   content: text('content').notNull(),
   embedding: vector1536('embedding'),
@@ -1493,6 +1498,8 @@ export const knowledgeChunks = pgTable('knowledge_chunks', {
   chunkIndexIdx: index('idx_knowledge_chunks_chunk_index').on(table.documentId, table.chunkIndex),
   // HNSW index for cosine similarity is created via raw SQL migration
   // (Drizzle doesn't support pgvector index syntax natively)
+  // Partial index for chat-scoped retrieval (issue #463):
+  // idx_knowledge_chunks_chat_id created via raw SQL migration 0043
 }));
 
 export type KnowledgeChunk = typeof knowledgeChunks.$inferSelect;
