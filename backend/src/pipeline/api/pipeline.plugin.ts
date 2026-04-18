@@ -32,15 +32,54 @@ export interface PipelinePluginOptions {
  * Parse a potentially multipart request, extracting fields and file attachments.
  * Falls back to standard JSON body when request is not multipart.
  */
+/**
+ * Convert image `ProcessedAttachment` entries to Anthropic content blocks.
+ *
+ * Kept local here — the analogous `FileUploadService.buildImageBlocks` method
+ * lives on the not-yet-merged #403 branch. Once that merges, this function
+ * can be swapped for the service method with no behavior change.
+ * Issue #402 step 4.
+ */
+function toAnthropicImageBlocks(
+  attachments: readonly ProcessedAttachment[],
+): import('../../services/ai/multimodalClient.js').AnthropicImageBlock[] {
+  const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+  const blocks: import('../../services/ai/multimodalClient.js').AnthropicImageBlock[] = [];
+  for (const att of attachments) {
+    if (att.type !== 'image' || !att.base64Data) continue;
+    if (!ALLOWED.has(att.mimeType)) {
+      logger.warn({ file: att.originalName, mimeType: att.mimeType }, '[Pipeline] skipping unsupported image mime for multimodal');
+      continue;
+    }
+    const commaIdx = att.base64Data.indexOf(',');
+    const raw = commaIdx >= 0 ? att.base64Data.slice(commaIdx + 1) : att.base64Data;
+    blocks.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: att.mimeType as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+        data: raw,
+      },
+    });
+  }
+  return blocks;
+}
+
 async function parseMultipartRequest(
   request: FastifyRequest,
   fileUploadService: FileUploadService,
-): Promise<{ fields: Record<string, unknown>; attachments: ProcessedAttachment[]; attachmentContext?: string }> {
+): Promise<{
+  fields: Record<string, unknown>;
+  attachments: ProcessedAttachment[];
+  attachmentContext?: string;
+  imageBlocks: import('../../services/ai/multimodalClient.js').AnthropicImageBlock[];
+}> {
   if (!request.isMultipart()) {
     return {
       fields: (request.body ?? {}) as Record<string, unknown>,
       attachments: [],
       attachmentContext: undefined,
+      imageBlocks: [],
     };
   }
 
@@ -74,8 +113,9 @@ async function parseMultipartRequest(
   const attachmentContext = attachments.length > 0
     ? fileUploadService.buildContextString(attachments)
     : undefined;
+  const imageBlocks = toAnthropicImageBlocks(attachments);
 
-  return { fields, attachments, attachmentContext };
+  return { fields, attachments, attachmentContext, imageBlocks };
 }
 
 export async function pipelinePlugin(
@@ -179,10 +219,10 @@ export async function pipelinePlugin(
   // POST /api/pipelines — start new pipeline (rate-limited: 5/min per user)
   // Supports both JSON and multipart/form-data (with file attachments)
   fastify.post('/', { preHandler: authPreHandler, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { fields, attachmentContext } = await parseMultipartRequest(request, fileUploadService);
+    const { fields, attachmentContext, imageBlocks } = await parseMultipartRequest(request, fileUploadService);
     // Inject parsed fields as body so downstream route handler can parse them
     (request as unknown as { body: unknown }).body = fields;
-    const result = await routes.startPipeline(request, reply, attachmentContext);
+    const result = await routes.startPipeline(request, reply, attachmentContext, imageBlocks);
     return reply.code(201).send(result);
   });
 

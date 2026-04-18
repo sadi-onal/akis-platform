@@ -382,6 +382,12 @@ export class PipelineOrchestrator {
     const scribeState = agents.scribe.createInitialState(input);
     scribeState.pipelineId = pipelineId;
 
+    // Thread multimodal image blocks into Scribe state so the agent can dispatch
+    // to the multimodal API path when they exist. Issue #402 step 4.
+    if (input.imageBlocks && input.imageBlocks.length > 0) {
+      scribeState.imageBlocks = input.imageBlocks;
+    }
+
     // Inject repo context as knowledge context
     if (repoKnowledge) {
       scribeState.knowledgeContext = (scribeState.knowledgeContext ?? '') + repoKnowledge;

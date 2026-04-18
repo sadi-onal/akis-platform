@@ -43,7 +43,12 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
   }
 
   return {
-    async startPipeline(request: unknown, _reply: unknown, attachmentContext?: string) {
+    async startPipeline(
+      request: unknown,
+      _reply: unknown,
+      attachmentContext?: string,
+      imageBlocks?: readonly import('../../services/ai/multimodalClient.js').AnthropicImageBlock[],
+    ) {
       const userId = getUserId(request);
 
       // ── Auth + Usage Limit Guard ─────────────────────────────────────
@@ -102,6 +107,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
         targetStack: body.targetStack,
         existingRepo: body.existingRepo,
         attachmentContext,
+        imageBlocks: imageBlocks && imageBlocks.length > 0 ? imageBlocks : undefined,
       }, body.model, body.jiraConfig, body.parentPipelineId, body.skipScribe, body.traceEnabled);
       return { pipeline };
     },

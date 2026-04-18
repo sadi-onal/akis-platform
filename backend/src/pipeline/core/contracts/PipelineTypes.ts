@@ -14,6 +14,13 @@ export interface ScribeInput {
   context?: string;
   targetStack?: string;
   attachmentContext?: string;
+  /**
+   * Anthropic image content blocks derived from user-uploaded image attachments.
+   * When present + provider is Anthropic, Scribe calls the multimodal API so
+   * the model sees the pixels rather than relying on the text-only ack prompt.
+   * Issue #402 step 4.
+   */
+  imageBlocks?: readonly import('../../../services/ai/multimodalClient.js').AnthropicImageBlock[];
   existingRepo?: {
     owner: string;
     repo: string;
