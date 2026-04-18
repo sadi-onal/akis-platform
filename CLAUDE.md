@@ -327,6 +327,108 @@ Duplicate issue patlamasini onlemek icin: yeni issue acmadan ONCE
 dosyasinda, issue numarasi GitHub'da — ikisi farkli namespace, log
 dosyasi kopruyu tutar.
 
+## PM → Senior → Developer Is Akisi (zorunlu)
+
+Her dev oturumunda bu 3-katmanli hiyerarsi kullanilir. Detayli tasarim:
+`docs/superpowers/specs/2026-04-18-senior-hierarchy-agent-office-design.md`
+
+### Hiyerarsi
+
+```
+Kullanici istegi
+      |
+  [PM — main Claude session]   triage, oncelik, risk, kapsam
+      |
+  [Senior X]                   (Frontend | Backend | AI/Platform | QA)
+      |  Agent tool (nested)
+  [Developer agents]           somut kod yazimi, test
+      |
+  Senior review & unified diff -> PM
+      |
+  PM opens PR -> CLAUDE.md PR review + smoke-test dongusu
+```
+
+### Senior rolleri
+
+| Senior | Domain | Ornek issue |
+|---|---|---|
+| **Sr Frontend** | React 19, Tailwind 4, Vite, chat UI, auth pages | UI bug, layout, state mgmt |
+| **Sr Backend** | Fastify, Drizzle, auth, REST API, GitHub adapter, multipart | API bug, migration, perf |
+| **Sr AI/Platform** | Claude API, Scribe/Proto/Trace agents, RAG, caching, streaming | prompt caching, token counter, RAG |
+| **Sr QA** | Playwright, Cucumber/BDD, post-deploy smoke, Chrome MCP | e2e tests, smoke reports |
+
+### Ne zaman delege edilir
+
+**HER ZAMAN delege et:**
+- >=3 dosya degisikligi
+- >=100 LOC
+- Yeni DB migration
+- Yeni API endpoint
+- Herhangi bir vision-gap feature
+- Auth / billing / pipeline orchestrator degisikligi
+
+**PM direkt yapabilir (delegasyon overhead gereksiz):**
+- Typo / tek satir string fix
+- README / docs-only degisiklik
+- Revert of known-bad commit
+- i18n key-only add (no logic)
+
+### Agent tool invocation sablonu
+
+PM senior'u soyle spawn eder:
+
+```
+Agent({
+  subagent_type: "general-purpose",
+  description: "Senior <Role> — issue #<N>",
+  prompt: `
+You are Senior <Role> Engineer for the AKIS platform.
+Project: /Users/omeryasironal/Projects/bitirme_projesi/devagents
+Read CLAUDE.md before anything.
+
+Your task: Issue #<N> — <baslik>.
+Context: <issue body, ilgili dosya yollari, acceptance criteria>
+
+Responsibilities:
+1. Plan the implementation (files, tests, migration).
+2. Spawn Developer agents via Agent tool (subagent_type: general-purpose) for atomic tasks.
+3. Integrate developer outputs into one coherent diff.
+4. Run local quality gates: typecheck, lint, test:unit, build.
+5. Update docs/agent-office/state.json at each milestone (working, dev spawn, complete).
+6. Report back: summary, files changed, tests added, risks, followups.
+
+Hard rules:
+- NEVER push to main directly. PM opens the PR.
+- NEVER modify .env files.
+- NEVER bypass CLAUDE.md rules.
+- temperature=0 for all agent prompts you write.
+`
+});
+```
+
+### Agent Office dashboard
+
+- Path: `docs/agent-office/index.html`
+- State: `docs/agent-office/state.json` (gitignored, ephemeral)
+- Serve lokal: `python3 -m http.server 8088 --directory docs/agent-office`
+- Erisim: `http://localhost:8088/index.html` (veya `file://` protokolune gore)
+- Oturum basi PM `state.initial.json` -> `state.json` kopyalar
+- PM ve Senior'lar her lifecycle transition'da (spawn, working, complete) state.json'u Write tool ile gunceller
+- Kullanici istediginde Chrome MCP ile acilir: `tabs_create_mcp` + `navigate`
+
+### Concurrency kurali
+
+- Ayni dosya / ayni modul ise **sequential**
+- Disjoint (farkli domain) ise **parallel** Agent call'lar tek mesajda
+- Cakisma riski varsa PM sequential'a duserir
+
+### ASLA
+
+- Senior'un Senior'u spawn etmesi (sadece Senior -> Developer)
+- Developer'in Developer'i spawn etmesi
+- Ayni issue'da 2 senior paralel calismasi (merge conflict riski)
+- state.json'i Developer'in dogrudan yazmasi (Senior aggregates)
+
 ## AI Provider Yapilandirmasi
 
 Desteklenen provider'lar: `anthropic`, `openai`, `openrouter`, `mock`

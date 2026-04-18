@@ -1,0 +1,17 @@
+{
+  "ts": "1970-01-01T00:00:00Z",
+  "pm": {
+    "status": "idle",
+    "task": null,
+    "issueNumber": null
+  },
+  "seniors": {
+    "frontend": { "status": "idle", "task": null, "issueNumber": null, "devs": [] },
+    "backend":  { "status": "idle", "task": null, "issueNumber": null, "devs": [] },
+    "ai":       { "status": "idle", "task": null, "issueNumber": null, "devs": [] },
+    "qa":       { "status": "idle", "task": null, "issueNumber": null, "devs": [] }
+  },
+  "log": [
+    "[00:00:00] Office opened — all hands idle"
+  ]
+}

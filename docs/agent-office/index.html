@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AKIS Agent Office</title>
+  <style>
+    :root {
+      --bg: #0A1215;
+      --surface: #12202A;
+      --surface-2: #1A2C38;
+      --primary: #07D1AF;
+      --text: #E8F0F2;
+      --text-dim: #8FA3AE;
+      --danger: #FF6B6B;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      overflow: hidden;
+    }
+
+    .office {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    .stage {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: linear-gradient(180deg, #1A2C38 0%, #0E1820 100%);
+    }
+
+    .header {
+      position: absolute;
+      top: 14px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: var(--primary);
+      font-size: 14px;
+      letter-spacing: 0.3em;
+      font-weight: bold;
+      text-shadow: 0 0 8px rgba(7, 209, 175, 0.4);
+      z-index: 3;
+    }
+
+    .subheader {
+      position: absolute;
+      top: 36px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      z-index: 3;
+    }
+
+    .viewport {
+      position: relative;
+      width: min(calc(100vw - 40px), 1600px);
+      aspect-ratio: 2 / 1;
+      margin: 56px auto 0;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      image-rendering: -moz-crisp-edges;
+    }
+
+    .bubbles {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .bubble {
+      position: absolute;
+      background: var(--surface-2);
+      border: 1px solid var(--primary);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      color: var(--text);
+      white-space: nowrap;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 2px 10px rgba(7, 209, 175, 0.25);
+      transform: translate(-50%, -100%);
+      transition: opacity 200ms;
+    }
+
+    .bubble::after {
+      content: "";
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--primary);
+    }
+
+    .log {
+      background: var(--surface);
+      border-top: 2px solid var(--primary);
+      padding: 12px 20px;
+      height: 180px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .log-title {
+      color: var(--primary);
+      font-weight: bold;
+      margin-bottom: 6px;
+      letter-spacing: 0.1em;
+    }
+
+    .log-entry {
+      color: var(--text-dim);
+      font-family: 'SF Mono', Monaco, monospace;
+    }
+
+    .log-entry.recent {
+      color: var(--text);
+    }
+
+    .status-dot {
+      position: absolute;
+      top: 14px;
+      right: 20px;
+      color: var(--text-dim);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      z-index: 3;
+    }
+
+    .status-dot::before {
+      content: "●";
+      color: var(--primary);
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body>
+  <div class="office">
+    <div class="stage">
+      <div class="header">AKIS AGENT OFFICE</div>
+      <div class="subheader">PM → SENIOR → DEVELOPER · LIVE</div>
+      <div class="status-dot" id="status-dot">LIVE</div>
+      <div class="viewport">
+        <canvas id="canvas"></canvas>
+        <div class="bubbles" id="bubbles"></div>
+      </div>
+    </div>
+    <div class="log">
+      <div class="log-title">▸ ACTIVITY LOG</div>
+      <div id="log-entries"></div>
+    </div>
+  </div>
+
+  <script>
+  /* ═════════════════════════════ CONSTANTS ═════════════════════════════ */
+  const TILE = 32;                // logical tile size (canvas pixels)
+  const SPRITE = 16;              // sprite logical size
+  const SPRITE_SCALE = 2;         // 16x16 sprite drawn as 32x32 canvas pixels
+  const COLS = 30;
+  const ROWS = 15;
+
+  /* Character slot positions (col, row) — anchor = sprite top-left */
+  const SLOTS = {
+    pm:       { col: 14, row: 3 },
+    frontend: { col: 3,  row: 8 },
+    backend:  { col: 10, row: 8 },
+    ai:       { col: 17, row: 8 },
+    qa:       { col: 24, row: 8 },
+    devSlots: {
+      frontend: [{col:2,row:11},{col:4,row:11},{col:6,row:11}],
+      backend:  [{col:9,row:11},{col:11,row:11},{col:13,row:11}],
+      ai:       [{col:16,row:11},{col:18,row:11},{col:20,row:11}],
+      qa:       [{col:23,row:11},{col:25,row:11},{col:27,row:11}]
+    }
+  };
+
+  const ROLE_LABELS = {
+    pm: 'PM',
+    frontend: 'FE',
+    backend: 'BE',
+    ai: 'AI',
+    qa: 'QA'
+  };
+
+  /* Per-role color palette */
+  const PALETTE = {
+    pm:       { primary: '#2E4A7D', secondary: '#F5C76C', skin: '#F2C199', accent: '#FFFFFF' },
+    frontend: { primary: '#E8823E', secondary: '#FFFFFF', skin: '#F2C199', accent: '#3A2A1A' },
+    backend:  { primary: '#3FA85E', secondary: '#1A1A1A', skin: '#F2C199', accent: '#07D1AF' },
+    ai:       { primary: '#8B5CF6', secondary: '#E0D4F7', skin: '#F2C199', accent: '#FFFFFF' },
+    qa:       { primary: '#F0F0F0', secondary: '#FF6B6B', skin: '#F2C199', accent: '#1A1A1A' },
+    dev:      { primary: '#9AA0A6', secondary: '#607D8B', skin: '#F2C199', accent: '#455A64' }
+  };
+
+  /* ═════════════════════════════ SPRITES ═════════════════════════════
+   * 16x16 grid, 2-frame animation.
+   * Letters:
+   *   . = transparent, P = primary, S = secondary, K = skin, A = accent, O = outline (#000)
+   */
+  const SPRITE_DEF = {
+    /* PM — navy suit + gold tie */
+    pm: [
+      /* frame A — idle */
+      [
+        "................",
+        "....OOOOOO......",
+        "...OKKKKKKO.....",
+        "...OKKKKKKO.....",
+        "...OKKKKKKO.....",
+        "....OOOOOO......",
+        "...OPPPPPPO.....",
+        "..OPPSPSPPO.....",
+        "..OPPPPPPPO.....",
+        "..OPPPPPPPO.....",
+        "..OPPPPPPPO.....",
+        "..OAAAAAAAO.....",
+        "...OP..POP......",
+        "...OP..POP......",
+        "...OP..POP......",
+        "..OOO..OOO......"
+      ],
+      /* frame B — breathe (raised 1px) */
+      [
+        "....OOOOOO......",
+        "...OKKKKKKO.....",
+        "...OKKKKKKO.....",
+        "...OKKKKKKO.....",
+        "....OOOOOO......",
+        "...OPPPPPPO.....",
+        "..OPPSPSPPO.....",
+        "..OPPPPPPPO.....",
+        "..OPPPPPPPO.....",
+        "..OPPPPPPPO.....",
+        "..OAAAAAAAO.....",
+        "...OP..POP......",
+        "...OP..POP......",
+        "...OP..POP......",
+        "..OOO..OOO......",
+        "................"
+      ]
+    ],
+    /* Senior — primary jacket, secondary stripe on chest */
+    senior: [
+      [
+        "................",
+        "....OOOOOO......",
+        "...OKKKKKKO.....",
+        "..OKKAAKAAKO....",
+        "...OKKKKKKO.....",
+        "....OOOOOO......",
+        "...OPPPPPPO.....",
+        "..OPPPPPPPPO....",
+        "..OPPSSSSPPO....",
+        "..OPPPPPPPPO....",
+        "..OPPPPPPPPO....",
+        "..OPPPPPPPPO....",
+        "...OP..POP......",
+        "...OP..POP......",
+        "...OP..POP......",
+        "..OOO..OOO......"
+      ],
+      [
+        "....OOOOOO......",
+        "...OKKKKKKO.....",
+        "..OKKAAKAAKO....",
+        "...OKKKKKKO.....",
+        "....OOOOOO......",
+        "...OPPPPPPO.....",
+        "..OPPPPPPPPO....",
+        "..OPPSSSSPPO....",
+        "..OPPPPPPPPO....",
+        "..OPPPPPPPPO....",
+        "..OPPPPPPPPO....",
+        "..OPPPPPPPPO....",
+        "...OP..POP......",
+        "...OP..POP......",
+        "...OP..POP......",
+        "..OOO..OOO......"
+      ]
+    ],
+    /* Developer — smaller, gray + blue */
+    dev: [
+      [
+        "................",
+        ".....OOOOO......",
+        "....OKKKKKO.....",
+        "....OKKKKKO.....",
+        "....OKKKKKO.....",
+        ".....OOOOO......",
+        "....OPPPPPO.....",
+        "...OPPPPPPPO....",
+        "...OPPAAAPPO....",
+        "...OPPPPPPPO....",
+        "...OPPPPPPPO....",
+        "...OPPPPPPPO....",
+        "....OP.POP......",
+        "....OP.POP......",
+        "....OP.POP......",
+        "...OOO.OOO......"
+      ],
+      [
+        ".....OOOOO......",
+        "....OKKKKKO.....",
+        "....OKKKKKO.....",
+        "....OKKKKKO.....",
+        ".....OOOOO......",
+        "....OPPPPPO.....",
+        "...OPPPPPPPO....",
+        "...OPPAAAPPO....",
+        "...OPPPPPPPO....",
+        "...OPPPPPPPO....",
+        "...OPPPPPPPO....",
+        "...OPPPPPPPO....",
+        "....OP.POP......",
+        "....OP.POP......",
+        "....OP.POP......",
+        "...OOO.OOO......"
+      ]
+    ]
+  };
+
+  /* ═════════════════════════════ STATE ═════════════════════════════ */
+  let currentState = null;
+  let frameCounter = 0;
+  let idlePhase = 0;     // 0/1 — toggles ~600ms (idle breathing)
+  let workPhase = 0;     // 0/1 — toggles ~200ms (typing)
+
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = COLS * TILE;            // 960
+  canvas.height = ROWS * TILE;           // 480
+  ctx.imageSmoothingEnabled = false;
+
+  const bubblesEl = document.getElementById('bubbles');
+  const logEl = document.getElementById('log-entries');
+  const statusDot = document.getElementById('status-dot');
+
+  /* ═════════════════════════════ DRAW ═════════════════════════════ */
+  function drawSprite(kind, palette, col, row, frame, alpha) {
+    if (!SPRITE_DEF[kind] || !SPRITE_DEF[kind][frame]) return;
+    const sprite = SPRITE_DEF[kind][frame];
+    const baseX = col * TILE;
+    const baseY = row * TILE;
+    ctx.save();
+    ctx.globalAlpha = alpha ?? 1;
+    for (let y = 0; y < SPRITE; y++) {
+      const line = sprite[y];
+      if (!line) continue;
+      for (let x = 0; x < SPRITE; x++) {
+        const ch = line[x];
+        let color = null;
+        switch (ch) {
+          case 'P': color = palette.primary; break;
+          case 'S': color = palette.secondary; break;
+          case 'K': color = palette.skin; break;
+          case 'A': color = palette.accent; break;
+          case 'O': color = '#000'; break;
+          default: continue;
+        }
+        ctx.fillStyle = color;
+        ctx.fillRect(baseX + x * SPRITE_SCALE, baseY + y * SPRITE_SCALE, SPRITE_SCALE, SPRITE_SCALE);
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawDesk(col, row, color) {
+    const baseX = col * TILE;
+    const baseY = row * TILE + SPRITE * SPRITE_SCALE + 2;  // just below sprite feet
+    ctx.fillStyle = color;
+    ctx.fillRect(baseX + 2, baseY, SPRITE * SPRITE_SCALE - 4, 4);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(baseX + 4, baseY + 4, 3, 8);
+    ctx.fillRect(baseX + SPRITE * SPRITE_SCALE - 7, baseY + 4, 3, 8);
+  }
+
+  function drawRoleLabel(col, row, text, color) {
+    const baseX = col * TILE;
+    const baseY = row * TILE + SPRITE * SPRITE_SCALE + 22;
+    ctx.fillStyle = color;
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, baseX + (SPRITE * SPRITE_SCALE) / 2, baseY);
+  }
+
+  function drawFloor() {
+    // dark base
+    ctx.fillStyle = '#0A1820';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // checkered tiles
+    ctx.fillStyle = '#0E1C26';
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if ((r + c) % 2 === 0) {
+          ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+        }
+      }
+    }
+    // horizon line between PM zone (top) and senior zone (bottom)
+    ctx.fillStyle = '#1A2C38';
+    ctx.fillRect(0, 6 * TILE - 2, canvas.width, 2);
+    // meeting room outline around PM
+    ctx.strokeStyle = 'rgba(7, 209, 175, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(12 * TILE, 2 * TILE, 6 * TILE, 4 * TILE);
+  }
+
+  /* ═════════════════════════════ BUBBLES ═════════════════════════════ */
+  function setBubble(key, col, row, text) {
+    let el = document.getElementById('bubble-' + key);
+    if (!text) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'bubble-' + key;
+      el.className = 'bubble';
+      bubblesEl.appendChild(el);
+    }
+    el.textContent = text.length > 24 ? text.slice(0, 22) + '…' : text;
+    // Position in canvas logical space (left%, top%)
+    const xPct = ((col * TILE + (SPRITE * SPRITE_SCALE) / 2) / canvas.width) * 100;
+    const yPct = ((row * TILE - 2) / canvas.height) * 100;
+    el.style.left = xPct + '%';
+    el.style.top = yPct + '%';
+  }
+
+  function cleanupStaleBubbles(validKeys) {
+    Array.from(bubblesEl.children).forEach((b) => {
+      const key = b.id.replace('bubble-', '');
+      if (!validKeys.has(key)) b.remove();
+    });
+  }
+
+  /* ═════════════════════════════ LOG ═════════════════════════════ */
+  function renderLog(entries) {
+    logEl.innerHTML = '';
+    const recent = (entries || []).slice(-30);
+    recent.forEach((entry, idx) => {
+      const div = document.createElement('div');
+      const isRecent = idx >= recent.length - 3;
+      div.className = 'log-entry' + (isRecent ? ' recent' : '');
+      div.textContent = entry;
+      logEl.appendChild(div);
+    });
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  /* ═════════════════════════════ RENDER ═════════════════════════════ */
+  function pickFrame(status) {
+    if (status === 'working') return workPhase;
+    return idlePhase;
+  }
+
+  function render() {
+    frameCounter++;
+    if (frameCounter % 36 === 0) idlePhase = 1 - idlePhase;   // ~600ms at 60fps
+    if (frameCounter % 12 === 0) workPhase = 1 - workPhase;   // ~200ms
+
+    drawFloor();
+
+    if (!currentState) return;
+
+    const validBubbleKeys = new Set();
+
+    /* PM */
+    const pm = currentState.pm || { status: 'idle' };
+    drawDesk(SLOTS.pm.col, SLOTS.pm.row, '#2E4A7D');
+    drawSprite('pm', PALETTE.pm, SLOTS.pm.col, SLOTS.pm.row, pickFrame(pm.status), 1);
+    drawRoleLabel(SLOTS.pm.col, SLOTS.pm.row, 'PM', '#F5C76C');
+    if (pm.status && pm.status !== 'idle' && pm.task) {
+      setBubble('pm', SLOTS.pm.col, SLOTS.pm.row, pm.task);
+      validBubbleKeys.add('pm');
+    }
+
+    /* Seniors + devs */
+    ['frontend', 'backend', 'ai', 'qa'].forEach((role) => {
+      const sr = (currentState.seniors && currentState.seniors[role]) || { status: 'idle', devs: [] };
+      const slot = SLOTS[role];
+      drawDesk(slot.col, slot.row, PALETTE[role].primary);
+      drawSprite('senior', PALETTE[role], slot.col, slot.row, pickFrame(sr.status), 1);
+      drawRoleLabel(slot.col, slot.row, 'Sr ' + ROLE_LABELS[role], PALETTE[role].primary);
+
+      if (sr.status && sr.status !== 'idle' && sr.task) {
+        const key = 'sr-' + role;
+        setBubble(key, slot.col, slot.row, sr.task);
+        validBubbleKeys.add(key);
+      }
+
+      /* devs */
+      const devSlots = SLOTS.devSlots[role];
+      (sr.devs || []).slice(0, devSlots.length).forEach((dev, i) => {
+        const ds = devSlots[i];
+        const alpha = dev.status === 'spawning' ? 0.5 : (dev.status === 'done' ? 0.4 : 1);
+        drawSprite('dev', PALETTE.dev, ds.col, ds.row, pickFrame(dev.status), alpha);
+        if (dev.task) {
+          const key = 'dev-' + role + '-' + dev.id;
+          setBubble(key, ds.col, ds.row, dev.task);
+          validBubbleKeys.add(key);
+        }
+      });
+    });
+
+    cleanupStaleBubbles(validBubbleKeys);
+  }
+
+  /* ═════════════════════════════ POLLING ═════════════════════════════ */
+  let lastLogLen = -1;
+  let lastPollOk = Date.now();
+
+  async function poll() {
+    try {
+      const resp = await fetch('./state.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const next = await resp.json();
+      currentState = next;
+      const logLen = (next.log || []).length;
+      if (logLen !== lastLogLen) {
+        renderLog(next.log || []);
+        lastLogLen = logLen;
+      }
+      lastPollOk = Date.now();
+      statusDot.textContent = 'LIVE';
+    } catch (err) {
+      console.warn('poll error', err);
+      if (Date.now() - lastPollOk > 3000) {
+        statusDot.textContent = 'DISCONNECTED';
+      }
+    }
+  }
+
+  /* ═════════════════════════════ BOOT ═════════════════════════════ */
+  /* setInterval keeps running even when tab is hidden (unlike requestAnimationFrame) */
+  poll();
+  setInterval(poll, 500);
+  setInterval(render, 33);  // ~30fps, tab-background safe
+  console.log('AKIS Agent Office ready');
+  </script>
+</body>
+</html>
