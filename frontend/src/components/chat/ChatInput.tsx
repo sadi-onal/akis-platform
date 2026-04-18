@@ -40,7 +40,7 @@ let _attachId = 0;
 // view and start offering the expand toggle. Below this threshold the expand button is
 // hidden so it doesn't clutter the UI when the user is writing a one-line prompt.
 // Issue #391 / BUG-11: "expand butonu gerektiğinde çıksın sadece".
-const EXPAND_THRESHOLD_PX = 140;
+const EXPAND_THRESHOLD_PX = 200;
 
 export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, placeholder }: ChatInputProps) {
   const [value, setValue] = useState('');
@@ -224,35 +224,15 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
         </div>
       )}
 
-      {/* Pill-shaped input wrapper */}
+      {/* Claude-Code-style input card — dark surface, rounded-2xl, vertical layout */}
       <div
         className={cn(
-          'flex bg-white shadow-md px-3 sm:px-5 py-3 border border-black/5',
-          'dark:bg-white/[0.05] dark:border-white/[0.08] dark:shadow-black/20',
-          'transition-all duration-200',
-          expanded ? 'items-stretch rounded-2xl' : 'items-end rounded-3xl',
-          isDragOver && 'border-[#07D1AF]/50 ring-2 ring-[#07D1AF]/20 shadow-[0_0_24px_rgba(7,209,175,0.15)]',
+          'flex flex-col rounded-2xl border transition-all duration-200',
+          'bg-white border-black/10 shadow-[0_1px_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.12)]',
+          'dark:bg-[#12181B] dark:border-white/[0.08] dark:shadow-[0_1px_0_rgba(255,255,255,0.04),0_8px_24px_-12px_rgba(0,0,0,0.6)]',
+          isDragOver && 'border-[#07D1AF]/60 ring-2 ring-[#07D1AF]/15',
         )}
       >
-        {/* Attachment button */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={disabled || attachments.length >= MAX_FILES}
-          title="Dosya ekle"
-          aria-label="Dosya ekle"
-          className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-            'text-gray-400 hover:bg-gray-100 hover:text-gray-500',
-            'dark:hover:bg-white/[0.08] dark:hover:text-gray-300',
-            'transition-colors duration-150 mr-2',
-            expanded && 'self-end',
-            (disabled || attachments.length >= MAX_FILES) && 'cursor-not-allowed opacity-40',
-          )}
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-          </svg>
-        </button>
         <input
           ref={fileInputRef}
           type="file"
@@ -263,38 +243,8 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
           aria-hidden
         />
 
-        {/* Expand / collapse toggle — only render when content actually overflows
-            the collapsed view, or the user is already in expanded mode.
-            Issue #391: "büyütme buttonu gerektiğinde çıksın sadece". */}
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-label={expanded ? 'Küçült' : 'Büyük yaz'}
-          aria-pressed={expanded}
-          title={expanded ? 'Küçült' : 'Büyük yaz'}
-          className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-            'text-gray-400 hover:bg-gray-100 hover:text-gray-500',
-            'dark:hover:bg-white/[0.08] dark:hover:text-gray-300',
-            'transition-colors duration-150 mr-2',
-            expanded && 'self-end',
-            // Hidden until content overflows (expanded view always shows the toggle so user can collapse).
-            !expanded && !isOverflowing && 'hidden',
-          )}
-        >
-          {expanded ? (
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-            </svg>
-          ) : (
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9M20.25 20.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-            </svg>
-          )}
-        </button>
-
-        {/* Content column: inner previews (when expanded) + textarea */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        {/* Textarea area — full-width at the top, lots of room */}
+        <div className="px-4 sm:px-5 pt-3.5 sm:pt-4">
           {showInnerPreviews && (
             <div className="flex flex-wrap gap-2 mb-2">
               {attachments.map((att) => (
@@ -313,50 +263,98 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
             rows={3}
             aria-label="Mesaj yaz"
             className={cn(
-              'w-full border-none outline-none resize-none text-sm leading-relaxed bg-transparent placeholder:text-gray-400',
-              'dark:text-white dark:placeholder:text-gray-500',
-              // Min-height bumped from 24px → 72px (issue #391 / BUG-11: "mesaj yazma yeri çok ufak").
-              // Users now see roughly 3 lines of breathing room even for a fresh/empty input.
-              expanded ? 'min-h-[240px]' : 'min-h-[72px]',
+              'w-full border-none outline-none resize-none text-[15px] leading-relaxed bg-transparent',
+              'text-gray-900 placeholder:text-gray-400',
+              'dark:text-white dark:placeholder:text-white/30',
+              // Taller default — Claude Code feel. 112px min (~4 visible lines) collapsed, 280px expanded.
+              expanded ? 'min-h-[280px]' : 'min-h-[112px]',
               (disabled || isSending) && 'cursor-not-allowed opacity-70 saturate-50',
             )}
           />
         </div>
 
-        {/* Send / Cancel button */}
-        {showCancel ? (
+        {/* Footer strip — attachment + expand on left, send on right, like Claude Code */}
+        <div className="flex items-center gap-1 px-2 sm:px-3 pb-2.5 pt-1">
+          {/* Attachment button */}
           <button
-            onClick={onCancel}
-            aria-label="İptal et"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled || attachments.length >= MAX_FILES}
+            title="Dosya ekle"
+            aria-label="Dosya ekle"
             className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center transition-colors ml-2 shrink-0',
-              'bg-red-500/10 text-red-400 hover:bg-red-500/20 active:scale-95',
-              expanded && 'self-end',
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+              'text-gray-400 hover:bg-black/5 hover:text-gray-600',
+              'dark:hover:bg-white/[0.06] dark:hover:text-white/80',
+              'transition-colors duration-150',
+              (disabled || attachments.length >= MAX_FILES) && 'cursor-not-allowed opacity-40',
             )}
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <rect x="6" y="6" width="12" height="12" rx="2" />
+            <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
             </svg>
           </button>
-        ) : (
+
+          {/* Expand / collapse toggle — only render when content overflows or already expanded. */}
           <button
-            onClick={handleSend}
-            disabled={disabled || isSending || !hasContent}
-            aria-busy={isSending ? 'true' : undefined}
-            aria-label="Gönder"
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={expanded ? 'Küçült' : 'Büyük yaz'}
+            aria-pressed={expanded}
+            title={expanded ? 'Küçült' : 'Büyük yaz'}
             className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center transition-colors ml-2 shrink-0',
-              expanded && 'self-end',
-              hasContent && !disabled && !isSending
-                ? 'bg-[#07D1AF] hover:bg-[#06B89A] text-white active:scale-95'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-white/[0.08] dark:text-gray-600',
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+              'text-gray-400 hover:bg-black/5 hover:text-gray-600',
+              'dark:hover:bg-white/[0.06] dark:hover:text-white/80',
+              'transition-colors duration-150',
+              !expanded && !isOverflowing && 'hidden',
             )}
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
-            </svg>
+            {expanded ? (
+              <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+              </svg>
+            ) : (
+              <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9M20.25 20.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+              </svg>
+            )}
           </button>
-        )}
+
+          <div className="flex-1" />
+
+          {/* Send / Cancel button */}
+          {showCancel ? (
+            <button
+              onClick={onCancel}
+              aria-label="İptal et"
+              className={cn(
+                'h-8 w-8 rounded-lg flex items-center justify-center transition-colors shrink-0',
+                'bg-red-500/10 text-red-400 hover:bg-red-500/20 active:scale-95',
+              )}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={disabled || isSending || !hasContent}
+              aria-busy={isSending ? 'true' : undefined}
+              aria-label="Gönder"
+              className={cn(
+                'h-8 w-8 rounded-lg flex items-center justify-center transition-colors shrink-0',
+                hasContent && !disabled && !isSending
+                  ? 'bg-[#07D1AF] hover:bg-[#06B89A] text-white active:scale-95'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-white/[0.06] dark:text-white/20',
+              )}
+            >
+              <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Helper text row (hidden on mobile) */}

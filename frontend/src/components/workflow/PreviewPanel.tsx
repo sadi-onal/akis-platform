@@ -262,6 +262,9 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
   const [view, setView] = useState<PreviewView>('web');
   const consoleEndRef = useRef<HTMLDivElement>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  // Bump to force Sandpack to remount (our in-tab-bar refresh button — Sandpack's
+  // own refresh button is hidden so it doesn't overlap the preview chrome).
+  const [sandpackKey, setSandpackKey] = useState(0);
 
   useEffect(() => {
     if (tab === 'console' && consoleEndRef.current) {
@@ -346,23 +349,36 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
         </div>
 
         {tab === 'preview' && (
-          <div className="mr-3 flex rounded-md border border-ak-border bg-ak-surface-2 p-0.5">
+          <div className="mr-3 flex items-center gap-1.5">
             <button
-              onClick={() => setView('web')}
-              className={cn('rounded px-2 py-0.5 text-[10px] font-medium transition-colors',
-                view === 'web' ? 'bg-ak-primary/20 text-ak-primary' : 'text-ak-text-tertiary hover:text-ak-text-secondary',
-              )}
+              type="button"
+              onClick={() => setSandpackKey((k) => k + 1)}
+              aria-label="Önizlemeyi yenile"
+              title="Yenile"
+              className="flex h-6 w-6 items-center justify-center rounded text-ak-text-tertiary hover:bg-ak-surface-2 hover:text-ak-text-secondary transition-colors"
             >
-              Web
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
             </button>
-            <button
-              onClick={() => setView('mobile')}
-              className={cn('rounded px-2 py-0.5 text-[10px] font-medium transition-colors',
-                view === 'mobile' ? 'bg-ak-primary/20 text-ak-primary' : 'text-ak-text-tertiary hover:text-ak-text-secondary',
-              )}
-            >
-              Mobile
-            </button>
+            <div className="flex rounded-md border border-ak-border bg-ak-surface-2 p-0.5">
+              <button
+                onClick={() => setView('web')}
+                className={cn('rounded px-2 py-0.5 text-[10px] font-medium transition-colors',
+                  view === 'web' ? 'bg-ak-primary/20 text-ak-primary' : 'text-ak-text-tertiary hover:text-ak-text-secondary',
+                )}
+              >
+                Web
+              </button>
+              <button
+                onClick={() => setView('mobile')}
+                className={cn('rounded px-2 py-0.5 text-[10px] font-medium transition-colors',
+                  view === 'mobile' ? 'bg-ak-primary/20 text-ak-primary' : 'text-ak-text-tertiary hover:text-ak-text-secondary',
+                )}
+              >
+                Mobile
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -428,6 +444,7 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
                   }
                 >
                   <SandpackProvider
+                    key={sandpackKey}
                     template={template}
                     files={sandpackFiles}
                     theme={akisSandpackTheme}
@@ -444,7 +461,7 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
                     <SandpackLayout>
                       <SandpackPreviewEmbed
                         showOpenInCodeSandbox={false}
-                        showRefreshButton
+                        showRefreshButton={false}
                       />
                     </SandpackLayout>
                   </SandpackProvider>
