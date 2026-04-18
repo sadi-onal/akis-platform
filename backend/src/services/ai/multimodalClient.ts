@@ -9,7 +9,12 @@
  *
  * Part of issue #402 (multimodal pixels → Anthropic). Step 1: helper + tests.
  * Step 2 (follow-up): wire into ScribeAIDeps so Scribe actually uses pixels.
+ *
+ * Issue #436 extension: system prompt is cache-controlled via
+ * `buildCacheableSystemBlocks` so multimodal Scribe iterations also benefit
+ * from the Anthropic 5-minute prompt cache.
  */
+import { buildCacheableSystemBlocks } from './AIService.js';
 /**
  * Anthropic Messages API image content block shape. Defined locally to keep
  * this helper self-contained; FileUploadService (introduced by PR #403) also
@@ -50,6 +55,12 @@ export interface AnthropicMultimodalResponse {
   usage?: {
     inputTokens?: number;
     outputTokens?: number;
+    /**
+     * Prompt-cache token counts from Anthropic (issue #436). Populated only
+     * when the call actually wrote to / read from the cache; otherwise absent.
+     */
+    cacheCreationInputTokens?: number;
+    cacheReadInputTokens?: number;
   };
   /** Raw Anthropic stop_reason so callers can differentiate max-tokens vs. end. */
   stopReason?: string;
@@ -70,6 +81,11 @@ export class AnthropicMultimodalError extends Error {
  * Build the request body for Anthropic's Messages API given system prompt +
  * user text + image blocks. Exported so callers that already have an HTTP
  * client can reuse the shape; the helper below uses it internally.
+ *
+ * Prompt caching (issue #436): the system prompt is wrapped in a cache_control
+ * block when it's large enough (via `buildCacheableSystemBlocks`) so repeat
+ * calls hit Anthropic's 5-min prompt cache. User text + images stay uncached
+ * because they change every turn.
  */
 export function buildAnthropicMultimodalBody(input: {
   model: string;
@@ -90,7 +106,7 @@ export function buildAnthropicMultimodalBody(input: {
   const body: Record<string, unknown> = {
     model: input.model,
     max_tokens: input.maxTokens ?? 4096,
-    system: input.systemPrompt,
+    system: buildCacheableSystemBlocks(input.systemPrompt),
     messages: [
       {
         role: 'user',
@@ -163,7 +179,12 @@ export async function callAnthropicMultimodal(
   const payload = data as {
     content?: Array<{ type: string; text?: string }>;
     stop_reason?: string;
-    usage?: { input_tokens?: number; output_tokens?: number };
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
   };
 
   const textBlocks = (payload.content ?? []).filter((b) => b.type === 'text' && typeof b.text === 'string');
@@ -179,6 +200,12 @@ export async function callAnthropicMultimodal(
       ? {
           inputTokens: payload.usage.input_tokens,
           outputTokens: payload.usage.output_tokens,
+          ...(typeof payload.usage.cache_creation_input_tokens === 'number' && {
+            cacheCreationInputTokens: payload.usage.cache_creation_input_tokens,
+          }),
+          ...(typeof payload.usage.cache_read_input_tokens === 'number' && {
+            cacheReadInputTokens: payload.usage.cache_read_input_tokens,
+          }),
         }
       : undefined,
   };

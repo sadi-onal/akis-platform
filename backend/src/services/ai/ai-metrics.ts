@@ -6,6 +6,12 @@ export type AITotals = {
   totalOutputTokens: number;
   totalTokens: number;
   estimatedCostUsd: number | null;
+  /**
+   * Anthropic prompt-cache aggregates (issue #436).
+   * Zero when no call in the run used caching (or provider doesn't support it).
+   */
+  totalCacheCreationInputTokens: number;
+  totalCacheReadInputTokens: number;
 };
 
 export class AICallMetricsCollector {
@@ -15,6 +21,8 @@ export class AICallMetricsCollector {
   private totalTokens = 0;
   private totalEstimatedCostUsd = 0;
   private hasCost = false;
+  private totalCacheCreationInputTokens = 0;
+  private totalCacheReadInputTokens = 0;
 
   record(metrics: AICallMetrics): void {
     if (!metrics.success) {
@@ -35,6 +43,12 @@ export class AICallMetricsCollector {
       if (typeof metrics.usage.totalTokens === 'number') {
         this.totalTokens += metrics.usage.totalTokens;
       }
+      if (typeof metrics.usage.cacheCreationInputTokens === 'number') {
+        this.totalCacheCreationInputTokens += metrics.usage.cacheCreationInputTokens;
+      }
+      if (typeof metrics.usage.cacheReadInputTokens === 'number') {
+        this.totalCacheReadInputTokens += metrics.usage.cacheReadInputTokens;
+      }
     }
 
     if (typeof metrics.estimatedCostUsd === 'number') {
@@ -50,6 +64,8 @@ export class AICallMetricsCollector {
       totalOutputTokens: this.totalOutputTokens,
       totalTokens: this.totalTokens,
       estimatedCostUsd: this.hasCost ? Number(this.totalEstimatedCostUsd.toFixed(6)) : null,
+      totalCacheCreationInputTokens: this.totalCacheCreationInputTokens,
+      totalCacheReadInputTokens: this.totalCacheReadInputTokens,
     };
   }
 }

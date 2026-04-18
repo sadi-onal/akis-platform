@@ -61,22 +61,48 @@ export function getModelPricing(model: string): ModelPricing | null {
 }
 
 /**
+ * Anthropic prompt-caching price multipliers (issue #436).
+ *
+ * - Writing a prefix into the cache costs 1.25x normal input tokens.
+ * - Reading a prefix from the cache costs 0.10x normal input tokens.
+ *
+ * These ratios are uniform across Claude 3.5 / 4.x families as of 2025-2026.
+ * Non-Anthropic providers don't expose cache tokens, so the multipliers are
+ * never applied in practice (cacheCreation/Read default to 0).
+ */
+export const ANTHROPIC_CACHE_WRITE_MULTIPLIER = 1.25;
+export const ANTHROPIC_CACHE_READ_MULTIPLIER = 0.10;
+
+/**
  * Estimates the USD cost for a given model and token counts.
  * Returns cost with 6 decimal places, or null if model pricing unknown.
+ *
+ * Prompt caching (issue #436): when `cacheCreationInputTokens` or
+ * `cacheReadInputTokens` are provided, the base `inputTokens` count should
+ * already EXCLUDE them — Anthropic's `usage.input_tokens` counts only the
+ * fresh (non-cached, non-cache-write) prefix. We price the cache pools
+ * separately against the model's input price to avoid double-counting.
  */
 export function estimateCostUsd(
   model: string,
   inputTokens?: number,
-  outputTokens?: number
+  outputTokens?: number,
+  cacheCreationInputTokens?: number,
+  cacheReadInputTokens?: number,
 ): number | null {
   const pricing = getModelPricing(model);
   if (!pricing) return null;
 
   const input = inputTokens ?? 0;
   const output = outputTokens ?? 0;
+  const cacheWrite = cacheCreationInputTokens ?? 0;
+  const cacheRead = cacheReadInputTokens ?? 0;
+
   const cost =
     (input / 1_000_000) * pricing.inputUsdPer1M +
-    (output / 1_000_000) * pricing.outputUsdPer1M;
+    (output / 1_000_000) * pricing.outputUsdPer1M +
+    (cacheWrite / 1_000_000) * pricing.inputUsdPer1M * ANTHROPIC_CACHE_WRITE_MULTIPLIER +
+    (cacheRead / 1_000_000) * pricing.inputUsdPer1M * ANTHROPIC_CACHE_READ_MULTIPLIER;
   return Number(cost.toFixed(6));
 }
 
