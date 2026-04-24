@@ -6,6 +6,14 @@ interface PipelineErrorBannerProps {
   onRetry?: () => void;
   onSkipTrace?: () => void;
   className?: string;
+  /**
+   * #490 BUG-N: when a retry POST is in flight, the parent keeps the banner
+   * visible (even though the backend may have already moved `stage` away from
+   * `failed`) and sets this flag so the Tekrar Dene button becomes a
+   * disabled loader. Prevents the user from thinking the pipeline has already
+   * recovered when async retry hasn't resolved yet.
+   */
+  isRetrying?: boolean;
 }
 
 /**
@@ -14,13 +22,14 @@ interface PipelineErrorBannerProps {
  * the backend, the error code, and action buttons (retry / skip-trace)
  * based on the error's `retryable` flag and `recoveryAction`.
  *
- * Issue #480 (BUG-I).
+ * Issue #480 (BUG-I). Retry-in-flight state added in #490 (BUG-N).
  */
 export function PipelineErrorBanner({
   error,
   onRetry,
   onSkipTrace,
   className,
+  isRetrying = false,
 }: PipelineErrorBannerProps) {
   const showRetry = error.retryable && onRetry;
   const showSkipTrace = error.recoveryAction === 'skip-trace' && onSkipTrace;
@@ -67,11 +76,38 @@ export function PipelineErrorBanner({
         <div className="flex gap-2 pl-6">
           {showRetry && (
             <button
-              onClick={onRetry}
-              className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-[12px] font-medium text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-200"
+              onClick={isRetrying ? undefined : onRetry}
+              disabled={isRetrying}
+              aria-busy={isRetrying}
+              className={cn(
+                'rounded-md border px-3 py-1 text-[12px] font-medium transition-colors',
+                isRetrying
+                  ? 'cursor-wait border-amber-500/30 bg-amber-500/10 text-amber-200'
+                  : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 hover:text-red-200',
+              )}
               data-testid="retry-button"
             >
-              Tekrar Dene
+              {isRetrying ? (
+                <span className="flex items-center gap-1.5">
+                  <svg
+                    className="h-3 w-3 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                    <path
+                      d="M22 12a10 10 0 0 1-10 10"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  Yeniden deneniyor...
+                </span>
+              ) : (
+                'Tekrar Dene'
+              )}
             </button>
           )}
           {showSkipTrace && (

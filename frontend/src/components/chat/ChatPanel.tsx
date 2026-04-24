@@ -59,6 +59,8 @@ interface ChatPanelProps {
   modelProviderHint?: 'anthropic' | 'openai' | 'openrouter';
   /** Pipeline error — present when stage === 'failed'. Renders error banner + disables input. */
   pipelineError?: PipelineError;
+  /** #490 BUG-N: retry POST is in flight; banner swaps to a disabled loader. */
+  isRetrying?: boolean;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -99,6 +101,7 @@ export const ChatPanel = memo(function ChatPanel({
   onModelChange,
   modelProviderHint,
   pipelineError,
+  isRetrying = false,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -192,6 +195,7 @@ export const ChatPanel = memo(function ChatPanel({
           error={pipelineError}
           onRetry={onRetry}
           onSkipTrace={onSkip}
+          isRetrying={isRetrying}
         />
       )}
 

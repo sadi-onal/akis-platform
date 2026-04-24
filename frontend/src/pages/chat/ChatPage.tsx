@@ -15,7 +15,7 @@ import { mapStageToMode } from '../../utils/mapPipelineEvent';
 import type { ConversationListItem, ChatMessage, ConversationStatus } from '../../types/chat';
 import type { Workflow, WorkflowStatus, ConversationMessage, StructuredSpec } from '../../types/workflow';
 import type { UserFriendlyPlan } from '../../types/plan';
-import type { PipelineStage } from '../../types/pipeline';
+import type { PipelineStage, PipelineError } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
 import { RepoSelector, type RepoMode, type SelectedRepo } from '../../components/chat/RepoSelector';
 import type { RepoContext } from '../../services/api/github';
@@ -938,11 +938,37 @@ export default function ChatPage() {
     catch (e) { toast(localizeError(e), 'error'); }
   }, [conversationId, refreshWorkflow]);
 
+  // #490 BUG-N: once the retry POST fires, the backend clears `error` and
+  // transitions `stage` to `proto_building` immediately — so the old banner
+  // logic (`currentStage === 'failed' ? error : undefined`) used to hide the
+  // banner while retry was still running async, making the user think the
+  // pipeline had already recovered. Capture the pre-retry error here and keep
+  // the banner visible in a "retrying" state until the pipeline reaches a
+  // terminal stage (completed / completed_partial, or fails again with a new
+  // error to show).
+  const [retryingError, setRetryingError] = useState<PipelineError | null>(null);
+  useEffect(() => {
+    if (!retryingError) return;
+    const stage = activeWorkflow?.currentStage;
+    const nextError = activeWorkflow?.error;
+    if (stage === 'completed' || stage === 'completed_partial') {
+      setRetryingError(null);
+      return;
+    }
+    // Retry re-failed: backend set a new error on the failed stage. Hand off
+    // to the normal pipelineError path so the user sees the new details.
+    if (stage === 'failed' && nextError) {
+      setRetryingError(null);
+    }
+  }, [activeWorkflow?.currentStage, activeWorkflow?.error, retryingError]);
+
   const handleRetry = useCallback(async () => {
     if (!conversationId) return;
+    const currentError = activeWorkflow?.error;
+    if (currentError) setRetryingError(currentError);
     try { await workflowsApi.retry(conversationId); await refreshWorkflow(); toast('Yeniden deneniyor...', 'info'); }
-    catch (e) { toast(localizeError(e), 'error'); }
-  }, [conversationId, refreshWorkflow]);
+    catch (e) { setRetryingError(null); toast(localizeError(e), 'error'); }
+  }, [conversationId, activeWorkflow?.error, refreshWorkflow]);
 
   const handleSkip = useCallback(async () => {
     if (!conversationId) return;
@@ -1092,7 +1118,11 @@ export default function ChatPage() {
                   tokenUsage={activeWorkflow?.tokenUsage}
                   model={activeWorkflow?.model}
                   onModelChange={!pendingConv ? handleModelChange : undefined}
-                  pipelineError={activeWorkflow?.currentStage === 'failed' ? activeWorkflow?.error : undefined}
+                  pipelineError={
+                    retryingError
+                      ?? (activeWorkflow?.currentStage === 'failed' ? activeWorkflow?.error : undefined)
+                  }
+                  isRetrying={retryingError !== null}
                 />
               </ErrorBoundary>
             </div>

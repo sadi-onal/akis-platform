@@ -160,4 +160,39 @@ describe('PipelineErrorBanner', () => {
 
     expect(screen.queryByTestId('reconnect-github-button')).not.toBeInTheDocument();
   });
+
+  // ── retry-in-flight (#490 BUG-N) ─────────────────────────────────────────
+
+  describe('#490 BUG-N — retry-in-flight state', () => {
+    it('swaps the retry button with a disabled loader when isRetrying=true', () => {
+      render(
+        <PipelineErrorBanner error={retryableError} onRetry={vi.fn()} isRetrying />,
+      );
+
+      const button = screen.getByTestId('retry-button');
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByText('Yeniden deneniyor...')).toBeInTheDocument();
+      expect(screen.queryByText('Tekrar Dene')).not.toBeInTheDocument();
+    });
+
+    it('does NOT call onRetry when the disabled retrying button is clicked', () => {
+      const onRetry = vi.fn();
+      render(
+        <PipelineErrorBanner error={retryableError} onRetry={onRetry} isRetrying />,
+      );
+
+      fireEvent.click(screen.getByTestId('retry-button'));
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it('renders the normal Tekrar Dene button when isRetrying is omitted (default false)', () => {
+      render(<PipelineErrorBanner error={retryableError} onRetry={vi.fn()} />);
+
+      const button = screen.getByTestId('retry-button');
+      expect(button).not.toBeDisabled();
+      expect(button).toHaveAttribute('aria-busy', 'false');
+      expect(screen.getByText('Tekrar Dene')).toBeInTheDocument();
+    });
+  });
 });
