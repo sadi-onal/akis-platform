@@ -732,6 +732,28 @@ export class PipelineOrchestrator {
     cucumberEnabled?: boolean,
   ): Promise<PipelineState> {
     const pipeline = await this.getPipeline(pipelineId);
+
+    // Idempotency guard (#488 BUG-L): when the same chat is open in two tabs,
+    // the second tab often still shows the Onayla button after the first tab
+    // already approved. Re-approving a pipeline that has already advanced past
+    // awaiting_approval is a no-op — return the current state so the stale tab
+    // transparently syncs instead of surfacing a scary INVALID_STAGE toast.
+    // Only short-circuit when approvedSpec is already persisted, so an empty
+    // mis-routed POST still hits the assertStage guard below.
+    const alreadyApprovedStages: readonly PipelineStage[] = [
+      'proto_building',
+      'trace_testing',
+      'completed',
+      'completed_partial',
+    ];
+    if (alreadyApprovedStages.includes(pipeline.stage) && pipeline.approvedSpec) {
+      logger.info(
+        { pipelineId, stage: pipeline.stage },
+        '[Pipeline] approveSpec idempotent hit — pipeline already advanced, returning current state',
+      );
+      return pipeline;
+    }
+
     this.assertStage(pipeline, 'awaiting_approval');
 
     if (!editedSpec && !pipeline.scribeOutput?.spec) {

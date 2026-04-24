@@ -298,20 +298,58 @@ describe('Pipeline edge cases — Invalid state transitions', () => {
     );
   });
 
-  it('rejects approveSpec from completed stage', async () => {
+  it('approveSpec is idempotent from completed stage (#488 BUG-L multi-tab)', async () => {
+    // Scenario: user has the same chat open in two browser tabs. Tab 1 clicks
+    // Onayla → pipeline runs to completion. Tab 2 still shows stale
+    // awaiting_approval state, user clicks Onayla again. The second call must
+    // NOT throw — it should silently return the current state so the stale tab
+    // can re-render from the response instead of surfacing INVALID_STAGE.
     const store = new InMemoryStore();
     const { orchestrator } = createOrchestrator({ store });
 
     const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app edge case' });
     await waitForStage(store, started.id, ['awaiting_approval']);
     await orchestrator.approveSpec(started.id, 'my-app', 'private');
-    await waitForStage(store, started.id, ['completed']);
+    const completed = await waitForStage(store, started.id, ['completed']);
 
-    await assert.rejects(
-      () => orchestrator.approveSpec(started.id, 'repo', 'private'),
-      (err: Error) => err.message.includes('Invalid stage'),
-    );
+    // Second Onayla click — should no-op and return current state
+    const result = await orchestrator.approveSpec(started.id, 'different-repo', 'public');
+    assert.equal(result.stage, 'completed');
+    assert.equal(result.id, completed.id);
+    // Sanity: second call's args (different-repo, public) should NOT overwrite
+    // the persisted protoConfig — idempotent means "no side effects".
+    assert.equal(result.protoConfig?.repoName, completed.protoConfig?.repoName);
+    assert.equal(result.protoConfig?.repoVisibility, completed.protoConfig?.repoVisibility);
   });
+
+  it('approveSpec is idempotent from proto_building with approvedSpec set (#488 BUG-L multi-tab)', async () => {
+    // More direct multi-tab simulation: approvedSpec is already persisted and
+    // Proto is running. A second approveSpec call must return the current
+    // state without re-triggering Proto.
+    const store = new InMemoryStore();
+    const { orchestrator } = createOrchestrator({ store });
+
+    const started = await orchestrator.startPipeline('user-1', { idea: 'Todo app edge case' });
+    await waitForStage(store, started.id, ['awaiting_approval']);
+    await orchestrator.approveSpec(started.id, 'my-app', 'private');
+    // Re-read pipeline once stage has moved past awaiting_approval but is
+    // still in flight (proto_building or later).
+    const afterFirstApprove = await store.getById(started.id);
+    assert.ok(afterFirstApprove?.approvedSpec, 'first approve should persist approvedSpec');
+
+    const result = await orchestrator.approveSpec(started.id, 'different-repo', 'private');
+    // Still in a post-approval stage, no throw, same approvedSpec
+    assert.ok(
+      ['proto_building', 'trace_testing', 'completed', 'completed_partial'].includes(result.stage),
+      `expected post-approval stage, got ${result.stage}`,
+    );
+    assert.equal(result.approvedSpec?.title, afterFirstApprove.approvedSpec?.title);
+  });
+
+  // Note: the existing 'rejects approveSpec from proto_building stage' test
+  // above covers the corrupted-state case (forceStage without approvedSpec)
+  // and continues to pass: the idempotency guard requires approvedSpec to be
+  // set, so corrupted state still surfaces InvalidStageError as before.
 
   it('rejects approveSpec from cancelled stage', async () => {
     const store = new InMemoryStore();
