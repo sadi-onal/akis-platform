@@ -35,6 +35,16 @@ export class GitHubRateLimitError extends Error {
   }
 }
 
+export class GitHubTokenInvalidError extends Error {
+  readonly code = 'GITHUB_TOKEN_INVALID';
+  readonly retryable = false;
+  readonly recoveryAction = 'reconnect_github' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'GitHubTokenInvalidError';
+  }
+}
+
 // ─── Error Codes ─────────────────────────────────
 
 export const PipelineErrorCode = {
@@ -49,6 +59,7 @@ export const PipelineErrorCode = {
   GITHUB_NOT_CONNECTED: 'GITHUB_NOT_CONNECTED',
   GITHUB_REPO_EXISTS: 'GITHUB_REPO_EXISTS',
   GITHUB_PERMISSION_DENIED: 'GITHUB_PERMISSION_DENIED',
+  GITHUB_TOKEN_INVALID: 'GITHUB_TOKEN_INVALID',
   GITHUB_API_ERROR: 'GITHUB_API_ERROR',
   PROTO_SCAFFOLD_GENERATION_FAILED: 'PROTO_SCAFFOLD_GENERATION_FAILED',
   PROTO_PUSH_FAILED: 'PROTO_PUSH_FAILED',
@@ -113,6 +124,12 @@ const ERROR_DEFINITIONS: Record<
   [PipelineErrorCode.GITHUB_PERMISSION_DENIED]: {
     message:
       "GitHub izinleriniz repo oluşturmaya yetmiyor. Lütfen GitHub bağlantınızı yenileyip 'repo' iznini verin.",
+    retryable: false,
+    recoveryAction: 'reconnect_github',
+  },
+  [PipelineErrorCode.GITHUB_TOKEN_INVALID]: {
+    message:
+      "GitHub bağlantınızın süresi dolmuş veya geçersiz. Devam etmek için GitHub hesabınızı yeniden bağlayın.",
     retryable: false,
     recoveryAction: 'reconnect_github',
   },

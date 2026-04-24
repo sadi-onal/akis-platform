@@ -24,6 +24,7 @@ export function PipelineErrorBanner({
 }: PipelineErrorBannerProps) {
   const showRetry = error.retryable && onRetry;
   const showSkipTrace = error.recoveryAction === 'skip-trace' && onSkipTrace;
+  const showReconnectGitHub = error.recoveryAction === 'reconnect_github';
 
   return (
     <div
@@ -62,7 +63,7 @@ export function PipelineErrorBanner({
       </div>
 
       {/* Action buttons */}
-      {(showRetry || showSkipTrace) && (
+      {(showRetry || showSkipTrace || showReconnectGitHub) && (
         <div className="flex gap-2 pl-6">
           {showRetry && (
             <button
@@ -81,6 +82,17 @@ export function PipelineErrorBanner({
             >
               Trace'i Atla
             </button>
+          )}
+          {showReconnectGitHub && (
+            <a
+              href="/settings?tab=integrations"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[12px] font-medium text-amber-300 transition-colors hover:bg-amber-500/20 hover:text-amber-200"
+              data-testid="reconnect-github-button"
+            >
+              GitHub&apos;a Yeniden Bağlan
+            </a>
           )}
         </div>
       )}

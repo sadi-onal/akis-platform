@@ -25,6 +25,13 @@ const nonRetryableError: PipelineError = {
   retryable: false,
 };
 
+const reconnectGitHubError: PipelineError = {
+  code: 'GITHUB_TOKEN_INVALID',
+  message: "GitHub bağlantınızın süresi dolmuş veya geçersiz. Devam etmek için GitHub hesabınızı yeniden bağlayın.",
+  retryable: false,
+  recoveryAction: 'reconnect_github',
+};
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('PipelineErrorBanner', () => {
@@ -130,5 +137,27 @@ describe('PipelineErrorBanner', () => {
 
     expect(screen.getByTestId('retry-button')).toBeInTheDocument();
     expect(screen.getByTestId('skip-trace-button')).toBeInTheDocument();
+  });
+
+  // ── reconnect-github (issue #485 / BUG-K) ────────────────────────────────
+
+  it('renders "GitHub\'a Yeniden Bağlan" button when recoveryAction is reconnect-github', () => {
+    render(<PipelineErrorBanner error={reconnectGitHubError} />);
+
+    expect(screen.getByTestId('reconnect-github-button')).toBeInTheDocument();
+    expect(screen.getByText("GitHub'a Yeniden Bağlan")).toBeInTheDocument();
+  });
+
+  it('"GitHub\'a Yeniden Bağlan" link points to /settings?tab=integrations', () => {
+    render(<PipelineErrorBanner error={reconnectGitHubError} />);
+
+    const link = screen.getByTestId('reconnect-github-button');
+    expect(link).toHaveAttribute('href', '/settings?tab=integrations');
+  });
+
+  it('does NOT render "reconnect-github" button when recoveryAction is different', () => {
+    render(<PipelineErrorBanner error={retryableError} />);
+
+    expect(screen.queryByTestId('reconnect-github-button')).not.toBeInTheDocument();
   });
 });

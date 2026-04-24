@@ -12,7 +12,7 @@
  *   POST   /repos/{owner}/{repo}/pulls                → createPR
  */
 import type { GitHubServiceLike } from '../core/pipeline-factory.js';
-import { GitHubRateLimitError, GitHubAPIError } from '../core/contracts/PipelineErrors.js';
+import { GitHubRateLimitError, GitHubAPIError, GitHubTokenInvalidError } from '../core/contracts/PipelineErrors.js';
 import { logger } from '../../lib/logger.js';
 
 const GITHUB_API = 'https://api.github.com';
@@ -160,12 +160,29 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
   return {
     async createRepository(owner: string, name: string, isPrivate: boolean): Promise<{ url: string }> {
       validateTargetRepo(name);
-      const result = await ghFetch<{ html_url: string; full_name: string; owner?: { login: string } }>(token, 'POST', '/user/repos', {
-        name,
-        description: `AKIS Pipeline scaffold — ${name}`,
-        private: isPrivate,
-        auto_init: true,
-      });
+      let result: { html_url: string; full_name: string; owner?: { login: string } };
+      try {
+        result = await ghFetch<{ html_url: string; full_name: string; owner?: { login: string } }>(token, 'POST', '/user/repos', {
+          name,
+          description: `AKIS Pipeline scaffold — ${name}`,
+          private: isPrivate,
+          auto_init: true,
+        });
+      } catch (err) {
+        // GitHub returns 404 on POST /user/repos when the OAuth token is
+        // invalid or expired (the endpoint doesn't exist for that credential).
+        // Surface a user-actionable error instead of a generic GITHUB_API_ERROR.
+        if (err instanceof GitHubAPIError && err.statusCode === 404) {
+          logger.warn(
+            { owner, name, statusCode: 404 },
+            '[GitHubRESTAdapter] createRepository: 404 on POST /user/repos — token likely invalid/expired',
+          );
+          throw new GitHubTokenInvalidError(
+            'POST /user/repos returned 404 — OAuth token is invalid or expired',
+          );
+        }
+        throw err;
+      }
       // Layer A — Read-back verification (PR #477): confirm the repo is accessible
       // before declaring success. Protects against silent-failure cases where the POST
       // returns 201 but the repo is not yet visible (eventual consistency).

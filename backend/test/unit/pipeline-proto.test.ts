@@ -7,6 +7,7 @@ import {
   type ProtoGitHubDeps,
 } from '../../src/pipeline/agents/proto/ProtoAgent.js';
 import type { ProtoInput, StructuredSpec } from '../../src/pipeline/core/contracts/PipelineTypes.js';
+import { GitHubTokenInvalidError } from '../../src/pipeline/core/contracts/PipelineErrors.js';
 
 // ─── Test Fixtures ────────────────────────────────
 
@@ -221,6 +222,30 @@ describe('Proto — GitHub error handling', () => {
     if (result.type === 'error') {
       assert.equal(result.error.code, 'GITHUB_API_ERROR');
       assert.equal(result.error.retryable, true);
+    }
+  });
+
+  it('returns GITHUB_TOKEN_INVALID when adapter throws GitHubTokenInvalidError (issue #489 BUG-M)', async () => {
+    // Regression guard for #489: the adapter in #487 throws GitHubTokenInvalidError
+    // on POST /user/repos 404, but ProtoAgent used to fall back to substring
+    // matching which masked the typed error as generic GITHUB_API_ERROR,
+    // hiding the reconnect-github CTA the banner depends on.
+    const ai = createMockAI(scaffoldResponse);
+    const github = createMockGitHub({
+      async createRepository() {
+        throw new GitHubTokenInvalidError(
+          'POST /user/repos returned 404 — OAuth token is invalid or expired',
+        );
+      },
+    });
+    const agent = new ProtoAgent(ai, github);
+
+    const result = await agent.execute(baseInput());
+    assert.equal(result.type, 'error');
+    if (result.type === 'error') {
+      assert.equal(result.error.code, 'GITHUB_TOKEN_INVALID');
+      assert.equal(result.error.recoveryAction, 'reconnect_github');
+      assert.equal(result.error.retryable, false);
     }
   });
 

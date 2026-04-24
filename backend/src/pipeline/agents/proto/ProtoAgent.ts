@@ -8,6 +8,7 @@ import {
   PipelineErrorCode,
   createPipelineError,
   RETRY_CONFIG,
+  GitHubTokenInvalidError,
 } from '../../core/contracts/PipelineErrors.js';
 import type { PipelineError } from '../../core/contracts/PipelineTypes.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
@@ -807,6 +808,19 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
       );
       return { type: 'output' };
     } catch (err) {
+      // Typed error classes come first — substring matching on `msg` below is
+      // a fallback for legacy paths that `throw new Error(...)` without a
+      // dedicated class. Without these instanceof checks, `GitHubTokenInvalidError`
+      // from the adapter (#487) would fall through to the generic
+      // GITHUB_API_ERROR bucket and the user would never see the reconnect
+      // CTA that #485/#487 added (issue #489 / BUG-M).
+      if (err instanceof GitHubTokenInvalidError) {
+        return {
+          type: 'error',
+          error: createPipelineError(PipelineErrorCode.GITHUB_TOKEN_INVALID, err.message),
+        };
+      }
+
       const msg = err instanceof Error ? err.message : String(err);
 
       if (msg.includes('already exists') || msg.includes('name already exists') || msg.includes('422')) {
