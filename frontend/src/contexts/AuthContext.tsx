@@ -31,7 +31,7 @@ const AuthContext = createContext<AuthContextValue>({
   setUser: () => {},
 });
 
-const AUTH_REQUIRED_PREFIXES = ['/dashboard', '/agents', '/pipeline', '/chat', '/settings', '/engineer'];
+const AUTH_REQUIRED_PREFIXES = ['/dashboard', '/agents', '/pipeline', '/chat', '/settings'];
 
 function requiresAuthResolve(pathname: string): boolean {
   return AUTH_REQUIRED_PREFIXES.some((prefix) => pathname.startsWith(prefix));

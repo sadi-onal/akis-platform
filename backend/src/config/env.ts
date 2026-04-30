@@ -13,12 +13,21 @@ import { logger } from '../lib/logger.js';
 // Get backend directory (where .env files are located)
 const backendDir = resolve(import.meta.dirname, '../../');
 
+// Snapshot shell exports so they keep precedence over .env / .env.local
+// (matches the stated priority: shell > .env.local > .env).
+const shellExports = { ...process.env };
+
 // Load .env first — override: true ensures .env values take precedence
 // over inherited shell environment (e.g., Claude Desktop sets NODE_ENV=production)
 loadEnv({ path: resolve(backendDir, '.env'), override: true });
 
 // Load .env.local second (local overrides) - this WILL override .env values
 loadEnv({ path: resolve(backendDir, '.env.local'), override: true });
+
+// Restore shell-exported values so explicit shell env wins.
+for (const [key, value] of Object.entries(shellExports)) {
+  if (value !== undefined) process.env[key] = value;
+}
 
 /**
  * Environment schema validation (fail-fast)

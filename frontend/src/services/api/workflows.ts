@@ -308,9 +308,9 @@ export function mapPipelineToWorkflow(pipeline: Pipeline, tokenUsage?: import('.
     if (first?.type !== 'user_idea') return 'Isimsiz Is Akisi';
     const content = (first as Record<string, unknown>).content;
     if (typeof content !== 'string') return 'Isimsiz Is Akisi';
-    // Engineer-started pipelines inline title + description separated by '\n\n';
-    // keep only the first line so the chat header doesn't render them concatenated
-    // mid-word (BUG-25).
+    // Some ideas inline title + description separated by '\n\n'; keep only the
+    // first line so the chat header doesn't render them concatenated mid-word
+    // (BUG-25).
     const firstLine = content.split('\n')[0].trim();
     return firstLine.slice(0, 60) || 'Isimsiz Is Akisi';
   })();
@@ -325,7 +325,6 @@ export function mapPipelineToWorkflow(pipeline: Pipeline, tokenUsage?: import('.
     updatedAt: pipeline.updatedAt,
     stages,
     conversation: mapConversation(pipeline),
-    engineerSessionId: pipeline.intermediateState?.engineerSessionId,
     tokenUsage,
     model: pipeline.model ?? tokenUsage?.model,
     error: pipeline.error,

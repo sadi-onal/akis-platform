@@ -79,11 +79,6 @@ function readPipelineImageBlocks(
 
 const PIPELINE_TITLE_MAX = 100;
 
-/**
- * Derive a single-line pipeline title from a user idea. Engineer-started
- * pipelines inline the task title + description separated by `\n\n`; without
- * this split the chat header would render them concatenated mid-word (BUG-25).
- */
 export function ideaToTitle(idea: string): string {
   const firstLine = idea.split('\n')[0]?.trim() ?? '';
   return firstLine.slice(0, PIPELINE_TITLE_MAX);
@@ -368,7 +363,6 @@ export class PipelineOrchestrator {
     parentPipelineId?: string,
     skipScribe?: boolean,
     traceEnabled?: boolean,
-    engineerSessionId?: string,
   ): Promise<PipelineState> {
     const pipeline = await this.store.create(userId);
 
@@ -392,15 +386,6 @@ export class PipelineOrchestrator {
         ...updateData.intermediateState,
         existingRepo: input.existingRepo,
         parentPipelineId,
-      };
-    }
-    // Record engineer-session ownership so the chat UI can surface
-    // "this pipeline belongs to Mühendis Modu session <X>" and deep-link
-    // back to the live session page (BUG-24 / #434).
-    if (engineerSessionId) {
-      updateData.intermediateState = {
-        ...updateData.intermediateState,
-        engineerSessionId,
       };
     }
     // Store attachment context for Scribe knowledge injection

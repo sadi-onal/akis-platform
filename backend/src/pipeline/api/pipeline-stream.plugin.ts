@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { pipelineBus, type PipelineActivity } from '../core/activityEmitter.js';
 import type { PipelineOrchestrator } from '../core/orchestrator/PipelineOrchestrator.js';
+import { isDevMode } from '../../config/devMode.js';
 
 export interface PipelineStreamPluginOptions {
   requireAuth: (request: FastifyRequest) => Promise<{ id: string }>;
@@ -17,14 +18,20 @@ export async function pipelineStreamPlugin(
   fastify: FastifyInstance,
   opts: PipelineStreamPluginOptions,
 ) {
-  const isDevMode = process.env.DEV_MODE === 'true';
+  const isDevModeActive = isDevMode();
 
   const authPreHandler = async (request: FastifyRequest) => {
-    if (isDevMode && opts.devUserId) {
-      (request as unknown as Record<string, unknown>).__pipelineUserId = opts.devUserId;
+    try {
+      const user = await opts.requireAuth(request);
+      (request as unknown as Record<string, unknown>).__pipelineUserId = user.id;
       return;
+    } catch {
+      if (isDevModeActive && opts.devUserId) {
+        (request as unknown as Record<string, unknown>).__pipelineUserId = opts.devUserId;
+        return;
+      }
+      throw Object.assign(new Error('UNAUTHORIZED'), { statusCode: 401 });
     }
-    await opts.requireAuth(request);
   };
 
   // GET /api/pipelines/:id/stream — SSE endpoint

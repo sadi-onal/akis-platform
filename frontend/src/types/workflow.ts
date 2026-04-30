@@ -156,14 +156,6 @@ export interface Workflow {
   /** Pipeline error details — present when status is 'failed'. */
   error?: import('./pipeline').PipelineError;
   /**
-   * Set when the pipeline was started by an Engineer Rental Mode session.
-   * The chat UI uses this to render an "engineer-owned" badge in the sidebar
-   * and a banner linking back to `/engineer/session/:engineerSessionId`, so
-   * the session context is not lost when the user drifts to the pipeline's
-   * chat row (BUG-24 / #434).
-   */
-  engineerSessionId?: string;
-  /**
    * Live chat-level token usage + context-window gauge data. Supplied by
    * `GET /api/pipelines/:id` response top-level field (not nested under
    * `pipeline.metrics`) so the gauge can read mid-stage accumulator values

@@ -285,7 +285,7 @@ describe('HttpClient 401 session handling', () => {
     let currentHref = '/initial';
     Object.defineProperty(window, 'location', {
       value: {
-        pathname: '/engineer',
+        pathname: '/chat',
         set href(v: string) {
           currentHref = v;
         },

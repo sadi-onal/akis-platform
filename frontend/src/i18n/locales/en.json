@@ -1036,8 +1036,6 @@
   "integrity.noData": "No integrity data yet",
   "integrity.empty.howDataBuilds": "Metrics appear after you run pipelines: agent activities, Trace criteria coverage, and assumption tracking feed this tab. Synthetic placeholders are not shown.",
   "integrity.error": "Failed to load integrity metrics",
-  "engineer.githubNotConnected": "GitHub is not connected. Connect GitHub under Settings → Integrations to list repositories.",
-  "engineer.integrationsCta": "Open Integrations",
   "status.description": "Current operational status of AKIS services.",
   "status.error": "Something went wrong.",
   "status.incidents.none": "No incidents reported in the last 30 days.",

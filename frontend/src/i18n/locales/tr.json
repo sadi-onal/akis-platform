@@ -1036,8 +1036,6 @@
   "integrity.noData": "Henüz bütünlük verisi yok",
   "integrity.empty.howDataBuilds": "Metrikler pipeline calistikca olusur: agent aktiviteleri, Trace kriter kapsami ve varsayim kayitlari bu sekmeyi besler. Sentetik veya sabit degerler KPI olarak gosterilmez.",
   "integrity.error": "Bütünlük metrikleri yüklenemedi",
-  "engineer.githubNotConnected": "GitHub bagli degil. Repo listesi icin Ayarlar > Entegrasyonlar uzerinden GitHub baglantisi yapin.",
-  "engineer.integrationsCta": "Entegrasyonlara git",
   "status.description": "AKIS hizmetlerinin mevcut operasyonel durumu.",
   "status.error": "Bir şeyler ters gitti.",
   "status.incidents.none": "Son 30 günde bildirilen olay yok.",

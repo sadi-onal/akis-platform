@@ -1203,8 +1203,6 @@ export const MESSAGE_KEYS = [
   'integrity.noData',
   'integrity.empty.howDataBuilds',
   'integrity.error',
-  'engineer.githubNotConnected',
-  'engineer.integrationsCta',
 
   // Dashboard
   'dashboard.overview.usage.recentActivityEmpty',

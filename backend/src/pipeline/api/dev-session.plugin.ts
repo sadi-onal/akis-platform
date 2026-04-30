@@ -13,6 +13,7 @@ import { getFileTreeViaREST, pushChangesViaREST } from '../adapters/GitHubRESTAd
 import type { AIServiceLike } from '../core/pipeline-factory.js';
 import type { PipelineOrchestrator } from '../core/orchestrator/PipelineOrchestrator.js';
 import type { FileChange, DevSessionContext, FileTreeNode } from '../../types/dev-session.js';
+import { isDevMode } from '../../config/devMode.js';
 
 export interface DevSessionPluginOptions {
   aiService: AIServiceLike;
@@ -27,16 +28,21 @@ export async function devSessionPlugin(
   opts: DevSessionPluginOptions,
 ) {
   const { aiService, githubToken, orchestrator, requireAuth, devUserId } = opts;
-  const isDevMode = process.env.DEV_MODE === 'true';
+  const isDevModeActive = isDevMode();
 
-  // Auth preHandler
+  // Auth preHandler — real auth first, DEV_MODE fallback only if no valid session
   const authPreHandler = async (request: FastifyRequest) => {
-    if (isDevMode && devUserId) {
-      (request as unknown as Record<string, unknown>).__pipelineUserId = devUserId;
+    try {
+      const user = await requireAuth(request);
+      (request as unknown as Record<string, unknown>).__pipelineUserId = user.id;
       return;
+    } catch {
+      if (isDevModeActive && devUserId) {
+        (request as unknown as Record<string, unknown>).__pipelineUserId = devUserId;
+        return;
+      }
+      throw Object.assign(new Error('UNAUTHORIZED'), { statusCode: 401 });
     }
-    const user = await requireAuth(request);
-    (request as unknown as Record<string, unknown>).__pipelineUserId = user.id;
   };
 
   // Create DevAgent AI deps from AIServiceLike

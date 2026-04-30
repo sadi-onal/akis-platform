@@ -8,12 +8,11 @@ in PRs **#399–#410** once they are merged and deployed to
 
 | Spec | PR / Bug | What it verifies |
 | --- | --- | --- |
-| `prod-smoke-auth.spec.ts` | #399 / BUG-01 | GitHub OAuth token is visible to both `/api/github/status` and `/api/integrations/github/status`; no "Profilinizi tamamlayın" banner; `/engineer` does not say "GitHub bağlı değil". |
+| `prod-smoke-auth.spec.ts` | #399 / BUG-01 | GitHub OAuth token is visible to both `/api/github/status` and `/api/integrations/github/status`; no "Profilinizi tamamlayın" banner. |
 | `prod-smoke-usage-admin.spec.ts` | #401 / BUG-02, BUG-03 | Admin plan tab shows ∞ everywhere, no progress bars; usage tab shows `Sinirsiz` badge + ∞ remaining. |
 | `prod-smoke-iteration.spec.ts` | #400 / BUG-08 | Follow-up prompt in a completed chat posts to `/api/pipelines/:id/message`, URL chat id unchanged, sidebar has 1 entry. |
 | `prod-smoke-image-ack.spec.ts` | #403 / BUG-09 | After PNG upload + prompt, Scribe's first reply contains `görsel` or `resim`. |
 | `prod-smoke-ui-polish.spec.ts` | #384, #387, #391, #392, #386, #406, #410 | i18n labels (`Bütünlük`, `Eşzamanlı Pipeline`), chat-input min-height ≥ 72px, Konsol tab hidden by default, `?debug=1` reveals it, PlanCard summary ≥ 13px. |
-| `prod-smoke-engineer.spec.ts` | #395 / BUG-15 | Fresh localStorage shows intro modal; "Başla" dismisses; reload does not re-show. |
 
 ## Running
 
@@ -44,7 +43,7 @@ commit secrets — all values come from the environment.
 
 | Var | Used by | Purpose |
 | --- | --- | --- |
-| `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | auth, iteration, image-ack, engineer | Real user session for end-to-end checks. Without them, specs stub the API or skip the test. |
+| `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | auth, iteration, image-ack | Real user session for end-to-end checks. Without them, specs stub the API or skip the test. |
 | `TEST_ADMIN_EMAIL` / `TEST_ADMIN_PASSWORD` | usage-admin | Real admin session; required for true live verification of admin-unlimited. |
 | `PROD_SMOKE_RUN_LIVE_PIPELINE` | image-ack | Opt-in (`=true`) to actually run a Scribe pipeline against prod. Costs real LLM tokens; off by default. |
 | `PLAYWRIGHT_BASE_URL` | all | Override the base URL (defaults to `http://127.0.0.1:5173`). |

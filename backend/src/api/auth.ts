@@ -13,6 +13,7 @@ import { registerOAuthRoutes } from './auth.oauth.js';
 import { registerInviteRoutes } from './auth.invite.js';
 import { sendError } from '../utils/errorHandler.js';
 import { requireAuth } from '../utils/auth.js';
+import { isDevMode } from '../config/devMode.js';
 
 type User = typeof users.$inferSelect;
 
@@ -181,51 +182,50 @@ export async function authRoutes(fastify: FastifyInstance) {
   );
 
   fastify.get('/me', async (request, reply) => {
-    // DEV_MODE: return first active user without requiring session cookie
-    if (process.env.DEV_MODE === 'true') {
+    const token = request.cookies?.[env.AUTH_COOKIE_NAME];
+    if (token) {
+      try {
+        const payload = await verify<{ sub: string }>(token);
+        const user = await db.query.users.findFirst({
+          where: eq(users.id, payload.sub),
+        });
+        if (user) return sanitizeUser(user);
+        clearSessionCookie(reply);
+      } catch {
+        clearSessionCookie(reply);
+      }
+    }
+
+    // DEV_MODE: fall back to first active user when no valid session cookie
+    if (isDevMode()) {
       const devUser = await db.query.users.findFirst({
         where: eq(users.status, 'active'),
       });
       if (devUser) return sanitizeUser(devUser);
     }
 
-    const token = request.cookies?.[env.AUTH_COOKIE_NAME];
-    if (!token) {
-      return reply.code(401).send({ user: null });
-    }
-
-    try {
-      const payload = await verify<{ sub: string }>(token);
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, payload.sub),
-      });
-
-      if (!user) {
-        clearSessionCookie(reply);
-        return reply.code(401).send({ user: null });
-      }
-
-      return sanitizeUser(user);
-    } catch {
-      clearSessionCookie(reply);
-      return reply.code(401).send({ user: null });
-    }
+    return reply.code(401).send({ user: null });
   });
 
   // ── Profile & Account Management endpoints ──
 
   const authPreHandler = async (request: FastifyRequest) => {
-    if (process.env.DEV_MODE === 'true') {
-      const devUser = await db.query.users.findFirst({
-        where: eq(users.status, 'active'),
-      });
-      if (devUser) {
-        (request as unknown as Record<string, unknown>).__authUser = { id: devUser.id, email: devUser.email, name: devUser.name, role: 'member' };
-        return;
+    try {
+      const user = await requireAuth(request);
+      (request as unknown as Record<string, unknown>).__authUser = user;
+      return;
+    } catch {
+      if (isDevMode()) {
+        const devUser = await db.query.users.findFirst({
+          where: eq(users.status, 'active'),
+        });
+        if (devUser) {
+          (request as unknown as Record<string, unknown>).__authUser = { id: devUser.id, email: devUser.email, name: devUser.name, role: 'member' };
+          return;
+        }
       }
+      throw Object.assign(new Error('UNAUTHORIZED'), { statusCode: 401 });
     }
-    const user = await requireAuth(request);
-    (request as unknown as Record<string, unknown>).__authUser = user;
   };
 
   const getUser = (request: FastifyRequest) =>

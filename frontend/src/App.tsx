@@ -32,10 +32,6 @@ const DocsPage = lazy(() => import('./pages/DocsPage'));
 // Protected pages
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
 
-// Engineer Rental Mode — protected pages
-const EngineerPage = lazy(() => import('./pages/engineer/EngineerPage'));
-const EngineerSessionPage = lazy(() => import('./pages/engineer/EngineerSessionPage'));
-
 const PageLoader = () => (
   <div className="flex min-h-[200px] items-center justify-center animate-in fade-in duration-200">
     <div className="h-8 w-8 animate-spin rounded-full border-2 border-ak-primary border-t-transparent" />
@@ -99,24 +95,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <Suspense fallback={<PageLoader />}><SettingsPage /></Suspense>
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Engineer Rental Mode — protected pages */}
-          <Route
-            path="/engineer"
-            element={
-              <ProtectedRoute>
-                <Suspense fallback={<PageLoader />}><EngineerPage /></Suspense>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/engineer/session/:id"
-            element={
-              <ProtectedRoute>
-                <Suspense fallback={<PageLoader />}><EngineerSessionPage /></Suspense>
               </ProtectedRoute>
             }
           />

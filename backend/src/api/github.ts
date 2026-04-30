@@ -9,6 +9,7 @@ import { db } from '../db/client.js';
 import { users } from '../db/schema.js';
 import { requireAuth } from '../utils/auth.js';
 import { getGitHubToken as resolveGitHubToken } from '../services/auth/githubToken.js';
+import { isDevMode } from '../config/devMode.js';
 
 const GITHUB_API = 'https://api.github.com';
 
@@ -47,20 +48,25 @@ async function ghFetch<T>(token: string, method: string, path: string, body?: un
 export const getGitHubToken = resolveGitHubToken;
 
 export async function githubRoutes(fastify: FastifyInstance) {
-  const isDevMode = process.env.DEV_MODE === 'true';
+  const isDevModeActive = isDevMode();
 
   const authPreHandler = async (request: FastifyRequest) => {
-    if (isDevMode) {
-      const devUser = await db.query.users.findFirst({
-        where: eq(users.status, 'active'),
-      });
-      if (devUser) {
-        (request as unknown as Record<string, unknown>).__githubUserId = devUser.id;
-        return;
+    try {
+      const user = await requireAuth(request);
+      (request as unknown as Record<string, unknown>).__githubUserId = user.id;
+      return;
+    } catch {
+      if (isDevModeActive) {
+        const devUser = await db.query.users.findFirst({
+          where: eq(users.status, 'active'),
+        });
+        if (devUser) {
+          (request as unknown as Record<string, unknown>).__githubUserId = devUser.id;
+          return;
+        }
       }
+      throw Object.assign(new Error('UNAUTHORIZED'), { statusCode: 401 });
     }
-    const user = await requireAuth(request);
-    (request as unknown as Record<string, unknown>).__githubUserId = user.id;
   };
 
   const getUserId = (request: FastifyRequest): string =>

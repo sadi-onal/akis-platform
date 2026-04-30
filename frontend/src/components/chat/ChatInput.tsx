@@ -207,7 +207,7 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
       data-expanded={expanded ? 'true' : 'false'}
       className={cn(
         'shrink-0 mx-auto w-full px-3 sm:px-6 pt-4 pb-2',
-        expanded ? 'max-w-5xl' : 'max-w-3xl md:max-w-4xl xl:max-w-5xl',
+        expanded ? 'max-w-6xl' : 'max-w-4xl md:max-w-5xl xl:max-w-6xl',
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}

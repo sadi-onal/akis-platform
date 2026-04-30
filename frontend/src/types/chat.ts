@@ -172,13 +172,6 @@ export interface ConversationListItem {
   branch?: string;
   prUrl?: string;
   prNumber?: number;
-  /**
-   * Present on pipelines created by an Engineer Rental Mode session. Sidebar
-   * renders a wrench badge and the row links to `/engineer/session/<id>`
-   * instead of the generic chat route so the engineer context stays intact
-   * (BUG-24 / #434).
-   */
-  engineerSessionId?: string;
 }
 
 /* ─── Agent Audit ───────────────────────────────── */

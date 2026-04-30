@@ -10,6 +10,7 @@ import { StaleStateError } from '../db/DrizzlePipelineStore.js';
 import { ZodError } from 'zod';
 import { FileUploadService, type ProcessedAttachment } from '../services/FileUploadService.js';
 import { logger } from '../../lib/logger.js';
+import { isDevMode } from '../../config/devMode.js';
 
 // ─── AKIS Platform Repo Guard ────────────────────
 const BLOCKED_PLATFORM_REPOS = [
@@ -123,7 +124,7 @@ export async function pipelinePlugin(
   opts: PipelinePluginOptions,
 ) {
   const { orchestrator, requireAuth, devUserId } = opts;
-  const isDevMode = process.env.DEV_MODE === 'true';
+  const isDevModeActive = isDevMode();
   const fileUploadService = new FileUploadService();
 
   const routes = createPipelineRoutes({
@@ -133,14 +134,19 @@ export async function pipelinePlugin(
     },
   });
 
-  // Auth preHandler — dev mode bypass or real auth
+  // Auth preHandler — real auth first, DEV_MODE fallback only if no valid session
   const authPreHandler = async (request: FastifyRequest) => {
-    if (isDevMode && devUserId) {
-      (request as unknown as Record<string, unknown>).__pipelineUserId = devUserId;
+    try {
+      const user = await requireAuth(request);
+      (request as unknown as Record<string, unknown>).__pipelineUserId = user.id;
       return;
+    } catch {
+      if (isDevModeActive && devUserId) {
+        (request as unknown as Record<string, unknown>).__pipelineUserId = devUserId;
+        return;
+      }
+      throw Object.assign(new Error('UNAUTHORIZED'), { statusCode: 401 });
     }
-    const user = await requireAuth(request);
-    (request as unknown as Record<string, unknown>).__pipelineUserId = user.id;
   };
 
   // Ownership preHandler — verify user owns the pipeline (prevents IDOR)

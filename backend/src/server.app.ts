@@ -41,12 +41,12 @@ import { billingRoutes } from './api/billing.js';
 import { pipelinePlugin } from './pipeline/api/pipeline.plugin.js';
 import { pipelineStreamPlugin } from './pipeline/api/pipeline-stream.plugin.js';
 import { devSessionPlugin } from './pipeline/api/dev-session.plugin.js';
-import { engineerPlugin } from './pipeline/api/engineer.plugin.js';
 import { createPipelineSystem, type GitHubServiceLike } from './pipeline/core/pipeline-factory.js';
 import { initSkills } from './pipeline/agents/skills/index.js';
 import { createGitHubRESTAdapter, getGitHubOwnerViaREST } from './pipeline/adapters/GitHubRESTAdapter.js';
 import { pushLog } from './lib/logBuffer.js';
 import { logger } from './lib/logger.js';
+import { isDevMode } from './config/devMode.js';
 import { initPiriRAGService } from './services/rag/PiriRAGService.js';
 import { AgentOrchestrator } from './core/orchestrator/AgentOrchestrator.js';
 import { createAIService, createToolCallingClient } from './services/ai/AIService.js';
@@ -76,6 +76,14 @@ const QUIET_ROUTES = new Set([
  * Separated from server.listen() to allow testing with inject()
  */
 export async function buildApp() {
+  // Boot-time hard guard: DEV_MODE must never be enabled in production.
+  // Misconfigured prod deploy with DEV_MODE=true would silently bypass auth
+  // and leak the first active user across all sessions. Fail fast instead.
+  if (process.env.NODE_ENV === 'production' && process.env.DEV_MODE === 'true') {
+    logger.fatal('[buildApp] FATAL: DEV_MODE=true is not allowed when NODE_ENV=production');
+    process.exit(1);
+  }
+
   // Validate environment variables at startup (fail-fast)
   const env = getEnv();
 
@@ -388,7 +396,7 @@ export async function buildApp() {
   app.addHook('onClose', () => pipelineReconciler.stop());
   // Resolve dev user for DEV_MODE auth bypass
   let devUserId: string | undefined;
-  if (process.env.DEV_MODE === 'true') {
+  if (isDevMode()) {
     try {
       const { db } = await import('./db/client.js');
       const { users: usersTable } = await import('./db/schema.js');
@@ -421,18 +429,6 @@ export async function buildApp() {
       devUserId,
     }),
     { prefix: '/api/pipelines' },
-  );
-
-  // Engineer Rental Mode routes
-  await app.register(
-    async (instance) => engineerPlugin(instance, {
-      requireAuth,
-      devUserId,
-      aiService,
-      githubService: pipelineGitHubService,
-      orchestrator: pipelineOrchestrator,
-    }),
-    { prefix: '/api/engineer' },
   );
 
   // Initialize Piri RAG service if configured

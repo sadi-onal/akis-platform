@@ -156,9 +156,10 @@ export async function resolveGitHubToken(
     );
   }
 
-  // 3. DEV_MODE env fallback
+  // 3. DEV_MODE env fallback — never active in production (defense-in-depth
+  // even if a misconfigured prod deploy sets DEV_MODE=true).
   const envVars = d.readEnv();
-  if (envVars.DEV_MODE === 'true') {
+  if (envVars.DEV_MODE === 'true' && process.env.NODE_ENV !== 'production') {
     const envToken = envVars.GITHUB_TOKEN;
     if (envToken && !envToken.startsWith('<') && envToken.length > 10) {
       logger.debug(`[github-token] resolved userId=${userId} source=dev_env_fallback`);

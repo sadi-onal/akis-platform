@@ -15,6 +15,7 @@ import { VerificationService } from '../services/auth/verification.js';
 import type { EmailService } from '../services/email/index.js';
 import { sendError } from '../utils/errorHandler.js';
 import { logger } from '../lib/logger.js';
+import { isDevMode } from '../config/devMode.js';
 
 type User = typeof users.$inferSelect;
 
@@ -75,9 +76,7 @@ export async function registerMultiStepAuthRoutes(
   fastify: FastifyInstance,
   emailService: EmailService
 ) {
-  const rawDevMode = process.env.DEV_MODE === 'true';
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isDevMode = rawDevMode && !isProduction; // DEV_MODE disabled in production for safety
+  const isDevModeActive = isDevMode(); // helper enforces NODE_ENV=production short-circuit
   const verificationService = new VerificationService(emailService, {
     ttlMinutes: 15, // Can be made configurable
   });
@@ -176,7 +175,7 @@ export async function registerMultiStepAuthRoutes(
     // Hash and store password
     const passwordHash = await hashPassword(body.password);
     
-    if (isDevMode) {
+    if (isDevModeActive) {
       const [updatedUser] = await db
         .update(users)
         .set({
@@ -324,7 +323,7 @@ export async function registerMultiStepAuthRoutes(
     }
 
     if (user.status === 'pending_verification' || !user.emailVerified) {
-      if (isDevMode && user.status !== 'disabled' && user.status !== 'deleted') {
+      if (isDevModeActive && user.status !== 'disabled' && user.status !== 'deleted') {
         const [promotedUser] = await db
           .update(users)
           .set({

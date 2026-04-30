@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
 import { logger } from '../../lib/logger.js';
+import { isDevMode } from '../../config/devMode.js';
 
 export interface CorsPluginOptions {
   origins: string[];
@@ -23,7 +24,9 @@ export const corsPlugin = fp<CorsPluginOptions>(
         .map((origin) => origin.replace(/\/$/, ''))
     );
 
-    const shouldAllowDevOrigins = process.env.NODE_ENV !== 'production';
+    // Allow localhost dev origins only when DEV_MODE helper is active.
+    // Helper enforces NODE_ENV=production short-circuit, so this is safe.
+    const shouldAllowDevOrigins = isDevMode() || process.env.NODE_ENV === 'test';
     if (shouldAllowDevOrigins) {
       for (const origin of DEV_ORIGINS) {
         normalizedOrigins.add(origin);

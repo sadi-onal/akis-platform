@@ -5,7 +5,6 @@
  *   - /api/github/status returns { connected: true }
  *   - /api/integrations/github/status returns { connected: true }
  *   - The "Profilinizi tamamlayın: GitHub" banner is NOT visible in the app shell.
- *   - The /engineer page does NOT show the "GitHub bağlı değil" notice.
  *
  * Against prod (PLAYWRIGHT_BASE_URL=https://akisflow.com) we skip gracefully
  * unless TEST_USER_EMAIL + TEST_USER_PASSWORD are supplied. Otherwise we stub
@@ -105,18 +104,6 @@ test.describe('BUG-01 / PR #399 — GitHub token storage unification @prod @smok
 
     const banner = page.getByText(/Profilinizi tamamlayın.*GitHub/i);
     await expect(banner).toHaveCount(0);
-  });
-
-  test('/engineer does not show "GitHub bağlı değil" when connected', async ({ page }) => {
-    test.skip(
-      !HAS_TEST_CREDS && !process.env.PLAYWRIGHT_BASE_URL?.includes('127.0.0.1'),
-      'Needs either real creds or local dev server to route /engineer',
-    );
-
-    await page.goto('/engineer');
-    // Under the fixed backend, this notice should be absent when OAuth is connected.
-    const notice = page.getByText(/GitHub bağlı değil/i);
-    await expect(notice).toHaveCount(0);
   });
 
   test('Integrations tab reports "Bağlı" when OAuth connected', async ({ page }) => {

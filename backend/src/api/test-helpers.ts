@@ -25,7 +25,10 @@ const E2E_TEST_USER = {
 
 export async function testHelpersRoutes(fastify: FastifyInstance) {
   const env = getEnv();
-  const isE2EMode = env.NODE_ENV === 'test' || process.env.E2E === '1';
+  // E2E test routes are only mounted under NODE_ENV=test. The previous
+  // E2E === '1' env-var escape hatch was removed (prod-hardening): we don't
+  // want a single env var to expose /test/e2e/login in any non-test env.
+  const isE2EMode = env.NODE_ENV === 'test';
   const devBootstrapEnabled = env.NODE_ENV !== 'production' && process.env.SCRIBE_DEV_GITHUB_BOOTSTRAP === 'true';
 
   // E2E login endpoint - ONLY available in test/E2E mode
