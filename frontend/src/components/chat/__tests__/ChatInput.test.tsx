@@ -32,7 +32,7 @@ describe('ChatInput', () => {
     fireEvent.change(textarea, { target: { value: '  my idea  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Gönder' }));
     expect(onSend).toHaveBeenCalledOnce();
-    expect(onSend).toHaveBeenCalledWith('my idea', undefined);
+    expect(onSend).toHaveBeenCalledWith('my idea');
   });
 
   it('calls onSend on Enter key', () => {
@@ -42,7 +42,7 @@ describe('ChatInput', () => {
     fireEvent.change(textarea, { target: { value: 'test message' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     expect(onSend).toHaveBeenCalledOnce();
-    expect(onSend).toHaveBeenCalledWith('test message', undefined);
+    expect(onSend).toHaveBeenCalledWith('test message');
   });
 
   it('Shift+Enter does NOT trigger send', () => {

@@ -17,8 +17,7 @@ import type { Workflow, WorkflowStatus, ConversationMessage, StructuredSpec } fr
 import type { UserFriendlyPlan } from '../../types/plan';
 import type { PipelineStage, PipelineError } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
-import { RepoSelector, type RepoMode, type SelectedRepo } from '../../components/chat/RepoSelector';
-import type { RepoContext } from '../../services/api/github';
+import type { SelectedRepo } from '../../components/chat/RepoSelector';
 import { LOGO_MARK_SVG } from '../../theme/brand';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
 import { ChatSkeleton } from '../../components/chat/ChatSkeleton';
@@ -278,9 +277,10 @@ export default function ChatPage() {
   // Trace toggle — off by default
   const [traceEnabled, setTraceEnabled] = useState(false);
   // Repo selector state
-  const [repoMode, setRepoMode] = useState<RepoMode>('new');
+  // Repo selection state retained so existing pipelines that reference these
+  // setters compile, but the user-facing selector is gone — every send
+  // creates a new project (selectedRepo stays null).
   const [selectedRepo, setSelectedRepo] = useState<SelectedRepo | null>(null);
-  const [repoContext, setRepoContext] = useState<RepoContext | null>(null);
   // Key source badge state
   const [keySourceBadge, setKeySourceBadge] = useState<{ source: 'akis' | 'own'; jobsRemaining: number; jobsLimit: number } | null>(null);
   const [showProfileWizard, setShowProfileWizard] = useState(false);
@@ -610,20 +610,10 @@ export default function ChatPage() {
   }, [navigate]);
   const handleToggleCollapse = useCallback(() => setSidebarCollapsed((c) => !c), []);
 
-  // Stable JSX slot for ChatPanel — prevents fresh React element on every render
-  const repoSelectorSlot = useMemo(() => {
-    if (!pendingConv) return undefined;
-    return (
-      <RepoSelector
-        mode={repoMode}
-        onModeChange={setRepoMode}
-        selectedRepo={selectedRepo}
-        onRepoSelect={setSelectedRepo}
-        repoContext={repoContext}
-        onRepoContextChange={setRepoContext}
-      />
-    );
-  }, [pendingConv, repoMode, selectedRepo, repoContext]);
+  // RepoSelector intentionally removed for v0.6.5 ship: we ship the New Project
+  // flow only. Existing-repo selection + dropdown is gone; pipelines always
+  // create a fresh repo per the New Project happy path.
+  const repoSelectorSlot = undefined;
 
   // ─── Global Keyboard Shortcuts ────────────────
   useEffect(() => {
@@ -695,10 +685,7 @@ export default function ChatPage() {
             existingRepo: selectedRepo ?? undefined,
           }, attachments);
           setPendingConv(null);
-          // Reset repo selector state after pipeline creation
-          setRepoMode('new');
           setSelectedRepo(null);
-          setRepoContext(null);
           loadedIdRef.current = w.id;
           setActiveWorkflow(w);
           setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
@@ -1077,11 +1064,7 @@ export default function ChatPage() {
                   isInputEnabled={pendingConv ? !creating : (creating ? false : isInputEnabled)}
                   isSending={creating}
                   showCancelButton={showCancelButton}
-                  inputPlaceholder={pendingConv
-                    ? (repoMode === 'existing' && selectedRepo
-                      ? 'Bu repoda ne degistirmek istiyorsunuz...'
-                      : 'Projenizi anlatın...')
-                    : inputPlaceholder}
+                  inputPlaceholder={pendingConv ? 'Projenizi anlatın...' : inputPlaceholder}
                   onSend={handleSend}
                   onCancel={handleCancel}
                   onApprove={handleApprove}

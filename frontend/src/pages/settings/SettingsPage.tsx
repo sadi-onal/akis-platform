@@ -14,7 +14,7 @@ import AvatarCropModal from '../../components/settings/AvatarCropModal';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'profile' | 'ai-keys' | 'usage' | 'plan' | 'pipeline-stats' | 'integrity' | 'integrations';
+type Tab = 'profile' | 'ai-keys' | 'usage' | 'plan' | 'pipeline-stats' | 'integrations';
 
 interface ProfileData {
   id: string;
@@ -30,29 +30,6 @@ interface ProfileData {
 }
 
 type Provider = 'anthropic' | 'openai' | 'openrouter';
-
-interface IntegrityMetricsData {
-  avgSpecCompliance: { scribe: number; proto: number; trace: number };
-  assumptionStats: {
-    avgPerPipeline: number;
-    totalTracked: number;
-    topAssumptions: string[];
-  };
-  confidenceTrend: Array<{
-    week: string;
-    scribe: number;
-    proto: number;
-    trace: number;
-  }>;
-  criteriaStats: {
-    totalCriteria: number;
-    coveredCriteria: number;
-    coverageRate: number;
-  };
-  hasMeaningfulData?: boolean;
-  dataQuality?: 'none' | 'partial' | 'good';
-  reasons?: string[];
-}
 
 interface ProviderStatus {
   configured: boolean;
@@ -98,7 +75,6 @@ interface PipelineStatsData {
 const PROVIDERS: { key: Provider; label: string; description: string; placeholder: string }[] = [
   { key: 'anthropic', label: 'Anthropic (Claude)', description: 'claude-sonnet-4-6', placeholder: 'sk-ant-...' },
   { key: 'openai', label: 'OpenAI', description: 'gpt-4o', placeholder: 'sk-...' },
-  { key: 'openrouter', label: 'OpenRouter', description: 'Birden fazla model', placeholder: 'sk-or-...' },
 ];
 
 const STAGE_I18N_KEYS: Record<string, { key: string; color: string }> = {
@@ -147,7 +123,6 @@ export default function SettingsPage() {
     : tabParam === 'usage' ? 'usage'
     : tabParam === 'plan' ? 'plan'
     : tabParam === 'pipeline-stats' ? 'pipeline-stats'
-    : tabParam === 'integrity' ? 'integrity'
     : tabParam === 'integrations' ? 'integrations'
     : 'profile';
 
@@ -190,9 +165,6 @@ export default function SettingsPage() {
           <TabButton active={activeTab === 'pipeline-stats'} onClick={() => setTab('pipeline-stats')}>
             {t('settings.tab.pipelineStats')}
           </TabButton>
-          <TabButton active={activeTab === 'integrity'} onClick={() => setTab('integrity')}>
-            {t('settings.tab.integrity')}
-          </TabButton>
           <TabButton active={activeTab === 'integrations'} onClick={() => setTab('integrations')}>
             {t('settings.tab.integrations')}
           </TabButton>
@@ -205,7 +177,6 @@ export default function SettingsPage() {
             {activeTab === 'usage' && <UsageTab />}
             {activeTab === 'plan' && <PlanTab />}
             {activeTab === 'pipeline-stats' && <PipelineStatsTab />}
-            {activeTab === 'integrity' && <IntegrityTab />}
             {activeTab === 'integrations' && <IntegrationsTab />}
           </div>
         </ErrorBoundary>
@@ -1185,230 +1156,6 @@ function AgentDuration({ label, ms }: { label: string; ms: number | null }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Integrity Tab                                                      */
-/* ------------------------------------------------------------------ */
-
-const AGENT_COLORS: Record<string, string> = {
-  scribe: '#3b82f6',  // blue
-  proto: '#f59e0b',   // amber
-  trace: '#8b5cf6',   // purple
-};
-
-function IntegrityTab() {
-  const { t } = useI18n();
-  const [data, setData] = useState<IntegrityMetricsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/settings/integrity-metrics', { credentials: 'include' });
-        if (!res.ok) throw new Error(t('integrity.error'));
-        setData(await res.json());
-      } catch (e) {
-        setError(e instanceof Error ? e.message : t('integrity.error'));
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (loading) {
-    return <div className="space-y-3 rounded-xl border border-ak-border bg-ak-surface p-6"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/2" /></div>;
-  }
-
-  if (error) {
-    return <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-xs text-red-400">{error}</div>;
-  }
-
-  if (!data) return null;
-
-  const legacyHasMetrics =
-    data.avgSpecCompliance.scribe > 0
-    || data.avgSpecCompliance.proto > 0
-    || data.avgSpecCompliance.trace > 0
-    || data.confidenceTrend.length > 0
-    || data.criteriaStats.totalCriteria > 0
-    || data.assumptionStats.totalTracked > 0;
-  const hasMeaningful = data.hasMeaningfulData ?? legacyHasMetrics;
-
-  return (
-    <div className="space-y-4">
-      {/* Explanation banner — or no-data notice when no signal yet */}
-      {hasMeaningful ? (
-        <div className="rounded-xl border border-ak-primary/20 bg-ak-primary/5 p-4">
-          <p className="text-xs leading-relaxed text-ak-text-secondary">
-            <span className="font-semibold text-ak-primary">Agent Kalite Metrikleri</span> — Pipeline'larinizda calisan 3 agent'in (Scribe, Proto, Trace) performansini izleyin. Spec uyumlulugu agent ciktisinin isteklerinize ne kadar uygun oldugunu, guven trendi ise zamana gore kalite degisimini gosterir.
-          </p>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-4 text-center">
-          <p className="text-xs font-medium text-ak-text-secondary">{t('integrity.noData')}</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-ak-text-tertiary">{t('integrity.empty.howDataBuilds')}</p>
-        </div>
-      )}
-
-      {/* Spec Compliance */}
-      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-        <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.compliance')}</h2>
-        <p className="mb-4 text-[11px] text-ak-text-tertiary">Her agent'in urettigi ciktinin spec'e ne oranda uygun oldugu</p>
-        <div className="flex justify-center gap-8">
-          {(['scribe', 'proto', 'trace'] as const).map((agent) => (
-            <ComplianceCircle key={agent} label={agent} value={data.avgSpecCompliance[agent]} />
-          ))}
-        </div>
-      </div>
-
-      {/* Confidence Trend — always shown; empty state when no signal */}
-      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-        <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.confidence')}</h2>
-        <p className="mb-3 text-[11px] text-ak-text-tertiary">Son 30 gunde her agent'in guven skorundaki degisim</p>
-        {data.confidenceTrend.length > 0
-          ? <ConfidenceChart trend={data.confidenceTrend} />
-          : <p className="py-6 text-center text-xs text-ak-text-tertiary">{t('integrity.noData')}</p>
-        }
-      </div>
-
-      {/* Criteria Coverage */}
-      {data.criteriaStats.totalCriteria > 0 && (
-        <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-          <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.coverage')}</h2>
-          <p className="mb-3 text-[11px] text-ak-text-tertiary">Trace agent'in olusturdugu testlerin kabul kriterlerini kapsama orani</p>
-          <div className="h-4 rounded-full bg-ak-surface-2 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-emerald-500 transition-all"
-              style={{ width: `${data.criteriaStats.coverageRate}%` }}
-            />
-          </div>
-          <p className="mt-2 text-xs text-ak-text-secondary text-center">
-            {data.criteriaStats.coveredCriteria}/{data.criteriaStats.totalCriteria} kriter karsilandi ({data.criteriaStats.coverageRate}%)
-          </p>
-        </div>
-      )}
-
-      {/* Top Assumptions — always shown; empty state when no signal */}
-      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-        <h2 className="mb-1 text-sm font-semibold text-ak-text-primary">{t('integrity.assumptions')}</h2>
-        <p className="mb-3 text-[11px] text-ak-text-tertiary">Agent'larin pipeline sirasinda yaptigi en sik varsayimlar</p>
-        {data.assumptionStats.topAssumptions.length > 0 ? (
-          <>
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ak-text-tertiary">
-              Toplam: {data.assumptionStats.totalTracked} (pipeline basina ort. {data.assumptionStats.avgPerPipeline.toFixed(1)})
-            </p>
-            <ol className="list-decimal list-inside space-y-1.5">
-              {data.assumptionStats.topAssumptions.map((a, i) => (
-                <li key={i} className="text-xs text-ak-text-secondary leading-relaxed">{a}</li>
-              ))}
-            </ol>
-          </>
-        ) : (
-          <p className="py-4 text-center text-xs text-ak-text-tertiary">{t('integrity.noData')}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Integrity sub-components                                           */
-/* ------------------------------------------------------------------ */
-
-function ComplianceCircle({ label, value }: { label: string; value: number }) {
-  const pct = Math.round(value * 100);
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <svg viewBox="0 0 36 36" className="h-24 w-24">
-        <path
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none"
-          stroke="var(--ak-surface-2)"
-          strokeWidth="3"
-        />
-        <path
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none"
-          stroke={AGENT_COLORS[label] ?? '#07D1AF'}
-          strokeWidth="3"
-          strokeDasharray={`${value * 100}, 100`}
-          strokeLinecap="round"
-        />
-        <text x="18" y="20" textAnchor="middle" className="fill-ak-text-primary text-[8px] font-bold">
-          {pct > 0 ? `${pct}%` : '—'}
-        </text>
-      </svg>
-      <span className="text-xs font-medium capitalize text-ak-text-secondary">{label}</span>
-    </div>
-  );
-}
-
-function ConfidenceChart({ trend }: { trend: IntegrityMetricsData['confidenceTrend'] }) {
-  if (trend.length === 0) return null;
-
-  const W = 400;
-  const H = 160;
-  const PX = 40; // left padding for Y labels
-  const PY = 20; // bottom padding for X labels
-  const chartW = W - PX - 10;
-  const chartH = H - PY - 10;
-
-  const xStep = trend.length > 1 ? chartW / (trend.length - 1) : chartW / 2;
-
-  const buildPoints = (key: 'scribe' | 'proto' | 'trace') =>
-    trend.map((d, i) => `${PX + i * xStep},${10 + chartH - d[key] * chartH}`).join(' ');
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="xMidYMid meet">
-      {/* Y axis gridlines */}
-      {[0, 0.25, 0.5, 0.75, 1].map((v) => {
-        const y = 10 + chartH - v * chartH;
-        return (
-          <g key={v}>
-            <line x1={PX} y1={y} x2={PX + chartW} y2={y} stroke="var(--ak-border)" strokeWidth="0.5" />
-            <text x={PX - 4} y={y + 3} textAnchor="end" className="fill-ak-text-tertiary text-[7px]">
-              {v.toFixed(2)}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* X axis labels */}
-      {trend.map((d, i) => (
-        <text
-          key={i}
-          x={PX + i * xStep}
-          y={H - 2}
-          textAnchor="middle"
-          className="fill-ak-text-tertiary text-[6px]"
-        >
-          {d.week.slice(5)}
-        </text>
-      ))}
-
-      {/* Lines per agent */}
-      {(['scribe', 'proto', 'trace'] as const).map((agent) => (
-        <polyline
-          key={agent}
-          points={buildPoints(agent)}
-          fill="none"
-          stroke={AGENT_COLORS[agent]}
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      ))}
-
-      {/* Legend */}
-      {(['scribe', 'proto', 'trace'] as const).map((agent, i) => (
-        <g key={agent} transform={`translate(${PX + i * 90}, ${H - PY + 14})`}>
-          <rect width="8" height="8" rx="2" fill={AGENT_COLORS[agent]} />
-          <text x="12" y="7" className="fill-ak-text-secondary text-[7px] capitalize">{agent}</text>
-        </g>
-      ))}
-    </svg>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Integrations Tab                                                   */
@@ -1419,8 +1166,6 @@ function IntegrationsTab() {
     <div className="space-y-4">
       <GitHubSection />
       <JiraSection />
-      <SlackSection />
-      <CucumberSection />
     </div>
   );
 }
@@ -1808,37 +1553,6 @@ function JiraSection() {
   );
 }
 
-/* -- Slack Section ---------------------------------------------------- */
-
-function SlackSection() {
-  const { t } = useI18n();
-
-  return (
-    <div className="rounded-xl border border-ak-border bg-ak-surface p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E01E5A]/10">
-            <svg className="h-[18px] w-[18px] text-[#E01E5A]" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zm-1.27 0a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.163 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.163 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.163 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zm0-1.27a2.527 2.527 0 0 1-2.52-2.523 2.527 2.527 0 0 1 2.52-2.52h6.315A2.528 2.528 0 0 1 24 15.163a2.528 2.528 0 0 1-2.522 2.523h-6.315z" />
-            </svg>
-          </div>
-          <div>
-            <span className="text-sm font-medium text-ak-text-primary">{t('integrations.slack.title')}</span>
-            <p className="text-[11px] text-ak-text-tertiary">{t('integrations.slack.description')}</p>
-          </div>
-        </div>
-        <StatusBadge status="coming-soon" />
-      </div>
-
-      <button
-        disabled
-        className="w-full rounded-lg border border-ak-border bg-ak-surface-2 py-2 text-xs font-medium text-ak-text-tertiary cursor-not-allowed opacity-50"
-      >
-        {t('integrations.slack.connectButton')}
-      </button>
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Usage Tab                                                          */
@@ -2253,58 +1967,3 @@ function PlanLimitRow({ label, value, highlight }: { label: string; value: strin
   );
 }
 
-/* -- Cucumber / BDD Section ------------------------------------------- */
-
-function CucumberSection() {
-  const { t } = useI18n();
-  const [enabled, setEnabled] = useState(() => localStorage.getItem('akis_cucumber_enabled') === 'true');
-
-  const handleToggle = () => {
-    const next = !enabled;
-    setEnabled(next);
-    localStorage.setItem('akis_cucumber_enabled', String(next));
-  };
-
-  return (
-    <div className="rounded-xl border border-ak-border bg-ak-surface p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-            <svg className="h-[18px] w-[18px] text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6.5 2C4.01 2 2 4.01 2 6.5S4.01 11 6.5 11 11 8.99 11 6.5 8.99 2 6.5 2z" />
-              <path d="M17.5 13c-2.49 0-4.5 2.01-4.5 4.5S15.01 22 17.5 22 22 19.99 22 17.5 19.99 13 17.5 13z" />
-              <path d="M14 6.5h8M6.5 14v8" />
-            </svg>
-          </div>
-          <div>
-            <span className="text-sm font-medium text-ak-text-primary">{t('integrations.cucumber.title')}</span>
-            <p className="text-[11px] text-ak-text-tertiary">{t('integrations.cucumber.description')}</p>
-          </div>
-        </div>
-        <StatusBadge status={enabled ? 'active' : 'disconnected'} />
-      </div>
-
-      {/* Toggle row */}
-      <div className="flex items-center justify-between rounded-lg bg-ak-surface-2 p-3">
-        <span className="text-xs text-ak-text-secondary">{t('integrations.cucumber.toggleLabel')}</span>
-        <button
-          onClick={handleToggle}
-          className={cn(
-            'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-ak-primary/30',
-            enabled ? 'bg-ak-primary' : 'bg-ak-surface-2 border border-ak-border',
-          )}
-        >
-          <span
-            className={cn(
-              'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-              enabled ? 'translate-x-4' : 'translate-x-0.5',
-              !enabled && 'mt-px ml-px',
-            )}
-          />
-        </button>
-      </div>
-
-      <p className="text-[10px] text-ak-text-tertiary leading-relaxed">{t('integrations.cucumber.hint')}</p>
-    </div>
-  );
-}
