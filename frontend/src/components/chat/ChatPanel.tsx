@@ -351,44 +351,46 @@ export const ChatPanel = memo(function ChatPanel({
         </div>
       )}
 
-      {/* Trace toggle + key-source badge \u2014 grouped in a single row with separator */}
+      {/* Trace toggle + key-source badge — width aligned with ChatInput's max-w container */}
       {(onTraceToggle || keySourceBadge) && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-1.5">
-          {onTraceToggle && (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={traceEnabled}
-                onClick={() => onTraceToggle(!traceEnabled)}
-                className={cn(
-                  'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ak-primary focus-visible:ring-offset-2',
-                  traceEnabled ? 'bg-ak-primary' : 'bg-ak-border',
-                )}
-              >
-                <span
+        <div className="mx-auto w-full max-w-4xl px-3 pt-1 sm:px-6 md:max-w-5xl xl:max-w-6xl">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {onTraceToggle && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={traceEnabled}
+                  onClick={() => onTraceToggle(!traceEnabled)}
                   className={cn(
-                    'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
-                    traceEnabled ? 'translate-x-4' : 'translate-x-0',
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ak-primary focus-visible:ring-offset-2',
+                    traceEnabled ? 'bg-ak-primary' : 'bg-ak-border',
                   )}
-                />
-              </button>
-              <div className="flex flex-col">
-                <span className="text-xs font-medium text-ak-text-secondary">Test Yaz (Trace)</span>
-                <span className="text-[10px] text-ak-text-tertiary">Koddan Playwright testleri \u00fcretir</span>
+                >
+                  <span
+                    className={cn(
+                      'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
+                      traceEnabled ? 'translate-x-4' : 'translate-x-0',
+                    )}
+                  />
+                </button>
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-ak-text-secondary">Test Yaz (Trace)</span>
+                  <span className="text-[10px] text-ak-text-tertiary">Koddan Playwright testleri üretir</span>
+                </div>
               </div>
-            </div>
-          )}
-          {onTraceToggle && keySourceBadge && (
-            <span aria-hidden="true" className="hidden h-6 w-px bg-ak-border-subtle sm:block" />
-          )}
-          {keySourceBadge && (
-            <span className="text-[11px] text-ak-text-tertiary">
-              {keySourceBadge.source === 'akis'
-                ? `Bug\u00fcn kalan: ${keySourceBadge.jobsRemaining}/${keySourceBadge.jobsLimit} i\u015f`
-                : 'Kendi Key \u00b7 S\u0131n\u0131rs\u0131z'}
-            </span>
-          )}
+            )}
+            {onTraceToggle && keySourceBadge && (
+              <span aria-hidden="true" className="hidden h-6 w-px bg-ak-border-subtle sm:block" />
+            )}
+            {keySourceBadge && (
+              <span className="text-[11px] text-ak-text-tertiary">
+                {keySourceBadge.source === 'akis'
+                  ? `Bugün kalan: ${keySourceBadge.jobsRemaining}/${keySourceBadge.jobsLimit} iş`
+                  : 'Kendi Key · Sınırsız'}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
