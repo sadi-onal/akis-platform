@@ -83,29 +83,30 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           DB_NAME: ${{ steps.dbname.outputs.name }}
         run: |
+          # Defensive: don't hardcode the table list — discover every user
+          # table in the public schema at runtime so this works regardless
+          # of migration state. We exclude drizzle's migration ledger so
+          # the app keeps booting after the wipe.
           ssh -i ~/.ssh/deploy_key "${PROD_USER}@${PROD_HOST}" \
             "docker exec -i akis-prod-db psql -v ON_ERROR_STOP=1 -U akis -d ${DB_NAME}" << 'SQL'
-          BEGIN;
-          TRUNCATE TABLE
-            agent_activities, agent_configs, agent_triggers, audit_log,
-            billing_notifications, chat_retrieval_anchors,
-            conversation_messages, conversation_threads,
-            crew_messages, crew_runs, crew_tasks,
-            dev_messages, dev_sessions, email_verification_tokens,
-            feedback, integration_credentials, invite_tokens,
-            job_ai_calls, job_artifacts, job_audits, job_comments,
-            job_plans, job_posts, job_sources, job_traces, jobs,
-            knowledge_chunks, knowledge_documents, knowledge_provenance,
-            knowledge_sources, knowledge_tags,
-            matches, oauth_accounts, pipelines,
-            plan_candidate_builds, plan_candidates, plans,
-            portfolios, profiles, proposals, skills,
-            studio_sessions, subscriptions,
-            thread_tasks, thread_trust_snapshots,
-            usage_counters, user_ai_keys, user_billing_overrides,
-            users, webhook_deliveries, workspace_billing_settings
-          RESTART IDENTITY CASCADE;
-          COMMIT;
+          DO $$
+          DECLARE
+            tables TEXT;
+          BEGIN
+            SELECT string_agg(format('public.%I', tablename), ', ')
+              INTO tables
+              FROM pg_tables
+             WHERE schemaname = 'public'
+               AND tablename NOT IN ('__drizzle_migrations', 'drizzle_migrations');
+
+            IF tables IS NULL THEN
+              RAISE NOTICE 'No user tables found — nothing to truncate.';
+            ELSE
+              RAISE NOTICE 'Truncating: %', tables;
+              EXECUTE 'TRUNCATE TABLE ' || tables || ' RESTART IDENTITY CASCADE';
+            END IF;
+          END $$;
+
           SELECT relname AS table, n_live_tup AS rows
           FROM pg_stat_user_tables
           WHERE n_live_tup > 0
