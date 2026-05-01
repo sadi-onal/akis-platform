@@ -1,7 +1,13 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 import path from 'path';
+
+// Read version from package.json so the footer always reflects the shipped build.
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')) as {
+  version: string;
+};
 
 // Get git commit SHA for version stamp
 const getGitSha = () => {
@@ -27,7 +33,7 @@ export default defineConfig({
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __GIT_SHA__: JSON.stringify(getGitSha()),
-    __APP_VERSION__: JSON.stringify('0.2.0'),
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   build: {
     // Sandpack + CodeMirror are lazy-loaded vendor chunks; suppress warnings for them

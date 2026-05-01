@@ -84,24 +84,26 @@ export function RepoSelector({
       <div className="flex rounded-lg bg-ak-surface p-0.5 border border-ak-border">
         <button
           type="button"
+          aria-pressed={mode === 'new'}
           onClick={() => { onModeChange('new'); onRepoSelect(null); onRepoContextChange(null); }}
           className={cn(
             'flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-150',
             mode === 'new'
               ? 'bg-ak-primary text-white shadow-sm'
-              : 'text-ak-text-secondary hover:text-ak-text-primary',
+              : 'bg-ak-surface-2/40 text-ak-text-secondary ring-1 ring-inset ring-ak-border-subtle hover:bg-ak-surface-2/70 hover:text-ak-text-primary',
           )}
         >
           Yeni Proje
         </button>
         <button
           type="button"
+          aria-pressed={mode === 'existing'}
           onClick={() => onModeChange('existing')}
           className={cn(
             'flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-150',
             mode === 'existing'
               ? 'bg-ak-primary text-white shadow-sm'
-              : 'text-ak-text-secondary hover:text-ak-text-primary',
+              : 'bg-ak-surface-2/40 text-ak-text-secondary ring-1 ring-inset ring-ak-border-subtle hover:bg-ak-surface-2/70 hover:text-ak-text-primary',
           )}
         >
           Mevcut Repo

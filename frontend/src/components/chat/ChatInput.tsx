@@ -258,14 +258,15 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
             onPaste={handlePaste}
             disabled={disabled || isSending}
             placeholder={placeholder ?? 'Projenizi anlatın...'}
-            rows={3}
+            rows={1}
             aria-label="Mesaj yaz"
             className={cn(
               'w-full border-none outline-none resize-none text-[15px] leading-relaxed bg-transparent',
               'text-gray-900 placeholder:text-gray-400',
               'dark:text-white dark:placeholder:text-white/30',
-              // Taller default — Claude Code feel. 112px min (~4 visible lines) collapsed, 280px expanded.
-              expanded ? 'min-h-[280px]' : 'min-h-[112px]',
+              // Single-line collapsed (~52px); auto-grows via scrollHeight as user types.
+              // Expand button appears past EXPAND_THRESHOLD_PX (200px) for long prompts.
+              expanded ? 'min-h-[280px]' : 'min-h-[52px]',
               (disabled || isSending) && 'cursor-not-allowed opacity-70 saturate-50',
             )}
           />
@@ -355,8 +356,8 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
         </div>
       </div>
 
-      {/* Helper text row (hidden on mobile) */}
-      <div className="text-xs text-gray-400/60 mt-1.5 text-center hidden sm:block">
+      {/* Helper text row (hidden on mobile) — de-emphasized so it doesn't compete with the input */}
+      <div className="text-[10px] text-gray-400/40 mt-1 text-center hidden sm:block">
         ⏎ Gönder&nbsp;&nbsp;⇧⏎ Yeni satır&nbsp;&nbsp;Esc Temizle
       </div>
 

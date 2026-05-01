@@ -301,7 +301,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
           </button>
         ) : (
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-ak-text-tertiary">AKIS v0.6.0</span>
+            <span className="text-[10px] text-ak-text-tertiary">AKIS v{__APP_VERSION__}</span>
             <button
               onClick={onToggleCollapse}
               aria-label="Daralt"

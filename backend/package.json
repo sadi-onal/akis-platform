@@ -1,6 +1,6 @@
 {
   "name": "akis-backend",
-  "version": "0.6.0",
+  "version": "0.6.5",
   "description": "AKIS Platform Backend — AI Agent Workflow Engine (Fastify + TypeScript + Drizzle ORM)",
   "author": "",
   "repository": {

@@ -186,7 +186,7 @@ describe('ConversationSidebar', () => {
         onNewConversation={vi.fn()}
       />,
     );
-    expect(screen.getByText(/AKIS v0\.6\.0/)).toBeInTheDocument();
+    expect(screen.getByText(/AKIS v\d+\.\d+\.\d+/)).toBeInTheDocument();
   });
 
   it('shows theme toggle button', () => {

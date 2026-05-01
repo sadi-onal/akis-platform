@@ -11,6 +11,13 @@ const MODE_STYLES: Record<ChatMode, string> = {
   review: 'bg-yellow-500/15 text-yellow-400',
 };
 
+const MODE_DESCRIPTIONS: Record<ChatMode, string> = {
+  ask: 'Bekliyorum: Scribe sorularına cevap verin',
+  plan: 'Spec hazır: planı inceleyin ve onaylayın',
+  act: 'Çalışıyor: Proto/Trace kod ve test üretiyor',
+  review: 'Tamamlandı: sonucu inceleyin',
+};
+
 interface ChatHeaderProps {
   repoShortName: string;
   repoFullName: string;
@@ -67,11 +74,19 @@ export function ChatHeader({
 
       {/* Mode badge — overridden by HATA when pipeline has failed */}
       {isFailed ? (
-        <span className="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400">
+        <span
+          className="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400"
+          title="Pipeline hata aldı: detaylar için sohbeti inceleyin"
+          aria-label="Pipeline hata aldı"
+        >
           HATA
         </span>
       ) : mode ? (
-        <span className={cn('rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider', MODE_STYLES[mode])}>
+        <span
+          className={cn('rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider', MODE_STYLES[mode])}
+          title={MODE_DESCRIPTIONS[mode]}
+          aria-label={MODE_DESCRIPTIONS[mode]}
+        >
           {mode}
         </span>
       ) : null}

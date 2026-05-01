@@ -351,41 +351,44 @@ export const ChatPanel = memo(function ChatPanel({
         </div>
       )}
 
-      {/* Trace toggle */}
-      {onTraceToggle && (
-        <div className="flex items-center gap-2 px-4 py-1.5">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={traceEnabled}
-            onClick={() => onTraceToggle(!traceEnabled)}
-            className={cn(
-              'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ak-primary focus-visible:ring-offset-2',
-              traceEnabled ? 'bg-ak-primary' : 'bg-ak-border',
-            )}
-          >
-            <span
-              className={cn(
-                'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
-                traceEnabled ? 'translate-x-4' : 'translate-x-0',
-              )}
-            />
-          </button>
-          <div className="flex flex-col">
-            <span className="text-xs font-medium text-ak-text-secondary">Test Yaz (Trace)</span>
-            <span className="text-[10px] text-ak-text-tertiary">Koddan Playwright testleri uretir</span>
-          </div>
-        </div>
-      )}
-
-      {/* Key source badge */}
-      {keySourceBadge && (
-        <div className="flex items-center gap-1.5 px-4 py-1">
-          <span className="text-[10px] text-ak-text-tertiary">
-            {keySourceBadge.source === 'akis'
-              ? `AKIS Key \u00b7 ${keySourceBadge.jobsRemaining}/${keySourceBadge.jobsLimit} is kaldi`
-              : `Kendi Key \u00b7 Sinirsiz`}
-          </span>
+      {/* Trace toggle + key-source badge \u2014 grouped in a single row with separator */}
+      {(onTraceToggle || keySourceBadge) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-1.5">
+          {onTraceToggle && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={traceEnabled}
+                onClick={() => onTraceToggle(!traceEnabled)}
+                className={cn(
+                  'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ak-primary focus-visible:ring-offset-2',
+                  traceEnabled ? 'bg-ak-primary' : 'bg-ak-border',
+                )}
+              >
+                <span
+                  className={cn(
+                    'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
+                    traceEnabled ? 'translate-x-4' : 'translate-x-0',
+                  )}
+                />
+              </button>
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-ak-text-secondary">Test Yaz (Trace)</span>
+                <span className="text-[10px] text-ak-text-tertiary">Koddan Playwright testleri \u00fcretir</span>
+              </div>
+            </div>
+          )}
+          {onTraceToggle && keySourceBadge && (
+            <span aria-hidden="true" className="hidden h-6 w-px bg-ak-border-subtle sm:block" />
+          )}
+          {keySourceBadge && (
+            <span className="text-[11px] text-ak-text-tertiary">
+              {keySourceBadge.source === 'akis'
+                ? `Bug\u00fcn kalan: ${keySourceBadge.jobsRemaining}/${keySourceBadge.jobsLimit} i\u015f`
+                : 'Kendi Key \u00b7 S\u0131n\u0131rs\u0131z'}
+            </span>
+          )}
         </div>
       )}
 

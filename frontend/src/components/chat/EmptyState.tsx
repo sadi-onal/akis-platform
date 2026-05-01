@@ -57,11 +57,8 @@ export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
   // New conversation variant — simple prompt
   if (variant === 'new-conversation') {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4">
-        <div className="relative">
-          <img src={LOGO_MARK_SVG} alt="AKIS" className="h-16 w-16 object-contain opacity-60" loading="eager" />
-          {!reduced && <div className="absolute inset-0 rounded-full animate-glow-pulse" style={{ boxShadow: '0 0 24px rgba(7, 209, 175, 0.2)' }} />}
-        </div>
+      <div className="flex flex-1 flex-col items-center gap-4 px-4 pt-12 sm:pt-16">
+        <img src={LOGO_MARK_SVG} alt="AKIS" className="h-16 w-16 object-contain opacity-60" loading="eager" />
         <div className="max-w-md text-center">
           <h3 className="text-lg font-semibold text-ak-text-primary">
             {t('chat.emptyState.greeting')} <span className="text-ak-primary">{t('chat.emptyState.brandName')}</span>.
@@ -86,7 +83,7 @@ export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
     <>
       {showWizard && <WelcomeWizard onComplete={handleWizardComplete} />}
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 px-4 overflow-hidden">
+      <div className="relative flex flex-1 flex-col items-center gap-5 px-4 pt-10 sm:pt-14 overflow-hidden">
         {/* Background blobs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className={cn(
@@ -100,16 +97,13 @@ export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
         </div>
 
         {/* Hero content */}
-        <div className="relative z-10 flex w-full max-w-4xl flex-col items-center gap-7">
-          <div className="relative">
-            <img
-              src={LOGO_MARK_SVG}
-              alt="AKIS"
-              className={cn('h-20 w-20 object-contain', !reduced && 'animate-float-gentle')}
-              loading="eager"
-            />
-            {!reduced && <div className="absolute inset-0 rounded-full animate-glow-pulse" style={{ boxShadow: '0 0 32px rgba(7, 209, 175, 0.15)' }} />}
-          </div>
+        <div className="relative z-10 flex w-full max-w-4xl flex-col items-center gap-6">
+          <img
+            src={LOGO_MARK_SVG}
+            alt="AKIS"
+            className={cn('h-20 w-20 object-contain', !reduced && 'animate-float-gentle')}
+            loading="eager"
+          />
 
           <div className="text-center">
             <h2 className={cn('text-2xl font-bold text-ak-text-primary', !reduced && 'animate-fade-in')}>

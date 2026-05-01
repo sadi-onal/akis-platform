@@ -23,6 +23,15 @@ const STATUS_DOT: Record<ConversationStatus, string> = {
   error: 'bg-red-400',
 };
 
+const STATUS_LABELS: Record<ConversationStatus, string> = {
+  idle: 'Hazır',
+  running: 'Çalışıyor…',
+  awaiting_approval: 'Onayınızı bekliyor',
+  error: 'Hata oluştu',
+};
+
+const FALLBACK_TITLE = 'İsimsiz Sohbet';
+
 function relativeTime(iso: string): string {
   try {
     const diff = Date.now() - new Date(iso).getTime();
@@ -86,17 +95,24 @@ export function ConversationItem({
     if (e.key === 'Escape') { setEditValue(title); setEditing(false); }
   };
 
+  const displayTitle = title || FALLBACK_TITLE;
+  const statusLabel = STATUS_LABELS[status];
+
   if (collapsed) {
     return (
       <button
         onClick={onClick}
-        aria-label={title}
+        aria-label={`${displayTitle} — ${statusLabel}`}
+        title={`${displayTitle} — ${statusLabel}`}
         className={cn(
           'flex h-9 w-9 items-center justify-center rounded-lg transition-colors',
           isActive ? 'bg-ak-primary/10 text-ak-primary' : 'text-ak-text-secondary hover:bg-ak-surface-2',
         )}
       >
-        <div className={cn('h-2 w-2 rounded-full', STATUS_DOT[status])} />
+        <span
+          aria-hidden="true"
+          className={cn('h-2 w-2 rounded-full', STATUS_DOT[status])}
+        />
       </button>
     );
   }
@@ -114,7 +130,12 @@ export function ConversationItem({
       >
         {/* Title row */}
         <div className="flex items-center gap-2">
-          <div className={cn('h-2 w-2 flex-shrink-0 rounded-full', STATUS_DOT[status])} />
+          <span
+            className={cn('h-2 w-2 flex-shrink-0 rounded-full', STATUS_DOT[status])}
+            role="status"
+            aria-label={statusLabel}
+            title={statusLabel}
+          />
           {editing ? (
             <input
               ref={inputRef}
@@ -130,9 +151,10 @@ export function ConversationItem({
               className={cn(
                 'truncate text-[12px] font-medium',
                 isActive ? 'text-ak-primary' : 'text-ak-text-primary',
+                !title && 'italic text-ak-text-secondary',
               )}
-              title={title}
-            >{title}</span>
+              title={displayTitle}
+            >{displayTitle}</span>
           )}
         </div>
         {/* Info row */}
