@@ -61,7 +61,7 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
         run: |
           ssh -i ~/.ssh/deploy_key "${PROD_USER}@${PROD_HOST}" \
-            'docker exec -i akis-prod-db psql -v ON_ERROR_STOP=1 -U akis -d akis' << 'SQL'
+            'docker exec -i akis-prod-db psql -v ON_ERROR_STOP=1 -U akis -d akis_prod' << 'SQL'
           BEGIN;
           TRUNCATE TABLE
             agent_activities, agent_configs, agent_triggers, audit_log,
