@@ -1,7 +1,7 @@
 import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppShell from './components/AppShell';
-import { ProtectedRoute } from './app/RouteGuards';
+import { ProtectedRoute, RedirectIfAuthenticated } from './app/RouteGuards';
 import { AuthProvider } from './contexts/AuthContext';
 import { useI18n } from './i18n/useI18n';
 import { ToastContainer } from './components/ui/Toast';
@@ -52,28 +52,51 @@ function App() {
           {/* Landing page — public */}
           <Route index element={<Suspense fallback={<PageLoader />}><LandingPage /></Suspense>} />
 
-          {/* Public Routes */}
+          {/* Public + auth-onboarding routes — share AppShell chrome */}
           <Route element={<AppShell />}>
+            {/* Legal — fully public */}
             <Route path="legal">
               <Route path="terms" element={<Suspense fallback={<PageLoader />}><LegalTermsPage /></Suspense>} />
               <Route path="privacy" element={<Suspense fallback={<PageLoader />}><LegalPrivacyPage /></Suspense>} />
             </Route>
-            <Route path="login">
-              <Route index element={<Suspense fallback={<PageLoader />}><LoginEmail /></Suspense>} />
-              <Route path="password" element={<Suspense fallback={<PageLoader />}><LoginPassword /></Suspense>} />
+
+            {/*
+              Auth-entry routes — only meaningful for users WITHOUT a session.
+              An authenticated user hitting /login bounces to /chat instead of
+              seeing a login form for the account they already have.
+            */}
+            <Route element={<RedirectIfAuthenticated />}>
+              <Route path="login">
+                <Route index element={<Suspense fallback={<PageLoader />}><LoginEmail /></Suspense>} />
+                <Route path="password" element={<Suspense fallback={<PageLoader />}><LoginPassword /></Suspense>} />
+              </Route>
+              <Route path="signup">
+                <Route index element={<Suspense fallback={<PageLoader />}><SignupEmail /></Suspense>} />
+                <Route path="password" element={<Suspense fallback={<PageLoader />}><SignupPassword /></Suspense>} />
+                <Route path="verify-email" element={<Suspense fallback={<PageLoader />}><SignupVerifyEmail /></Suspense>} />
+              </Route>
+              <Route path="forgot-password" element={<Suspense fallback={<PageLoader />}><ForgotPassword /></Suspense>} />
+              <Route path="reset-password" element={<Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>} />
             </Route>
-            <Route path="signup">
-              <Route index element={<Suspense fallback={<PageLoader />}><SignupEmail /></Suspense>} />
-              <Route path="password" element={<Suspense fallback={<PageLoader />}><SignupPassword /></Suspense>} />
-              <Route path="verify-email" element={<Suspense fallback={<PageLoader />}><SignupVerifyEmail /></Suspense>} />
-            </Route>
-            <Route path="forgot-password" element={<Suspense fallback={<PageLoader />}><ForgotPassword /></Suspense>} />
-            <Route path="reset-password" element={<Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>} />
-            <Route path="auth">
+
+            {/*
+              Post-auth onboarding routes — require a live session. These
+              pages are reached only after a successful signup/login (the
+              backend OAuth callback redirects here, frontend signup/login
+              handlers navigate here). A direct visit without a session
+              must bounce to /login, otherwise the page is just a dead-end
+              form whose submit will 401.
+            */}
+            <Route path="auth" element={<ProtectedRoute />}>
               <Route path="welcome-beta" element={<Suspense fallback={<PageLoader />}><WelcomeBeta /></Suspense>} />
               <Route path="privacy-consent" element={<Suspense fallback={<PageLoader />}><PrivacyConsent /></Suspense>} />
-              <Route path="invite/:token" element={<Suspense fallback={<PageLoader />}><InviteAccept /></Suspense>} />
             </Route>
+
+            {/*
+              Invite acceptance is intentionally public: the token in the URL
+              IS the auth credential — the user does not have an account yet.
+            */}
+            <Route path="auth/invite/:token" element={<Suspense fallback={<PageLoader />}><InviteAccept /></Suspense>} />
           </Route>
 
           {/* Docs — public */}

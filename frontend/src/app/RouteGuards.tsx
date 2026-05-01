@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { POST_AUTH_PATH } from './routes';
 
 type Role = 'admin' | 'member';
 
@@ -37,13 +38,40 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   return children ? <>{children}</> : <Outlet />;
 }
 
+/**
+ * Inverse of ProtectedRoute: a route that is meaningless once you have a
+ * session (login form, signup form, password reset form). Redirects an
+ * already-authenticated user to the chat.
+ */
+type RedirectIfAuthenticatedProps = {
+  children?: ReactNode;
+};
+
+export function RedirectIfAuthenticated({ children }: RedirectIfAuthenticatedProps) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-sm text-ak-text-secondary">
+        Yükleniyor...
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to={POST_AUTH_PATH} replace />;
+  }
+
+  return children ? <>{children}</> : <Outlet />;
+}
+
 type RequireRoleProps = {
   roles: Role[];
   fallbackPath?: string;
   children?: ReactNode;
 };
 
-export function RequireRole({ roles, fallbackPath = '/dashboard', children }: RequireRoleProps) {
+export function RequireRole({ roles, fallbackPath = POST_AUTH_PATH, children }: RequireRoleProps) {
   const location = useLocation();
   const { user, loading } = useAuth();
   const isAuthenticated = Boolean(user);
