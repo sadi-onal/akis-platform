@@ -34,6 +34,11 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ inputs.confirm == 'RESET PROD' }}
     timeout-minutes: 5
+    # Same scope as Deploy to Production so PROD_HOST / PROD_USER /
+    # PROD_SSH_KEY secrets resolve. Inherits the manual-approval gate
+    # configured on this environment, if any.
+    environment:
+      name: production
 
     steps:
       - name: Verify confirmation
