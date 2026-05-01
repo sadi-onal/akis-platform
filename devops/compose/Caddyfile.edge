@@ -53,8 +53,28 @@ akisflow.com {
         reverse_proxy akis-prod-backend:3000
     }
 
-    # Auth routes -> Backend
-    handle /auth/* {
+    # Auth routes — method-aware so SPA pages (GET /auth/login, /auth/signup,
+    # /auth/privacy-consent, /auth/welcome-beta, /auth/forgot-password, etc.)
+    # fall through to the static frontend handler. Only API mutations and the
+    # GET-only API endpoints reach the backend.
+
+    # OAuth callbacks always go to backend (all methods)
+    handle /auth/oauth/* {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # POST/PUT/PATCH/DELETE /auth/* -> backend API
+    @auth_mutation {
+        method POST PUT PATCH DELETE
+        path /auth/*
+    }
+    handle @auth_mutation {
+        reverse_proxy akis-prod-backend:3000
+    }
+
+    # GET-only backend API endpoints under /auth/
+    @auth_get_api path /auth/me /auth/health /auth/profile /auth/invite/*
+    handle @auth_get_api {
         reverse_proxy akis-prod-backend:3000
     }
 
