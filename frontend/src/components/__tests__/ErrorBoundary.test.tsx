@@ -56,24 +56,24 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('Sayfayı Yenile')).toBeInTheDocument();
   });
 
-  it('shows Back to Dashboard link by default', () => {
+  it('shows Back to Chat link by default', () => {
     renderWithRouter(
       <ErrorBoundary>
         <ThrowingChild />
       </ErrorBoundary>
     );
-    const link = screen.getByText(/Dashboard sayfasına dön/);
-    expect(link.closest('a')?.getAttribute('href')).toBe('/dashboard');
+    const link = screen.getByText(/Sohbet sayfasına dön/);
+    expect(link.closest('a')?.getAttribute('href')).toBe('/chat');
   });
 
   it('shows custom fallback path and label', () => {
     renderWithRouter(
-      <ErrorBoundary fallbackPath="/dashboard/jobs" fallbackLabel="Jobs">
+      <ErrorBoundary fallbackPath="/settings" fallbackLabel="Ayarlar">
         <ThrowingChild />
       </ErrorBoundary>
     );
-    const link = screen.getByText(/Jobs sayfasına dön/);
-    expect(link.closest('a')?.getAttribute('href')).toBe('/dashboard/jobs');
+    const link = screen.getByText(/Ayarlar sayfasına dön/);
+    expect(link.closest('a')?.getAttribute('href')).toBe('/settings');
   });
 });
 

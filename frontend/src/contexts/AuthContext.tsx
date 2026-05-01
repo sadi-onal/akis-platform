@@ -31,7 +31,10 @@ const AuthContext = createContext<AuthContextValue>({
   setUser: () => {},
 });
 
-const AUTH_REQUIRED_PREFIXES = ['/dashboard', '/agents', '/pipeline', '/chat', '/settings'];
+// Routes that require an authenticated session. /chat and /settings are
+// the only protected surfaces in the chat-centric SPA; the legacy
+// /dashboard, /agents and /pipeline trees were retired in v0.6.5.
+const AUTH_REQUIRED_PREFIXES = ['/chat', '/settings'];
 
 function requiresAuthResolve(pathname: string): boolean {
   return AUTH_REQUIRED_PREFIXES.some((prefix) => pathname.startsWith(prefix));

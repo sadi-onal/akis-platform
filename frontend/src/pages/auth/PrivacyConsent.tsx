@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Button from '../../components/common/Button';
 import Logo from '../../components/branding/Logo';
 import { getReturnTo, clearReturnTo, setReturnTo } from '../../utils/returnTo';
+import { POST_AUTH_PATH } from '../../app/routes';
 
 export default function PrivacyConsent() {
   const navigate = useNavigate();
@@ -20,16 +21,16 @@ export default function PrivacyConsent() {
       const returnTo = getReturnTo();
       if (!user.hasSeenBetaWelcome) {
         if (returnTo) setReturnTo(returnTo);
-        navigate('/auth/welcome-beta');
+        navigate('/auth/welcome-beta', { replace: true });
       } else {
         clearReturnTo();
-        navigate(returnTo || '/dashboard');
+        navigate(returnTo || POST_AUTH_PATH, { replace: true });
       }
     } catch (err) {
       if (import.meta.env.DEV) console.error('Failed to update preferences:', err);
       const returnTo = getReturnTo();
       if (returnTo) setReturnTo(returnTo);
-      navigate('/auth/welcome-beta');
+      navigate('/auth/welcome-beta', { replace: true });
     } finally {
       setSubmitting(false);
     }

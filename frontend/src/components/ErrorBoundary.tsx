@@ -50,7 +50,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public render() {
-    const { fallbackPath = '/dashboard', fallbackLabel = 'Dashboard' } = this.props;
+    const { fallbackPath = '/chat', fallbackLabel = 'Sohbet' } = this.props;
 
     if (this.state.hasError) {
       const isDev = import.meta.env.DEV;

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/common/Button';
 import Logo from '../../components/branding/Logo';
+import { POST_AUTH_PATH } from '../../app/routes';
 
 export default function SignupPassword() {
   const navigate = useNavigate();
@@ -72,11 +73,11 @@ export default function SignupPassword() {
         sessionStorage.removeItem('akis_signup_data');
 
         if (response.needsDataSharingConsent) {
-          navigate('/auth/privacy-consent');
+          navigate('/auth/privacy-consent', { replace: true });
         } else if (!response.user.hasSeenBetaWelcome) {
-          navigate('/auth/welcome-beta');
+          navigate('/auth/welcome-beta', { replace: true });
         } else {
-          navigate('/dashboard');
+          navigate(POST_AUTH_PATH, { replace: true });
         }
         return;
       }

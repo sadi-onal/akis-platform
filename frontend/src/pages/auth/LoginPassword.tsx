@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/common/Button';
 import Logo from '../../components/branding/Logo';
 import { getReturnTo, clearReturnTo } from '../../utils/returnTo';
+import { POST_AUTH_PATH } from '../../app/routes';
 
 export default function LoginPassword() {
   const navigate = useNavigate();
@@ -54,12 +55,12 @@ export default function LoginPassword() {
       const returnTo = getReturnTo();
 
       if (response.needsDataSharingConsent) {
-        navigate('/auth/privacy-consent');
+        navigate('/auth/privacy-consent', { replace: true });
       } else if (!response.user.hasSeenBetaWelcome) {
-        navigate('/auth/welcome-beta');
+        navigate('/auth/welcome-beta', { replace: true });
       } else {
         clearReturnTo();
-        navigate(returnTo || '/dashboard');
+        navigate(returnTo || POST_AUTH_PATH, { replace: true });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Yanlış şifre. Lütfen tekrar deneyin.';
