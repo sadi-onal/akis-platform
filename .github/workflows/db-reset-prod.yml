@@ -55,13 +55,36 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Truncate every data table on prod
+      - name: Discover the prod database name
+        id: dbname
         env:
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_HOST: ${{ secrets.PROD_HOST }}
         run: |
+          # The akis-prod-db container's POSTGRES_DB is set from the prod
+          # .env (not env.example), so don't hardcode it. Read it back from
+          # the running container and verify the database exists.
+          DB=$(ssh -i ~/.ssh/deploy_key "${PROD_USER}@${PROD_HOST}" \
+            'docker exec akis-prod-db sh -c "echo \$POSTGRES_DB"' | tr -d '\r\n ')
+          if [ -z "$DB" ]; then
+            echo "::error::Could not read POSTGRES_DB from akis-prod-db container"
+            exit 1
+          fi
+          echo "Prod DB name: $DB"
+          # Sanity-check the DB exists
           ssh -i ~/.ssh/deploy_key "${PROD_USER}@${PROD_HOST}" \
-            'docker exec -i akis-prod-db psql -v ON_ERROR_STOP=1 -U akis -d akis_prod' << 'SQL'
+            "docker exec akis-prod-db psql -U akis -lqt | cut -d'|' -f1 | tr -d ' ' | grep -Fxq '${DB}'" \
+            || { echo "::error::Database ${DB} not found in postgres"; exit 1; }
+          echo "name=${DB}" >> "$GITHUB_OUTPUT"
+
+      - name: Truncate every data table on prod
+        env:
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          DB_NAME: ${{ steps.dbname.outputs.name }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "${PROD_USER}@${PROD_HOST}" \
+            "docker exec -i akis-prod-db psql -v ON_ERROR_STOP=1 -U akis -d ${DB_NAME}" << 'SQL'
           BEGIN;
           TRUNCATE TABLE
             agent_activities, agent_configs, agent_triggers, audit_log,
