@@ -141,7 +141,7 @@ devagents/
 │       ├── types/                    workflow.ts, pipeline.ts
 │       └── components/              Chat, UI bilesenleri
 ├── mcp-gateway/                       HTTP-to-stdio bridge for GitHub MCP Server
-├── deploy/                            Deployment configs (oci/, staging/)
+├── deploy/                            Deployment configs (oci/prod/)
 ├── scripts/                           Local dev helper'lari
 └── docs/                              Product + architecture referanslari
 ```
@@ -474,6 +474,8 @@ Desteklenen provider'lar: `anthropic`, `openai`, `openrouter`, `mock`
 ## Deployment
 
 - **Production:** `akisflow.com` — OCI x86_64, Docker Compose + Caddy
-- **CI/CD:** GitHub Actions (ci.yml, pr-gate.yml, oci-staging-deploy.yml)
+- **CI/CD:** GitHub Actions (ci.yml, pr-gate.yml, deploy-prod.yml)
 - Docker image: `ghcr.io/omeryasironal/akis-platform-devolopment/akis-backend`
-- Deploy script: `deploy/oci/staging/deploy.sh`
+- Deploy script: `deploy/oci/prod/deploy.sh`
+- Staging environment was retired in this PR (single-env on `akisflow.com`).
+  The `staging.akisflow.com → akisflow.com` 301 redirect in `devops/compose/Caddyfile.edge` is kept for graceful degradation of old links.

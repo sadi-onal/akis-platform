@@ -139,7 +139,7 @@ export interface WelcomeParams {
 }
 
 export function welcomeHtml(params: WelcomeParams): string {
-  const { name, loginUrl = 'https://staging.akisflow.com/login', logoUrl } = params;
+  const { name, loginUrl = 'https://akisflow.com/login', logoUrl } = params;
   const greeting = name ? `Merhaba ${name},` : 'Merhaba,';
 
   const body = `
@@ -165,7 +165,7 @@ export function welcomeHtml(params: WelcomeParams): string {
 }
 
 export function welcomeText(params: WelcomeParams): string {
-  const { name, loginUrl = 'https://staging.akisflow.com/login' } = params;
+  const { name, loginUrl = 'https://akisflow.com/login' } = params;
   const greeting = name ? `Merhaba ${name},` : 'Merhaba,';
 
   return `${greeting}

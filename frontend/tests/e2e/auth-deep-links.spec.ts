@@ -14,44 +14,30 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('SPA deep-link routing', () => {
-  test('/auth/welcome-beta renders React page, not backend JSON', async ({
+  test('/auth/welcome-beta is a deleted route — must catchall to landing', async ({
     page,
   }) => {
+    // The /auth/welcome-beta page was removed in the auth-cleanup PR.
+    // The catchall route in App.tsx redirects unknown paths to "/".
     const response = await page.goto('/auth/welcome-beta');
     expect(response).not.toBeNull();
-
-    // Must return 200 (Vite serves index.html for any SPA route)
+    // Vite/Caddy still serves index.html (SPA fallback) and React handles the redirect.
     expect(response!.status()).toBe(200);
-
-    // Content-Type must be HTML, not application/json
     const ct = response!.headers()['content-type'] ?? '';
     expect(ct).toContain('text/html');
-
-    // The React app should mount and render the WelcomeBeta page
-    await expect(page.getByRole('heading', { name: /welcome to akis/i })).toBeVisible();
-    await expect(page.getByText('🎉')).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /continue to akis dashboard/i }),
-    ).toBeVisible();
+    // After the redirect we should be on the landing page (not on welcome-beta).
+    await page.waitForURL((url) => url.pathname === '/', { timeout: 5_000 });
   });
 
-  test('/auth/privacy-consent renders React page, not backend JSON', async ({
+  test('/auth/privacy-consent is a deleted route — must catchall to landing', async ({
     page,
   }) => {
     const response = await page.goto('/auth/privacy-consent');
     expect(response).not.toBeNull();
-
     expect(response!.status()).toBe(200);
-
     const ct = response!.headers()['content-type'] ?? '';
     expect(ct).toContain('text/html');
-
-    // PrivacyConsent page renders these elements
-    await expect(page.getByRole('heading', { name: /help improve akis/i })).toBeVisible();
-    await expect(page.getByRole('checkbox')).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /continue to dashboard/i }),
-    ).toBeVisible();
+    await page.waitForURL((url) => url.pathname === '/', { timeout: 5_000 });
   });
 
   test('/signup renders React page (email form)', async ({ page }) => {

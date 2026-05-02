@@ -90,8 +90,8 @@ export default function SignupVerifyEmail() {
       // Clear signup data
       sessionStorage.removeItem('akis_signup_data');
 
-      // Navigate to beta welcome screen
-      navigate('/auth/welcome-beta');
+      // Email verified — go straight to chat
+      navigate('/chat');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Kod yanlış veya süresi dolmuş. Lütfen tekrar deneyin.';
       

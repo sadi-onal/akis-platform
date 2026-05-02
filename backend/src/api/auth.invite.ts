@@ -63,7 +63,7 @@ export async function registerInviteRoutes(
   fastify: FastifyInstance,
   emailService: EmailService,
 ) {
-  const publicUrl = env.FRONTEND_URL || 'https://staging.akisflow.com';
+  const publicUrl = env.FRONTEND_URL || 'https://akisflow.com';
   const logoUrl = process.env.PUBLIC_LOGO_URL;
 
   const inviteService = new InviteService(emailService, {

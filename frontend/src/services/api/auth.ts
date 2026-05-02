@@ -89,7 +89,6 @@ export type LoginStartResponse = {
 
 export type LoginCompleteResponse = {
   user: AuthUser;
-  needsDataSharingConsent: boolean;
 };
 
 export type SignupPasswordResponse = {
@@ -97,7 +96,6 @@ export type SignupPasswordResponse = {
   message: string;
   verificationBypassed?: boolean;
   user?: AuthUser;
-  needsDataSharingConsent?: boolean;
 };
 
 export type VerifyEmailResponse = {
@@ -161,13 +159,6 @@ export const AuthAPI = {
     }),
   loginComplete: (data: { userId: string; password: string }) =>
     request<LoginCompleteResponse>('/auth/login/complete', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  
-  // User preferences
-  updatePreferences: (data: { dataSharingConsent?: boolean; hasSeenBetaWelcome?: boolean }) =>
-    request<{ ok: boolean }>('/auth/update-preferences', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

@@ -400,7 +400,7 @@ export class TraceAgent extends BaseAgent {
         stepId: 'ai-pass-2',
         title: 'AI Pass 2/3: Generate Playwright Tests',
         description: 'Generating production-ready Playwright test code in TypeScript',
-        reasoning: `Converting ${prioritized.length} test scenarios into executable Playwright code. Using page.getByRole() and page.getByText() selectors for resilient tests. Target base URL: ${payload.targetBaseUrl || 'https://staging.akisflow.com'}.`,
+        reasoning: `Converting ${prioritized.length} test scenarios into executable Playwright code. Using page.getByRole() and page.getByText() selectors for resilient tests. Target base URL: ${payload.targetBaseUrl || 'https://akisflow.com'}.`,
         status: 'running',
       });
       this.emitLog('AI Pass 2/3: Generating executable Playwright test code');
@@ -430,7 +430,7 @@ export class TraceAgent extends BaseAgent {
           '- Include `expect()` assertions with meaningful error messages',
           '- Handle loading states with `page.waitForLoadState()`',
           '- Add test tags via `test()` annotations',
-          `- Base URL: ${payload.targetBaseUrl || 'https://staging.akisflow.com'}`,
+          `- Base URL: ${payload.targetBaseUrl || 'https://akisflow.com'}`,
           '',
           'Return ONLY TypeScript code wrapped in a single code block. No Markdown outside the code block.',
         ].join('\n'),
@@ -1116,7 +1116,7 @@ export class TraceAgent extends BaseAgent {
 
   private generatePlaywrightTestCode(
     prioritized: PrioritizedScenario[],
-    targetBaseUrl = 'https://staging.akisflow.com',
+    targetBaseUrl = 'https://akisflow.com',
   ): string {
     const lines: string[] = [
       `import { test, expect } from '@playwright/test';`,
@@ -1298,7 +1298,7 @@ export class TraceAgent extends BaseAgent {
   }
 
   private resolveTargetBaseUrl(payload: TracePayload): string {
-    return payload.targetBaseUrl?.trim() || 'https://staging.akisflow.com';
+    return payload.targetBaseUrl?.trim() || 'https://akisflow.com';
   }
 
   private resolveRunnerBrowserTarget(payload: TracePayload): 'chromium' | 'firefox' | 'webkit' {

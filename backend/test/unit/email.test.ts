@@ -95,7 +95,7 @@ describe('Email Templates — Turkish', () => {
     });
 
     test('includes login URL', () => {
-      const url = 'https://staging.akisflow.com/login';
+      const url = 'https://akisflow.com/login';
       const html = welcomeHtml({ loginUrl: url });
       assert.ok(html.includes(url), 'Should contain login URL');
     });
@@ -121,13 +121,13 @@ describe('Email Templates — Turkish', () => {
       const html = inviteHtml({
         inviterName: 'Ahmet',
         recipientEmail: 'test@test.com',
-        inviteUrl: 'https://staging.akisflow.com/invite/abc',
+        inviteUrl: 'https://akisflow.com/invite/abc',
       });
       assert.ok(html.includes('Ahmet'), 'Should contain inviter name');
     });
 
     test('includes invite URL', () => {
-      const url = 'https://staging.akisflow.com/invite/abc';
+      const url = 'https://akisflow.com/invite/abc';
       const html = inviteHtml({
         inviterName: 'Test',
         recipientEmail: 'x@y.com',
@@ -399,7 +399,7 @@ describe('BaseEmailService.sendWelcomeEmail (via MockEmailService)', () => {
     await mock.sendWelcomeEmail('test@example.com');
 
     assert.ok(
-      capturedHtml.includes('staging.akisflow.com/login'),
+      capturedHtml.includes('akisflow.com/login'),
       'HTML should contain default login URL',
     );
   });

@@ -6,11 +6,8 @@ import { POST_AUTH_PATH } from '../app/routes';
 /**
  * AppShell — chrome for the public-facing routes (auth pages, legal).
  *
- * The header was always rendering a "Giriş Yap" link, even on pages like
- * /auth/privacy-consent that you can ONLY land on while authenticated.
- * Now we read AuthContext: signed-in users get a "Sohbete Dön" link to
- * /chat instead of being told to log in to the account they already
- * have.
+ * Reads AuthContext so signed-in users get a "Sohbete Dön" link to /chat
+ * instead of being told to log in to the account they already have.
  */
 export default function AppShell() {
   const { user, loading } = useAuth();

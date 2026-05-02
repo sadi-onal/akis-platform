@@ -12,8 +12,6 @@ const LoginPassword = lazy(() => import('./pages/auth/LoginPassword'));
 const SignupEmail = lazy(() => import('./pages/auth/SignupEmail'));
 const SignupPassword = lazy(() => import('./pages/auth/SignupPassword'));
 const SignupVerifyEmail = lazy(() => import('./pages/auth/SignupVerifyEmail'));
-const WelcomeBeta = lazy(() => import('./pages/auth/WelcomeBeta'));
-const PrivacyConsent = lazy(() => import('./pages/auth/PrivacyConsent'));
 const InviteAccept = lazy(() => import('./pages/auth/InviteAccept'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
@@ -77,19 +75,6 @@ function App() {
               </Route>
               <Route path="forgot-password" element={<Suspense fallback={<PageLoader />}><ForgotPassword /></Suspense>} />
               <Route path="reset-password" element={<Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>} />
-            </Route>
-
-            {/*
-              Post-auth onboarding routes — require a live session. These
-              pages are reached only after a successful signup/login (the
-              backend OAuth callback redirects here, frontend signup/login
-              handlers navigate here). A direct visit without a session
-              must bounce to /login, otherwise the page is just a dead-end
-              form whose submit will 401.
-            */}
-            <Route path="auth" element={<ProtectedRoute />}>
-              <Route path="welcome-beta" element={<Suspense fallback={<PageLoader />}><WelcomeBeta /></Suspense>} />
-              <Route path="privacy-consent" element={<Suspense fallback={<PageLoader />}><PrivacyConsent /></Suspense>} />
             </Route>
 
             {/*

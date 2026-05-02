@@ -2,8 +2,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { LOGO_MARK_SVG } from '../../theme/brand';
 
-const WORDS = ['Fikirden', 'Koda,'];
-const ACCENT_WORDS = ['Dakikalar', 'İçinde.'];
+const WORDS = ['Üç', 'Ajan.'];
+const ACCENT_WORDS = ['Fikirden', 'Test', 'Edilmiş', 'Koda.'];
 
 const containerVariants = {
   hidden: {},
@@ -72,8 +72,9 @@ export function HeroSection() {
         animate={{ y: 0 }}
         transition={{ duration: 0.5, delay: 0.8 }}
       >
-        AI destekli agent'lar ile yazılım geliştirme sürecinizi hızlandırın.
-        Fikrinizi anlatın, AKIS spec yazarken siz onaylayın, kod ve testler otomatik oluşsun.
+        AKIS, düz metin fikirlerinizi yapılandırılmış spec'e, scaffold edilmiş kod'a
+        ve otomatik Playwright testlerine dönüştürür. Üç agent — Scribe, Proto, Trace —
+        bir arada çalışır; spec'i siz onaylarsınız.
       </motion.p>
 
       {/* Pipeline mini-flow */}

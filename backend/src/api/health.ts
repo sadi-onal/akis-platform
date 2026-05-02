@@ -85,7 +85,7 @@ export async function healthRoutes(fastify: FastifyInstance) {
                 properties: {
                   google: { type: 'boolean', example: true },
                   github: { type: 'boolean', example: true },
-                  callbackBase: { type: 'string', example: 'https://staging.akisflow.com/auth/oauth' },
+                  callbackBase: { type: 'string', example: 'https://akisflow.com/auth/oauth' },
                 },
               },
               mcp: {

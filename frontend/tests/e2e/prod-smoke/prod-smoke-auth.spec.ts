@@ -55,8 +55,6 @@ async function stubAuthedUser(page: Page) {
         firstName: 'Smoke',
         lastName: 'Tester',
         emailVerified: true,
-        hasSeenBetaWelcome: true,
-        dataSharingConsent: true,
         role: 'user',
       }),
     });

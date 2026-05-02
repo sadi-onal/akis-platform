@@ -36,7 +36,7 @@ test('TraceAgent reports automation execution summary for strong scenarios', asy
   assert.strictEqual(result.ok, true);
   assert.ok(result.testPlan.includes('## Automation Execution Summary'));
   assert.strictEqual(result.metadata.automationExecution.runner, 'playwright');
-  assert.strictEqual(result.metadata.automationExecution.targetBaseUrl, 'https://staging.akisflow.com');
+  assert.strictEqual(result.metadata.automationExecution.targetBaseUrl, 'https://akisflow.com');
   assert.strictEqual(result.metadata.automationExecution.featurePassRate, 100);
   assert.strictEqual(result.metadata.automationExecution.executedScenarios, 1);
   assert.strictEqual(result.metadata.automationExecution.passedScenarios, 1);
@@ -365,7 +365,7 @@ describe('TraceAgent automation evaluation', () => {
         'Then dashboard is shown',
       ].join('\n'),
       automationMode: 'generate_and_run',
-      targetBaseUrl: 'https://staging.akisflow.com',
+      targetBaseUrl: 'https://akisflow.com',
     }) as {
       metadata: {
         automationExecution: {
@@ -382,7 +382,7 @@ describe('TraceAgent automation evaluation', () => {
 
     assert.strictEqual(runCount, 2, 'flaky manager should perform one retry after first failure');
     assert.strictEqual(result.metadata.automationExecution.mode, 'real');
-    assert.strictEqual(result.metadata.automationExecution.targetBaseUrl, 'https://staging.akisflow.com');
+    assert.strictEqual(result.metadata.automationExecution.targetBaseUrl, 'https://akisflow.com');
     assert.strictEqual(result.metadata.automationExecution.artifactPaths?.traceArtifactPath, '/tmp/trace.zip');
     assert.strictEqual(result.metadata.flaky.retryCount, 1);
     assert.ok(result.metadata.flaky.pfsLite >= 0);

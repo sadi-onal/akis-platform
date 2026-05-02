@@ -49,8 +49,6 @@ async function stubScribeAckResponse(page: Page) {
         firstName: 'Smoke',
         lastName: 'User',
         emailVerified: true,
-        hasSeenBetaWelcome: true,
-        dataSharingConsent: true,
         role: 'user',
       }),
     });

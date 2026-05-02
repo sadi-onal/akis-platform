@@ -2,10 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { EmptyState } from '../EmptyState';
 
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { name: 'Test', hasSeenBetaWelcome: true }, loading: false }),
-}));
-
 vi.mock('../../../hooks/useReducedMotion', () => ({
   useReducedMotion: () => true,
 }));
@@ -17,10 +13,6 @@ vi.mock('../../../i18n/useI18n', () => ({
     availableLocales: ['tr', 'en'],
     setLocale: vi.fn(),
   }),
-}));
-
-vi.mock('../../onboarding/WelcomeWizard', () => ({
-  WelcomeWizard: () => <div data-testid="welcome-wizard" />,
 }));
 
 vi.mock('../../onboarding/AgentFeatureCard', () => ({
@@ -66,11 +58,6 @@ describe('EmptyState', () => {
       expect(screen.getByTestId('agent-Scribe')).toBeInTheDocument();
       expect(screen.getByTestId('agent-Proto')).toBeInTheDocument();
       expect(screen.getByTestId('agent-Trace')).toBeInTheDocument();
-    });
-
-    it('does not show WelcomeWizard when user has already seen beta welcome', () => {
-      render(<EmptyState variant="no-conversation" onNewConversation={vi.fn()} />);
-      expect(screen.queryByTestId('welcome-wizard')).not.toBeInTheDocument();
     });
   });
 });

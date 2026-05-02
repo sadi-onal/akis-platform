@@ -53,15 +53,8 @@ export default function LoginPassword() {
 
       sessionStorage.removeItem('akis_login_data');
       const returnTo = getReturnTo();
-
-      if (response.needsDataSharingConsent) {
-        navigate('/auth/privacy-consent', { replace: true });
-      } else if (!response.user.hasSeenBetaWelcome) {
-        navigate('/auth/welcome-beta', { replace: true });
-      } else {
-        clearReturnTo();
-        navigate(returnTo || POST_AUTH_PATH, { replace: true });
-      }
+      clearReturnTo();
+      navigate(returnTo || POST_AUTH_PATH, { replace: true });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Yanlış şifre. Lütfen tekrar deneyin.';
       

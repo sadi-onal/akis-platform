@@ -12,8 +12,6 @@ export const MOCK_USER = {
   email: 'e2e@test.akis.dev',
   firstName: 'E2E',
   lastName: 'Tester',
-  hasSeenBetaWelcome: true,
-  dataSharingConsent: true,
   emailVerified: true,
   role: 'user',
 } as const;

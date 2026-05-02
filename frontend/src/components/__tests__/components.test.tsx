@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 
 // ─── Mocks shared across suites ──────────────────────────────────────
 vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { name: 'Test', hasSeenBetaWelcome: true }, loading: false }),
+  useAuth: () => ({ user: { name: 'Test' }, loading: false }),
 }));
 
 vi.mock('../../hooks/useReducedMotion', () => ({
@@ -29,10 +29,6 @@ vi.mock('../../i18n/useI18n', () => ({
     availableLocales: ['tr', 'en'],
     setLocale: vi.fn(),
   }),
-}));
-
-vi.mock('../onboarding/WelcomeWizard', () => ({
-  WelcomeWizard: () => <div data-testid="welcome-wizard" />,
 }));
 
 vi.mock('../onboarding/AgentFeatureCard', () => ({

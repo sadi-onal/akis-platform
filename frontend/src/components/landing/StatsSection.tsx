@@ -26,11 +26,19 @@ function AnimatedCounter({ target, suffix = '' }: { target: number; suffix?: str
   return <span ref={ref}>{count}{suffix}</span>;
 }
 
-const STATS = [
-  { value: 3, suffix: '', label: 'AI Agent' },
-  { value: 5, suffix: ' dk', label: 'Ortalama Pipeline Süresi' },
-  { value: 100, suffix: '%', label: 'Test Kapsamı Hedefi' },
-  { value: 0, suffix: '', label: 'Yapılandırma Gerekli', display: 'Sıfır' },
+// Each stat must map to something verifiable in the code (the marketing
+// "5 dk Ortalama Pipeline Süresi" / "100% Test Kapsamı Hedefi" stats were
+// not backed by data and were removed).
+const STATS: Array<{
+  value: number;
+  suffix?: string;
+  label: string;
+  display?: string;
+}> = [
+  { value: 3, label: 'AI Agent', display: '3' }, // Scribe + Proto + Trace
+  { value: 3, label: 'AI Sağlayıcı', display: '3' }, // Anthropic, OpenAI, OpenRouter
+  { value: 1, label: 'Tek Komutla Kurulum', display: 'pnpm dev' },
+  { value: 1, label: 'Otomatik Test', display: 'Playwright' },
 ];
 
 export function StatsSection() {

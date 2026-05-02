@@ -153,25 +153,22 @@ describe('LandingPage — auth redirect', () => {
 // ===================== HeroSection =====================
 
 describe('HeroSection', () => {
-  it('renders the hero headline containing "Fikirden"', () => {
+  it('renders the hero headline opening "Üç" / "Ajan."', () => {
+    renderWithRouter(<HeroSection />);
+    expect(screen.getByText('Üç')).toBeInTheDocument();
+    expect(screen.getByText('Ajan.')).toBeInTheDocument();
+  });
+
+  it('renders the accent words including "Fikirden" and "Koda."', () => {
     renderWithRouter(<HeroSection />);
     expect(screen.getByText('Fikirden')).toBeInTheDocument();
+    expect(screen.getByText('Koda.')).toBeInTheDocument();
   });
 
-  it('renders the hero headline containing "Koda,"', () => {
-    renderWithRouter(<HeroSection />);
-    expect(screen.getByText('Koda,')).toBeInTheDocument();
-  });
-
-  it('renders the accent words "Dakikalar" and "Icinde."', () => {
-    renderWithRouter(<HeroSection />);
-    expect(screen.getByText('Dakikalar')).toBeInTheDocument();
-  });
-
-  it('renders the subtitle about AI agents', () => {
+  it('renders a subtitle that mentions Scribe, Proto, and Trace', () => {
     renderWithRouter(<HeroSection />);
     expect(
-      screen.getByText(/AI destekli agent.*yazılım geliştirme/),
+      screen.getByText(/Scribe, Proto, Trace/),
     ).toBeInTheDocument();
   });
 
@@ -242,33 +239,34 @@ describe('FeaturesSection', () => {
     expect(screen.getByText(/Jira Entegrasyonu/)).toBeInTheDocument();
   });
 
-  it('renders "BDD / Cucumber" feature', () => {
+  it('renders "Otomatik Test" feature (Playwright primary, Cucumber optional)', () => {
     renderWithRouter(<FeaturesSection />);
-    expect(screen.getByText(/BDD \/ Cucumber/)).toBeInTheDocument();
+    expect(screen.getByText(/Otomatik Test/)).toBeInTheDocument();
   });
 });
 
 // ===================== StatsSection =====================
 
 describe('StatsSection', () => {
-  it('renders "AI Agent" stat label', () => {
+  it('renders "AI Agent" stat label (3 = Scribe + Proto + Trace)', () => {
     renderWithRouter(<StatsSection />);
     expect(screen.getByText('AI Agent')).toBeInTheDocument();
   });
 
-  it('renders "Ortalama Pipeline Suresi" stat label', () => {
+  it('renders "AI Sağlayıcı" stat label', () => {
     renderWithRouter(<StatsSection />);
-    expect(screen.getByText(/Ortalama Pipeline Süresi/)).toBeInTheDocument();
+    expect(screen.getByText('AI Sağlayıcı')).toBeInTheDocument();
   });
 
-  it('renders "Test Kapsami Hedefi" stat label', () => {
+  it('renders the setup-command stat with "pnpm dev" display', () => {
     renderWithRouter(<StatsSection />);
-    expect(screen.getByText(/Test Kapsamı Hedefi/)).toBeInTheDocument();
+    expect(screen.getByText(/Tek Komutla Kurulum/)).toBeInTheDocument();
+    expect(screen.getByText('pnpm dev')).toBeInTheDocument();
   });
 
-  it('renders "Yapilandirma Gerekli" stat label with "Sifir" display', () => {
+  it('renders "Otomatik Test" stat with "Playwright" display', () => {
     renderWithRouter(<StatsSection />);
-    expect(screen.getByText(/Yapılandırma Gerekli/)).toBeInTheDocument();
-    expect(screen.getByText('Sıfır')).toBeInTheDocument();
+    expect(screen.getByText(/Otomatik Test/)).toBeInTheDocument();
+    expect(screen.getByText('Playwright')).toBeInTheDocument();
   });
 });

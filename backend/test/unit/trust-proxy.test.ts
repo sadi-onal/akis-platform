@@ -18,7 +18,7 @@ describe('Trust Proxy (OPS-2)', () => {
       headers: {
         'x-forwarded-proto': 'https',
         'x-forwarded-for': '203.0.113.50',
-        'x-forwarded-host': 'staging.akisflow.com',
+        'x-forwarded-host': 'akisflow.com',
       },
     });
 
@@ -26,7 +26,7 @@ describe('Trust Proxy (OPS-2)', () => {
     const body = JSON.parse(res.body);
     assert.strictEqual(body.protocol, 'https');
     assert.strictEqual(body.ip, '203.0.113.50');
-    assert.strictEqual(body.hostname, 'staging.akisflow.com');
+    assert.strictEqual(body.hostname, 'akisflow.com');
 
     await app.close();
   });

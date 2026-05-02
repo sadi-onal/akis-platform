@@ -25,7 +25,7 @@ jobs:
   # Migration Idempotency Verification
   # ===========================================================================
   # Ensures migrations can be run twice without errors (idempotent)
-  # This catches issues like "enum label already exists" before they hit staging
+  # This catches issues like "enum label already exists" before they hit production
   # ===========================================================================
   migration-idempotency:
     name: Migration Idempotency Check

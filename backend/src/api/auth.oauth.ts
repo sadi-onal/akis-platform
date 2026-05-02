@@ -651,16 +651,12 @@ export async function registerOAuthRoutes(fastify: FastifyInstance, emailService
       });
       
       reply.setCookie(env.AUTH_COOKIE_NAME, jwt, cookieOpts);
-      
-      // Determine redirect based on onboarding gates (same as normal login)
-      let redirectPath = '/chat';
-      
-      if (user.dataSharingConsent === null) {
-        redirectPath = '/auth/privacy-consent';
-      } else if (!user.hasSeenBetaWelcome) {
-        redirectPath = '/auth/welcome-beta';
-      }
-      
+
+      // Always redirect to /chat after a successful OAuth login. The
+      // privacy-consent and welcome-beta intermediate pages were removed
+      // in this cleanup; their backend gates are no-ops now.
+      const redirectPath = '/chat';
+
       logger.info(`[OAuth] Login successful for user ${user.id}, isNewUser: ${isNewUser}, redirecting to: ${redirectPath}`);
       
       // Send welcome email for new OAuth users (fire-and-forget)

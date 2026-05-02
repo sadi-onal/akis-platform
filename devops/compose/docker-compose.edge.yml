@@ -3,16 +3,18 @@
 #
 # This is the ONLY service that binds to ports 80/443 on the host.
 # It routes requests to the appropriate backend based on hostname:
-#   - akisflow.com        -> akis-prod-backend:3000
-#   - staging.akisflow.com -> akis-staging-backend:3000
+#   - akisflow.com         -> akis-prod-backend:3000
+#   - www.akisflow.com     -> 301 -> akisflow.com
+#   - staging.akisflow.com -> 301 -> akisflow.com (graceful degradation; staging
+#                                                  was retired 2026-05-02)
 #
 # Usage:
 #   docker compose -f docker-compose.edge.yml up -d
 #   docker compose -f docker-compose.edge.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
 #
 # Prerequisites:
-#   - akis-edge-net network must exist (created by staging/prod stack or manually)
-#   - Frontend files must be in /opt/akis/staging-frontend and /opt/akis/prod-frontend
+#   - akis-edge-net network must exist (created by prod stack or manually)
+#   - Frontend files must be in /opt/akis/prod-frontend
 
 name: akis-edge
 
@@ -28,8 +30,7 @@ services:
       - ./Caddyfile.edge:/etc/caddy/Caddyfile:ro
       - edge_caddy_data:/data
       - edge_caddy_config:/config
-      # Bind mount frontend directories for static file serving
-      - /opt/akis/staging-frontend:/srv/staging-frontend:ro
+      # Bind mount frontend directory for static file serving
       - /opt/akis/prod-frontend:/srv/prod-frontend:ro
     networks:
       - akis-edge-net
@@ -52,7 +53,7 @@ services:
           memory: 64M
 
 networks:
-  # External network shared by staging, prod, and edge stacks
+  # External network shared by prod and edge stacks
   # Must be created before first deploy: docker network create akis-edge-net
   akis-edge-net:
     external: true

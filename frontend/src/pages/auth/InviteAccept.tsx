@@ -91,8 +91,8 @@ export default function InviteAccept() {
         password,
       });
 
-      // Navigate to privacy consent (standard post-signup flow)
-      navigate('/auth/privacy-consent');
+      // Invite accepted — go straight to chat
+      navigate('/chat');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       setError(msg);

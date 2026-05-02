@@ -3,7 +3,7 @@
  * Implements Cursor-style auth flows with email verification
  */
 
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
@@ -51,11 +51,6 @@ const LoginCompleteSchema = z.object({
   password: z.string().min(8),
 });
 
-const UpdatePreferencesSchema = z.object({
-  dataSharingConsent: z.boolean().optional(),
-  hasSeenBetaWelcome: z.boolean().optional(),
-});
-
 // Helper to sanitize user data
 const sanitizeUser = (user: User) => ({
   id: user.id,
@@ -66,11 +61,6 @@ const sanitizeUser = (user: User) => ({
   dataSharingConsent: user.dataSharingConsent,
   hasSeenBetaWelcome: user.hasSeenBetaWelcome,
 });
-
-// Helper to clear session cookie
-function clearSessionCookie(reply: FastifyReply) {
-  reply.setCookie(env.AUTH_COOKIE_NAME, '', { ...cookieOpts, maxAge: 0 });
-}
 
 export async function registerMultiStepAuthRoutes(
   fastify: FastifyInstance,
@@ -206,7 +196,6 @@ export async function registerMultiStepAuthRoutes(
         message: 'Password set successfully (DEV_MODE verification bypass)',
         verificationBypassed: true,
         user: sanitizeUser(resolvedUser),
-        needsDataSharingConsent: resolvedUser.dataSharingConsent === null,
       };
     }
 
@@ -396,56 +385,7 @@ export async function registerMultiStepAuthRoutes(
 
     return {
       user: sanitizeUser(user),
-      needsDataSharingConsent: user.dataSharingConsent === null,
     };
-  });
-
-  /**
-   * USER PREFERENCES
-   */
-
-  // Update user preferences (requires auth)
-  fastify.post('/update-preferences', {
-    preHandler: async (request: FastifyRequest & { userId?: string }, reply: FastifyReply) => {
-      // Simple auth check - extract user from cookie
-      const token = request.cookies?.[env.AUTH_COOKIE_NAME];
-      
-      if (!token) {
-        return sendError(reply, request, 'UNAUTHORIZED', 'Authentication required');
-      }
-
-      // Attach userId to request for handler
-      try {
-        const { verify } = await import('../services/auth/jwt.js');
-        const payload = await verify<{ sub: string }>(token);
-        request.userId = payload.sub;
-      } catch {
-        clearSessionCookie(reply);
-        return sendError(reply, request, 'UNAUTHORIZED', 'Invalid session');
-      }
-    },
-  }, async (request: FastifyRequest & { userId?: string }, _reply) => {
-    const body = UpdatePreferencesSchema.parse(request.body);
-    const userId = request.userId as string;
-
-    const updates: Partial<User> = {
-      updatedAt: new Date(),
-    };
-
-    if (body.dataSharingConsent !== undefined) {
-      updates.dataSharingConsent = body.dataSharingConsent;
-    }
-
-    if (body.hasSeenBetaWelcome !== undefined) {
-      updates.hasSeenBetaWelcome = body.hasSeenBetaWelcome;
-    }
-
-    await db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, userId));
-
-    return { ok: true };
   });
 
   // ─── Password Reset Flow ──────────────────────────

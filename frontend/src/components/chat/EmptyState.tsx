@@ -1,10 +1,7 @@
-import { useState, useCallback } from 'react';
 import { cn } from '../../utils/cn';
 import { LOGO_MARK_SVG } from '../../theme/brand';
-import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/useI18n';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
-import { WelcomeWizard } from '../onboarding/WelcomeWizard';
 import { AgentFeatureCard } from '../onboarding/AgentFeatureCard';
 
 interface EmptyStateProps {
@@ -31,28 +28,8 @@ const TraceIcon = () => (
 );
 
 export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
-  const { user } = useAuth();
   const { t } = useI18n();
   const reduced = useReducedMotion();
-  const [showWizard, setShowWizard] = useState(() => {
-    // Check both server flag and localStorage for reliability across re-mounts
-    if (user?.hasSeenBetaWelcome) return false;
-    if (typeof window !== 'undefined' && localStorage.getItem('hasSeenBetaWelcome') === 'true') return false;
-    return true;
-  });
-
-  const handleWizardComplete = useCallback(async () => {
-    try {
-      if (typeof window !== 'undefined') localStorage.setItem('hasSeenBetaWelcome', 'true');
-      await fetch('/auth/update-preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ hasSeenBetaWelcome: true }),
-      });
-    } catch { /* best-effort */ }
-    setShowWizard(false);
-  }, []);
 
   // New conversation variant — simple prompt
   if (variant === 'new-conversation') {
@@ -81,8 +58,6 @@ export function EmptyState({ variant, onNewConversation }: EmptyStateProps) {
   // Hero variant — animated empty state with feature cards
   return (
     <>
-      {showWizard && <WelcomeWizard onComplete={handleWizardComplete} />}
-
       <div className="relative flex flex-1 flex-col items-center gap-5 px-4 pt-10 sm:pt-14 overflow-hidden">
         {/* Background blobs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">

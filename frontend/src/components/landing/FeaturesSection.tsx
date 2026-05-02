@@ -15,14 +15,14 @@ const FEATURES = [
   },
   {
     title: 'Jira Entegrasyonu',
-    description: 'Spec onayında otomatik Epic ve sub-task oluşturma, pipeline sonuçları Jira\'ya yorum olarak eklenir.',
+    description: 'Spec onayında otomatik Jira Epic; Proto ve Trace sonuçları Epic\'e yorum olarak eklenir.',
     icon: '📋',
     color: '#0052CC',
   },
   {
-    title: 'BDD / Cucumber',
-    description: 'Gherkin feature dosyaları ve step definition stub\'ları otomatik üretilir.',
-    icon: '🥒',
+    title: 'Otomatik Test',
+    description: 'Trace, Proto\'nun ürettiği koddan Playwright e2e testleri yazar. Cucumber export opsiyoneldir.',
+    icon: '🧪',
     color: '#23D96C',
   },
 ];
@@ -51,7 +51,7 @@ export function FeaturesSection() {
         viewport={{ once: true }}
         transition={{ delay: 0.2, duration: 0.5 }}
       >
-        Tek platformda AI, GitHub, Jira ve BDD entegrasyonu.
+        Tek platformda AI, GitHub, Jira ve otomatik test entegrasyonu.
       </motion.p>
 
       <div className="grid gap-5 sm:grid-cols-2">

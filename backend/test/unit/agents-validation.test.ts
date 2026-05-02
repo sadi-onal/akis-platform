@@ -269,11 +269,11 @@ describe('tracePayloadSchema', () => {
     const r = tracePayloadSchema.parse({
       spec: 's',
       automationMode: 'generate_and_run',
-      targetBaseUrl: 'https://staging.akisflow.com',
+      targetBaseUrl: 'https://akisflow.com',
       featureLimit: 25,
     });
     assert.strictEqual(r.automationMode, 'generate_and_run');
-    assert.strictEqual(r.targetBaseUrl, 'https://staging.akisflow.com');
+    assert.strictEqual(r.targetBaseUrl, 'https://akisflow.com');
     assert.strictEqual(r.featureLimit, 25);
   });
 

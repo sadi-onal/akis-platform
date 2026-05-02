@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 // ─── Shared mocks ───────────────────────────────────────────────────
 vi.mock('../../hooks/useReducedMotion', () => ({
@@ -13,7 +13,6 @@ vi.mock('../../theme/brand', () => ({
 // ─── Imports (after mocks) ──────────────────────────────────────────
 import { SuggestionWizard } from '../workflow/SuggestionWizard';
 import { PlanCard } from '../chat/PlanCard';
-import { WelcomeWizard } from '../onboarding/WelcomeWizard';
 import type { UserFriendlyPlan, ChangePlan } from '../../types/plan';
 
 // ─── Fixtures ───────────────────────────────────────────────────────
@@ -511,72 +510,3 @@ describe('PlanCard — tech choices & change plans', () => {
   });
 });
 
-// =====================================================================
-// 3. WelcomeWizard — additional coverage beyond WelcomeWizard.test.tsx
-// =====================================================================
-describe('WelcomeWizard — agent descriptions & CTA', () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
-
-  it('renders welcome title on initial step', () => {
-    render(<WelcomeWizard onComplete={vi.fn()} />);
-    expect(screen.getByText(/Hoş Geldiniz/)).toBeInTheDocument();
-  });
-
-  it('shows agent descriptions on step 1', () => {
-    render(<WelcomeWizard onComplete={vi.fn()} />);
-    fireEvent.click(screen.getByText('Devam'));
-
-    // Agent names should be visible
-    expect(screen.getByText('Scribe')).toBeInTheDocument();
-    expect(screen.getByText('Proto')).toBeInTheDocument();
-    expect(screen.getByText('Trace')).toBeInTheDocument();
-
-    // Agent descriptions should be visible
-    expect(screen.getByText(/spesifikasyona dönüştürür/)).toBeInTheDocument();
-    expect(screen.getByText(/MVP kodu üretir/)).toBeInTheDocument();
-    expect(screen.getByText(/Playwright otomasyon testleri/)).toBeInTheDocument();
-  });
-
-  it('shows CTA button on final step', () => {
-    render(<WelcomeWizard onComplete={vi.fn()} />);
-    fireEvent.click(screen.getByText('Devam')); // step 0 -> 1
-    fireEvent.click(screen.getByText('Devam')); // step 1 -> 2
-
-    expect(screen.getByText(/İlk Pipeline/)).toBeInTheDocument();
-  });
-
-  it('shows "Daha sonra" skip link on final step', () => {
-    render(<WelcomeWizard onComplete={vi.fn()} />);
-    fireEvent.click(screen.getByText('Devam'));
-    fireEvent.click(screen.getByText('Devam'));
-
-    expect(screen.getByText(/Daha sonra/)).toBeInTheDocument();
-  });
-
-  it('CTA button triggers onComplete', () => {
-    const onComplete = vi.fn();
-    render(<WelcomeWizard onComplete={onComplete} />);
-    fireEvent.click(screen.getByText('Devam'));
-    fireEvent.click(screen.getByText('Devam'));
-    fireEvent.click(screen.getByText(/İlk Pipeline/));
-    act(() => { vi.runAllTimers(); });
-    expect(onComplete).toHaveBeenCalledOnce();
-  });
-
-  it('"Daha sonra" also triggers onComplete', () => {
-    const onComplete = vi.fn();
-    render(<WelcomeWizard onComplete={onComplete} />);
-    fireEvent.click(screen.getByText('Devam'));
-    fireEvent.click(screen.getByText('Devam'));
-    fireEvent.click(screen.getByText(/Daha sonra/));
-    act(() => { vi.runAllTimers(); });
-    expect(onComplete).toHaveBeenCalledOnce();
-  });
-
-  it('step 1 subtitle mentions 3 agents', () => {
-    render(<WelcomeWizard onComplete={vi.fn()} />);
-    fireEvent.click(screen.getByText('Devam'));
-    expect(screen.getByText(/3 AI agent/)).toBeInTheDocument();
-  });
-});

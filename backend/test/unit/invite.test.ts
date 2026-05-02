@@ -20,13 +20,13 @@ describe('Invite Templates', () => {
     const html = inviteHtml({
       inviterName: 'Ömer Yasir',
       recipientEmail: 'test@example.com',
-      inviteUrl: 'https://staging.akisflow.com/auth/invite/abc123',
+      inviteUrl: 'https://akisflow.com/auth/invite/abc123',
     });
     assert.ok(html.includes('Ömer Yasir'), 'HTML must contain inviter name');
   });
 
   test('inviteHtml includes invite URL', () => {
-    const url = 'https://staging.akisflow.com/auth/invite/abc123';
+    const url = 'https://akisflow.com/auth/invite/abc123';
     const html = inviteHtml({
       inviterName: 'Admin',
       recipientEmail: 'test@example.com',

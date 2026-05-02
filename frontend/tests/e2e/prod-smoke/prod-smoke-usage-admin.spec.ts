@@ -27,8 +27,6 @@ async function stubAdminSession(page: Page) {
         firstName: 'Admin',
         lastName: 'Smoke',
         emailVerified: true,
-        hasSeenBetaWelcome: true,
-        dataSharingConsent: true,
         role: 'admin',
         isAdmin: true,
       }),

@@ -1,6 +1,7 @@
 import { HttpClient } from '../../http/HttpClient.js';
 import { atlassianOAuthService } from '../../atlassian/index.js';
 import { getEnv } from '../../../config/env.js';
+import { logger } from '../../../lib/logger.js';
 
 /**
  * JiraMCPService - MCP client adapter for Jira
@@ -98,13 +99,31 @@ export class JiraMCPService {
    */
   static async fromOAuth(userId: string): Promise<JiraMCPService | null> {
     const env = getEnv();
-    
+
     if (!env.ATLASSIAN_MCP_BASE_URL) {
+      // Server is not configured for Jira at all — silent skip is fine here,
+      // it's a deploy-time fact, not a per-request anomaly.
       return null;
     }
 
-    const token = await atlassianOAuthService.getValidToken(userId);
+    let token: string | null = null;
+    try {
+      token = await atlassianOAuthService.getValidToken(userId);
+    } catch (err) {
+      // Token decryption / refresh failed. The pipeline is best-effort with
+      // Jira; surface the reason in logs so prod regressions are debuggable.
+      logger.warn(
+        { userId, err: err instanceof Error ? err.message : String(err) },
+        '[Jira] fromOAuth: getValidToken threw — returning null'
+      );
+      return null;
+    }
+
     if (!token) {
+      logger.warn(
+        { userId },
+        '[Jira] fromOAuth: no valid token (user likely never connected Atlassian, or token rotation failed) — returning null'
+      );
       return null;
     }
 

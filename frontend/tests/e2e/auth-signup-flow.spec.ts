@@ -1,8 +1,11 @@
 /**
  * Signup Happy-Path E2E (mocked backend)
  *
- * Walks through the 5-step signup flow:
- *   /signup → /signup/password → /signup/verify-email → /auth/welcome-beta → /auth/privacy-consent
+ * Walks through the 3-step signup flow:
+ *   /signup → /signup/password → /signup/verify-email → /chat
+ *
+ * (The /auth/welcome-beta and /auth/privacy-consent intermediate pages were
+ * removed in the auth-cleanup PR; verify-email now navigates straight to chat.)
  *
  * All backend API calls are mocked via Playwright route interception so the
  * test runs without a live backend. Each run uses a unique email via timestamp.
@@ -49,8 +52,6 @@ async function mockSignupApi(page: Page, email: string) {
           email,
           status: 'active',
           emailVerified: true,
-          hasSeenBetaWelcome: false,
-          dataSharingConsent: null,
         },
         message: 'Email verified successfully',
       }),
@@ -66,25 +67,7 @@ async function mockSignupApi(page: Page, email: string) {
     });
   });
 
-  // POST /auth/update-preferences → success (used by WelcomeBeta + PrivacyConsent)
-  await page.route('**/auth/update-preferences', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ ok: true }),
-    });
-  });
-
-  // POST /auth/preferences → success (legacy fallback)
-  await page.route('**/auth/preferences', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ success: true }),
-    });
-  });
-
-  // GET /auth/me → user without welcome/consent completed
+  // GET /auth/me → authenticated user
   await page.route('**/auth/me', async (route: Route) => {
     await route.fulfill({
       status: 200,
@@ -94,8 +77,6 @@ async function mockSignupApi(page: Page, email: string) {
         name: 'E2E Tester',
         email,
         status: 'active',
-        hasSeenBetaWelcome: false,
-        dataSharingConsent: null,
         emailVerified: true,
       }),
     });
@@ -199,8 +180,9 @@ test.describe('Signup happy path', () => {
     // Submit
     await page.getByRole('button', { name: /verify/i }).click();
 
-    // Should navigate to welcome-beta after successful verification
-    await page.waitForURL('**/auth/welcome-beta', { timeout: 10_000 });
+    // Should navigate to /chat after successful verification (intermediate
+    // welcome-beta and privacy-consent pages were removed)
+    await page.waitForURL('**/chat**', { timeout: 10_000 });
   });
 
   test('Step 3b: wrong verification code shows error', async ({ page }) => {
@@ -335,48 +317,4 @@ test.describe('Signup happy path', () => {
     await expect(page.locator('.text-ak-danger')).toBeVisible({ timeout: 5_000 });
   });
 
-  test('Step 4: /auth/welcome-beta page renders and Continue button is clickable', async ({
-    page,
-  }) => {
-    const email = uniqueEmail();
-    await mockSignupApi(page, email);
-
-    await page.goto('/auth/welcome-beta');
-
-    // Verify page content
-    await expect(page.getByRole('heading', { name: /welcome to akis/i })).toBeVisible();
-    await expect(page.getByText('🎉')).toBeVisible();
-
-    const continueBtn = page.getByRole('button', { name: /continue to akis dashboard/i });
-    await expect(continueBtn).toBeVisible();
-    await expect(continueBtn).toBeEnabled();
-
-    // Click should navigate to /dashboard (API call mocked)
-    await continueBtn.click();
-    await page.waitForURL('**/dashboard**', { timeout: 10_000 });
-  });
-
-  test('Step 5: /auth/privacy-consent page renders and Continue works', async ({
-    page,
-  }) => {
-    const email = uniqueEmail();
-    await mockSignupApi(page, email);
-
-    await page.goto('/auth/privacy-consent');
-
-    // Verify page content
-    await expect(page.getByRole('heading', { name: /help improve akis/i })).toBeVisible();
-    await expect(page.getByRole('checkbox')).toBeVisible();
-
-    const continueBtn = page.getByRole('button', { name: /continue to dashboard/i });
-    await expect(continueBtn).toBeVisible();
-    await expect(continueBtn).toBeEnabled();
-
-    // Toggle checkbox and submit
-    await page.getByRole('checkbox').check();
-    await continueBtn.click();
-
-    // Should navigate to welcome-beta or dashboard
-    await page.waitForURL(/\/(auth\/welcome-beta|dashboard)/, { timeout: 10_000 });
-  });
 });

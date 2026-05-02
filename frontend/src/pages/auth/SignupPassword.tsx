@@ -71,14 +71,7 @@ export default function SignupPassword() {
       if (response.verificationBypassed && response.user) {
         setUser(response.user);
         sessionStorage.removeItem('akis_signup_data');
-
-        if (response.needsDataSharingConsent) {
-          navigate('/auth/privacy-consent', { replace: true });
-        } else if (!response.user.hasSeenBetaWelcome) {
-          navigate('/auth/welcome-beta', { replace: true });
-        } else {
-          navigate(POST_AUTH_PATH, { replace: true });
-        }
+        navigate(POST_AUTH_PATH, { replace: true });
         return;
       }
 

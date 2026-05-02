@@ -18,15 +18,11 @@ vi.mock('../../../i18n/useI18n', () => ({
 }));
 
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { name: 'Test', hasSeenBetaWelcome: true }, loading: false }),
+  useAuth: () => ({ user: { name: 'Test' }, loading: false }),
 }));
 
 vi.mock('../../../hooks/useReducedMotion', () => ({
   useReducedMotion: () => true,
-}));
-
-vi.mock('../../onboarding/WelcomeWizard', () => ({
-  WelcomeWizard: () => <div data-testid="welcome-wizard" />,
 }));
 
 vi.mock('../../onboarding/AgentFeatureCard', () => ({
