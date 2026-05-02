@@ -208,3 +208,6 @@ frontend/package-lock.json
 # alongside the main repo for convenience. They live in /Users working
 # copies only; shipping them would confuse contributors.
 AKIS_*_PLAN.md
+
+# Worktrees (superpowers)
+.worktrees/
