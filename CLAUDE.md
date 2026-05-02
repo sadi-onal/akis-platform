@@ -259,9 +259,11 @@ CALISTIR — kullanicidan tekrar istek beklemeden:
 1. **Review**: `superpowers:code-reviewer` alt-ajanina PR diff'ini ver;
    READY/NEEDS-WORK/BLOCKED sonucunu al. NEEDS-WORK ise PR'a yorum bas,
    fix-up commit plani ver, durur.
-2. **Merge** (sadece READY + dusuk-risk kategori): UI/UX, i18n, typography,
-   flag-gated degisikler otomatik merge. Backend migration / billing /
-   auth / pipeline orchestrator degisiklikleri KULLANICI onayi bekler.
+2. **Merge** karari:
+   - READY + dusuk-risk → otomatik merge
+   - READY + audit-gated kategori + PR'da bagimsiz pre-merge audit raporu var → otomatik merge
+   - READY + mutlak high-risk (DB migration / billing) → KULLANICI onayi bekle
+   - NEEDS-WORK / BLOCKED → fix-up plani yaz, dur
 3. **Deploy bekle**: merge sonrasi GitHub Actions "Deploy to Production"
    workflow calismasini gozle. `success` olana kadar ~2-3 dk bekle.
 4. **Chrome smoke-test**: prod deploy bitince **mutlaka** `claude-in-chrome`
@@ -283,14 +285,27 @@ Dusuk-risk PR kategorisi (otomatik mergelenebilir):
 - CSS/typography/a11y degisikleri (no logic)
 - Flag-gated yeni ozellikler (default off)
 - Yalniz yeni bilesen ekleyen PR'lar (mevcut bilesenleri degistirmeyen)
+- Docs-only / runbook / CLAUDE.md guncellemeleri
 
-Yuksek-risk PR kategorisi (kullanici onayi sart):
-- DB migration/schema degisikligi
-- Backend API contract degisikligi (response shape)
-- Auth/OAuth/token degisikligi
-- Billing/quota/limit logic
-- Pipeline orchestrator veya agent prompt degisikligi
-- CI workflow / deployment script degisikligi
+Audit-gated kategori (otomatik mergelenebilir, ASAGIDAKI 3 KOSUL TAMAMI saglanirsa):
+1. PR'da bagimsiz pre-merge audit raporu var:
+   `docs/ops/DEPLOY_SMOKE_<pr>_*_PRE_MERGE_AUDIT.md` veya esdeger
+2. CI tum check'lerde yesil (PR Gate dahil)
+3. PR DB migration veya billing/quota logic icermiyor
+
+Bu kosullar altinda asagidaki kategoriler otomatik mergelenebilir:
+- Auth/OAuth/token/cookie degisikligi (cookie/JWT unit test eslik etmeli)
+- Backend API contract degisikligi (schema/integration test eslik etmeli)
+- Pipeline orchestrator veya agent prompt degisikligi (golden test eslik etmeli)
+- CI workflow / deployment script degisikligi (script/yml only, infra change yok)
+
+3 kosulun herhangi biri eksikse audit-gated PR'lar mutlak high-risk gibi davranilir
+ve kullanici onayini bekler.
+
+Mutlak high-risk PR kategorisi (audit'le bile KULLANICI onayi sart):
+- DB migration/schema degisikligi (irreversible — rollback rotasi yok)
+- Billing/quota/limit logic (yan etki para etkili)
+- External credential rotation (OAuth client secret, GitHub PAT, JWT secret)
 
 ### Smoke-Test → Issue Triage Dongusu (zorunlu)
 
