@@ -694,6 +694,7 @@ export default function ChatPage() {
             idea: content,
             traceEnabled,
             existingRepo: selectedRepo ?? undefined,
+            model: pendingModel,
           }, attachments);
           setPendingConv(null);
           // Reset repo selector state after pipeline creation
@@ -944,6 +945,8 @@ export default function ChatPage() {
     catch (e) { toast(localizeError(e), 'error'); }
   }, [conversationId, refreshWorkflow]);
 
+  const [pendingModel, setPendingModel] = useState<string | undefined>(undefined);
+
   const handleSkip = useCallback(async () => {
     if (!conversationId) return;
     try { await workflowsApi.skipTrace(conversationId); await refreshWorkflow(); toast('Trace atlandi.', 'info'); }
@@ -1090,8 +1093,8 @@ export default function ChatPage() {
                   repoSelectorSlot={repoSelectorSlot}
                   keySourceBadge={pendingConv ? keySourceBadge : null}
                   tokenUsage={activeWorkflow?.tokenUsage}
-                  model={activeWorkflow?.model}
-                  onModelChange={!pendingConv ? handleModelChange : undefined}
+                  model={pendingConv ? pendingModel : activeWorkflow?.model}
+                  onModelChange={pendingConv ? setPendingModel : handleModelChange}
                   pipelineError={activeWorkflow?.currentStage === 'failed' ? activeWorkflow?.error : undefined}
                 />
               </ErrorBoundary>

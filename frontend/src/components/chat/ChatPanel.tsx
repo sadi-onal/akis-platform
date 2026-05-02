@@ -180,9 +180,6 @@ export const ChatPanel = memo(function ChatPanel({
           onBack={onBack}
           showBackButton={showBackButton}
           tokenUsage={tokenUsage}
-          model={model}
-          onModelChange={onModelChange}
-          modelProviderHint={modelProviderHint}
         />
       )}
 
@@ -394,6 +391,9 @@ export const ChatPanel = memo(function ChatPanel({
           isSending={isSending}
           showCancel={showCancelButton}
           placeholder={inputPlaceholder}
+          model={model}
+          onModelChange={onModelChange}
+          modelProviderHint={modelProviderHint}
         />
       )}
     </div>

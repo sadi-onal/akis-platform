@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type DragEvent, type ChangeEvent } from 'react';
 import { cn } from '../../utils/cn';
 import { toast } from '../ui/Toast';
+import { ModelPicker } from './ModelPicker';
 
 export interface ChatAttachment {
   id: string;
@@ -16,6 +17,9 @@ interface ChatInputProps {
   isSending?: boolean;
   showCancel?: boolean;
   placeholder?: string;
+  model?: string;
+  onModelChange?: (modelId: string) => void | Promise<void>;
+  modelProviderHint?: 'anthropic' | 'openai' | 'openrouter';
 }
 
 const ACCEPT_TYPES = 'image/png,image/jpeg,image/gif,image/webp,.pdf,.md,.txt,.json,.ts,.tsx,.js,.jsx,.html,.css';
@@ -42,8 +46,7 @@ let _attachId = 0;
 // Issue #391 / BUG-11: "expand butonu gerektiğinde çıksın sadece".
 const EXPAND_THRESHOLD_PX = 200;
 
-export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, placeholder }: ChatInputProps) {
-  const [value, setValue] = useState('');
+export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, placeholder, model, onModelChange, modelProviderHint }: ChatInputProps) {  const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -319,6 +322,17 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
           </button>
 
           <div className="flex-1" />
+
+          {/* Model picker — send butonunun solunda */}
+          {onModelChange && (
+            <ModelPicker
+              value={model}
+              onSelect={onModelChange}
+              providerHint={modelProviderHint}
+              disabled={disabled}
+              className="mr-1"
+            />
+          )}
 
           {/* Send / Cancel button */}
           {showCancel ? (

@@ -2,7 +2,6 @@ import { cn } from '../../utils/cn';
 import type { ChatMode } from '../../types/chat';
 import type { WorkflowTokenUsage } from '../../types/workflow';
 import { TokenGauge } from './TokenGauge';
-import { ModelPicker } from './ModelPicker';
 
 const MODE_STYLES: Record<ChatMode, string> = {
   ask: 'bg-blue-500/15 text-blue-400',
@@ -27,9 +26,6 @@ interface ChatHeaderProps {
   onBack?: () => void;
   showBackButton?: boolean;
   tokenUsage?: WorkflowTokenUsage;
-  model?: string;
-  onModelChange?: (modelId: string) => void | Promise<void>;
-  modelProviderHint?: 'anthropic' | 'openai' | 'openrouter';
 }
 
 export function ChatHeader({
@@ -47,9 +43,6 @@ export function ChatHeader({
   onBack,
   showBackButton,
   tokenUsage,
-  model,
-  onModelChange,
-  modelProviderHint,
 }: ChatHeaderProps) {
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-ak-border bg-ak-surface px-4 py-3 z-10">
@@ -141,11 +134,7 @@ export function ChatHeader({
         </button>
       )}
 
-      {/* Model picker (issue #437) */}
-      {onModelChange && (
-        <ModelPicker value={model} onSelect={onModelChange} providerHint={modelProviderHint} />
-      )}
-
+      
       {/* Token gauge (issue #438) */}
       {tokenUsage && tokenUsage.totalTokens > 0 && (
         <TokenGauge usage={tokenUsage} />

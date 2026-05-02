@@ -5,14 +5,21 @@
  */
 import pino from 'pino';
 
-const isTest = process.env.NODE_ENV === 'test';
-const isDev = process.env.NODE_ENV === 'development';
+const env = process.env.NODE_ENV ?? 'production';
+
+const isTest = env === 'test';
+const isDev = env === 'development';
 
 export const logger = isTest
   ? pino({ level: 'silent' })
+  : isDev
+  ? pino({
+      level: process.env.LOG_LEVEL || 'info',
+      transport: {
+        target: 'pino-pretty',
+        options: { colorize: true },
+      },
+    })
   : pino({
       level: process.env.LOG_LEVEL || 'info',
-      ...(isDev && {
-        transport: { target: 'pino-pretty', options: { colorize: true } },
-      }),
     });

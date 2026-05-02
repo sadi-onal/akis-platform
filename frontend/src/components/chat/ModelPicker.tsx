@@ -127,8 +127,7 @@ export function ModelPicker({ value, onSelect, providerHint, disabled, className
         <div
           role="listbox"
           aria-label={t('chat.model.ariaLabel')}
-          className="absolute right-0 top-full z-20 mt-1 w-max min-w-[260px] rounded-lg border border-ak-border bg-ak-surface-2 p-1 shadow-lg"
-        >
+          className="absolute right-0 bottom-full z-20 mb-1 w-max min-w-[260px] rounded-lg border border-ak-border bg-ak-surface-2 p-1 shadow-lg"        >
           {loading && (
             <div className="px-3 py-2 text-[11px] text-ak-text-tertiary">
               {t('chat.model.loading')}

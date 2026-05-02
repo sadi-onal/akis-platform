@@ -10,7 +10,7 @@ name: akis
 services:
   # ── PostgreSQL ──
   db:
-    image: postgres:16-alpine
+    image: ankane/pgvector:latest
     container_name: akis-db
     restart: unless-stopped
     environment:
@@ -52,6 +52,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-akis_v2}
       PORT: 3000
+    ports:
+      - "3000:3000"
     expose:
       - "3000"
     depends_on:
