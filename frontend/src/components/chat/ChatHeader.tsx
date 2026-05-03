@@ -36,7 +36,9 @@ interface ChatHeaderProps {
   tokenUsage?: WorkflowTokenUsage;
   model?: string;
   onModelChange?: (modelId: string) => void | Promise<void>;
-  modelProviderHint?: 'anthropic' | 'openai' | 'openrouter';
+  modelProviderHint?: 'anthropic' | 'openai';
+  /** Disables the picker with a lock affordance — pipeline already started. */
+  modelLocked?: boolean;
 }
 
 export function ChatHeader({
@@ -57,6 +59,7 @@ export function ChatHeader({
   model,
   onModelChange,
   modelProviderHint,
+  modelLocked,
 }: ChatHeaderProps) {
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-ak-border bg-ak-surface px-4 py-3 z-10">
@@ -156,9 +159,9 @@ export function ChatHeader({
         </button>
       )}
 
-      {/* Model picker (issue #437) */}
+      {/* Model picker (issue #437) — locked once the pipeline has been created (PR-A Commit 5) */}
       {onModelChange && (
-        <ModelPicker value={model} onSelect={onModelChange} providerHint={modelProviderHint} />
+        <ModelPicker value={model} onSelect={onModelChange} providerHint={modelProviderHint} locked={modelLocked} />
       )}
 
       {/* Token gauge (issue #438) */}

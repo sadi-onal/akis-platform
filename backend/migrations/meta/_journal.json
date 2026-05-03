@@ -330,6 +330,13 @@
       "when": 1776902400000,
       "tag": "0045_github_integrations_drop_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1777766400000,
+      "tag": "0046_remove_openrouter_lock_model",
+      "breakpoints": true
     }
   ]
 }

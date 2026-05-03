@@ -11,6 +11,7 @@
  * the line (e.g. on `stage_change` events from usePipelineStream).
  */
 import { cn } from '../../utils/cn';
+import { useI18n } from '../../i18n/useI18n';
 
 export type NarratorAgent = 'scribe' | 'proto' | 'trace';
 
@@ -28,7 +29,12 @@ const AGENT_LABEL: Record<NarratorAgent, string> = {
 
 export interface AgentStartedLineProps {
   agent: NarratorAgent;
-  /** Optional one-liner hint on what the agent is about to do. */
+  /**
+   * Either an i18n key (preferred — e.g. `pipeline.activity.proto.creating_scaffold`)
+   * or a raw string. PR-A: ChatPage now passes activity keys so EN locale gets
+   * English labels. Unknown keys fall back to the literal string (i18n returns
+   * the key as-is when not found).
+   */
   task?: string;
   /** Static "started" state uses muted color; use `running` for active pulse. */
   state?: 'started' | 'running' | 'completed';
@@ -44,7 +50,9 @@ export function AgentStartedLine({
   meta,
   className,
 }: AgentStartedLineProps) {
+  const { t } = useI18n();
   const isActive = state === 'running';
+  const taskLabel = task ? t(task) : undefined;
   return (
     <div
       className={cn(
@@ -70,10 +78,10 @@ export function AgentStartedLine({
         {state === 'completed' ? 'Background agent finished' : 'Background agent started'}
       </span>
       <span className="font-medium text-ak-text-primary">{AGENT_LABEL[agent]}</span>
-      {task && (
+      {taskLabel && (
         <>
           <span className="text-ak-text-tertiary">—</span>
-          <span className="text-ak-text-secondary truncate">{task}</span>
+          <span className="text-ak-text-secondary truncate">{taskLabel}</span>
         </>
       )}
       {meta && (

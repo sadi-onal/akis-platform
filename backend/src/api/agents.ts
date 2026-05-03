@@ -465,74 +465,69 @@ export async function agentsRoutes(fastify: FastifyInstance) {
           // CRITICAL: Frontend selection MUST be respected - no cross-provider fallback
           // ========================================================================
           const payloadObj = body.payload as Record<string, unknown> | undefined;
-          const frontendProvider = payloadObj?.aiProvider as 'openai' | 'openrouter' | undefined;
-          
+          const frontendProvider = payloadObj?.aiProvider as 'openai' | 'anthropic' | undefined;
+
           logger.debug(`[agents.ts] Frontend sent aiProvider: ${frontendProvider || 'none'}`);
-          
+
           // Load env config for fallback only
           const aiConfig = getAIConfig(getEnv());
           const allowlist = getScribeModelAllowlist();
-          
+
           // Determine if we should use ENV AI (only when NO frontend provider AND ENV is configured)
           // IMPORTANT: If frontend explicitly sends a provider, we MUST NOT override it with ENV
-          const useEnvAI = !frontendProvider && 
-                          (aiConfig.provider === 'openrouter' || aiConfig.provider === 'openai') && 
+          const useEnvAI = !frontendProvider &&
+                          (aiConfig.provider === 'anthropic' || aiConfig.provider === 'openai') &&
                           aiConfig.apiKey;
-          
+
           logger.debug(`[agents.ts] useEnvAI=${useEnvAI}, envProvider=${aiConfig.provider}, hasEnvKey=${!!aiConfig.apiKey}`);
-          
+
           if (!useEnvAI && !frontendProvider) {
             // No env AI and no frontend provider - check if user has any key configured
+            const anthropicStatus = await getUserAiKeyStatus(userId, 'anthropic');
             const openaiStatus = await getUserAiKeyStatus(userId, 'openai');
-            const openrouterStatus = await getUserAiKeyStatus(userId, 'openrouter');
-            if (!openaiStatus.configured && !openrouterStatus.configured) {
-              throw new MissingAIKeyError('openai', 'No AI provider configured. Please add an API key in Settings > API Keys.');
+            if (!anthropicStatus.configured && !openaiStatus.configured) {
+              throw new MissingAIKeyError('anthropic', 'No AI provider configured. Please add an API key in Settings > API Keys.');
             }
           }
 
           if (allowlist.length === 0 && !useEnvAI && !frontendProvider) {
-            throw new ModelNotAllowedError('openai', 'unknown', allowlist);
+            throw new ModelNotAllowedError('anthropic', 'unknown', allowlist);
           }
-          
+
           // ========================================================================
           // PROVIDER/MODEL CONSISTENCY VALIDATION
-          // Prevent sending OpenRouter models to OpenAI provider (and vice versa)
           // Read model from multiple possible field names (frontend sends modelId)
           // ========================================================================
           const frontendModel = payloadObj?.modelId as string | undefined ||
-                               payloadObj?.model as string | undefined || 
+                               payloadObj?.model as string | undefined ||
                                payloadObj?.llmModelOverride as string | undefined;
-          
+
           logger.debug(`[agents.ts] Frontend sent model: ${frontendModel || 'none'} (checked modelId, model, llmModelOverride)`);
-          
+
           // Helper to detect provider from model ID
-          const detectModelProvider = (model: string): 'openai' | 'openrouter' | 'unknown' => {
-            if (model.startsWith('gpt-') || model.startsWith('o1') || 
+          const detectModelProvider = (model: string): 'openai' | 'anthropic' | 'unknown' => {
+            if (model.startsWith('gpt-') || model.startsWith('o1') ||
                 model.startsWith('text-') || model.startsWith('davinci') ||
                 model.startsWith('o3')) {
               return 'openai';
             }
-            if (model.includes('/') || model.includes(':free') || model.includes(':nitro')) {
-              return 'openrouter';
+            if (model.startsWith('claude-')) {
+              return 'anthropic';
             }
             return 'unknown';
           };
-          
+
           if (frontendModel) {
             const detectedModelProvider = detectModelProvider(frontendModel);
-            
+
             // If no explicit provider from frontend, infer from model
             if (!frontendProvider && detectedModelProvider !== 'unknown') {
               logger.debug(`[agents.ts] Inferring provider from model: ${detectedModelProvider}`);
             }
-            
-            // Validate provider-model compatibility
+
+            // Validate provider-model compatibility — strict cross-provider rejection
             if (frontendProvider && detectedModelProvider !== 'unknown' && detectedModelProvider !== frontendProvider) {
-              if (frontendProvider === 'openai' && detectedModelProvider === 'openrouter') {
-                throw new Error(`Model "${frontendModel}" is an OpenRouter model and cannot be used with OpenAI provider. Please select an OpenAI model (e.g., gpt-4o-mini) or switch to OpenRouter provider.`);
-              }
-              // OpenRouter can proxy OpenAI models, so just log
-              logger.debug(`[agents.ts] Note: Using ${detectedModelProvider} model "${frontendModel}" with ${frontendProvider} provider`);
+              throw new Error(`Model "${frontendModel}" is a ${detectedModelProvider} model and cannot be used with ${frontendProvider} provider.`);
             }
           }
 
@@ -643,37 +638,37 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             // ========================================================================
             
             // Helper to get provider-safe model
-            const getProviderSafeModel = (provider: 'openai' | 'openrouter', requestedModel: string | null): string => {
+            const getProviderSafeModel = (provider: 'openai' | 'anthropic', requestedModel: string | null): string => {
               if (!requestedModel) {
                 return RECOMMENDED_MODELS[provider];
               }
-              
+
               const modelProvider = detectModelProvider(requestedModel);
-              
+
               // If model is compatible with provider, use it
               if (modelProvider === 'unknown' || modelProvider === provider) {
                 return requestedModel;
               }
-              
+
               // Model is incompatible - use provider's default and log
               logger.debug(`[agents.ts] Model "${requestedModel}" (${modelProvider}) incompatible with ${provider}, using default: ${RECOMMENDED_MODELS[provider]}`);
               return RECOMMENDED_MODELS[provider];
             };
-            
+
             // Determine the effective provider
             if (frontendProvider) {
               // Frontend explicitly selected a provider - respect it completely
               aiProvider = frontendProvider;
-              
+
               // Ensure model is compatible with provider
               aiModel = getProviderSafeModel(frontendProvider, modelOverride);
-              
+
               logger.debug(`[agents.ts] Using frontend provider: ${aiProvider}, model: ${aiModel}`);
             } else if (useEnvAI) {
               // No frontend provider, use env-based AI configuration
-              const envProvider = aiConfig.provider === 'openai' || aiConfig.provider === 'openrouter' 
-                ? aiConfig.provider 
-                : 'openrouter';
+              const envProvider = aiConfig.provider === 'openai' || aiConfig.provider === 'anthropic'
+                ? aiConfig.provider
+                : 'anthropic';
               aiProvider = envProvider;
               aiModel = getProviderSafeModel(envProvider, modelOverride || aiConfig.modelDefault);
               logger.debug(`[agents.ts] Using ENV provider: ${aiProvider}, model: ${aiModel}`);

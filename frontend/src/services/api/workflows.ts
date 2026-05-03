@@ -203,10 +203,12 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
 
   // Add proto result message if completed
   if (pipeline.protoOutput?.ok) {
+    const stat = `Scaffold oluşturuldu — ${pipeline.protoOutput.metadata.filesCreated} dosya, ${pipeline.protoOutput.metadata.totalLinesOfCode} satır`;
+    const summary = pipeline.protoOutput.summary;
     messages.push({
       role: 'proto',
       type: 'proto_result',
-      content: `Scaffold oluşturuldu — ${pipeline.protoOutput.metadata.filesCreated} dosya, ${pipeline.protoOutput.metadata.totalLinesOfCode} satır`,
+      content: summary ? `${stat}\n\n${summary}` : stat,
       timestamp: pipeline.metrics?.protoCompletedAt || new Date().toISOString(),
       protoResult: {
         branch: pipeline.protoOutput.branch,
@@ -222,6 +224,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
         })),
         totalFiles: pipeline.protoOutput.metadata.filesCreated,
         totalLines: pipeline.protoOutput.metadata.totalLinesOfCode,
+        ...(summary ? { summary } : {}),
         verificationReport: pipeline.protoOutput.verificationReport,
       },
     });
@@ -327,6 +330,7 @@ export function mapPipelineToWorkflow(pipeline: Pipeline, tokenUsage?: import('.
     conversation: mapConversation(pipeline),
     tokenUsage,
     model: pipeline.model ?? tokenUsage?.model,
+    modelLockedAt: pipeline.modelLockedAt,
     error: pipeline.error,
   };
 }
@@ -433,7 +437,7 @@ export const workflowsApi = {
   },
 
   listSupportedModels: async (
-    provider?: 'anthropic' | 'openai' | 'openrouter',
+    provider?: 'anthropic' | 'openai',
   ): Promise<{ provider: string; models: Array<{ id: string; name: string; provider: string; recommended: boolean }> }> => {
     const qs = provider ? `?provider=${provider}` : '';
     return http.get(`/api/ai/supported-models${qs}`);

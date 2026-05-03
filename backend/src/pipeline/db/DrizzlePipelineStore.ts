@@ -53,6 +53,7 @@ function rowToState(row: typeof pipelines.$inferSelect): PipelineState {
     stage: row.stage as PipelineState['stage'],
     title: row.title ?? undefined,
     model: row.model ?? undefined,
+    modelLockedAt: row.modelLockedAt ?? undefined,
     traceEnabled: row.traceEnabled,
     scribeConversation: (row.scribeConversation ?? []) as PipelineState['scribeConversation'],
     scribeOutput: row.scribeOutput as PipelineState['scribeOutput'],
@@ -167,6 +168,7 @@ export class DrizzlePipelineStore implements PipelineStore {
     if (data.stage !== undefined) updateData.stage = data.stage;
     if (data.title !== undefined) updateData.title = data.title;
     if (data.model !== undefined) updateData.model = data.model;
+    if (data.modelLockedAt !== undefined) updateData.modelLockedAt = data.modelLockedAt;
     if (data.scribeConversation !== undefined) updateData.scribeConversation = data.scribeConversation;
     if (data.scribeOutput !== undefined) updateData.scribeOutput = data.scribeOutput;
     if (data.approvedSpec !== undefined) updateData.approvedSpec = data.approvedSpec;

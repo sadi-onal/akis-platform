@@ -437,7 +437,7 @@ export class ScribeAgent {
 
     const userPrompt = this.buildClarificationUserPrompt(state);
 
-    emit?.('ai_call', 'Claude AI ile fikir analiz ediliyor...', 25);
+    emit?.('ai_call', 'Claude AI ile fikir analiz ediliyor...', 25, undefined, undefined, 'pipeline.activity.scribe.analyzing_questions');
     let responseText: string;
     try {
       const clarificationBase = this.enhance(CLARIFICATION_SYSTEM_PROMPT);
@@ -540,7 +540,7 @@ export class ScribeAgent {
 
     state.phase = 'generating';
     const userPrompt = this.buildSpecGenerationUserPrompt(state);
-    emit?.('ai_call', 'Yapılandırılmış spec oluşturuluyor...', 30);
+    emit?.('ai_call', 'Yapılandırılmış spec oluşturuluyor...', 30, undefined, undefined, 'pipeline.activity.scribe.writing_spec');
 
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;

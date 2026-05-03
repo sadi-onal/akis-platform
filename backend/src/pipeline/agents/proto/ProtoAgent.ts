@@ -78,6 +78,39 @@ export type ProtoResult =
 // ─── Constants ────────────────────────────────────
 
 const MIN_SCAFFOLD_FILES = 6;
+const PROTO_SUMMARY_MAX_LEN = 500;
+
+/**
+ * Extract a chat-friendly Turkish summary from Proto's final assistant text.
+ *
+ * The tool-use prompt asks Claude for a 1-3 sentence plain-text summary after
+ * push_files completes. Claude usually obeys but can occasionally wrap it in
+ * JSON or prepend a code fence. Strip both and clamp to a sane length.
+ */
+export function extractProtoSummary(rawText: string | undefined | null): string | undefined {
+  if (!rawText) return undefined;
+  let text = rawText.trim();
+  if (!text) return undefined;
+
+  // If the model wrapped the summary in ```...``` fences, drop them.
+  const fenceMatch = /^```(?:\w+)?\n?([\s\S]*?)```$/.exec(text);
+  if (fenceMatch) text = fenceMatch[1].trim();
+
+  // If it parsed as JSON, prefer an explicit "summary" field; otherwise bail
+  // out — JSON without summary isn't useful as a chat narration.
+  if (text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const fromJson = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
+      if (!fromJson) return undefined;
+      return fromJson.slice(0, PROTO_SUMMARY_MAX_LEN);
+    } catch {
+      // not valid JSON; fall through to plain-text handling
+    }
+  }
+
+  return text.slice(0, PROTO_SUMMARY_MAX_LEN);
+}
 
 export const SCAFFOLD_SYSTEM_PROMPT = `You are Proto, an MVP scaffold builder.
 
@@ -189,8 +222,14 @@ BEFORE returning your output, perform VERIFICATION:
    }
    confidenceScore range: 0.0 (no confidence) to 1.0 (fully verified)
 
+SUMMARY (mandatory):
+- Include a "summary" field at the top level: 1-3 sentences in Turkish describing what you built
+- Mention the main features (e.g. "Liste, ekleme, silme, localStorage kalıcılığı")
+- Mention the stack briefly ("React + Vite ile basit bir todo uygulaması")
+- Keep it under 280 characters total — this is shown as a chat message
+
 JSON format (respond with ONLY this, nothing else):
-{"files":[{"filePath":"index.html","content":"...","linesOfCode":12},{"filePath":"package.json","content":"...","linesOfCode":20},{"filePath":"vite.config.js","content":"...","linesOfCode":7},{"filePath":".gitignore","content":"node_modules\\ndist\\n.env","linesOfCode":3},{"filePath":"README.md","content":"...","linesOfCode":25},{"filePath":"src/main.jsx","content":"...","linesOfCode":8},{"filePath":"src/App.jsx","content":"...","linesOfCode":40},{"filePath":"src/App.css","content":"...","linesOfCode":60},{"filePath":"src/components/FeatureName.jsx","content":"...","linesOfCode":45}],"setupCommands":["npm install","npm run dev"],"metadata":{"filesCreated":9,"totalLinesOfCode":220,"stackUsed":"React + Vite"},"verificationReport":{"specCoverage":"5/5 criteria addressed","integrityIssues":[],"missingDependencies":[],"unresolvedImports":[],"confidenceScore":0.9}}`;
+{"files":[{"filePath":"index.html","content":"...","linesOfCode":12},{"filePath":"package.json","content":"...","linesOfCode":20},{"filePath":"vite.config.js","content":"...","linesOfCode":7},{"filePath":".gitignore","content":"node_modules\\ndist\\n.env","linesOfCode":3},{"filePath":"README.md","content":"...","linesOfCode":25},{"filePath":"src/main.jsx","content":"...","linesOfCode":8},{"filePath":"src/App.jsx","content":"...","linesOfCode":40},{"filePath":"src/App.css","content":"...","linesOfCode":60},{"filePath":"src/components/FeatureName.jsx","content":"...","linesOfCode":45}],"setupCommands":["npm install","npm run dev"],"summary":"React + Vite ile basit bir todo uygulaması iskeleti. Ekleme, silme, listeleme ve localStorage kalıcılığı içeriyor.","metadata":{"filesCreated":9,"totalLinesOfCode":220,"stackUsed":"React + Vite"},"verificationReport":{"specCoverage":"5/5 criteria addressed","integrityIssues":[],"missingDependencies":[],"unresolvedImports":[],"confidenceScore":0.9}}`;
 
 // ─── ProtoAgent ───────────────────────────────────
 
@@ -234,7 +273,7 @@ export class ProtoAgent {
 
     // Fallback: legacy text-generation path
     // Step 1: Generate scaffold via AI
-    emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor...', 20);
+    emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_scaffold');
     const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
       emit?.('error', 'Scaffold üretimi başarısız oldu', 0);
@@ -270,7 +309,7 @@ export class ProtoAgent {
     const branchName = 'main';
 
     // Step 4: Push files
-    emit?.('github_push', `${files.length} dosya GitHub'a push ediliyor...`, 75);
+    emit?.('github_push', `${files.length} dosya GitHub'a push ediliyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
     const pushResult = await this.pushFiles(input.owner, input.repoName, branchName, files, emit);
     if (pushResult.type === 'error') {
       emit?.('error', 'Dosyalar push edilemedi', 0);
@@ -451,7 +490,7 @@ JSON format (respond with ONLY this, nothing else):
     // Issue #483 BUG-J: Hard-enforce repo creation BEFORE the agentic loop so the
     // LLM cannot skip create_repository and call push_files on a non-existent repo.
     // Tool-orchestration for a deterministic step must not depend on LLM reasoning.
-    emit?.('github_push', 'GitHub repo oluşturuluyor...', 20);
+    emit?.('github_push', 'GitHub repo oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_repo');
     const repoResult = await this.createRepo(input);
     if (repoResult.type === 'error') {
       emit?.('error', 'GitHub repo oluşturulamadı', 0);
@@ -486,7 +525,7 @@ Steps:
 1. Generate a working React+Vite scaffold (8-12 files, each under 80 lines)
 2. Call push_files to push ALL files to the "main" branch in one commit
 
-After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "totalLinesOfCode": N, "stackUsed": "..." }`;
+After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSON, NO markdown) describing what you built — features, stack, anything notable. Keep under 280 characters. This will be shown to the user as a chat message.`;
 
     // Exclude create_repository from the tool list — repo was already created above.
     // This prevents the LLM from attempting a redundant (and potentially failing) second call.
@@ -515,7 +554,7 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
           // vision-capable model can reference the mockup while scaffolding.
           initialImages: hasImages ? input.imageBlocks : undefined,
           onToolCall: (name, _input) => {
-            if (name === 'push_files') emit?.('github_push', 'Dosyalar push ediliyor...', 75);
+            if (name === 'push_files') emit?.('github_push', 'Dosyalar push ediliyor...', 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
           },
           onToolResult: (name, _result, isError) => {
             if (isError) emit?.('error', `Tool ${name} başarısız`, 0);
@@ -581,6 +620,7 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
       }
 
       emit?.('complete', `Scaffold hazır: ${files.length} dosya push edildi (tool_use)`, 100);
+      const summary = extractProtoSummary(result.text);
       return {
         type: 'output',
         data: {
@@ -590,6 +630,7 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
           repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
           files,
           setupCommands: this.buildSetupCommands(input.owner, input.repoName, ['npm install', 'npm run dev']),
+          ...(summary ? { summary } : {}),
           metadata: { filesCreated: files.length, totalLinesOfCode: totalLOC, stackUsed: 'React + Vite (tool_use)', committed: true },
         },
       };
@@ -629,7 +670,7 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
     if (repoResult.type === 'error') return repoResult;
 
     const branchName = 'main';
-    emit?.('github_push', `${files.length} dosya GitHub'a push ediliyor...`, 75);
+    emit?.('github_push', `${files.length} dosya GitHub'a push ediliyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
     const pushResult = await this.pushFiles(input.owner, input.repoName, branchName, files, emit);
     if (pushResult.type === 'error') return pushResult;
 
@@ -747,6 +788,8 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
       const files = obj.files as ProtoOutput['files'] | undefined;
       const setupCmds = obj.setupCommands as string[] | undefined;
       const meta = obj.metadata as Record<string, unknown> | undefined;
+      const rawSummary = typeof obj.summary === 'string' ? obj.summary.trim() : undefined;
+      const summary = rawSummary && rawSummary.length > 0 ? rawSummary.slice(0, 500) : undefined;
 
       const fileCount = Array.isArray(files) ? files.length : 0;
 
@@ -780,6 +823,7 @@ After pushing, respond with a JSON summary: { "ok": true, "filesCreated": N, "to
         data: {
           files: normalizedFiles,
           setupCommands: Array.isArray(setupCmds) ? setupCmds : ['npm install', 'npm run dev'],
+          ...(summary ? { summary } : {}),
           metadata: {
             filesCreated: normalizedFiles.length,
             totalLinesOfCode: totalLines,

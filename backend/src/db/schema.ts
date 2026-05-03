@@ -528,7 +528,7 @@ export const userStatusEnum = pgEnum('user_status', [
 /**
  * AI Provider enum for user settings
  */
-export const aiProviderEnum = pgEnum('ai_provider', ['anthropic', 'openai', 'openrouter']);
+export const aiProviderEnum = pgEnum('ai_provider', ['anthropic', 'openai']);
 export const userRoleEnum = pgEnum('user_role', ['admin', 'member']);
 
 /**
@@ -544,7 +544,7 @@ export const users = pgTable('users', {
   dataSharingConsent: boolean('data_sharing_consent'),
   hasSeenBetaWelcome: boolean('has_seen_beta_welcome').default(false).notNull(),
   /** User's active AI provider for Scribe and other AI features */
-  activeAiProvider: aiProviderEnum('active_ai_provider').default('openrouter'),
+  activeAiProvider: aiProviderEnum('active_ai_provider').default('anthropic'),
   /** User role for access control */
   role: userRoleEnum('role').notNull().default('member'),
   /** GitHub username (cached from API validation) */
@@ -1578,6 +1578,11 @@ export const pipelines = pgTable('pipelines', {
   title: text('title'),
   /** AI model chosen for this chat (issue #437). Null = fall back to default. */
   model: varchar('model', { length: 255 }),
+  /**
+   * When set, the model is locked for this chat — `setModel` returns 409 once
+   * this is non-null. Stamped at pipeline creation by startPipeline().
+   */
+  modelLockedAt: timestamp('model_locked_at', { withTimezone: true }),
   scribeConversation: jsonb('scribe_conversation').default([]),
   scribeOutput: jsonb('scribe_output'),
   approvedSpec: jsonb('approved_spec'),

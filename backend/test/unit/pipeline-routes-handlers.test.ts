@@ -26,8 +26,19 @@ function createMockOrchestrator() {
   };
 
   const orchestrator = {
-    startPipeline: async (userId: string, input: unknown, model?: string, jiraConfig?: unknown) => {
-      calls.push({ method: 'startPipeline', args: [userId, input, model, jiraConfig] });
+    startPipeline: async (
+      userId: string,
+      input: unknown,
+      model?: string,
+      jiraConfig?: unknown,
+      parentPipelineId?: string,
+      skipScribe?: boolean,
+      traceEnabled?: boolean,
+    ) => {
+      calls.push({
+        method: 'startPipeline',
+        args: [userId, input, model, jiraConfig, parentPipelineId, skipScribe, traceEnabled],
+      });
       return { ...mockPipeline, id: 'pipe-new' };
     },
     listPipelines: async (userId: string) => {
@@ -116,6 +127,47 @@ describe('Pipeline Routes — startPipeline', () => {
     assert.equal(startCalls.length, 1);
     assert.equal(startCalls[0].args[0], 'user-1');
     assert.deepEqual((startCalls[0].args[1] as { idea: string }).idea, 'React ile bir todo uygulaması istiyorum, Google login olsun');
+  });
+
+  // PR-A: traceEnabled wire-format regression. The schema default flipped from
+  // false → true; this test pins the route-level contract so a future refactor
+  // (e.g. switching to a request-validation middleware that bypasses the schema)
+  // can't silently land tests-disabled-by-default again.
+  it('defaults traceEnabled to true when body omits it (PR-A schema default)', async () => {
+    const { routes, calls } = createRoutes();
+
+    await routes.startPipeline(
+      makeRequest({}, { idea: 'todo uygulaması yap' }),
+      {},
+    );
+
+    const startCalls = calls.filter((c) => c.method === 'startPipeline');
+    // Argument order: userId, scribeInput, model, jiraConfig, parentPipelineId, skipScribe, traceEnabled
+    assert.equal(startCalls[0].args[6], true, 'traceEnabled should default to true when omitted');
+  });
+
+  it('respects explicit traceEnabled: false from body (user opt-out)', async () => {
+    const { routes, calls } = createRoutes();
+
+    await routes.startPipeline(
+      makeRequest({}, { idea: 'todo uygulaması yap', traceEnabled: false }),
+      {},
+    );
+
+    const startCalls = calls.filter((c) => c.method === 'startPipeline');
+    assert.equal(startCalls[0].args[6], false);
+  });
+
+  it('respects explicit traceEnabled: true from body', async () => {
+    const { routes, calls } = createRoutes();
+
+    await routes.startPipeline(
+      makeRequest({}, { idea: 'todo uygulaması yap', traceEnabled: true }),
+      {},
+    );
+
+    const startCalls = calls.filter((c) => c.method === 'startPipeline');
+    assert.equal(startCalls[0].args[6], true);
   });
 });
 
@@ -310,9 +362,10 @@ describe('Pipeline Routes — setModel', () => {
 
   it('trims whitespace before validating', async () => {
     const { routes, calls } = createRoutes();
-    await routes.setModel(makeRequest({ id: 'pipe-1' }, { model: '  gpt-4o-mini  ' }));
+    // PR-A: OpenAI excluded from allowlist; use an Anthropic model the picker accepts.
+    await routes.setModel(makeRequest({ id: 'pipe-1' }, { model: '  claude-sonnet-4-6  ' }));
     const setCalls = calls.filter((c) => c.method === 'setModel');
-    assert.equal(setCalls[setCalls.length - 1].args[2], 'gpt-4o-mini');
+    assert.equal(setCalls[setCalls.length - 1].args[2], 'claude-sonnet-4-6');
   });
 
   it('rejects model longer than 255 chars', async () => {

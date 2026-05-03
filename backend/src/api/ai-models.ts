@@ -5,9 +5,12 @@ import { getUserActiveProvider, type AIKeyProvider } from '../services/ai/user-a
 
 export async function aiModelsRoutes(fastify: FastifyInstance) {
   /**
-   * GET /api/ai/supported-models?provider=openai|openrouter
+   * GET /api/ai/supported-models?provider=anthropic|openai
    * Returns provider-specific list of supported AI models for agent jobs.
-   * If provider omitted, uses user's active provider from DB.
+   * If provider omitted, uses user's active provider from DB; default 'anthropic'.
+   *
+   * PR-A: 'openai' returns an empty list — see modelAllowlist for the rationale
+   * (runtime client lands in PR-B B5).
    */
   fastify.get(
     '/api/ai/supported-models',
@@ -18,7 +21,7 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
         querystring: {
           type: 'object',
           properties: {
-            provider: { type: 'string', enum: ['anthropic', 'openai', 'openrouter'] },
+            provider: { type: 'string', enum: ['anthropic', 'openai'] },
           },
         },
         response: {
@@ -44,12 +47,12 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
       },
     },
     async (request) => {
-      let provider: AIKeyProvider = 'openrouter';
+      let provider: AIKeyProvider = 'anthropic';
 
       // If explicit provider param, use it
       const query = request.query as Record<string, string> | undefined;
       const providerParam = query?.provider;
-      if (providerParam === 'anthropic' || providerParam === 'openai' || providerParam === 'openrouter') {
+      if (providerParam === 'anthropic' || providerParam === 'openai') {
         provider = providerParam;
       } else {
         // Try to get user's active provider from DB
@@ -60,7 +63,7 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
             provider = userProvider;
           }
         } catch {
-          // Not authenticated — use default (openrouter)
+          // Not authenticated — fall back to anthropic
         }
       }
 
@@ -69,7 +72,7 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
 
       const models = allowlist.map((modelId) => ({
         id: modelId,
-        name: formatModelName(modelId),
+        name: modelId,
         provider,
         recommended: modelId === recommendedModel,
       }));
@@ -77,18 +80,4 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
       return { provider, models };
     }
   );
-}
-
-function formatModelName(modelId: string): string {
-  // OpenRouter models have org/name format
-  if (modelId.includes('/')) {
-    const [org, name] = modelId.split('/');
-    const orgLabel = org.charAt(0).toUpperCase() + org.slice(1);
-    const nameLabel = name
-      .split('-')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
-    return `${orgLabel} ${nameLabel}`;
-  }
-  return modelId;
 }

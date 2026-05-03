@@ -36,7 +36,7 @@ const STATS: Array<{
   display?: string;
 }> = [
   { value: 3, label: 'AI Agent', display: '3' }, // Scribe + Proto + Trace
-  { value: 3, label: 'AI Sağlayıcı', display: '3' }, // Anthropic, OpenAI, OpenRouter
+  { value: 3, label: 'Anthropic Modeli', display: '3' }, // Haiku 4.5, Sonnet 4.6, Opus 4.7
   { value: 1, label: 'Tek Komutla Kurulum', display: 'pnpm dev' },
   { value: 1, label: 'Otomatik Test', display: 'Playwright' },
 ];

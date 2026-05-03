@@ -472,11 +472,11 @@ describe('Schema — enum completeness', () => {
     assert.ok(v.includes('atlassian'));
   });
 
-  test('aiProvider enum has anthropic, openai, openrouter', () => {
+  test('aiProvider enum has anthropic and openai (PR-A: openrouter removed)', () => {
     const v = aiProviderEnum.enumValues;
     assert.ok(v.includes('anthropic'));
     assert.ok(v.includes('openai'));
-    assert.ok(v.includes('openrouter'));
+    assert.ok(!(v as readonly string[]).includes('openrouter'), 'openrouter must be removed in PR-A');
   });
 
   test('traceEventType enum includes explainability types', () => {

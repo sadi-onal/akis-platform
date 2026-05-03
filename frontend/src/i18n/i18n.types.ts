@@ -1072,6 +1072,20 @@ export const MESSAGE_KEYS = [
   'pipeline.stage.scribeGenerating',
   'pipeline.stage.traceTesting',
 
+  // Pipeline activity sub-stage keys (PR-A: emitted by agents, rendered as live status)
+  'pipeline.activity.scribe.analyzing_questions',
+  'pipeline.activity.scribe.writing_spec',
+  'pipeline.activity.scribe.spec_ready',
+  'pipeline.activity.proto.creating_repo',
+  'pipeline.activity.proto.creating_scaffold',
+  'pipeline.activity.proto.pushing_github',
+  'pipeline.activity.trace.reading_repo',
+  'pipeline.activity.trace.writing_scenarios',
+  'pipeline.activity.trace.pushing_tests',
+  'pipeline.trace.proceedingWithoutPlan',
+  'chat.model.locked',
+  'chat.status.now',
+
   // Settings
   'settings.account.defaultName',
   'settings.account.title',

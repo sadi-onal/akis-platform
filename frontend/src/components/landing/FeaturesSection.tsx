@@ -2,8 +2,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 
 const FEATURES = [
   {
-    title: 'Çoklu AI Sağlayıcı',
-    description: 'Anthropic Claude, OpenAI GPT-4o ve OpenRouter desteği. Kendi API key\'inizi kullanın.',
+    title: 'AI Sağlayıcı',
+    description: 'Anthropic Claude (Haiku 4.5, Sonnet 4.6, Opus 4.7) yerleşik. Kendi API anahtarınızı da kullanabilirsiniz.',
     icon: '🧠',
     color: '#07D1AF',
   },

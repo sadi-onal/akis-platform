@@ -36,9 +36,9 @@ describe('ModelPicker — trigger', () => {
     expect(screen.getByText('claude-haiku-4-5')).toBeInTheDocument();
   });
 
-  it('strips OpenRouter org prefix', () => {
-    render(<ModelPicker value="anthropic/claude-3.5-sonnet" onSelect={vi.fn()} />);
-    expect(screen.getByText('claude-3.5-sonnet')).toBeInTheDocument();
+  it('renders the full ID for short Anthropic IDs (no slash handling after PR-A)', () => {
+    render(<ModelPicker value="claude-sonnet-4-6" onSelect={vi.fn()} />);
+    expect(screen.getByText('claude-sonnet-4-6')).toBeInTheDocument();
   });
 
   it('shows aria-expanded=false initially', () => {
@@ -102,13 +102,13 @@ describe('shortModelLabel', () => {
     expect(shortModelLabel('claude-sonnet-4-20250514')).toBe('claude-sonnet-4');
   });
 
-  it('takes the tail of OpenRouter slug format', () => {
-    expect(shortModelLabel('anthropic/claude-3.5-sonnet')).toBe('claude-3.5-sonnet');
-    expect(shortModelLabel('google/gemini-2.5-flash')).toBe('gemini-2.5-flash');
-  });
-
   it('leaves plain OpenAI IDs untouched', () => {
     expect(shortModelLabel('gpt-4o-mini')).toBe('gpt-4o-mini');
     expect(shortModelLabel('gpt-4.1')).toBe('gpt-4.1');
+  });
+
+  it('leaves Anthropic short-version IDs untouched (PR-A: no org/model slash handling)', () => {
+    expect(shortModelLabel('claude-sonnet-4-6')).toBe('claude-sonnet-4-6');
+    expect(shortModelLabel('claude-opus-4-7')).toBe('claude-opus-4-7');
   });
 });

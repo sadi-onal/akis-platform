@@ -92,6 +92,8 @@ export interface ConversationMessage {
     files: FileTreeNode[];
     totalFiles: number;
     totalLines: number;
+    /** Optional 1-3 sentence Turkish narration of what Proto built. */
+    summary?: string;
     verificationReport?: {
       specCoverage: string;
       integrityIssues: string[];
@@ -164,6 +166,8 @@ export interface Workflow {
   tokenUsage?: WorkflowTokenUsage;
   /** Per-chat AI model selection (issue #437). */
   model?: string;
+  /** Pipeline creation stamp; ModelPicker locks when present (PR-A Commit 5). */
+  modelLockedAt?: string;
 }
 
 export interface WorkflowStats {

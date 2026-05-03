@@ -224,9 +224,9 @@ describe('FeaturesSection', () => {
     expect(screen.getByText('Entegrasyonlar')).toBeInTheDocument();
   });
 
-  it('renders "Coklu AI Saglayici" feature', () => {
+  it('renders the AI Sağlayıcı feature heading (PR-A: Anthropic-only copy)', () => {
     renderWithRouter(<FeaturesSection />);
-    expect(screen.getByText(/Çoklu AI Sağlayıcı/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI Sağlayıcı' })).toBeInTheDocument();
   });
 
   it('renders "GitHub Entegrasyonu" feature', () => {
@@ -253,9 +253,9 @@ describe('StatsSection', () => {
     expect(screen.getByText('AI Agent')).toBeInTheDocument();
   });
 
-  it('renders "AI Sağlayıcı" stat label', () => {
+  it('renders "Anthropic Modeli" stat label (PR-A: stat counts the 3 Anthropic models)', () => {
     renderWithRouter(<StatsSection />);
-    expect(screen.getByText('AI Sağlayıcı')).toBeInTheDocument();
+    expect(screen.getByText('Anthropic Modeli')).toBeInTheDocument();
   });
 
   it('renders the setup-command stat with "pnpm dev" display', () => {

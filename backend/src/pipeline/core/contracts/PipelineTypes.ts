@@ -131,6 +131,12 @@ export interface ProtoOutput {
   }>;
   prUrl?: string;
   setupCommands: string[];
+  /**
+   * 1-3 sentence Turkish narration of what Proto scaffolded — surfaced as a
+   * chat message so the user sees what was built without scanning the file
+   * tree. Optional because legacy/older pipelines won't have it.
+   */
+  summary?: string;
   metadata: {
     filesCreated: number;
     totalLinesOfCode: number;
@@ -240,6 +246,12 @@ export interface PipelineState {
   stage: PipelineStage;
   title?: string;
   model?: string;
+  /**
+   * When set, the model is locked for this chat — `setModel` returns 409.
+   * Stamped at pipeline creation by startPipeline(). Migrated rows from
+   * before PR-A start as null, allowing one transitional set.
+   */
+  modelLockedAt?: Date;
 
   scribeConversation: ScribeMessageType[];
   scribeOutput?: ScribeOutput;

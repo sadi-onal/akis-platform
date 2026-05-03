@@ -93,6 +93,8 @@ export interface ProtoOutput {
   }>;
   prUrl?: string;
   setupCommands: string[];
+  /** Optional 1-3 sentence Turkish narration shown as a chat message. */
+  summary?: string;
   metadata: {
     filesCreated: number;
     totalLinesOfCode: number;
@@ -171,6 +173,8 @@ export interface Pipeline {
   title?: string;
   /** Per-chat AI model selection (issue #437). */
   model?: string;
+  /** Stamped at pipeline creation (PR-A). When set, setModel returns 409. */
+  modelLockedAt?: string;
   traceEnabled: boolean;
   scribeConversation: ScribeMessageType[];
   scribeOutput?: ScribeOutput;

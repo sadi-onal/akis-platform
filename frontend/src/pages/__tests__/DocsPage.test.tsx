@@ -38,7 +38,7 @@ const MOCK_TRANSLATIONS: Record<string, string> = {
   'docsPage.sections.pipeline.title': 'Pipeline Flow',
   'docsPage.sections.pipeline.content': '## Pipeline\nScribe then Proto then Trace.',
   'docsPage.sections.providers.title': 'AI Providers',
-  'docsPage.sections.providers.content': '## Providers\nAnthropic, OpenAI, OpenRouter.',
+  'docsPage.sections.providers.content': '## Providers\nAnthropic Claude (built-in). OpenAI coming soon.',
   'docsPage.sections.settings.title': 'Settings',
   'docsPage.sections.settings.content': '## Settings\nManage your API keys.',
   'docsPage.sections.faq.title': 'FAQ',
@@ -182,7 +182,7 @@ describe('DocsPage — section switching', () => {
     renderDocsPage();
     const sectionContentSnippets: Record<string, string> = {
       'Pipeline Flow': 'Scribe then Proto then Trace.',
-      'AI Providers': 'Anthropic, OpenAI, OpenRouter.',
+      'AI Providers': 'Anthropic Claude (built-in). OpenAI coming soon.',
       Settings: 'Manage your API keys.',
       FAQ: 'Common questions answered here.',
     };

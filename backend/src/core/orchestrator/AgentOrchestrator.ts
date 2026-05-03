@@ -1156,9 +1156,9 @@ export class AgentOrchestrator {
       const isExplicitPayloadRequest = !!payloadProvider;
       
       // Get ENV key ONLY for the requested provider (no cross-provider!)
-      const envKeyForProvider = providerCandidate === 'openai' 
-        ? env.OPENAI_API_KEY 
-        : (env.OPENROUTER_API_KEY || env.AI_API_KEY);
+      const envKeyForProvider = providerCandidate === 'openai'
+        ? env.OPENAI_API_KEY
+        : env.AI_API_KEY;
       
       // ENV provider must match requested provider for fallback
       const envProviderMatches = envConfig.provider === providerCandidate;
@@ -1189,7 +1189,8 @@ export class AgentOrchestrator {
 
     // FAIL if no key available for chosen provider
     if (!apiKey) {
-      const errorMessage = `No API key configured for ${providerCandidate}. Please add your ${providerCandidate === 'openai' ? 'OpenAI' : 'OpenRouter'} API key in Settings > API Keys.`;
+      const providerLabel = providerCandidate === 'openai' ? 'OpenAI' : 'Anthropic';
+      const errorMessage = `No API key configured for ${providerCandidate}. Please add your ${providerLabel} API key in Settings > API Keys.`;
       logger.error(`[resolveAiServiceForJob] ${errorMessage}`);
       throw new MissingAIKeyError(providerCandidate, errorMessage);
     }
@@ -1203,7 +1204,6 @@ export class AgentOrchestrator {
     const PROVIDER_BASE_URLS: Record<AIKeyProvider, string> = {
       anthropic: 'https://api.anthropic.com/v1',
       openai: 'https://api.openai.com/v1',
-      openrouter: 'https://openrouter.ai/api/v1',
     };
 
     // Validate and resolve model
@@ -1221,10 +1221,10 @@ export class AgentOrchestrator {
       resolvedModel = RECOMMENDED_MODELS[providerCandidate];
     }
 
-    const baseUrl = providerCandidate === 'openrouter'
-      ? PROVIDER_BASE_URLS.openrouter
-      : (env.OPENAI_BASE_URL || PROVIDER_BASE_URLS.openai);
-    
+    const baseUrl = providerCandidate === 'openai'
+      ? (env.OPENAI_BASE_URL || PROVIDER_BASE_URLS.openai)
+      : PROVIDER_BASE_URLS.anthropic;
+
     const aiConfig = {
       provider: providerCandidate,
       apiKey,
@@ -1232,8 +1232,6 @@ export class AgentOrchestrator {
       modelDefault: resolvedModel,
       modelPlanner: resolvedModel,
       modelValidation: resolvedModel,
-      siteUrl: env.OPENROUTER_SITE_URL,
-      appName: env.OPENROUTER_APP_NAME,
     };
 
     logger.debug(`[resolveAiServiceForJob] Creating AIService: provider=${providerCandidate}, model=${resolvedModel}, keySource=${keySource}, providerReason=${providerResolutionReason}, baseUrl=${baseUrl}`);

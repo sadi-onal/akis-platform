@@ -122,20 +122,22 @@ function specToUserFriendlyPlan(spec: StructuredSpec): UserFriendlyPlan {
 }
 
 /**
- * Stage → agent name mapping for Claude-Code-style "Background agent started"
- * markers injected into the chat timeline (issue #390 / BUG-10 MVP).
+ * Stage → (agent, activityKey) mapping for Claude-Code-style
+ * "Background agent started" markers injected into the chat timeline
+ * (issue #390 / BUG-10 MVP).
+ *
+ * PR-A: the task is an i18n key consumed by `AgentStartedLine` via `t(task)`,
+ * so EN-locale users get English copy. Backend sub-stage emissions use the
+ * same key namespace (`pipeline.activity.<agent>.<step>`); see
+ * `backend/src/pipeline/core/activityEmitter.ts` and per-agent emit calls.
  */
-const STAGE_TO_AGENT: Partial<Record<PipelineStage, 'scribe' | 'proto' | 'trace'>> = {
-  scribe_clarifying: 'scribe',
-  scribe_generating: 'scribe',
-  proto_building: 'proto',
-  trace_testing: 'trace',
-};
+type NarratorAgent = 'scribe' | 'proto' | 'trace';
 
-const AGENT_RUNNING_TASK: Record<'scribe' | 'proto' | 'trace', string> = {
-  scribe: 'Spec yazıyor',
-  proto: 'Scaffold üretiyor',
-  trace: 'Testleri yazıyor',
+const STAGE_NARRATOR: Partial<Record<PipelineStage, { agent: NarratorAgent; taskKey: string }>> = {
+  scribe_clarifying: { agent: 'scribe', taskKey: 'pipeline.activity.scribe.analyzing_questions' },
+  scribe_generating: { agent: 'scribe', taskKey: 'pipeline.activity.scribe.writing_spec' },
+  proto_building: { agent: 'proto', taskKey: 'pipeline.activity.proto.creating_scaffold' },
+  trace_testing: { agent: 'trace', taskKey: 'pipeline.activity.trace.writing_scenarios' },
 };
 
 function conversationToChatMessages(conv: ConversationMessage[], currentStage?: PipelineStage): ChatMessage[] {
@@ -144,18 +146,27 @@ function conversationToChatMessages(conv: ConversationMessage[], currentStage?: 
   // Track whether we've already emitted a marker for each agent in this render
   // so we don't duplicate when the conversation already contained a transition
   // signal (e.g. spec_approved → proto marker).
-  const agentMarked = new Set<'scribe' | 'proto' | 'trace'>();
+  const agentMarked = new Set<NarratorAgent>();
+  // Default task keys when we don't know the exact sub-stage (e.g. transition
+  // markers fired before backend activities arrive). AgentStartedLine renders
+  // these via `t(task)` so EN locale gets English.
+  const defaultTaskKey: Record<NarratorAgent, string> = {
+    scribe: 'pipeline.activity.scribe.writing_spec',
+    proto: 'pipeline.activity.proto.creating_scaffold',
+    trace: 'pipeline.activity.trace.writing_scenarios',
+  };
   const pushAgentStarted = (
-    agent: 'scribe' | 'proto' | 'trace',
+    agent: NarratorAgent,
     state: 'started' | 'running' | 'completed',
     timestamp: string,
+    taskKey?: string,
   ) => {
     if (state === 'running' && agentMarked.has(agent)) return;
     if (state === 'running') agentMarked.add(agent);
     msgs.push({
       type: 'agent_started',
       agent,
-      task: AGENT_RUNNING_TASK[agent],
+      task: taskKey ?? defaultTaskKey[agent],
       state,
       timestamp,
     });
@@ -240,10 +251,9 @@ function conversationToChatMessages(conv: ConversationMessage[], currentStage?: 
 
   // Append a live "running" marker for the currently-active agent so users
   // see a Claude-Code-style status line while the pipeline progresses.
-  const activeAgent = currentStage ? STAGE_TO_AGENT[currentStage] : undefined;
-  if (activeAgent && !agentMarked.has(activeAgent)) {
-    const nowIso = new Date().toISOString();
-    pushAgentStarted(activeAgent, 'running', nowIso);
+  const narrator = currentStage ? STAGE_NARRATOR[currentStage] : undefined;
+  if (narrator && !agentMarked.has(narrator.agent)) {
+    pushAgentStarted(narrator.agent, 'running', new Date().toISOString(), narrator.taskKey);
   }
 
   return msgs;
@@ -273,8 +283,9 @@ export default function ChatPage() {
   });
   // Pending new conversation — created locally, pipeline not yet started on backend
   const [pendingConv, setPendingConv] = useState<{ displayName: string } | null>(null);
-  // Trace toggle — off by default
-  const [traceEnabled, setTraceEnabled] = useState(false);
+  // Trace toggle — on by default to match the schema default flipped in PR-A
+  // (StartPipelineRequestSchema.traceEnabled). Users can opt out per chat.
+  const [traceEnabled, setTraceEnabled] = useState(true);
   // Repo selector state
   // Repo selection state retained so existing pipelines that reference these
   // setters compile, but the user-facing selector is gone — every send
@@ -1101,6 +1112,7 @@ export default function ChatPage() {
                   tokenUsage={activeWorkflow?.tokenUsage}
                   model={activeWorkflow?.model}
                   onModelChange={!pendingConv ? handleModelChange : undefined}
+                  modelLocked={Boolean(activeWorkflow?.modelLockedAt)}
                   pipelineError={
                     retryingError
                       ?? (activeWorkflow?.currentStage === 'failed' ? activeWorkflow?.error : undefined)

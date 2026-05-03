@@ -29,7 +29,7 @@ interface ProfileData {
   avatarUrl?: string | null;
 }
 
-type Provider = 'anthropic' | 'openai' | 'openrouter';
+type Provider = 'anthropic' | 'openai';
 
 interface ProviderStatus {
   configured: boolean;
@@ -70,9 +70,10 @@ interface PipelineStatsData {
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
+// PR-A: OpenAI tab kept visible but flagged "yakında" — runtime client lands in PR-B B5.
 const PROVIDERS: { key: Provider; label: string; description: string; placeholder: string }[] = [
-  { key: 'anthropic', label: 'Anthropic (Claude)', description: 'claude-sonnet-4-6', placeholder: 'sk-ant-...' },
-  { key: 'openai', label: 'OpenAI', description: 'gpt-4o', placeholder: 'sk-...' },
+  { key: 'anthropic', label: 'Anthropic (Claude)', description: 'claude-haiku-4-5', placeholder: 'sk-ant-...' },
+  { key: 'openai', label: 'OpenAI (yakında)', description: 'PR-B ile aktif olacak', placeholder: 'sk-...' },
 ];
 
 const STAGE_I18N_KEYS: Record<string, { key: string; color: string }> = {

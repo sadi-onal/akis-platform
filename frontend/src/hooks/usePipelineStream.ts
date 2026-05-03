@@ -8,6 +8,8 @@ export interface PipelineActivity {
   detail?: string;
   progress?: number;
   retryCount?: number;
+  /** i18n key (e.g. `pipeline.activity.proto.writing_files`) — use this if present, fall back to `message`. */
+  activityKey?: string;
   timestamp: string;
 }
 

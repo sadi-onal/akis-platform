@@ -13,7 +13,7 @@ import {
   detectProviderFromModel,
   getRecommendedModel,
   DEFAULT_OPENAI_MODELS,
-  DEFAULT_OPENROUTER_MODELS,
+  DEFAULT_ANTHROPIC_MODELS,
   RECOMMENDED_MODELS,
 } from '../../src/services/ai/modelAllowlist.js';
 
@@ -282,42 +282,41 @@ describe('Config agentType enum validation', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('Config model selection per provider', () => {
-  test('OpenAI default list includes gpt-4o-mini', () => {
+  test('OpenAI default list includes gpt-4o-mini (kept for PR-B B5)', () => {
     assert.ok(DEFAULT_OPENAI_MODELS.includes('gpt-4o-mini'));
   });
 
-  test('OpenRouter default list includes anthropic/claude-sonnet-4', () => {
-    assert.ok(DEFAULT_OPENROUTER_MODELS.includes('anthropic/claude-sonnet-4'));
+  test('Anthropic default list includes claude-haiku-4-5-20251001', () => {
+    assert.ok(DEFAULT_ANTHROPIC_MODELS.includes('claude-haiku-4-5-20251001'));
   });
 
   test('model in OpenAI list passes allowlist check', () => {
     assert.equal(isModelAllowed('gpt-4o-mini', DEFAULT_OPENAI_MODELS), true);
   });
 
-  test('model NOT in OpenAI list fails allowlist check', () => {
-    assert.equal(isModelAllowed('anthropic/claude-sonnet-4', DEFAULT_OPENAI_MODELS), false);
+  test('Anthropic model not in OpenAI list fails allowlist check', () => {
+    assert.equal(isModelAllowed('claude-haiku-4-5-20251001', DEFAULT_OPENAI_MODELS), false);
   });
 
-  test('OpenRouter model with org/ format passes allowlist', () => {
-    assert.equal(isModelAllowed('anthropic/claude-sonnet-4', DEFAULT_OPENROUTER_MODELS), true);
+  test('Anthropic model passes Anthropic allowlist', () => {
+    assert.equal(isModelAllowed('claude-sonnet-4-6', DEFAULT_ANTHROPIC_MODELS), true);
   });
 
-  test('provider compatibility — OpenAI model on OpenRouter is OK (proxying)', () => {
-    assert.equal(isModelCompatibleWithProvider('gpt-4o-mini', 'openrouter'), true);
+  test('provider compatibility — OpenAI model on Anthropic is NOT OK', () => {
+    assert.equal(isModelCompatibleWithProvider('gpt-4o-mini', 'anthropic'), false);
   });
 
-  test('provider compatibility — OpenRouter model on OpenAI is NOT OK', () => {
-    assert.equal(isModelCompatibleWithProvider('anthropic/claude-sonnet-4', 'openai'), false);
+  test('provider compatibility — Anthropic model on OpenAI is NOT OK', () => {
+    assert.equal(isModelCompatibleWithProvider('claude-haiku-4-5-20251001', 'openai'), false);
   });
 
   test('unknown format model is compatible with any provider', () => {
     assert.equal(isModelCompatibleWithProvider('custom-finetune-v1', 'openai'), true);
-    assert.equal(isModelCompatibleWithProvider('custom-finetune-v1', 'openrouter'), true);
+    assert.equal(isModelCompatibleWithProvider('custom-finetune-v1', 'anthropic'), true);
   });
 
-  test('recommended model exists for each provider', () => {
+  test('recommended model exists for each provider (PR-A: anthropic + openai)', () => {
     assert.ok(getRecommendedModel('openai'));
-    assert.ok(getRecommendedModel('openrouter'));
     assert.ok(getRecommendedModel('anthropic'));
   });
 });
@@ -617,10 +616,10 @@ describe('Model listing by provider', () => {
     }
   });
 
-  test('OpenRouter models list is non-empty array of strings', () => {
-    assert.ok(Array.isArray(DEFAULT_OPENROUTER_MODELS));
-    assert.ok(DEFAULT_OPENROUTER_MODELS.length > 0);
-    for (const m of DEFAULT_OPENROUTER_MODELS) {
+  test('Anthropic models list is non-empty array of strings', () => {
+    assert.ok(Array.isArray(DEFAULT_ANTHROPIC_MODELS));
+    assert.ok(DEFAULT_ANTHROPIC_MODELS.length > 0);
+    for (const m of DEFAULT_ANTHROPIC_MODELS) {
       assert.equal(typeof m, 'string');
     }
   });
@@ -631,14 +630,14 @@ describe('Model listing by provider', () => {
     }
   });
 
-  test('all OpenRouter default models detected as openrouter provider', () => {
-    for (const m of DEFAULT_OPENROUTER_MODELS) {
-      assert.equal(detectProviderFromModel(m), 'openrouter', `${m} should be openrouter`);
+  test('all Anthropic default models detected as anthropic provider', () => {
+    for (const m of DEFAULT_ANTHROPIC_MODELS) {
+      assert.equal(detectProviderFromModel(m), 'anthropic', `${m} should be anthropic`);
     }
   });
 
-  test('no overlap between OpenAI and OpenRouter default lists', () => {
-    const overlap = DEFAULT_OPENAI_MODELS.filter((m) => DEFAULT_OPENROUTER_MODELS.includes(m));
+  test('no overlap between OpenAI and Anthropic default lists', () => {
+    const overlap = DEFAULT_OPENAI_MODELS.filter((m) => DEFAULT_ANTHROPIC_MODELS.includes(m));
     assert.equal(overlap.length, 0, 'lists should not overlap');
   });
 });
@@ -652,15 +651,8 @@ describe('Model metadata — naming and recommendations', () => {
     assert.equal(formatModelName('gpt-4o-mini'), 'gpt-4o-mini');
   });
 
-  test('formatModelName formats org/model into display name', () => {
-    const name = formatModelName('anthropic/claude-sonnet-4');
-    assert.ok(name.startsWith('Anthropic'));
-    assert.ok(name.includes('Claude'));
-  });
-
-  test('formatModelName capitalizes each word after split', () => {
-    const name = formatModelName('google/gemini-2.5-flash');
-    assert.ok(name.startsWith('Google'));
+  test('formatModelName returns raw ID for Anthropic IDs (PR-A: no slash branch)', () => {
+    assert.equal(formatModelName('claude-sonnet-4-6'), 'claude-sonnet-4-6');
   });
 
   test('recommended model for anthropic provider is set', () => {
@@ -673,9 +665,9 @@ describe('Model metadata — naming and recommendations', () => {
     assert.equal(DEFAULT_OPENAI_MODELS.includes(rec), true);
   });
 
-  test('recommended model for openrouter is in the default list', () => {
-    const rec = getRecommendedModel('openrouter');
-    assert.equal(DEFAULT_OPENROUTER_MODELS.includes(rec), true);
+  test('recommended model for anthropic is in the default list', () => {
+    const rec = getRecommendedModel('anthropic');
+    assert.equal(DEFAULT_ANTHROPIC_MODELS.includes(rec), true);
   });
 });
 
@@ -702,7 +694,7 @@ describe('Model invalid provider handling', () => {
 
   test('compatibility check for unknown model format returns true (allow-by-default)', () => {
     assert.equal(isModelCompatibleWithProvider('brand-new-model', 'openai'), true);
-    assert.equal(isModelCompatibleWithProvider('brand-new-model', 'openrouter'), true);
+    assert.equal(isModelCompatibleWithProvider('brand-new-model', 'anthropic'), true);
   });
 });
 

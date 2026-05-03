@@ -254,8 +254,8 @@ export const StartPipelineRequestSchema = z.object({
   parentPipelineId: z.string().uuid().optional(),
   /** When true, skip Scribe and jump directly to Proto (iteration on existing project) */
   skipScribe: z.boolean().optional().default(false),
-  /** When true, run Trace (test generation) after Proto. Default: false (skip Trace). */
-  traceEnabled: z.boolean().optional().default(false),
+  /** When true, run Trace (test generation) after Proto. Default: true (user can opt out). */
+  traceEnabled: z.boolean().optional().default(true),
   /**
    * Preferred AI model for this pipeline. Validated downstream via
    * `isModelAllowed` + `isModelCompatibleWithProvider` so the per-chat

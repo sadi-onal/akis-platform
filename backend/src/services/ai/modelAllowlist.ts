@@ -3,32 +3,30 @@ import type { AIKeyProvider } from './user-ai-keys.js';
 
 export const DEFAULT_ANTHROPIC_MODELS = [
   'claude-haiku-4-5-20251001',
-  'claude-sonnet-4-20250514',
-  'claude-opus-4-20250514',
+  'claude-sonnet-4-6',
+  'claude-opus-4-7',
 ];
 
+/**
+ * OpenAI model allowlist — kept untouched in PR-A (per the user's "don't
+ * touch OpenAI" directive) so PR-B B5 can wire up the runtime client and
+ * promote the list. PR-A explicitly EXCLUDES OpenAI from
+ * `getAllKnownModels()` so the picker / API validation rejects them today
+ * even though the array exists.
+ */
 export const DEFAULT_OPENAI_MODELS = [
   'gpt-4o-mini',
   'gpt-4o',
   'gpt-4.1-mini',
 ];
 
-export const DEFAULT_OPENROUTER_MODELS = [
-  'anthropic/claude-sonnet-4',
-  'anthropic/claude-3.5-haiku',
-  'google/gemini-2.5-flash',
-  'meta-llama/llama-4-maverick',
-  'deepseek/deepseek-chat-v3-0324',
-];
-
 export const RECOMMENDED_MODELS: Record<AIKeyProvider, string> = {
   anthropic: 'claude-haiku-4-5-20251001',
-  openai: 'gpt-4o-mini',
-  openrouter: 'anthropic/claude-3.5-haiku',
+  openai: 'gpt-4o',
 };
 
 /** @deprecated Use getScribeModelAllowlistByProvider instead */
-export const DEFAULT_SCRIBE_MODELS = DEFAULT_OPENAI_MODELS;
+export const DEFAULT_SCRIBE_MODELS = DEFAULT_ANTHROPIC_MODELS;
 
 /** Returns the Scribe model allowlist from env override or defaults. */
 export function getScribeModelAllowlist(): string[] {
@@ -45,6 +43,10 @@ export function getScribeModelAllowlist(): string[] {
 /**
  * Get allowed models for a specific provider.
  * Env override applies to all providers (comma-separated list).
+ *
+ * Note: OpenAI returns an empty array in PR-A — there's no runtime client
+ * yet (see PR-B B5). Frontend treats empty as "provider not yet available"
+ * and shows the disabled-tab UX.
  */
 export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): string[] {
   const env = getEnv();
@@ -54,29 +56,26 @@ export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): str
       .filter(Boolean);
   }
 
-  if (provider === 'openrouter') {
-    return DEFAULT_OPENROUTER_MODELS;
-  }
   if (provider === 'anthropic') {
     return DEFAULT_ANTHROPIC_MODELS;
   }
-  return DEFAULT_OPENAI_MODELS;
+  if (provider === 'openai') {
+    // PR-A: defensively empty until B5 adds the runtime client.
+    return [];
+  }
+  return DEFAULT_ANTHROPIC_MODELS;
 }
 
 /**
- * Combined allowlist across every provider — used by the per-chat model
- * picker (issue #437) to validate PATCH /api/pipelines/:id/model input
- * without the caller having to know which provider the pipeline is bound
- * to. Any model that appears in _any_ provider's default list is accepted;
- * provider compatibility is then a client-side gating concern based on
- * which provider keys the user has configured.
+ * Combined allowlist across every supported provider — used by the per-chat
+ * model picker (issue #437) to validate PATCH /api/pipelines/:id/model.
+ *
+ * PR-A: Anthropic-only. OpenAI models are deliberately excluded so a user
+ * who somehow types one in gets rejected at the API boundary instead of
+ * blowing up at runtime in AIService factory. PR-B B5 brings them back.
  */
 export function getAllKnownModels(): string[] {
-  return [
-    ...DEFAULT_ANTHROPIC_MODELS,
-    ...DEFAULT_OPENAI_MODELS,
-    ...DEFAULT_OPENROUTER_MODELS,
-  ];
+  return [...DEFAULT_ANTHROPIC_MODELS];
 }
 
 /** Returns the recommended default model for a given AI provider. */
@@ -91,17 +90,18 @@ export function isModelAllowed(model: string, allowlist: string[]): boolean {
 
 /**
  * Check if a model ID looks like it belongs to a specific provider.
- * OpenRouter models typically have "org/model" format or ":free"/":nitro" suffix.
- * OpenAI models start with "gpt-", "o1", "text-", "davinci", etc.
+ * OpenAI models start with "gpt-", "o1", etc. — kept here because PR-B B5
+ * needs the mapping; the runtime factory still rejects 'openai' until then.
  */
 export function detectProviderFromModel(model: string): AIKeyProvider | null {
-  if (model.startsWith('gpt-') || model.startsWith('o1') || 
-      model.startsWith('o3') || model.startsWith('text-') || 
-      model.startsWith('davinci')) {
+  if (
+    model.startsWith('gpt-') ||
+    model.startsWith('o1') ||
+    model.startsWith('o3') ||
+    model.startsWith('text-') ||
+    model.startsWith('davinci')
+  ) {
     return 'openai';
-  }
-  if (model.includes('/') || model.includes(':free') || model.includes(':nitro')) {
-    return 'openrouter';
   }
   if (model.startsWith('claude-')) {
     return 'anthropic';
@@ -115,17 +115,11 @@ export function detectProviderFromModel(model: string): AIKeyProvider | null {
  */
 export function isModelCompatibleWithProvider(model: string, provider: AIKeyProvider): boolean {
   const modelProvider = detectProviderFromModel(model);
-  
+
   // Unknown model format - allow it (could be a new model)
   if (modelProvider === null) {
     return true;
   }
-  
-  // OpenRouter can proxy OpenAI models
-  if (provider === 'openrouter') {
-    return true;
-  }
-  
-  // OpenAI can only use OpenAI models
+
   return modelProvider === provider;
 }

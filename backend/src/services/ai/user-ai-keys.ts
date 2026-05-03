@@ -3,7 +3,11 @@ import { db } from '../../db/client.js';
 import { userAiKeys, users, type UserAiKey } from '../../db/schema.js';
 import { decryptSecret, encryptSecret } from '../../utils/crypto.js';
 
-export type AIKeyProvider = 'anthropic' | 'openai' | 'openrouter';
+/**
+ * Supported AI providers. PR-A removed `'openrouter'`; OpenAI is type-level
+ * supported but the runtime client (and modelAllowlist entry) lands in PR-B B5.
+ */
+export type AIKeyProvider = 'anthropic' | 'openai';
 
 export type AIKeyStatus = {
   provider: AIKeyProvider;
@@ -18,7 +22,6 @@ export type MultiProviderStatus = {
   providers: {
     anthropic: Omit<AIKeyStatus, 'provider'>;
     openai: Omit<AIKeyStatus, 'provider'>;
-    openrouter: Omit<AIKeyStatus, 'provider'>;
   };
 };
 
@@ -34,7 +37,7 @@ function buildScope(userId: string, provider: AIKeyProvider): string {
 /**
  * Retrieves the AI key status for a user-provider pair.
  * @param userId - The user's ID
- * @param provider - The AI provider (openai or openrouter)
+ * @param provider - The AI provider (anthropic or openai)
  * @returns Status including whether configured, last 4 chars, and update time
  */
 export async function getUserAiKeyStatus(
@@ -56,7 +59,7 @@ export async function getUserAiKeyStatus(
 /**
  * Creates or updates an encrypted AI key for a user-provider pair.
  * @param userId - The user's ID
- * @param provider - The AI provider (openai or openrouter)
+ * @param provider - The AI provider (anthropic or openai)
  * @param apiKey - The raw API key to encrypt and store
  * @returns Updated key status
  */
@@ -163,10 +166,9 @@ export async function getMultiProviderStatus(userId: string): Promise<MultiProvi
   const activeProvider: AIKeyProvider | null = (user?.activeAiProvider as AIKeyProvider) || null;
 
   // Get status for all providers
-  const [anthropicStatus, openaiStatus, openrouterStatus] = await Promise.all([
+  const [anthropicStatus, openaiStatus] = await Promise.all([
     getUserAiKeyStatus(userId, 'anthropic'),
     getUserAiKeyStatus(userId, 'openai'),
-    getUserAiKeyStatus(userId, 'openrouter'),
   ]);
 
   return {
@@ -181,11 +183,6 @@ export async function getMultiProviderStatus(userId: string): Promise<MultiProvi
         configured: openaiStatus.configured,
         last4: openaiStatus.last4,
         updatedAt: openaiStatus.updatedAt,
-      },
-      openrouter: {
-        configured: openrouterStatus.configured,
-        last4: openrouterStatus.last4,
-        updatedAt: openrouterStatus.updatedAt,
       },
     },
   };

@@ -16,9 +16,16 @@ interface ModelPickerProps {
   value?: string;
   /** Called with the new model ID after the dropdown selection. Parent owns the API call. */
   onSelect: (modelId: string) => void | Promise<void>;
-  /** Optional provider hint (anthropic | openai | openrouter) to seed the list. */
-  providerHint?: 'anthropic' | 'openai' | 'openrouter';
+  /** Optional provider hint (anthropic | openai) to seed the list. */
+  providerHint?: 'anthropic' | 'openai';
   disabled?: boolean;
+  /**
+   * When true, the picker renders as a read-only pill with a lock icon and
+   * a tooltip explaining the chat-level model lock (PR-A Commit 5). Click is
+   * a no-op. `disabled` is the bigger hammer (e.g. while saving) — `locked`
+   * is the always-on UI affordance for "this chat's model can't change".
+   */
+  locked?: boolean;
   className?: string;
 }
 
@@ -29,7 +36,7 @@ interface ModelPickerProps {
  *
  * Styling mirrors `TokenGauge` so the two active-session pills line up.
  */
-export function ModelPicker({ value, onSelect, providerHint, disabled, className }: ModelPickerProps) {
+export function ModelPicker({ value, onSelect, providerHint, disabled, locked, className }: ModelPickerProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -97,30 +104,44 @@ export function ModelPicker({ value, onSelect, providerHint, disabled, className
   };
 
   const display = value ? shortModelLabel(value) : t('chat.model.auto');
+  const lockTooltip = locked && value ? t('chat.model.locked').replace('{model}', shortModelLabel(value)) : undefined;
 
   return (
     <div ref={rootRef} className={cn('relative hidden sm:flex', className)}>
       <button
         type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
+        aria-haspopup={locked ? undefined : 'listbox'}
+        aria-expanded={locked ? undefined : open}
         aria-label={t('chat.model.ariaLabel')}
-        disabled={disabled || saving}
-        onClick={() => setOpen((prev) => !prev)}
+        disabled={disabled || saving || locked}
+        title={lockTooltip}
+        onClick={() => {
+          if (locked) return;
+          setOpen((prev) => !prev);
+        }}
         className={cn(
           'flex items-center gap-1 rounded-lg border border-ak-border px-2.5 py-1 text-[11px] text-ak-text-secondary transition-colors',
-          'hover:border-ak-primary hover:text-ak-primary',
+          !locked && 'hover:border-ak-primary hover:text-ak-primary',
           'disabled:opacity-50 disabled:cursor-not-allowed',
+          locked && 'cursor-default opacity-70',
           open && 'border-ak-primary text-ak-primary',
         )}
       >
-        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
+        {locked ? (
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 11c1.105 0 2 .895 2 2v3a2 2 0 11-4 0v-3c0-1.105.895-2 2-2zM7 11V8a5 5 0 1110 0v3M5 11h14a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1z" />
+          </svg>
+        ) : (
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        )}
         <span className="font-mono">{display}</span>
-        <svg className={cn('h-3 w-3 transition-transform', open && 'rotate-180')} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+        {!locked && (
+          <svg className={cn('h-3 w-3 transition-transform', open && 'rotate-180')} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
       </button>
 
       {open && (

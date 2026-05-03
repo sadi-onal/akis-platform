@@ -56,7 +56,8 @@ interface ChatPanelProps {
   tokenUsage?: import('../../types/workflow').WorkflowTokenUsage;
   model?: string;
   onModelChange?: (modelId: string) => void | Promise<void>;
-  modelProviderHint?: 'anthropic' | 'openai' | 'openrouter';
+  modelProviderHint?: 'anthropic' | 'openai';
+  modelLocked?: boolean;
   /** Pipeline error — present when stage === 'failed'. Renders error banner + disables input. */
   pipelineError?: PipelineError;
   /** #490 BUG-N: retry POST is in flight; banner swaps to a disabled loader. */
@@ -100,6 +101,7 @@ export const ChatPanel = memo(function ChatPanel({
   model,
   onModelChange,
   modelProviderHint,
+  modelLocked,
   pipelineError,
   isRetrying = false,
 }: ChatPanelProps) {
@@ -186,6 +188,7 @@ export const ChatPanel = memo(function ChatPanel({
           model={model}
           onModelChange={onModelChange}
           modelProviderHint={modelProviderHint}
+          modelLocked={modelLocked}
         />
       )}
 

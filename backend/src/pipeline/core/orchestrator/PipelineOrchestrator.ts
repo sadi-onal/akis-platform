@@ -78,6 +78,13 @@ function readPipelineImageBlocks(
 
 const PIPELINE_TITLE_MAX = 100;
 
+/**
+ * Default model used when a chat is created without an explicit model. Kept
+ * separate from `RECOMMENDED_MODELS.anthropic` so a future RECOMMENDED bump
+ * doesn't silently change which model in-flight pipelines lock to.
+ */
+const DEFAULT_PIPELINE_MODEL = 'claude-haiku-4-5-20251001';
+
 export function ideaToTitle(idea: string): string {
   const firstLine = idea.split('\n')[0]?.trim() ?? '';
   return firstLine.slice(0, PIPELINE_TITLE_MAX);
@@ -116,6 +123,7 @@ export interface PipelineStateUpdate {
   stage: PipelineStage;
   title: string;
   model: string;
+  modelLockedAt: Date;
   traceEnabled: boolean;
   scribeConversation: ScribeMessageType[];
   scribeOutput: ScribeOutput;
@@ -369,9 +377,14 @@ export class PipelineOrchestrator {
       { type: 'user_idea', content: input.idea },
     ];
 
+    // Model is locked at pipeline creation. If the caller didn't pass one,
+    // fall back to the system default (Haiku 4.5) so the chat still has a
+    // concrete model recorded.
+    const lockedModel = model ?? DEFAULT_PIPELINE_MODEL;
     const updateData: Partial<PipelineStateUpdate> = {
       title: ideaToTitle(input.idea),
-      model,
+      model: lockedModel,
+      modelLockedAt: new Date(),
       traceEnabled: traceEnabled ?? false,
       scribeConversation: conversation,
       metrics: { ...pipeline.metrics, startedAt: new Date() },
@@ -1064,12 +1077,10 @@ export class PipelineOrchestrator {
       specCompliance: 0.85, // Proto succeeded → base compliance
     });
 
-    // Check if Scribe marked this as not requiring tests
     const pipeline = await this.getPipeline(pipelineId);
-    const requiresTests = pipeline.scribeOutput?.plan?.requiresTests ?? true;
 
-    if (!requiresTests || !pipeline.traceEnabled) {
-      // Skip Trace — mark as completed directly (either Scribe said no tests needed, or user disabled Trace)
+    if (!pipeline.traceEnabled) {
+      // User explicitly disabled Trace — skip and mark completed.
       await this.store.update(pipelineId, {
         protoOutput: protoResult.data,
         stage: 'completed',
@@ -1077,6 +1088,17 @@ export class PipelineOrchestrator {
       });
       this.emitEvent(pipelineId, 'stage_change', 'completed');
       return;
+    }
+
+    // If Scribe's plan said requiresTests=false but the user enabled Trace, proceed
+    // anyway — user intent wins. Emit a warning activity so it's visible in the chat.
+    const requiresTests = pipeline.scribeOutput?.plan?.requiresTests ?? true;
+    if (!requiresTests) {
+      this.logActivity(pipelineId, 'trace', 'proceeding_without_plan', {
+        message: 'Plan testleri zorunlu kılmadı ama kullanıcı Trace\'i açtı, devam ediliyor',
+      });
+      const traceEmit = createActivityEmitter(pipelineId, 'trace');
+      traceEmit('proceeding_without_plan', 'Plan testleri zorunlu kılmadı ama kullanıcı Trace\'i açtı, devam ediliyor', undefined, undefined, undefined, 'pipeline.trace.proceedingWithoutPlan');
     }
 
     // ─── Level 4: Deterministic Validator (before CriticCode) ───
@@ -1425,7 +1447,19 @@ export class PipelineOrchestrator {
     if (pipeline.userId !== userId) {
       throw new Error('UNAUTHORIZED');
     }
-    return this.store.update(pipelineId, { model });
+
+    // Model lock (PR-A Commit 5). Pipelines created from PR-A onward are
+    // locked at creation. The only legitimate setModel callers are migrated
+    // pre-PR-A pipelines whose model was nulled by migration 0046 — those
+    // get exactly one transitional set, which also stamps the lock.
+    if (pipeline.modelLockedAt !== null && pipeline.modelLockedAt !== undefined) {
+      throw Object.assign(
+        new Error('Bu sohbetin modeli sabit. Yeni model seçmek için yeni sohbet açın.'),
+        { statusCode: 409, code: 'MODEL_LOCKED' as const },
+      );
+    }
+
+    return this.store.update(pipelineId, { model, modelLockedAt: new Date() });
   }
 
   // ─── Private: Scribe Result Handler ──────────

@@ -2,9 +2,21 @@
  * AgentStartedLine — Claude-Code-style agent start/running/completed row.
  * Covers issue #390 / BUG-10 — visual contract only (no pipeline wiring).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { AgentStartedLine } from '../AgentStartedLine';
+
+// PR-A: AgentStartedLine now uses useI18n to translate the `task` i18n key.
+// Stub returns the key verbatim so existing string-content assertions still match.
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
 
 describe('AgentStartedLine', () => {
   it('renders "Background agent started" + agent name by default', () => {
@@ -19,11 +31,11 @@ describe('AgentStartedLine', () => {
     expect(screen.getByText('Proto')).toBeInTheDocument();
   });
 
-  it('shows the task suffix after an em-dash when provided', () => {
-    render(<AgentStartedLine agent="trace" task="Testler yazılıyor" />);
+  it('shows the task suffix after an em-dash when provided (i18n key passes through stub)', () => {
+    render(<AgentStartedLine agent="trace" task="pipeline.activity.trace.writing_scenarios" />);
     expect(screen.getByText('Trace')).toBeInTheDocument();
     expect(screen.getByText('—')).toBeInTheDocument();
-    expect(screen.getByText('Testler yazılıyor')).toBeInTheDocument();
+    expect(screen.getByText('pipeline.activity.trace.writing_scenarios')).toBeInTheDocument();
   });
 
   it('sets aria-live="polite" when state is running', () => {

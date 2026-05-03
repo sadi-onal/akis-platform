@@ -511,16 +511,8 @@ class RealAIService implements AIService {
       Authorization: `Bearer ${this.config.apiKey}`,
     };
 
-    if (this.config.siteUrl) {
-      headers['HTTP-Referer'] = this.config.siteUrl;
-    } else {
-      headers['HTTP-Referer'] = 'https://akis.dev';
-    }
-    if (this.config.appName) {
-      headers['X-Title'] = this.config.appName;
-    } else {
-      headers['X-Title'] = 'AKIS Platform';
-    }
+    // (OpenRouter-specific HTTP-Referer/X-Title headers were removed in PR-A
+    // along with the rest of the OpenRouter integration.)
 
     const body: Record<string, unknown> = {
       model,
@@ -664,7 +656,7 @@ class RealAIService implements AIService {
           
           // Auth errors (401, 403) - provide clear, actionable message
           if (response.status === 401 || response.status === 403) {
-            const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : this.config.provider === 'anthropic' ? 'Anthropic' : 'OpenRouter';
+            const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : 'Anthropic';
             
             // Create user-friendly error message (don't expose raw API errors like "cookie auth")
             let friendlyMessage: string;
@@ -696,7 +688,7 @@ class RealAIService implements AIService {
           
           // Model not found errors (404) - provide actionable message
           if (response.status === 404) {
-            const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : this.config.provider === 'anthropic' ? 'Anthropic' : 'OpenRouter';
+            const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : 'Anthropic';
             const modelNotFoundError = new AIProviderError(
               'AI_MODEL_NOT_FOUND',
               `Model "${model}" is not available on ${providerLabel}. Please select a different model in the agent configuration.`,
@@ -726,7 +718,7 @@ class RealAIService implements AIService {
           }
           
           // Generic error - provide friendly message
-          const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : this.config.provider === 'anthropic' ? 'Anthropic' : 'OpenRouter';
+          const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : 'Anthropic';
           let friendlyMessage = `${providerLabel} returned an error (${response.status}).`;
           
           // Add context based on error content
@@ -1386,6 +1378,15 @@ export function createAIService(
     return new MockAIService(observer);
   }
 
+  // PR-A defensive guard: OpenAI runtime is not implemented yet (PR-B B5).
+  // The picker / API allowlist also rejects OpenAI models, so getting here
+  // means somebody bypassed those checks. Throw a clear, actionable error.
+  if (resolvedConfig.provider === 'openai') {
+    throw new Error(
+      'OpenAI desteklenecek (PR-B B5). Şu an Anthropic kullanın veya AI_PROVIDER=mock olarak ayarlayın.',
+    );
+  }
+
   if (!resolvedConfig.apiKey) {
     logger.warn(
       `[AIService] No API key found for provider "${resolvedConfig.provider}", falling back to mock`
@@ -1395,7 +1396,7 @@ export function createAIService(
 
   logger.info(`[AIService] Using ${resolvedConfig.provider} provider`);
   logger.info(`[AIService] Models: default=${resolvedConfig.modelDefault}, planner=${resolvedConfig.modelPlanner}, validation=${resolvedConfig.modelValidation}`);
-  
+
   return new RealAIService(resolvedConfig, observer, runtimeOptions);
 }
 

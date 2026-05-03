@@ -12,6 +12,12 @@ export interface PipelineActivity {
   detail?: string;
   progress?: number; // 0-100
   retryCount?: number; // >0 when agent is retrying a transient failure
+  /**
+   * Stable i18n key for the activity message (e.g. `pipeline.activity.proto.writing_files`).
+   * Frontend prefers this over `message` when present so the same backend event
+   * renders in the user's chosen locale. `message` stays as the Turkish fallback.
+   */
+  activityKey?: string;
   timestamp: string;
 }
 
@@ -51,6 +57,7 @@ export function createActivityEmitter(
     progress?: number,
     detail?: string,
     retryCount?: number,
+    activityKey?: string,
   ) => {
     emitActivity({
       pipelineId,
@@ -60,6 +67,7 @@ export function createActivityEmitter(
       progress,
       detail,
       retryCount,
+      ...(activityKey ? { activityKey } : {}),
       timestamp: new Date().toISOString(),
     });
   };

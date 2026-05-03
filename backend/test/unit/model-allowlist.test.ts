@@ -1,5 +1,7 @@
 /**
- * Unit tests for AI model allowlist — pure function tests
+ * Unit tests for AI model allowlist — pure function tests.
+ * PR-A removed OpenRouter; OpenAI is type-level supported but excluded
+ * from getAllKnownModels until PR-B B5 lights up the runtime client.
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
@@ -11,7 +13,6 @@ import {
   getAllKnownModels,
   DEFAULT_ANTHROPIC_MODELS,
   DEFAULT_OPENAI_MODELS,
-  DEFAULT_OPENROUTER_MODELS,
   RECOMMENDED_MODELS,
 } from '../../src/services/ai/modelAllowlist.js';
 
@@ -48,36 +49,25 @@ describe('detectProviderFromModel', () => {
     assert.strictEqual(detectProviderFromModel('o3-mini'), 'openai');
   });
 
-  test('detects OpenAI models by text- prefix', () => {
-    assert.strictEqual(detectProviderFromModel('text-embedding-3-small'), 'openai');
-  });
-
   test('detects OpenAI models by davinci prefix', () => {
     assert.strictEqual(detectProviderFromModel('davinci-002'), 'openai');
   });
 
-  test('detects OpenRouter models by org/model format', () => {
-    assert.strictEqual(detectProviderFromModel('anthropic/claude-sonnet-4'), 'openrouter');
-    assert.strictEqual(detectProviderFromModel('google/gemini-2.5-flash'), 'openrouter');
-  });
-
-  test('detects OpenRouter models by :free suffix', () => {
-    assert.strictEqual(detectProviderFromModel('meta-llama/llama-4:free'), 'openrouter');
-  });
-
-  test('detects OpenRouter models by :nitro suffix', () => {
-    assert.strictEqual(detectProviderFromModel('anthropic/claude-3:nitro'), 'openrouter');
-  });
-
   test('detects Anthropic models by claude- prefix', () => {
     assert.strictEqual(detectProviderFromModel('claude-haiku-4-5-20251001'), 'anthropic');
-    assert.strictEqual(detectProviderFromModel('claude-sonnet-4-20250514'), 'anthropic');
-    assert.strictEqual(detectProviderFromModel('claude-opus-4-20250514'), 'anthropic');
+    assert.strictEqual(detectProviderFromModel('claude-sonnet-4-6'), 'anthropic');
+    assert.strictEqual(detectProviderFromModel('claude-opus-4-7'), 'anthropic');
   });
 
   test('returns null for unknown model format', () => {
     assert.strictEqual(detectProviderFromModel('some-unknown-model'), null);
     assert.strictEqual(detectProviderFromModel('custom-model-v2'), null);
+  });
+
+  test('PR-A: org/model slash format is no longer routed to openrouter', () => {
+    // Pre-PR-A this returned 'openrouter'. Now we just don't recognise it.
+    assert.strictEqual(detectProviderFromModel('anthropic/claude-sonnet-4'), null);
+    assert.strictEqual(detectProviderFromModel('google/gemini-2.5-flash'), null);
   });
 });
 
@@ -88,21 +78,21 @@ describe('isModelCompatibleWithProvider', () => {
     assert.strictEqual(isModelCompatibleWithProvider('gpt-4o-mini', 'openai'), true);
   });
 
-  test('OpenAI model is compatible with OpenRouter (proxying)', () => {
-    assert.strictEqual(isModelCompatibleWithProvider('gpt-4o-mini', 'openrouter'), true);
+  test('Anthropic model is compatible with Anthropic', () => {
+    assert.strictEqual(isModelCompatibleWithProvider('claude-haiku-4-5-20251001', 'anthropic'), true);
   });
 
-  test('OpenRouter model is NOT compatible with OpenAI', () => {
-    assert.strictEqual(isModelCompatibleWithProvider('anthropic/claude-sonnet-4', 'openai'), false);
+  test('OpenAI model is NOT compatible with Anthropic', () => {
+    assert.strictEqual(isModelCompatibleWithProvider('gpt-4o-mini', 'anthropic'), false);
   });
 
-  test('OpenRouter model is compatible with OpenRouter', () => {
-    assert.strictEqual(isModelCompatibleWithProvider('anthropic/claude-sonnet-4', 'openrouter'), true);
+  test('Anthropic model is NOT compatible with OpenAI', () => {
+    assert.strictEqual(isModelCompatibleWithProvider('claude-haiku-4-5-20251001', 'openai'), false);
   });
 
   test('unknown model format is compatible with any provider', () => {
     assert.strictEqual(isModelCompatibleWithProvider('some-new-model', 'openai'), true);
-    assert.strictEqual(isModelCompatibleWithProvider('some-new-model', 'openrouter'), true);
+    assert.strictEqual(isModelCompatibleWithProvider('some-new-model', 'anthropic'), true);
   });
 });
 
@@ -113,8 +103,8 @@ describe('getRecommendedModel', () => {
     assert.strictEqual(getRecommendedModel('openai'), RECOMMENDED_MODELS.openai);
   });
 
-  test('returns correct recommended model for openrouter', () => {
-    assert.strictEqual(getRecommendedModel('openrouter'), RECOMMENDED_MODELS.openrouter);
+  test('returns correct recommended model for anthropic', () => {
+    assert.strictEqual(getRecommendedModel('anthropic'), RECOMMENDED_MODELS.anthropic);
   });
 });
 
@@ -125,12 +115,8 @@ describe('Default model lists', () => {
     assert.ok(DEFAULT_ANTHROPIC_MODELS.length > 0);
   });
 
-  test('DEFAULT_OPENAI_MODELS is non-empty', () => {
+  test('DEFAULT_OPENAI_MODELS is non-empty (kept for PR-B B5)', () => {
     assert.ok(DEFAULT_OPENAI_MODELS.length > 0);
-  });
-
-  test('DEFAULT_OPENROUTER_MODELS is non-empty', () => {
-    assert.ok(DEFAULT_OPENROUTER_MODELS.length > 0);
   });
 
   test('all default Anthropic models are detected as Anthropic', () => {
@@ -138,7 +124,7 @@ describe('Default model lists', () => {
       assert.strictEqual(
         detectProviderFromModel(model),
         'anthropic',
-        `${model} should be detected as anthropic`
+        `${model} should be detected as anthropic`,
       );
     }
   });
@@ -148,17 +134,7 @@ describe('Default model lists', () => {
       assert.strictEqual(
         detectProviderFromModel(model),
         'openai',
-        `${model} should be detected as openai`
-      );
-    }
-  });
-
-  test('all default OpenRouter models are detected as OpenRouter', () => {
-    for (const model of DEFAULT_OPENROUTER_MODELS) {
-      assert.strictEqual(
-        detectProviderFromModel(model),
-        'openrouter',
-        `${model} should be detected as openrouter`
+        `${model} should be detected as openai`,
       );
     }
   });
@@ -167,19 +143,22 @@ describe('Default model lists', () => {
 // ─── getAllKnownModels (issue #437) ────────────────────────────────────
 
 describe('getAllKnownModels', () => {
-  test('returns union of all provider default lists', () => {
+  test('PR-A: returns Anthropic-only — OpenAI excluded until B5 wires the runtime', () => {
     const all = getAllKnownModels();
-    for (const m of DEFAULT_ANTHROPIC_MODELS) assert.ok(all.includes(m), `${m} missing`);
-    for (const m of DEFAULT_OPENAI_MODELS) assert.ok(all.includes(m), `${m} missing`);
-    for (const m of DEFAULT_OPENROUTER_MODELS) assert.ok(all.includes(m), `${m} missing`);
+    for (const m of DEFAULT_ANTHROPIC_MODELS) {
+      assert.ok(all.includes(m), `${m} missing from allowlist`);
+    }
+    for (const m of DEFAULT_OPENAI_MODELS) {
+      assert.ok(!all.includes(m), `${m} should NOT be in allowlist (PR-A)`);
+    }
   });
 
-  test('all entries pass detectProviderFromModel', () => {
+  test('all entries pass detectProviderFromModel as anthropic', () => {
     for (const m of getAllKnownModels()) {
-      const p = detectProviderFromModel(m);
-      assert.ok(
-        p === 'anthropic' || p === 'openai' || p === 'openrouter',
-        `model '${m}' must be detectable`
+      assert.strictEqual(
+        detectProviderFromModel(m),
+        'anthropic',
+        `model '${m}' must be detectable as anthropic`,
       );
     }
   });
