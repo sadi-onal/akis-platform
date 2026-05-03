@@ -5,6 +5,7 @@ import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ChatHeader } from './ChatHeader';
+import { ModelPicker } from './ModelPicker';
 import { EmptyState } from './EmptyState';
 import { ChatSkeleton } from './ChatSkeleton';
 import { ClarificationCard } from './ClarificationCard';
@@ -52,7 +53,6 @@ interface ChatPanelProps {
   traceEnabled?: boolean;
   onTraceToggle?: (enabled: boolean) => void;
   repoSelectorSlot?: React.ReactNode;
-  keySourceBadge?: { source: 'akis' | 'own' } | null;
   tokenUsage?: import('../../types/workflow').WorkflowTokenUsage;
   model?: string;
   onModelChange?: (modelId: string) => void | Promise<void>;
@@ -96,7 +96,6 @@ export const ChatPanel = memo(function ChatPanel({
   traceEnabled,
   onTraceToggle,
   repoSelectorSlot,
-  keySourceBadge,
   tokenUsage,
   model,
   onModelChange,
@@ -185,10 +184,6 @@ export const ChatPanel = memo(function ChatPanel({
           onBack={onBack}
           showBackButton={showBackButton}
           tokenUsage={tokenUsage}
-          model={model}
-          onModelChange={onModelChange}
-          modelProviderHint={modelProviderHint}
-          modelLocked={modelLocked}
         />
       )}
 
@@ -354,8 +349,8 @@ export const ChatPanel = memo(function ChatPanel({
         </div>
       )}
 
-      {/* Trace toggle + key-source badge — width aligned with ChatInput's max-w container */}
-      {(onTraceToggle || keySourceBadge) && (
+      {/* Trace toggle + model picker — width aligned with ChatInput's max-w container */}
+      {(onTraceToggle || onModelChange) && (
         <div className="mx-auto w-full max-w-4xl px-3 pt-1 sm:px-6 md:max-w-5xl xl:max-w-6xl">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             {onTraceToggle && (
@@ -383,13 +378,16 @@ export const ChatPanel = memo(function ChatPanel({
                 </div>
               </div>
             )}
-            {onTraceToggle && keySourceBadge && (
+            {onTraceToggle && onModelChange && (
               <span aria-hidden="true" className="hidden h-6 w-px bg-ak-border-subtle sm:block" />
             )}
-            {keySourceBadge && (
-              <span className="text-[11px] text-ak-text-tertiary">
-                {keySourceBadge.source === 'akis' ? 'AKIS Anahtarı' : 'Kendi Anahtarı'}
-              </span>
+            {onModelChange && (
+              <ModelPicker
+                value={model}
+                onSelect={onModelChange}
+                providerHint={modelProviderHint}
+                locked={modelLocked}
+              />
             )}
           </div>
         </div>

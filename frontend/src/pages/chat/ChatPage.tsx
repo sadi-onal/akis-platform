@@ -286,13 +286,15 @@ export default function ChatPage() {
   // Trace toggle — on by default to match the schema default flipped in PR-A
   // (StartPipelineRequestSchema.traceEnabled). Users can opt out per chat.
   const [traceEnabled, setTraceEnabled] = useState(true);
+  // Pending model — chosen by user before pipeline starts; default Haiku 4.5.
+  // After pipeline creation the lock-locked model lives on activeWorkflow.model.
+  const [pendingModel, setPendingModel] = useState<string>('claude-haiku-4-5-20251001');
   // Repo selector state
   // Repo selection state retained so existing pipelines that reference these
   // setters compile, but the user-facing selector is gone — every send
   // creates a new project (selectedRepo stays null).
   const [selectedRepo, setSelectedRepo] = useState<SelectedRepo | null>(null);
   // Key source badge state — informational only (no quota since plans were removed)
-  const [keySourceBadge, setKeySourceBadge] = useState<{ source: 'akis' | 'own' } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   // Resizable preview panel (percentage of container width, 30-70%)
   const [previewWidth, setPreviewWidth] = useState(50);
@@ -410,18 +412,6 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => { refreshList(); }, [refreshList]);
-
-  // Fetch key source badge (once on mount)
-  useEffect(() => {
-    fetch('/api/settings/ai-keys/status', { credentials: 'include' })
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (!data) return;
-        const source: 'akis' | 'own' = data.keySource ?? 'akis';
-        setKeySourceBadge({ source });
-      })
-      .catch(() => { /* best-effort */ });
-  }, []);
 
   // Load active conversation — keep old content visible until new data arrives
   useEffect(() => {
@@ -718,6 +708,7 @@ export default function ChatPage() {
           const w = await workflowsApi.create({
             idea: content,
             traceEnabled,
+            model: pendingModel,
             existingRepo: selectedRepo ?? undefined,
           }, attachments);
           setPendingConv(null);
@@ -928,7 +919,7 @@ export default function ChatPage() {
     } finally {
       sendingRef.current = false;
     }
-  }, [conversationId, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, syncFromStage]);
+  }, [conversationId, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, syncFromStage, pendingModel]);
 
   const approveInFlightRef = useRef(false);
   const handleApprove = useCallback(async () => {
@@ -1108,11 +1099,10 @@ export default function ChatPage() {
                   traceEnabled={traceEnabled}
                   onTraceToggle={pendingConv ? setTraceEnabled : undefined}
                   repoSelectorSlot={repoSelectorSlot}
-                  keySourceBadge={pendingConv ? keySourceBadge : null}
                   tokenUsage={activeWorkflow?.tokenUsage}
-                  model={activeWorkflow?.model}
-                  onModelChange={!pendingConv ? handleModelChange : undefined}
-                  modelLocked={Boolean(activeWorkflow?.modelLockedAt)}
+                  model={pendingConv ? pendingModel : activeWorkflow?.model}
+                  onModelChange={pendingConv ? setPendingModel : handleModelChange}
+                  modelLocked={pendingConv ? false : Boolean(activeWorkflow?.modelLockedAt)}
                   pipelineError={
                     retryingError
                       ?? (activeWorkflow?.currentStage === 'failed' ? activeWorkflow?.error : undefined)
