@@ -1,6 +1,7 @@
 /**
  * GitHub Integration API routes.
- * Manages GitHub PAT connection, repo listing, and repo creation.
+ * Read-only access to repos via the unified GitHub token resolver.
+ * Connect/disconnect lives at /api/integrations/github (OAuth-only — see api/integrations.ts).
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -12,10 +13,6 @@ import { getGitHubToken as resolveGitHubToken } from '../services/auth/githubTok
 import { isDevMode } from '../config/devMode.js';
 
 const GITHUB_API = 'https://api.github.com';
-
-const ConnectSchema = z.object({
-  token: z.string().min(1),
-});
 
 const CreateRepoSchema = z.object({
   name: z.string().min(1).max(100),
@@ -161,50 +158,6 @@ export async function githubRoutes(fastify: FastifyInstance) {
         error: { code: 'GITHUB_API_ERROR', message: err instanceof Error ? err.message : 'Failed to create repo' },
       });
     }
-  });
-
-  // POST /api/github/connect
-  fastify.post('/connect', { preHandler: authPreHandler }, async (request, reply) => {
-    const userId = getUserId(request);
-    const body = ConnectSchema.parse(request.body);
-
-    // Validate token by calling GitHub API
-    try {
-      const ghUser = await ghFetch<{ login: string; avatar_url: string }>(body.token, 'GET', '/user');
-
-      await db
-        .update(users)
-        .set({
-          githubToken: body.token,
-          githubUsername: ghUser.login,
-          githubAvatarUrl: ghUser.avatar_url,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userId));
-
-      return { connected: true, username: ghUser.login, avatarUrl: ghUser.avatar_url };
-    } catch {
-      return reply.code(400).send({
-        error: { code: 'INVALID_TOKEN', message: 'Invalid GitHub token' },
-      });
-    }
-  });
-
-  // POST /api/github/disconnect
-  fastify.post('/disconnect', { preHandler: authPreHandler }, async (request) => {
-    const userId = getUserId(request);
-
-    await db
-      .update(users)
-      .set({
-        githubToken: null,
-        githubUsername: null,
-        githubAvatarUrl: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId));
-
-    return { connected: false };
   });
 
   // GET /api/github/repos/:owner/:repo/context — fetch repo analysis context

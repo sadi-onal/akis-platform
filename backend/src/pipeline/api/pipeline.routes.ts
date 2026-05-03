@@ -51,55 +51,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
     ) {
       const userId = getUserId(request);
 
-      // ── Auth + Usage Limit Guard ─────────────────────────────────────
-      // Admins: unlimited, no restrictions
-      // Users using own API key (active provider has configured key): relaxed limits (daily job limit still applies)
-      // Users using AKIS built-in key: full plan limits (daily jobs + monthly token budget)
-      try {
-        const { requireAuth: _requireAuth } = await import('../../utils/auth.js');
-        const user = await _requireAuth(request as import('fastify').FastifyRequest);
-        if (user.role !== 'admin') {
-          const { getMultiProviderStatus } = await import('../../services/ai/user-ai-keys.js');
-          const keyStatus = await getMultiProviderStatus(user.id);
-
-          // Determine if user is actively using their own key
-          const activeProvider = keyStatus.activeProvider;
-          const providers = keyStatus.providers as Record<string, { configured: boolean }>;
-          const isUsingOwnKey = activeProvider
-            ? providers[activeProvider]?.configured === true
-            : false;
-
-          if (!isUsingOwnKey) {
-            // Using AKIS built-in key → enforce full plan limits (daily + token budget)
-            const { checkUsageLimits } = await import('../../services/billing/BillingService.js');
-            const limitCheck = await checkUsageLimits(user.id);
-            if (!limitCheck.allowed) {
-              throw Object.assign(
-                new Error(limitCheck.reason || 'Gunluk pipeline limitinize ulastiniz (3/3). Kendi AI anahtarinizi eklerseniz sinirsiz kullanabilirsiniz.'),
-                { statusCode: 429, code: limitCheck.code || 'DAILY_LIMIT_EXCEEDED' },
-              );
-            }
-          }
-          // isUsingOwnKey = true → skip token budget check, but daily job limit still tracked via incrementUsage
-        }
-      } catch (err) {
-        if (err && typeof err === 'object' && 'statusCode' in err) {
-          const status = (err as { statusCode: number }).statusCode;
-          if (status === 403 || status === 429) throw err;
-        }
-        // Non-403/429 errors (auth lookup, DB) — proceed with pipeline start
-      }
-
       const body = StartPipelineRequestSchema.parse((request as { body: unknown }).body);
-
-      // Increment daily usage counter BEFORE starting pipeline
-      // (prevents bypass by starting many pipelines simultaneously)
-      try {
-        const { incrementUsage: _incr } = await import('../../services/billing/BillingService.js');
-        await _incr(userId, 0);
-      } catch {
-        // Non-blocking — if counter fails, pipeline still starts
-      }
 
       const pipeline = await orchestrator.startPipeline(userId, {
         idea: body.idea,

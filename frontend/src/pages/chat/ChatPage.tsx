@@ -7,8 +7,7 @@ import { EmptyState } from '../../components/chat/EmptyState';
 import { useConversationState } from '../../hooks/useConversationState';
 import { usePipelineStream } from '../../hooks/usePipelineStream';
 import { useProfileCompleteness } from '../../hooks/useProfileCompleteness';
-import { ProfileSetupBanner } from '../../components/onboarding/ProfileSetupBanner';
-import { ProfileSetupWizard } from '../../components/onboarding/ProfileSetupWizard';
+import { GithubConnectModal } from '../../components/onboarding/GithubConnectModal';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { toast } from '../../components/ui/Toast';
 import { mapStageToMode } from '../../utils/mapPipelineEvent';
@@ -281,15 +280,43 @@ export default function ChatPage() {
   // setters compile, but the user-facing selector is gone — every send
   // creates a new project (selectedRepo stays null).
   const [selectedRepo, setSelectedRepo] = useState<SelectedRepo | null>(null);
-  // Key source badge state
-  const [keySourceBadge, setKeySourceBadge] = useState<{ source: 'akis' | 'own'; jobsRemaining: number; jobsLimit: number } | null>(null);
-  const [showProfileWizard, setShowProfileWizard] = useState(false);
+  // Key source badge state — informational only (no quota since plans were removed)
+  const [keySourceBadge, setKeySourceBadge] = useState<{ source: 'akis' | 'own' } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   // Resizable preview panel (percentage of container width, 30-70%)
   const [previewWidth, setPreviewWidth] = useState(50);
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
-  const { missingSteps, loading: profileLoading } = useProfileCompleteness();
+  const { hasGitHub, loading: profileLoading } = useProfileCompleteness();
+
+  // GitHub-integration modal: shown on first visit when the account has no
+  // integration row yet, regardless of which login method (Google / GitHub /
+  // password) the user came in with. Login and integration are deliberately
+  // separate flows — see services/auth/githubToken.ts.
+  const [githubModalDismissed, setGithubModalDismissed] = useState(() =>
+    sessionStorage.getItem('akis-github-connect-dismissed') === 'true',
+  );
+  const handleGithubModalDismiss = useCallback(() => {
+    sessionStorage.setItem('akis-github-connect-dismissed', 'true');
+    setGithubModalDismissed(true);
+  }, []);
+  const showGithubConnectModal =
+    !profileLoading && !hasGitHub && !githubModalDismissed;
+
+  // Auto-dismiss when user returns from successful integration OAuth.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('github') === 'connected') {
+      sessionStorage.removeItem('akis-github-connect-dismissed');
+      params.delete('github');
+      const qs = params.toString();
+      window.history.replaceState(
+        {},
+        '',
+        window.location.pathname + (qs ? `?${qs}` : ''),
+      );
+    }
+  }, []);
 
   // Drag-to-resize handler for the split pane
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -380,9 +407,7 @@ export default function ChatPage() {
       .then((data) => {
         if (!data) return;
         const source: 'akis' | 'own' = data.keySource ?? 'akis';
-        const jobsUsed = data.usage?.jobsUsedToday ?? 0;
-        const jobsLimit = data.usage?.jobsLimit ?? 3;
-        setKeySourceBadge({ source, jobsRemaining: Math.max(0, jobsLimit - jobsUsed), jobsLimit });
+        setKeySourceBadge({ source });
       })
       .catch(() => { /* best-effort */ });
   }, []);
@@ -1026,21 +1051,14 @@ export default function ChatPage() {
         <span className="text-[15px] font-extrabold tracking-tight text-ak-primary">AKIS</span>
       </div>
 
-      {/* Profile setup wizard modal */}
-      {showProfileWizard && (
-        <ProfileSetupWizard onClose={() => setShowProfileWizard(false)} />
-      )}
+      {/* GitHub integration modal — first visit nudge */}
+      <GithubConnectModal
+        open={showGithubConnectModal}
+        onDismiss={handleGithubModalDismiss}
+      />
 
       {/* Main content — top padding only on mobile for the top bar */}
       <div className={cn('flex min-w-0 flex-1 flex-col min-h-0', 'pt-[52px] md:pt-0')}>
-        {/* Profile completeness banner */}
-        {!profileLoading && missingSteps.length > 0 && !conversationId && !pendingConv && (
-          <ProfileSetupBanner
-            missingSteps={missingSteps}
-            onSetup={() => setShowProfileWizard(true)}
-          />
-        )}
-
         {conversationId || pendingConv ? (
           <div ref={splitContainerRef} className="flex min-w-0 flex-1 min-h-0">
             {/* Chat panel — takes remaining width */}

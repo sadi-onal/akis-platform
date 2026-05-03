@@ -52,7 +52,7 @@ interface ChatPanelProps {
   traceEnabled?: boolean;
   onTraceToggle?: (enabled: boolean) => void;
   repoSelectorSlot?: React.ReactNode;
-  keySourceBadge?: { source: 'akis' | 'own'; jobsRemaining: number; jobsLimit: number } | null;
+  keySourceBadge?: { source: 'akis' | 'own' } | null;
   tokenUsage?: import('../../types/workflow').WorkflowTokenUsage;
   model?: string;
   onModelChange?: (modelId: string) => void | Promise<void>;
@@ -385,9 +385,7 @@ export const ChatPanel = memo(function ChatPanel({
             )}
             {keySourceBadge && (
               <span className="text-[11px] text-ak-text-tertiary">
-                {keySourceBadge.source === 'akis'
-                  ? `Bugün kalan: ${keySourceBadge.jobsRemaining}/${keySourceBadge.jobsLimit} iş`
-                  : 'Kendi Key · Sınırsız'}
+                {keySourceBadge.source === 'akis' ? 'AKIS Anahtarı' : 'Kendi Anahtarı'}
               </span>
             )}
           </div>

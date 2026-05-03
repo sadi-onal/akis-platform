@@ -547,8 +547,6 @@ export const users = pgTable('users', {
   activeAiProvider: aiProviderEnum('active_ai_provider').default('openrouter'),
   /** User role for access control */
   role: userRoleEnum('role').notNull().default('member'),
-  /** GitHub Personal Access Token (stored for pipeline GitHub operations) */
-  githubToken: text('github_token'),
   /** GitHub username (cached from API validation) */
   githubUsername: text('github_username'),
   /** GitHub avatar URL (cached from API validation) */
@@ -1171,151 +1169,31 @@ export const threadTrustSnapshotsRelations = relations(threadTrustSnapshots, ({ 
 }));
 
 // ============================================================================
-// Billing: Plans, Subscriptions, Usage Counters
+// GitHub Integration (separate from login OAuth)
+// Login uses oauth_accounts; pipeline operations use this table.
+// Each user must explicitly OAuth into integration even if logged in via GitHub.
 // ============================================================================
 
-export const planTierEnum = pgEnum('plan_tier', ['free', 'pro', 'pro_plus', 'team', 'enterprise']);
-export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'past_due', 'canceled', 'trialing', 'incomplete']);
-
-/**
- * Plans table - defines available subscription tiers and their limits
- */
-export const plans = pgTable('plans', {
-  id: varchar('id', { length: 50 }).primaryKey(),  // e.g. 'free', 'pro', 'pro_plus'
-  tier: planTierEnum('tier').notNull(),
-  name: varchar('name', { length: 100 }).notNull(),
-  description: text('description'),
-
-  // Limits
-  jobsPerDay: integer('jobs_per_day').notNull().default(5),
-  maxTokenBudget: integer('max_token_budget').notNull().default(50000),
-  maxAgents: integer('max_agents').notNull().default(2),
-  depthModesAllowed: text('depth_modes_allowed').array().notNull(),  // ['lite','standard'] or ['lite','standard','deep']
-  maxOutputTokensPerJob: integer('max_output_tokens_per_job').notNull().default(16000),
-  passesAllowed: integer('passes_allowed').notNull().default(1),     // 1 or 2
-  priorityQueue: boolean('priority_queue').notNull().default(false),
-  backgroundJobHistory: integer('background_job_history_days').notNull().default(7),
-
-  // Pricing (cents USD, 0 = free)
-  priceMonthly: integer('price_monthly').notNull().default(0),
-  priceYearly: integer('price_yearly').notNull().default(0),
-
-  // Stripe mapping
-  stripePriceMonthly: varchar('stripe_price_monthly', { length: 255 }),
-  stripePriceYearly: varchar('stripe_price_yearly', { length: 255 }),
-
-  // Metadata
-  isActive: boolean('is_active').notNull().default(true),
-  sortOrder: integer('sort_order').notNull().default(0),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
-export type Plan = typeof plans.$inferSelect;
-
-/**
- * Subscriptions table - tracks user subscription state
- */
-export const subscriptions = pgTable('subscriptions', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id),
-  planId: varchar('plan_id', { length: 50 }).notNull().references(() => plans.id),
-  status: subscriptionStatusEnum('status').notNull().default('active'),
-
-  // Stripe
-  stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
-  stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }),
-
-  // Billing period
-  currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
-  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
-  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
-
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+export const githubIntegrations = pgTable('github_integrations', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  /** GitHub user numeric id */
+  providerAccountId: text('provider_account_id').notNull(),
+  /** GitHub username */
+  login: text('login').notNull(),
+  /** GitHub avatar URL */
+  avatarUrl: text('avatar_url'),
+  /** OAuth scopes granted (comma-separated, e.g. "read:user,user:email,repo") */
+  scope: text('scope').notNull(),
+  /** Encrypted OAuth access token (AES-256-GCM via OAuthTokenCrypto) */
+  accessToken: text('access_token').notNull(),
+  connectedAt: timestamp('connected_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
-  userIdIdx: index('idx_subscriptions_user_id').on(table.userId),
-  stripeCustomerIdx: index('idx_subscriptions_stripe_customer').on(table.stripeCustomerId),
-  stripeSubIdx: index('idx_subscriptions_stripe_sub').on(table.stripeSubscriptionId),
+  loginIdx: index('idx_github_integrations_login').on(table.login),
 }));
 
-export type Subscription = typeof subscriptions.$inferSelect;
-
-export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
-  user: one(users, { fields: [subscriptions.userId], references: [users.id] }),
-  plan: one(plans, { fields: [subscriptions.planId], references: [plans.id] }),
-}));
-
-/**
- * Usage counters table - tracks per-user resource consumption per billing cycle
- */
-export const usageCounters = pgTable('usage_counters', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id),
-
-  // Period (YYYY-MM format for monthly, or YYYY-MM-DD for daily)
-  periodKey: varchar('period_key', { length: 10 }).notNull(),  // '2025-01' or '2025-01-30'
-  periodType: varchar('period_type', { length: 10 }).notNull().default('daily'),  // 'daily' | 'monthly'
-
-  // Counters
-  jobsUsed: integer('jobs_used').notNull().default(0),
-  tokensUsed: integer('tokens_used').notNull().default(0),
-
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  userPeriodUnique: uniqueIndex('idx_usage_user_period').on(table.userId, table.periodKey, table.periodType),
-  userIdIdx: index('idx_usage_counters_user_id').on(table.userId),
-}));
-
-export type UsageCounter = typeof usageCounters.$inferSelect;
-
-// ============================================================================
-// Billing Admin
-// ============================================================================
-
-/**
- * Workspace-level billing settings (singleton — one row)
- */
-export const workspaceBillingSettings = pgTable('workspace_billing_settings', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  monthlyBudgetUsd: numeric('monthly_budget_usd', { precision: 10, scale: 2 }),
-  softThresholdPct: numeric('soft_threshold_pct', { precision: 3, scale: 2 }).notNull().default('0.80'),
-  hardStopEnabled: boolean('hard_stop_enabled').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
-export type WorkspaceBillingSettings = typeof workspaceBillingSettings.$inferSelect;
-
-/**
- * Per-user billing overrides (admin can set per-user budgets or unlimited)
- */
-export const userBillingOverrides = pgTable('user_billing_overrides', {
-  userId: uuid('user_id').primaryKey().references(() => users.id),
-  monthlyBudgetUsd: numeric('monthly_budget_usd', { precision: 10, scale: 2 }),
-  isUnlimited: boolean('is_unlimited').notNull().default(false),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
-export type UserBillingOverride = typeof userBillingOverrides.$inferSelect;
-
-/**
- * Billing notifications (threshold warnings, limit reached, etc.)
- */
-export const billingNotifications = pgTable('billing_notifications', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id),
-  type: varchar('type', { length: 50 }).notNull(),
-  payload: jsonb('payload').notNull().default({}),
-  readAt: timestamp('read_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  userIdx: index('idx_billing_notifications_user').on(table.userId),
-  typeDateIdx: index('idx_billing_notifications_type_date').on(table.type, table.createdAt),
-}));
-
-export type BillingNotification = typeof billingNotifications.$inferSelect;
+export type GithubIntegration = typeof githubIntegrations.$inferSelect;
+export type NewGithubIntegration = typeof githubIntegrations.$inferInsert;
 
 // ============================================================================
 // Crew System (M2: Agent Teams — Claude Code Teams inspired)

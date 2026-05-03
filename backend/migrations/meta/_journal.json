@@ -323,6 +323,13 @@
       "when": 1776816000000,
       "tag": "0044_add_agent_activities",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1776902400000,
+      "tag": "0045_github_integrations_drop_billing",
+      "breakpoints": true
     }
   ]
 }

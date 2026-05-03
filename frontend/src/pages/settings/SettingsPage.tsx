@@ -14,7 +14,7 @@ import AvatarCropModal from '../../components/settings/AvatarCropModal';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'profile' | 'ai-keys' | 'usage' | 'plan' | 'pipeline-stats' | 'integrations';
+type Tab = 'profile' | 'ai-keys' | 'usage' | 'pipeline-stats' | 'integrations';
 
 interface ProfileData {
   id: string;
@@ -42,8 +42,6 @@ interface MultiProviderStatus {
   providers: Record<Provider, ProviderStatus>;
   keySource?: 'akis' | 'own';
   canUseOwnKey?: boolean;
-  plan?: { tier: string; name: string; jobsPerDay: number; maxTokenBudget: number };
-  usage?: { jobsUsedToday: number; tokensUsedThisMonth: number; jobsLimit: number; tokensLimit: number };
 }
 
 interface PipelineStatsData {
@@ -121,7 +119,6 @@ export default function SettingsPage() {
   const tabParam = searchParams.get('tab');
   const activeTab: Tab = tabParam === 'ai-keys' ? 'ai-keys'
     : tabParam === 'usage' ? 'usage'
-    : tabParam === 'plan' ? 'plan'
     : tabParam === 'pipeline-stats' ? 'pipeline-stats'
     : tabParam === 'integrations' ? 'integrations'
     : 'profile';
@@ -159,9 +156,6 @@ export default function SettingsPage() {
           <TabButton active={activeTab === 'usage'} onClick={() => setTab('usage')}>
             {t('settings.tab.usage')}
           </TabButton>
-          <TabButton active={activeTab === 'plan'} onClick={() => setTab('plan')}>
-            {t('settings.tab.plan')}
-          </TabButton>
           <TabButton active={activeTab === 'pipeline-stats'} onClick={() => setTab('pipeline-stats')}>
             {t('settings.tab.pipelineStats')}
           </TabButton>
@@ -175,7 +169,6 @@ export default function SettingsPage() {
             {activeTab === 'profile' && <ProfileTab />}
             {activeTab === 'ai-keys' && <AIKeysTab />}
             {activeTab === 'usage' && <UsageTab />}
-            {activeTab === 'plan' && <PlanTab />}
             {activeTab === 'pipeline-stats' && <PipelineStatsTab />}
             {activeTab === 'integrations' && <IntegrationsTab />}
           </div>
@@ -642,13 +635,7 @@ function AIKeysTab() {
   };
 
   const keySource = status?.keySource ?? 'akis';
-  const plan = status?.plan;
-  const usage = status?.usage;
   const hasAnyOwnKey = status ? Object.values(status.providers).some((p) => p.configured) : false;
-
-  const tokenBudgetPct = (plan?.maxTokenBudget && usage)
-    ? Math.min(100, Math.round((usage.tokensUsedThisMonth / plan.maxTokenBudget) * 100))
-    : 0;
 
   return (
     <>
@@ -688,49 +675,10 @@ function AIKeysTab() {
                   )}
                 </div>
                 <p className="text-xs text-ak-text-tertiary">
-                  Anthropic Claude &middot; {plan?.name ?? 'Free'} planiniz dahilinde
+                  Anthropic Claude &middot; sinirsiz kullanim
                 </p>
               </div>
             </div>
-
-            {/* Remaining quota + token budget (only for AKIS key) */}
-            {plan && usage && (
-              <div className="mt-3 space-y-1.5">
-                {/* Remaining jobs badge */}
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold',
-                    (usage.jobsLimit - usage.jobsUsedToday) <= 0
-                      ? 'bg-red-500/10 text-red-400'
-                      : (usage.jobsLimit - usage.jobsUsedToday) <= 1
-                        ? 'bg-yellow-500/10 text-yellow-400'
-                        : 'bg-ak-primary/10 text-ak-primary',
-                  )}>
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                    {Math.max(0, usage.jobsLimit - usage.jobsUsedToday)}/{usage.jobsLimit} is kaldi bugun
-                  </span>
-                </div>
-                {/* Token budget progress */}
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="text-ak-text-tertiary">Token Butcesi</span>
-                  <span className="font-mono text-ak-text-secondary">
-                    {formatTokens(usage.tokensUsedThisMonth)} / {formatTokens(plan.maxTokenBudget)}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-ak-surface-2">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all duration-500',
-                      tokenBudgetPct > 90 ? 'bg-red-500' : tokenBudgetPct > 70 ? 'bg-yellow-500' : 'bg-ak-primary',
-                    )}
-                    style={{ width: `${tokenBudgetPct}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-end text-[10px] text-ak-text-tertiary">
-                  <span>{tokenBudgetPct}% kullanildi</span>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Own Key Card */}
@@ -864,40 +812,6 @@ function AIKeysTab() {
         </>
       )}
 
-      {/* ── Section 3: Plan Bilgisi ──────────────────────── */}
-      {!loading && plan && (
-        <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className={cn(
-                'inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                plan.tier === 'free' ? 'bg-ak-surface-2 text-ak-text-tertiary'
-                  : plan.tier === 'pro' ? 'bg-ak-primary/10 text-ak-primary'
-                  : plan.tier === 'team' ? 'bg-purple-500/10 text-purple-400'
-                  : 'bg-ak-surface-2 text-ak-text-tertiary',
-              )}>
-                {plan.name}
-              </span>
-              <div>
-                <p className="text-xs font-medium text-ak-text-primary">
-                  {plan.name} Plan
-                </p>
-                <p className="text-[10px] text-ak-text-tertiary">
-                  {plan.jobsPerDay} is/gun &middot; {formatTokens(plan.maxTokenBudget)} token/ay
-                </p>
-              </div>
-            </div>
-            {plan.tier === 'free' && (
-              <button
-                disabled
-                className="rounded-lg bg-ak-surface-2 px-3 py-1.5 text-[10px] font-medium text-ak-text-tertiary cursor-not-allowed"
-              >
-                Yukselme planlari yakinda
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -1561,228 +1475,114 @@ function JiraSection() {
 function UsageTab() {
   const { t } = useI18n();
   const [data, setData] = useState<Awaited<ReturnType<typeof api.getUsage>> | null>(null);
-  const [planUsage, setPlanUsage] = useState<Awaited<ReturnType<typeof api.getUsageWithPlan>> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.getUsage().catch(() => null),
-      api.getUsageWithPlan().catch(() => null),
-    ]).then(([usageData, planData]) => {
-      setData(usageData);
-      setPlanUsage(planData);
-    }).finally(() => setLoading(false));
+    api.getUsage()
+      .then(setData)
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="space-y-4"><Skeleton className="h-32 w-full rounded-xl" /><Skeleton className="h-48 w-full rounded-xl" /></div>;
-
-  if (!data && !planUsage) return (
-    <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-8 text-center">
-      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-ak-surface-2">
-        <svg className="h-5 w-5 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" /></svg>
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
       </div>
-      <p className="text-xs text-ak-text-tertiary">{t('settings.usage.noData')}</p>
-      <p className="mt-1 text-[10px] text-ak-text-tertiary">Pipeline calistirdiginizda kullanim verileriniz burada gorunecek.</p>
-    </div>
-  );
+    );
+  }
 
-  const isUnlimitedUser = Boolean(planUsage?.unlimited);
-  // Admin / unlimited users never see progress-bar fill (issue #382 / BUG-02).
-  const pctJobsDaily = planUsage && !isUnlimitedUser ? Math.min(100, planUsage.usage.percentJobsUsed) : 0;
-  const pctTokensMonthly = planUsage && !isUnlimitedUser ? Math.min(100, planUsage.usage.percentTokensUsed) : 0;
+  if (!data) {
+    return (
+      <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-8 text-center">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-ak-surface-2">
+          <svg className="h-5 w-5 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+          </svg>
+        </div>
+        <p className="text-xs text-ak-text-tertiary">{t('settings.usage.noData')}</p>
+        <p className="mt-1 text-[10px] text-ak-text-tertiary">Pipeline calistirdiginizda kullanim verileriniz burada gorunecek.</p>
+      </div>
+    );
+  }
 
-  // Role-aware cost label (Issue #449) — admins see the real wholesale cost we
-  // pay the AI provider; regular users see our retail price. `userIsAdmin` /
-  // `breakdown` are only set by the backend when the caller is an admin.
-  const userIsAdmin = Boolean(planUsage?.userIsAdmin || data?.userIsAdmin);
-  const costBreakdown = planUsage?.breakdown ?? data?.breakdown;
+  const userIsAdmin = Boolean(data.userIsAdmin);
+  const costBreakdown = data.breakdown;
   const costLabel = userIsAdmin ? 'Gercek Maliyet (Wholesale)' : 'Tahmini Maliyet';
 
   return (
     <div className="space-y-4">
-      {/* Plan-aware usage summary */}
-      {planUsage && (
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-ak-text-primary">{t('settings.usage.title')}</h2>
+          <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-semibold text-ak-primary">
+            Sinirsiz
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <UsageStatCard label="Calistirilan Is" value={String(data.usage.jobCount)} icon="&#9889;" color="text-yellow-400" />
+          <UsageStatCard label="Token Kullanimi" value={formatTokens(data.usage.totalTokens)} icon="&#9881;" color="text-blue-400" />
+          <UsageStatCard label={costLabel} value={`$${data.usage.estimatedCostUsd.toFixed(4)}`} icon="&#36;" color="text-emerald-400" />
+        </div>
+
+        {userIsAdmin && costBreakdown && (
+          <div className="mt-4 rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-300">
+                Admin
+              </span>
+              <span className="text-xs text-ak-text-secondary">
+                Maliyet Dagilimi (markup {costBreakdown.markup.toFixed(2)}x)
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded bg-ak-surface-2 p-2">
+                <p className="text-[10px] uppercase text-ak-text-tertiary">Wholesale</p>
+                <p className="font-mono text-sm text-ak-text-primary">${costBreakdown.wholesale.toFixed(4)}</p>
+              </div>
+              <div className="rounded bg-ak-surface-2 p-2">
+                <p className="text-[10px] uppercase text-ak-text-tertiary">Retail</p>
+                <p className="font-mono text-sm text-ak-text-primary">${costBreakdown.retail.toFixed(4)}</p>
+              </div>
+              <div className="rounded bg-ak-surface-2 p-2">
+                <p className="text-[10px] uppercase text-ak-text-tertiary">Margin</p>
+                <p className="font-mono text-sm text-emerald-400">${costBreakdown.margin.toFixed(4)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
+        <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">Detayli Dagilim</h3>
+        <div className="space-y-2">
+          <BreakdownRow label={t('settings.usage.inputTokens')} value={formatTokens(data.usage.inputTokens)} />
+          <BreakdownRow label={t('settings.usage.outputTokens')} value={formatTokens(data.usage.outputTokens)} />
+          <BreakdownRow label="Toplam Token" value={formatTokens(data.usage.totalTokens)} accent />
+        </div>
+      </div>
+
+      {data.daily && data.daily.length > 0 && (
         <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-ak-text-primary">{t('settings.usage.title')}</h2>
-            <span className={cn(
-              'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-              isUnlimitedUser ? 'bg-ak-primary/10 text-ak-primary'
-                : planUsage.plan.tier === 'free' ? 'bg-ak-surface-2 text-ak-text-tertiary'
-                : planUsage.plan.tier === 'pro' ? 'bg-ak-primary/10 text-ak-primary'
-                : planUsage.plan.tier === 'team' ? 'bg-purple-500/10 text-purple-400'
-                : 'bg-ak-surface-2 text-ak-text-tertiary',
-            )}>
-              {isUnlimitedUser ? 'Sinirsiz' : `${planUsage.plan.name} Plan`}
-            </span>
-          </div>
-
-          {/* Top stats */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <UsageStatCard label="Calistirilan Is" value={String(planUsage.totalJobs)} icon="&#9889;" color="text-yellow-400" />
-            <UsageStatCard label="Token Kullanimi" value={formatTokens(planUsage.totalTokens)} icon="&#9881;" color="text-blue-400" />
-            <UsageStatCard label={costLabel} value={`$${planUsage.estimatedCost.toFixed(4)}`} icon="&#36;" color="text-emerald-400" />
-          </div>
-
-          {/* Admin-only: wholesale vs retail breakdown */}
-          {userIsAdmin && costBreakdown && (
-            <div className="mb-5 rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
-              <div className="mb-2 flex items-center gap-2">
-                <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-300">
-                  Admin
-                </span>
+          <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">Gunluk Aktivite</h3>
+          <DailyChart days={data.daily} />
+          <div className="mt-3 space-y-1.5">
+            {data.daily.slice().reverse().map((d) => (
+              <div key={d.date} className="flex items-center justify-between rounded-lg bg-ak-surface-2 px-3 py-2">
                 <span className="text-xs text-ak-text-secondary">
-                  Maliyet Dagilimi (markup {costBreakdown.markup.toFixed(2)}x)
+                  {new Date(d.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
                 </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded bg-ak-surface-2 p-2">
-                  <p className="text-[10px] uppercase text-ak-text-tertiary">Wholesale</p>
-                  <p className="font-mono text-sm text-ak-text-primary">
-                    ${costBreakdown.wholesale.toFixed(4)}
-                  </p>
-                </div>
-                <div className="rounded bg-ak-surface-2 p-2">
-                  <p className="text-[10px] uppercase text-ak-text-tertiary">Retail</p>
-                  <p className="font-mono text-sm text-ak-text-primary">
-                    ${costBreakdown.retail.toFixed(4)}
-                  </p>
-                </div>
-                <div className="rounded bg-ak-surface-2 p-2">
-                  <p className="text-[10px] uppercase text-ak-text-tertiary">Margin</p>
-                  <p className="font-mono text-sm text-emerald-400">
-                    ${costBreakdown.margin.toFixed(4)}
-                  </p>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs font-mono text-ak-text-secondary">{d.jobs} is</span>
+                  <span className="text-xs font-mono text-blue-400">{formatTokens(d.tokens)}</span>
+                  <span className="text-xs font-mono text-emerald-400">${d.cost.toFixed(4)}</span>
                 </div>
               </div>
-              {/* Per-token breakdown only available from /api/usage/current-month (data.breakdown) */}
-              {data?.breakdown && (data.breakdown.input > 0 || data.breakdown.output > 0) && (
-                <div className="mt-2 grid grid-cols-2 gap-2 text-center">
-                  <div className="rounded bg-ak-surface-2 p-2">
-                    <p className="text-[10px] uppercase text-ak-text-tertiary">Input Cost</p>
-                    <p className="font-mono text-xs text-blue-400">
-                      ${data.breakdown.input.toFixed(4)}
-                    </p>
-                  </div>
-                  <div className="rounded bg-ak-surface-2 p-2">
-                    <p className="text-[10px] uppercase text-ak-text-tertiary">Output Cost</p>
-                    <p className="font-mono text-xs text-blue-400">
-                      ${data.breakdown.output.toFixed(4)}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Daily job limit progress */}
-          <div className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-ak-text-secondary">Gunluk Is Limiti</span>
-                <span className="text-xs font-mono text-ak-text-tertiary">
-                  {isUnlimitedUser
-                    ? `${planUsage.usage.jobsUsedToday} / ∞`
-                    : `${planUsage.usage.jobsUsedToday} / ${planUsage.usage.jobsLimit}`}
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-ak-surface-2">
-                <div
-                  className={cn('h-full rounded-full transition-all duration-500',
-                    isUnlimitedUser ? 'bg-ak-primary/40'
-                      : pctJobsDaily >= 100 ? 'bg-red-500'
-                      : pctJobsDaily > 70 ? 'bg-yellow-500'
-                      : 'bg-ak-primary')}
-                  style={{ width: isUnlimitedUser ? '100%' : `${pctJobsDaily}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Monthly token limit progress */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-ak-text-secondary">Aylik Token Limiti</span>
-                <span className="text-xs font-mono text-ak-text-tertiary">
-                  {isUnlimitedUser
-                    ? `${formatTokens(planUsage.usage.tokensUsedThisMonth)} / ∞`
-                    : `${formatTokens(planUsage.usage.tokensUsedThisMonth)} / ${formatTokens(planUsage.usage.tokensLimit)}`}
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-ak-surface-2">
-                <div
-                  className={cn('h-full rounded-full transition-all duration-500',
-                    isUnlimitedUser ? 'bg-blue-500/40'
-                      : pctTokensMonthly >= 100 ? 'bg-red-500'
-                      : pctTokensMonthly > 70 ? 'bg-yellow-500'
-                      : 'bg-blue-500')}
-                  style={{ width: isUnlimitedUser ? '100%' : `${pctTokensMonthly}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Remaining — merges a11y typography (#409, main) with admin-unlimited logic (#401) */}
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-ak-surface-2 p-3 text-center">
-              <p className="text-xs text-ak-text-secondary">Kalan Is (Bugun)</p>
-              <p className={cn('text-xl font-bold',
-                isUnlimitedUser ? 'text-ak-primary'
-                  : (planUsage.remaining.jobs ?? 0) <= 0 ? 'text-red-400'
-                  : 'text-ak-primary')}>
-                {isUnlimitedUser || planUsage.remaining.jobs === null ? '∞' : planUsage.remaining.jobs}
-              </p>
-            </div>
-            <div className="rounded-lg bg-ak-surface-2 p-3 text-center">
-              <p className="text-xs text-ak-text-secondary">Kalan Token (Ay)</p>
-              <p className={cn('text-xl font-bold',
-                isUnlimitedUser ? 'text-blue-400'
-                  : (planUsage.remaining.tokens ?? 0) <= 0 ? 'text-red-400'
-                  : 'text-blue-400')}>
-                {isUnlimitedUser || planUsage.remaining.tokens === null
-                  ? '∞'
-                  : formatTokens(planUsage.remaining.tokens)}
-              </p>
-            </div>
+            ))}
           </div>
         </div>
-      )}
-
-      {/* Detailed breakdown from /api/usage/current-month */}
-      {data && (
-        <>
-          <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-            <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">Detayli Dagilim</h3>
-            <div className="space-y-2">
-              <BreakdownRow label={t('settings.usage.inputTokens')} value={formatTokens(data.usage.inputTokens)} />
-              <BreakdownRow label={t('settings.usage.outputTokens')} value={formatTokens(data.usage.outputTokens)} />
-              <BreakdownRow label={t('settings.usage.freeQuota')} value={formatTokens(data.freeQuota.tokens)} accent />
-              <BreakdownRow label={t('settings.usage.remaining')} value={formatTokens(data.remaining.tokens)} accent={data.remaining.tokens > 0} warn={data.remaining.tokens === 0} />
-              {data.onDemand.tokens > 0 && (
-                <BreakdownRow label={t('settings.usage.onDemand')} value={formatTokens(data.onDemand.tokens)} warn />
-              )}
-            </div>
-          </div>
-
-          {/* Daily Activity */}
-          {data.daily && data.daily.length > 0 && (
-            <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-              <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">Gunluk Aktivite</h3>
-              <DailyChart days={data.daily} />
-              <div className="mt-3 space-y-1.5">
-                {data.daily.slice().reverse().map((d) => (
-                  <div key={d.date} className="flex items-center justify-between rounded-lg bg-ak-surface-2 px-3 py-2">
-                    <span className="text-xs text-ak-text-secondary">{new Date(d.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}</span>
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs font-mono text-ak-text-secondary">{d.jobs} is</span>
-                      <span className="text-xs font-mono text-blue-400">{formatTokens(d.tokens)}</span>
-                      <span className="text-xs font-mono text-emerald-400">${d.cost.toFixed(4)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
       )}
     </div>
   );
@@ -1840,130 +1640,4 @@ function formatTokens(n: number): string {
 /* ------------------------------------------------------------------ */
 /*  Plan Tab                                                           */
 /* ------------------------------------------------------------------ */
-
-function PlanTab() {
-  const { t } = useI18n();
-  const [planData, setPlanData] = useState<Awaited<ReturnType<typeof api.getBillingPlan>> | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.getBillingPlan().then(setPlanData).catch(() => toast('Plan bilgisi alinamadi', 'error')).finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <div className="space-y-4"><Skeleton className="h-40 w-full rounded-xl" /><Skeleton className="h-32 w-full rounded-xl" /></div>;
-
-  if (!planData) return (
-    <div className="rounded-xl border border-ak-border bg-ak-surface p-8 text-center">
-      <p className="text-sm text-ak-text-tertiary">Plan bilgisi yuklenemedi</p>
-    </div>
-  );
-
-  const { plan, usage, unlimited, role } = planData;
-  const isAdmin = role === 'admin';
-
-  const planBadgeStyle = plan.tier === 'free'
-    ? 'bg-ak-surface-2 text-ak-text-tertiary'
-    : plan.tier === 'pro'
-      ? 'bg-ak-primary/10 text-ak-primary'
-      : plan.tier === 'team'
-        ? 'bg-purple-500/10 text-purple-400'
-        : plan.tier === 'enterprise'
-          ? 'bg-amber-500/10 text-amber-400'
-          : 'bg-ak-surface-2 text-ak-text-tertiary';
-
-  const planDisplayName = plan.tier === 'free' ? 'Ucretsiz'
-    : plan.tier === 'pro' ? 'Builder'
-    : plan.name;
-
-  return (
-    <div className="space-y-4">
-      {/* Current plan card */}
-      <div className="rounded-xl border border-ak-border bg-ak-surface p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-ak-text-tertiary">{t('settings.plan.current')}</span>
-            <div className="flex items-center gap-2 mt-1">
-              <h2 className="text-xl font-bold text-ak-text-primary">{planDisplayName}</h2>
-              <span className={cn('rounded-full px-2.5 py-0.5 text-[10px] font-semibold', planBadgeStyle)}>
-                {plan.tier.toUpperCase()}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-col items-end">
-            {plan.priceMonthly === 0 ? (
-              <span className={cn('rounded-full px-3 py-1 text-sm font-semibold', planBadgeStyle)}>{t('settings.plan.free')}</span>
-            ) : (
-              <>
-                <span className="text-lg font-bold text-ak-text-primary">${plan.priceMonthly}</span>
-                <span className="text-[10px] text-ak-text-tertiary">/ay</span>
-              </>
-            )}
-          </div>
-        </div>
-
-          {(unlimited || isAdmin) && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-ak-primary/10 px-3 py-2">
-              <span className="text-sm">&#9733;</span>
-              <span className="text-xs font-medium text-ak-primary">
-                {isAdmin ? t('settings.plan.adminNote') : t('settings.plan.unlimited')}
-              </span>
-            </div>
-          )}
-
-        {/* Usage within plan */}
-        {usage && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-ak-surface-2 p-3">
-              <p className="text-[10px] text-ak-text-tertiary">Bugun</p>
-              <p className="text-sm font-bold text-ak-text-primary">{(usage as Record<string, number>).jobsUsedToday ?? usage.jobsToday ?? 0} <span className="text-[10px] font-normal text-ak-text-tertiary">/ {(unlimited || isAdmin) ? '∞' : ((usage as Record<string, number>).jobsLimit ?? plan.jobsPerDay)} is</span></p>
-            </div>
-            <div className="rounded-lg bg-ak-surface-2 p-3">
-              <p className="text-[10px] text-ak-text-tertiary">Bu Ay Token</p>
-              <p className="text-sm font-bold text-ak-text-primary">{formatTokens((usage as Record<string, number>).tokensUsedThisMonth ?? usage.tokensThisMonth ?? 0)} <span className="text-[10px] font-normal text-ak-text-tertiary">/ {(unlimited || isAdmin) ? '∞' : formatTokens((usage as Record<string, number>).tokensLimit ?? plan.maxTokenBudget)}</span></p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Plan limits */}
-      <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-        <h3 className="mb-3 text-xs font-semibold text-ak-text-primary">Plan Limitleri</h3>
-        <div className="space-y-2">
-          <PlanLimitRow label={t('settings.plan.jobsPerDay')} value={(unlimited || isAdmin) ? '∞' : String(plan.jobsPerDay)} />
-          <PlanLimitRow label={t('settings.plan.tokenBudget')} value={(unlimited || isAdmin) ? '∞' : formatTokens(plan.maxTokenBudget)} />
-          <PlanLimitRow label={t('settings.plan.maxAgents')} value={(unlimited || isAdmin) ? '∞' : String(plan.maxAgents)} />
-          <PlanLimitRow label={t('settings.plan.depthModes')} value={plan.depthModesAllowed.join(', ')} />
-          <PlanLimitRow label={t('settings.plan.maxOutput')} value={(unlimited || isAdmin) ? '∞' : formatTokens(plan.maxOutputTokensPerJob)} />
-          <PlanLimitRow label={t('settings.plan.passes')} value={(unlimited || isAdmin) ? '∞' : String(plan.passesAllowed)} />
-          <PlanLimitRow label={t('settings.plan.priorityQueue')} value={(plan.priorityQueue || unlimited || isAdmin) ? 'Evet' : 'Hayir'} highlight={Boolean(plan.priorityQueue || unlimited || isAdmin)} />
-        </div>
-      </div>
-
-      {/* Upgrade placeholder */}
-      {plan.tier === 'free' && !unlimited && (
-        <div className="rounded-xl border border-dashed border-ak-border bg-ak-surface p-5 text-center space-y-3">
-          <div>
-            <p className="text-xs font-medium text-ak-text-secondary">Daha fazla is ve token mu gerekiyor?</p>
-            <p className="text-[10px] text-ak-text-tertiary mt-1">Builder ve Team planlari ile limitlerinizi artirin.</p>
-          </div>
-          <button
-            disabled
-            className="rounded-lg bg-ak-surface-2 px-4 py-2 text-xs font-medium text-ak-text-tertiary cursor-not-allowed"
-          >
-            Yukselme planlari yakinda
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PlanLimitRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg bg-ak-surface-2 px-3 py-2">
-      <span className="text-xs text-ak-text-secondary">{label}</span>
-      <span className={cn('text-xs font-mono font-medium', highlight ? 'text-ak-primary' : 'text-ak-text-primary')}>{value}</span>
-    </div>
-  );
-}
 

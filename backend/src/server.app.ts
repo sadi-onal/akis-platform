@@ -37,7 +37,6 @@ import { crewRoutes, initCrewRunManager } from './api/crew.js';
 import { ragRoutes } from './api/rag.js';
 import { adminRoutes } from './api/admin.js';
 import { githubRoutes, getGitHubToken } from './api/github.js';
-import { billingRoutes } from './api/billing.js';
 import { pipelinePlugin } from './pipeline/api/pipeline.plugin.js';
 import { pipelineStreamPlugin } from './pipeline/api/pipeline-stream.plugin.js';
 import { devSessionPlugin } from './pipeline/api/dev-session.plugin.js';
@@ -297,7 +296,6 @@ export async function buildApp() {
   await app.register(crewRoutes);
   await app.register(ragRoutes);
   await app.register(adminRoutes);
-  await app.register(billingRoutes);
   await app.register(githubRoutes, { prefix: '/api/github' });
 
   // Agent activities stub (returns empty until full wiring)

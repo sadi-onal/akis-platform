@@ -22,12 +22,9 @@ import {
   jobStateEnum,
   pipelines,
   pipelineStageEnum,
-  plans,
-  planTierEnum,
-  subscriptions,
-  subscriptionStatusEnum,
   oauthAccounts,
   oauthProviderEnum,
+  githubIntegrations,
   emailVerificationTokens,
   jobPlans,
   jobAudits,
@@ -45,7 +42,6 @@ import {
   crewTasks,
   crewMessages,
   inviteTokens,
-  usageCounters,
   studioSessions,
   devSessions,
   agentConfigs,
@@ -261,88 +257,33 @@ describe('Schema — pipeline stage enum (FSM stages)', () => {
 });
 
 // ====================================================================
-// 4. Plans table — tier enum, price fields
+// 4. github_integrations table — separate from login OAuth
 // ====================================================================
 
-describe('Schema — plans table', () => {
-  const cols = colMap(plans);
+describe('Schema — github_integrations table', () => {
+  const cols = colMap(githubIntegrations);
 
-  test('planTier enum values', () => {
-    const expected = ['free', 'pro', 'pro_plus', 'team', 'enterprise'];
-    for (const v of expected) {
-      assert.ok(planTierEnum.enumValues.includes(v as typeof planTierEnum.enumValues[number]), `missing tier: ${v}`);
+  test('user_id is the primary key', () => {
+    const cfg = getTableConfig(githubIntegrations);
+    const pk = cfg.columns.find((c) => c.name === 'user_id');
+    assert.ok(pk?.primary, 'user_id should be primary key');
+  });
+
+  test('login + provider_account_id + scope + access_token are NOT NULL', () => {
+    for (const name of ['login', 'provider_account_id', 'scope', 'access_token']) {
+      const c = cols.get(name);
+      assert.ok(c, `${name} missing`);
+      assert.equal(c.notNull, true, `${name} should be NOT NULL`);
     }
   });
 
-  test('price_monthly column exists and has default 0', () => {
-    const pm = cols.get('price_monthly');
-    assert.ok(pm);
-    assert.ok(pm.hasDefault, 'price_monthly should default to 0');
+  test('foreign key to users with cascade delete', () => {
+    assert.ok(fkTargets(githubIntegrations).includes('users'), 'FK to users missing');
   });
 
-  test('price_yearly column exists and has default 0', () => {
-    const py = cols.get('price_yearly');
-    assert.ok(py);
-    assert.ok(py.hasDefault, 'price_yearly should default to 0');
-  });
-
-  test('stripe price columns are optional (nullable)', () => {
-    const spm = cols.get('stripe_price_monthly');
-    const spy = cols.get('stripe_price_yearly');
-    assert.ok(spm);
-    assert.ok(spy);
-    assert.equal(spm.notNull, false, 'stripe_price_monthly should be nullable');
-    assert.equal(spy.notNull, false, 'stripe_price_yearly should be nullable');
-  });
-
-  test('jobs_per_day and max_token_budget have defaults', () => {
-    assert.ok(cols.get('jobs_per_day')?.hasDefault);
-    assert.ok(cols.get('max_token_budget')?.hasDefault);
-  });
-});
-
-// ====================================================================
-// 5. Subscriptions — status enum, Stripe fields
-// ====================================================================
-
-describe('Schema — subscriptions table', () => {
-  const cols = colMap(subscriptions);
-
-  test('subscription status enum values', () => {
-    const expected = ['active', 'past_due', 'canceled', 'trialing', 'incomplete'];
-    for (const v of expected) {
-      assert.ok(
-        subscriptionStatusEnum.enumValues.includes(v as typeof subscriptionStatusEnum.enumValues[number]),
-        `missing subscription status: ${v}`,
-      );
-    }
-  });
-
-  test('stripe_customer_id and stripe_subscription_id are nullable', () => {
-    const cid = cols.get('stripe_customer_id');
-    const sid = cols.get('stripe_subscription_id');
-    assert.ok(cid);
-    assert.ok(sid);
-    assert.equal(cid.notNull, false);
-    assert.equal(sid.notNull, false);
-  });
-
-  test('cancel_at_period_end defaults to false', () => {
-    const c = cols.get('cancel_at_period_end');
-    assert.ok(c);
-    assert.ok(c.hasDefault);
-  });
-
-  test('foreign keys to users and plans', () => {
-    const targets = fkTargets(subscriptions);
-    assert.ok(targets.includes('users'), 'FK to users missing');
-    assert.ok(targets.includes('plans'), 'FK to plans missing');
-  });
-
-  test('indexes on stripe fields exist', () => {
-    const idxs = indexNames(subscriptions);
-    assert.ok(idxs.some((n) => n.includes('stripe_customer')), `stripe_customer index missing: ${idxs}`);
-    assert.ok(idxs.some((n) => n.includes('stripe_sub')), `stripe_sub index missing: ${idxs}`);
+  test('login index exists for reverse lookup', () => {
+    const idxs = indexNames(githubIntegrations);
+    assert.ok(idxs.some((n) => n.includes('login')), `login index missing: ${idxs}`);
   });
 });
 
@@ -395,10 +336,8 @@ describe('Schema — foreign key relationships', () => {
     assert.ok(fkTargets(userAiKeys).includes('users'));
   });
 
-  test('subscriptions → users and plans', () => {
-    const t = fkTargets(subscriptions);
-    assert.ok(t.includes('users'));
-    assert.ok(t.includes('plans'));
+  test('githubIntegrations → users', () => {
+    assert.ok(fkTargets(githubIntegrations).includes('users'));
   });
 
   test('pipelines → users', () => {
@@ -497,7 +436,6 @@ describe('Schema — timestamp defaults across tables', () => {
     { name: 'users', table: users },
     { name: 'jobs', table: jobs },
     { name: 'pipelines', table: pipelines },
-    { name: 'subscriptions', table: subscriptions },
     { name: 'conversationThreads', table: conversationThreads },
     { name: 'knowledgeDocuments', table: knowledgeDocuments },
     { name: 'studioSessions', table: studioSessions },
@@ -879,10 +817,6 @@ describe('Schema — additional coverage', () => {
     assert.ok(v.includes('api'));
     assert.ok(v.includes('git_clone'));
     assert.ok(v.includes('manual_upload'));
-  });
-
-  test('usageCounters has user_id FK', () => {
-    assert.ok(fkTargets(usageCounters).includes('users'));
   });
 
   test('inviteTokens has invitedBy FK to users', () => {

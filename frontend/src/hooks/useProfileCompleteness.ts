@@ -24,7 +24,7 @@ export function useProfileCompleteness(): ProfileCompleteness {
     async function check() {
       try {
         const [ghRes, aiRes] = await Promise.all([
-          fetch('/api/github/status', { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch('/api/integrations/github/status', { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null),
           fetch('/api/settings/ai-keys/status', { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null),
         ]);
         if (cancelled) return;

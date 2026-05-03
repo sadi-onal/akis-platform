@@ -13,7 +13,6 @@ import { getUserAiKeyStatus } from '../services/ai/user-ai-keys.js';
 import { getScribeModelAllowlist, RECOMMENDED_MODELS } from '../services/ai/modelAllowlist.js';
 import { getEnv, getAIConfig } from '../config/env.js';
 import { generateScribeBranchName } from '../utils/branchNaming.js';
-import { incrementUsage } from '../services/billing/BillingService.js';
 import { generateQualitySuggestions, type QualityResult, type QualityInput } from '../services/quality/index.js';
 import { logger } from '../lib/logger.js';
 
@@ -813,13 +812,6 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             // Phase 7.B: Record job completion/failure metrics
             if (finalState === 'completed') {
               metrics.jobsCompleted.inc({ type: body.type });
-              // Increment usage counter on success
-              if (userId) {
-                const tokensUsed = job.aiTotalTokens ?? 0;
-                incrementUsage(userId, tokensUsed).catch(err =>
-                  logger.warn(`[Billing] Failed to increment usage: ${err}`)
-                );
-              }
             } else if (finalState === 'failed') {
               metrics.jobsFailed.inc({ type: body.type });
             }

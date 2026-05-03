@@ -13,6 +13,8 @@ interface RequestOptions {
 
 interface GitHubOAuthTokenResponse {
   access_token?: string;
+  scope?: string;
+  token_type?: string;
   error?: string;
   error_description?: string;
 }

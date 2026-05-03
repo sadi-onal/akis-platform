@@ -33,7 +33,16 @@ vi.mock('../../../hooks/useReducedMotion', () => ({
 }));
 
 vi.mock('../../../hooks/useProfileCompleteness', () => ({
-  useProfileCompleteness: () => ({ missingSteps: [], loading: false }),
+  useProfileCompleteness: () => ({
+    missingSteps: [],
+    loading: false,
+    hasGitHub: true,
+    hasName: true,
+    hasAiKey: true,
+    isComplete: true,
+    completedSteps: 3,
+    totalSteps: 3,
+  }),
 }));
 
 vi.mock('../../../hooks/usePipelineStream', () => ({
@@ -65,12 +74,8 @@ vi.mock('../../../components/ErrorBoundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('../../../components/onboarding/ProfileSetupBanner', () => ({
-  ProfileSetupBanner: () => null,
-}));
-
-vi.mock('../../../components/onboarding/ProfileSetupWizard', () => ({
-  ProfileSetupWizard: () => null,
+vi.mock('../../../components/onboarding/GithubConnectModal', () => ({
+  GithubConnectModal: () => null,
 }));
 
 vi.mock('../../../components/onboarding/AgentFeatureCard', () => ({

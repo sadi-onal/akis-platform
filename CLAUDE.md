@@ -74,7 +74,7 @@ Her adimda → failed (retryable) | cancelled
 | AI Provider | Anthropic (claude-sonnet-4-6) |
 | GitHub Entegrasyon | GitHub REST API (pipeline), OAuth (kullanici login) |
 | File Upload | @fastify/multipart (bellekte isleme, Scribe context injection) |
-| Test | Vitest (unit — 673 test), Node test (backend — 3112 test), Playwright (e2e) |
+| Test | Vitest (unit — 754 test), Node test (backend — 3177 test), Playwright (e2e) |
 | Deployment | OCI x86_64, Docker Compose, Caddy |
 | RAG/Knowledge | pgvector, RepoDocsIngester, hybrid search (keyword + semantic) |
 
@@ -113,6 +113,21 @@ Detayli sablona bak: `backend/.env.example`
 - Pattern: `${FRONTEND_URL}/auth/oauth/${provider}/callback`
 - Local: `http://localhost:5173/auth/oauth/google/callback`
 - Production: `https://akisflow.com/auth/oauth/google/callback`
+
+### GitHub: Login vs. Integration (ayri akislar)
+
+GitHub'la **login** ile pipeline **integration** birbirinden tamamen ayri:
+
+- **Login OAuth** (`/auth/oauth/github`) → kullanici dogrulama. Scope: `user:email`. Token `oauth_accounts` tablosuna yazilir.
+- **Integration OAuth** (`/api/integrations/github/oauth/start`) → pipeline'in repo acmasi/push'lamasi icin. Scope: `read:user user:email repo`. Token AYRI tabloda: `github_integrations`.
+
+Sonuc: GitHub ile giris yapmis bir kullanici bile pipeline'i kullanabilmek icin integration OAuth'unu ayrica tetiklemek zorunda. UI bunu `GithubConnectModal` ile yapar — chat ilk acilista, integration row yoksa modal cikar; tek tikla `/api/integrations/github/oauth/start` baslar. `oauth_accounts.github` row'unun varligi ASLA "GitHub bagli" anlamina gelmez — kontrol her zaman `github_integrations` uzerinden.
+
+Token cozumu: `services/auth/githubToken.ts` resolver'i sadece `github_integrations` (ve dev modda env `GITHUB_TOKEN`) okur. Eski `users.github_token` kolonu (PAT) ve `oauth_accounts` icin GitHub fallback'i kaldirildi.
+
+### Plan/Billing kaldirildi
+
+Bu bitirme projesi — gercek billing yok. `plans`, `subscriptions`, `usage_counters`, `workspace_billing_settings`, `user_billing_overrides`, `billing_notifications` tablolari ve Stripe entegrasyonu tamamen kaldirildi (`migrations/0045`). `BillingService`, `StripeService`, `api/billing.ts`, settings'deki Plan tab silindi. Pipeline.routes quota gate kaldirildi — her hesap sinirsiz. Token/maliyet analitigi `pipelines.metrics` JSONB'sinden okunmaya devam ediyor (sadece `/api/usage*` analitik amacli).
 
 ---
 

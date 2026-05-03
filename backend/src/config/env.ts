@@ -89,12 +89,6 @@ const envSchema = z
     // OAuth credentials for user login (separate from GitHub App credentials)
     GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
     GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),
-    // Preprocess empty string → undefined so compose `${VAR:-}` defaults don't
-    // fail z.url() and crash the boot (observed in prod deploy 2026-04-17).
-    GITHUB_OAUTH_CALLBACK_URL: z.preprocess(
-      (val) => (val === '' || val === undefined ? undefined : val),
-      z.string().url().optional()
-    ),
     APP_PUBLIC_URL: z.preprocess(
       (val) => (val === '' || val === undefined ? undefined : val),
       z.string().url().optional()
@@ -169,13 +163,6 @@ const envSchema = z
     
     // GitHub private key (base64 encoded)
     GITHUB_PRIVATE_KEY_BASE64: z.string().optional(),
-
-    // Stripe billing
-    STRIPE_SECRET_KEY: z.string().optional(),
-    STRIPE_WEBHOOK_SECRET: z.string().optional(),
-    STRIPE_PRICE_PRO: z.string().optional(),        // price_xxx for Pro plan
-    STRIPE_PRICE_PRO_PLUS: z.string().optional(),   // price_xxx for Pro+ plan
-    STRIPE_PRICE_TEAM: z.string().optional(),        // price_xxx for Team plan
 
     // Piri RAG Engine (M2)
     PIRI_BASE_URL: z.preprocess(

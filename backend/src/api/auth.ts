@@ -354,7 +354,6 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       await db.update(users).set({
         status: 'deleted',
-        githubToken: null,
         githubUsername: null,
         githubAvatarUrl: null,
         updatedAt: new Date(),

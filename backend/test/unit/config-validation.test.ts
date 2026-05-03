@@ -247,11 +247,10 @@ describe('MCP base URL preprocess', () => {
   });
 });
 
-// ─── OAuth Callback / public URL preprocess ─────────────────────────
-// Regression guard for 2026-04-17 prod outage: compose injected
-// `GITHUB_OAUTH_CALLBACK_URL=""` (empty string via `${VAR:-}`) which a plain
-// `z.string().url().optional()` treated as an invalid URL and crashed boot.
-// Fix: same preprocess pattern as MCP base URLs.
+// ─── Public URL preprocess ─────────────────────────
+// Same preprocess pattern used by APP_PUBLIC_URL / FRONTEND_URL — empty strings
+// (compose `${VAR:-}` defaults) must coerce to undefined instead of crashing
+// the URL validator at boot.
 
 describe('OAuth URL preprocess', () => {
   const oauthUrlSchema = z.preprocess(

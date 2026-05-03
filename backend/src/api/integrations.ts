@@ -32,7 +32,7 @@ import { randomBytes } from 'crypto';
 import { getEnv } from '../config/env.js';
 import { requireAuth } from '../utils/auth.js';
 import { db } from '../db/client.js';
-import { oauthAccounts, integrationCredentials } from '../db/schema.js';
+import { githubIntegrations, integrationCredentials } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { encryptSecret, decryptSecret } from '../utils/crypto.js';
 import { atlassianOAuthService } from '../services/atlassian/index.js';
@@ -81,14 +81,8 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
           });
         }
 
-        if (!config.GITHUB_OAUTH_CALLBACK_URL) {
-          return reply.code(501).send({
-            error: {
-              code: 'GITHUB_OAUTH_NOT_CONFIGURED',
-              message: 'GITHUB_OAUTH_CALLBACK_URL is not configured.',
-            },
-          });
-        }
+        // Note: callback URL is computed from FRONTEND_URL below; no separate
+        // env var is required (the previous check here was always wrong on prod).
 
         // Generate CSRF state token
         const state = randomBytes(32).toString('hex');
@@ -177,6 +171,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         }
 
         const accessToken = tokenData.access_token;
+        const grantedScope = tokenData.scope ?? '';
         let encryptedAccessToken: string;
 
         try {
@@ -207,35 +202,36 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
           return reply.code(302).header('Location', errorUrl).send();
         }
 
-        // Store/update in database
-        const existingOAuth = await db.query.oauthAccounts.findFirst({
-          where: and(
-            eq(oauthAccounts.userId, user.id),
-            eq(oauthAccounts.provider, 'github')
-          ),
+        // Upsert into github_integrations (separate from login oauth_accounts).
+        const existingIntegration = await db.query.githubIntegrations.findFirst({
+          where: eq(githubIntegrations.userId, user.id),
         });
 
-        // Tokens are encrypted via OAuthTokenCrypto.encryptForStorage() above (AES-256-GCM)
-        if (existingOAuth) {
+        if (existingIntegration) {
           await db
-            .update(oauthAccounts)
+            .update(githubIntegrations)
             .set({
-              accessToken: encryptedAccessToken,
               providerAccountId: githubUser.id.toString(),
+              login: githubUser.login,
+              avatarUrl: githubUser.avatar_url ?? null,
+              scope: grantedScope,
+              accessToken: encryptedAccessToken,
               updatedAt: new Date(),
             })
-            .where(eq(oauthAccounts.id, existingOAuth.id));
+            .where(eq(githubIntegrations.userId, user.id));
         } else {
-          await db.insert(oauthAccounts).values({
+          await db.insert(githubIntegrations).values({
             userId: user.id,
-            provider: 'github',
             providerAccountId: githubUser.id.toString(),
+            login: githubUser.login,
+            avatarUrl: githubUser.avatar_url ?? null,
+            scope: grantedScope,
             accessToken: encryptedAccessToken,
           });
         }
 
-        // Redirect back to integrations with success
-        const successUrl = `${appPublicUrl}/dashboard/settings?tab=github&github=connected`;
+        // Redirect back to chat with success — frontend dismisses the modal
+        const successUrl = `${appPublicUrl}/chat?github=connected`;
         return reply.code(302).header('Location', successUrl).send();
       } catch (err: unknown) {
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {
@@ -257,34 +253,26 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const user = await requireAuth(request);
-        const token = await getGitHubToken(user.id);
 
-        if (!token) {
-          return reply.code(200).send({
-            connected: false,
-          });
+        const integration = await db.query.githubIntegrations.findFirst({
+          where: eq(githubIntegrations.userId, user.id),
+          columns: {
+            login: true,
+            avatarUrl: true,
+            scope: true,
+          },
+        });
+
+        if (!integration) {
+          return reply.code(200).send({ connected: false });
         }
 
-        try {
-          // Verify token works by fetching user info
-          const githubUser = await fetchFromGitHub<{ login: string; avatar_url: string; created_at: string }>(
-            '/user',
-            token,
-            request.id
-          );
-
-          return reply.code(200).send({
-            connected: true,
-            login: githubUser.login,
-            avatarUrl: githubUser.avatar_url,
-          });
-        } catch (_err) {
-          // Token exists but is invalid/expired
-          return reply.code(200).send({
-            connected: false,
-            error: 'Token invalid or expired',
-          });
-        }
+        return reply.code(200).send({
+          connected: true,
+          login: integration.login,
+          avatarUrl: integration.avatarUrl ?? null,
+          scope: integration.scope,
+        });
       } catch (err: unknown) {
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {
           return reply.code(401).send({
@@ -305,15 +293,9 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
       try {
         const user = await requireAuth(request);
 
-        // Delete OAuth account for GitHub
         await db
-          .delete(oauthAccounts)
-          .where(
-            and(
-              eq(oauthAccounts.userId, user.id),
-              eq(oauthAccounts.provider, 'github')
-            )
-          );
+          .delete(githubIntegrations)
+          .where(eq(githubIntegrations.userId, user.id));
 
         return reply.code(200).send({
           ok: true,
