@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# AKIS Platform — tail backend + frontend logs in a single stream.
+# AKIS Platform — tail backend + frontend logs in a unified, readable stream.
 # Backend uses pino (JSON) — pino-pretty makes it human-readable.
 # Frontend uses plain console output.
 #
 # Usage:
-#   ./scripts/dev-logs.sh           # both logs
+#   ./scripts/dev-logs.sh           # both logs, pretty-printed, prefixed [BE]/[FE]
 #   ./scripts/dev-logs.sh backend   # backend only
 #   ./scripts/dev-logs.sh frontend  # frontend only
 
@@ -15,26 +15,43 @@ cd "$REPO_ROOT"
 
 target="${1:-both}"
 
-# Use pino-pretty from backend/node_modules if installed; otherwise raw tail.
-PRETTY="cat"
-if [ -x "backend/node_modules/.bin/pino-pretty" ]; then
-  PRETTY="backend/node_modules/.bin/pino-pretty -t SYS:HH:MM:ss -i pid,hostname"
-fi
+PRETTY_BIN="backend/node_modules/.bin/pino-pretty"
+pretty() {
+  if [ -x "$PRETTY_BIN" ]; then
+    "$PRETTY_BIN" -t SYS:HH:MM:ss -i pid,hostname --singleLine
+  else
+    cat
+  fi
+}
+
+prefix() {
+  local tag="$1"
+  awk -v tag="$tag" '{ printf "%s %s\n", tag, $0; fflush() }'
+}
+
+ensure_log() {
+  [ -f "$1" ] || touch "$1"
+}
 
 case "$target" in
   backend)
-    [ -f backend.log ] || { echo "backend.log not found — start with ./scripts/dev-up.sh"; exit 1; }
-    tail -F backend.log | $PRETTY
+    ensure_log backend.log
+    tail -F backend.log | pretty
     ;;
   frontend)
-    [ -f frontend.log ] || { echo "frontend.log not found — start with ./scripts/dev-up.sh"; exit 1; }
+    ensure_log frontend.log
     tail -F frontend.log
     ;;
   both|"")
-    [ -f backend.log ] || touch backend.log
-    [ -f frontend.log ] || touch frontend.log
-    # tail -F prefixes each line with the file name when multiple files are given.
-    tail -F backend.log frontend.log
+    ensure_log backend.log
+    ensure_log frontend.log
+    # Two parallel streams, each prefixed so you can tell them apart.
+    # On exit (Ctrl+C), kill both background tails so we don't leak.
+    trap 'kill 0' INT TERM EXIT
+
+    ( tail -F backend.log  | pretty | prefix '\033[36m[BE]\033[0m' ) &
+    ( tail -F frontend.log         | prefix '\033[35m[FE]\033[0m' ) &
+    wait
     ;;
   *)
     echo "Usage: $0 [backend|frontend|both]"
