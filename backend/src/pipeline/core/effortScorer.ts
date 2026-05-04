@@ -7,9 +7,18 @@
  *   5+   → Sonnet  (balanced quality for complex specs)
  */
 
-const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
-const MODEL_SONNET = 'claude-sonnet-4-6';
+const MODEL_HAIKU_ANTHROPIC = 'claude-haiku-4-5-20251001';
+const MODEL_SONNET_ANTHROPIC = 'claude-sonnet-4-6';
+const MODEL_HAIKU_OPENROUTER = 'anthropic/claude-3.5-haiku';
+const MODEL_SONNET_OPENROUTER = 'anthropic/claude-sonnet-4';
 
+function selectModel(score: number): string {
+  const provider = process.env.AI_PROVIDER ?? 'mock';
+  const isOpenRouter = provider === 'openrouter';
+  
+  if (score >= 5) return isOpenRouter ? MODEL_SONNET_OPENROUTER : MODEL_SONNET_ANTHROPIC;
+  return isOpenRouter ? MODEL_HAIKU_OPENROUTER : MODEL_HAIKU_ANTHROPIC;
+}
 export interface EffortScore {
   score: number;
   /** Suggested model — advisory only, user/config model takes priority */
@@ -93,14 +102,6 @@ export function scoreTraceEffort(protoResult: {
     model: selectModel(score),
     reasoning: `files=${fileCount} → ${score}`,
   };
-}
-
-function selectModel(score: number): string {
-  // Tiered model selection based on complexity:
-  // Low complexity (1-4): Haiku — fast, cost-effective
-  // Medium-high complexity (5+): Sonnet — better quality for complex specs
-  if (score >= 5) return MODEL_SONNET;
-  return MODEL_HAIKU;
 }
 
 function clamp(score: number): number {
