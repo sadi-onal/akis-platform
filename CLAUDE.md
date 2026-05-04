@@ -511,9 +511,27 @@ Desteklenen provider'lar: `anthropic`, `openai`, `openrouter`, `mock`
 
 ## Deployment
 
-- **Production:** `akisflow.com` — OCI x86_64, Docker Compose + Caddy
+> **STATUS (2026-05-04): PROD DORMANT.** akisflow.com is intentionally
+> offline until the thesis project is complete. All AKIS containers,
+> volumes (DB included), and the edge Caddy were torn down on the OCI VM.
+> Ports 80/443 are free, the VM is still running but only `unisum-backend`
+> (a separate, unrelated project) is active.
+>
+> **Bring prod back up** when ready: SSH `oci-prod`, then:
+> ```
+> cd /opt/akis/prod && docker compose up -d
+> cd /opt/akis     && docker compose -f docker-compose.edge.yml up -d
+> ```
+> Backend will boot against an empty DB (volume was wiped). Migrations run
+> automatically on first start.
+>
+> **Auto-deploy is disabled** (workflow_dispatch only) — main → prod
+> never triggers automatically.
+
+- **Production target:** `akisflow.com` — OCI x86_64 VM (`oci-prod` SSH alias), Docker Compose + Caddy
+- **Prod path on VM:** `/opt/akis/prod/`
 - **CI/CD:** GitHub Actions (ci.yml, pr-gate.yml, deploy-prod.yml)
-- Docker image: `ghcr.io/omeryasironal/akis-platform-devolopment/akis-backend`
-- Deploy script: `deploy/oci/prod/deploy.sh`
-- Staging environment was retired in this PR (single-env on `akisflow.com`).
+- **Docker image:** `ghcr.io/omeryasironal/akis-platform-devolopment/akis-backend`
+- **Deploy script:** `deploy/oci/prod/deploy.sh`
+- Staging environment was retired earlier (single-env on `akisflow.com`).
   The `staging.akisflow.com → akisflow.com` 301 redirect in `devops/compose/Caddyfile.edge` is kept for graceful degradation of old links.
