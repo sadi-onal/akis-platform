@@ -202,22 +202,36 @@ Tum hatalar `PipelineError` tipinde: code, message (Turkce), technicalDetail, re
 ## Local Gelistirme Ortami
 
 ### Onkosullar
-1. PostgreSQL (Docker): `./scripts/db-up.sh`
-2. Node.js 20+, pnpm
+- Docker Desktop (Postgres + Adminer container'lari icin)
+- Node.js 20+, pnpm
+- `backend/.env` ve `frontend/.env` symlink'leri `~/.env.d/`'ye baglanmis olmali
 
-### Backend Baslatma
+### Tek komutla baslatma
 ```bash
-pnpm -C backend dev
+./scripts/dev-up.sh
 ```
-- `DEV_MODE=true` (.env'de): Auth bypass (otomatik dev user)
-- `DATABASE_URL` local'e baktigi icin `.env` dosyasinda dogru oldugundan emin ol
+Bu script:
+1. Postgres (pgvector/pgvector:pg16) ve Adminer'i ayaga kaldirir
+2. DB migration'larini uygular
+3. Backend'i :3000 portunda arka planda baslatir (log: backend.log)
+4. Frontend'i :5173 portunda arka planda baslatir (log: frontend.log)
 
-### Frontend Baslatma
+### Durdurma
 ```bash
-pnpm -C frontend dev
+./scripts/dev-down.sh
 ```
-- Vite dev server: http://localhost:5173
-- Vite proxy `/auth/*` ve `/api/*` isteklerini `localhost:3000`'a yonlendirir
+
+### Manuel calistirma (debug icin)
+```bash
+docker compose -f docker-compose.dev.yml up -d   # sadece DB
+pnpm -C backend dev                               # backend foreground
+pnpm -C frontend dev                              # frontend foreground
+```
+
+### Endpoint'ler
+- Frontend: http://localhost:5173
+- Backend:  http://localhost:3000/health
+- Adminer:  http://localhost:8080 (server=`db`, user=`postgres`, pass=`postgres`, db=`akis_v2`)
 
 ## Canonical Commands
 
@@ -246,6 +260,10 @@ pnpm -C frontend dev
 
 ### Quality Gate (commit oncesi)
 ```bash
+./scripts/gate.sh
+```
+Bu script backend ve frontend icin sirasiyla typecheck, lint, unit test ve build calistirir. Manuel calistirmak istersen:
+```bash
 pnpm -C backend typecheck && pnpm -C backend lint && pnpm -C backend test:unit && pnpm -C backend build
 pnpm -C frontend typecheck && pnpm -C frontend lint && pnpm -C frontend test && pnpm -C frontend build
 ```
@@ -266,7 +284,7 @@ pnpm -C frontend typecheck && pnpm -C frontend lint && pnpm -C frontend test && 
 - Hatalari lint kurallarini devre disi birakarak susturma — tamamen gerekcelenmeden
 - Minimum kod yorumu (sadece acik olmayan mantik)
 
-### PR Review + Deploy Smoke Otomasyonu (zorunlu)
+### PR Review Otomasyonu (zorunlu)
 
 Her PR acildiginda ve CI yesile dondugunde, ASAGIDAKI DONGUYU OTOMATIK
 CALISTIR — kullanicidan tekrar istek beklemeden:
@@ -279,21 +297,11 @@ CALISTIR — kullanicidan tekrar istek beklemeden:
    - READY + audit-gated kategori + PR'da bagimsiz pre-merge audit raporu var → otomatik merge
    - READY + mutlak high-risk (DB migration / billing) → KULLANICI onayi bekle
    - NEEDS-WORK / BLOCKED → fix-up plani yaz, dur
-3. **Deploy bekle**: merge sonrasi GitHub Actions "Deploy to Production"
-   workflow calismasini gozle. `success` olana kadar ~2-3 dk bekle.
-4. **Chrome smoke-test**: prod deploy bitince **mutlaka** `claude-in-chrome`
-   MCP'si ile `akisflow.com`'u ac. PR kapsamindaki degisikligi dogrudan
-   ekrandan test et:
-   - UI degisikliklerinde: ilgili sayfayi ziyaret et, screenshot cek
-   - Davranis degisikliklerinde: kullanici akisini simule et (tikla, formdoldur)
-   - Her PR icin en az 1 before/after screenshot PR yorumu olarak eklenir
-5. **Rapor**: `docs/ops/DEPLOY_SMOKE_<pr-num>_<date>.md` olarak kaydet.
-   Ekran goruntuleri + gozlemler + regresyon var mi notu. PR'a link olarak bagla.
-6. **Regresyon varsa**: revert hazirla, PR yorumu ile kullaniciyi haberdar et.
-   OTOMATIK revert yapma — kullanici onayi bekle.
 
-Bu dongu ceviri: oturum basinda acik PR varsa once gerekli adima atla
-(ornegin PR halihazirda merge edildiyse dogrudan adim 3'ten devam).
+> **NOT (2026-05-04):** `main`'e merge artik prod'a otomatik deploy ETMEZ.
+> `main` gelistirme integration dali; prod sadece GitHub Actions'tan manuel
+> "Deploy to Production" workflow'u ile yayina alinir. Merge sonrasi smoke
+> ve deploy adimlari kullanici tarafindan manuel tetiklendiginde calisir.
 
 Dusuk-risk PR kategorisi (otomatik mergelenebilir):
 - Pure i18n (sadece tr.json/en.json)
@@ -413,7 +421,7 @@ Agent({
   description: "Senior <Role> — issue #<N>",
   prompt: `
 You are Senior <Role> Engineer for the AKIS platform.
-Project: /Users/omeryasironal/Projects/bitirme_projesi/devagents
+Project: /Users/omeryasironal/Projects/akisflow
 Read CLAUDE.md before anything.
 
 Your task: Issue #<N> — <baslik>.

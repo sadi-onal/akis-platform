@@ -13,7 +13,7 @@ Bu StrongDM'in "holdout test" pattern'i ve LLMloop arastirmasindaki "fix-test-fi
 
 ## ADIM 0 — DISCOVERY
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 cat backend/src/pipeline/core/contracts/PipelineTypes.ts
 cat backend/src/pipeline/agents/proto/ProtoAgent.ts

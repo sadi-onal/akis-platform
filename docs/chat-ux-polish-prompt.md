@@ -9,7 +9,7 @@
 
 AKIS (Adaptive Knowledge Integrity System), universite bitirme projesi olan bir AI Agent Workflows Engine'dir. React 19 + Vite 7 SPA frontend, Fastify 4 + TypeScript backend. Tez temasi: Knowledge Integrity & Agent Verification.
 
-**Calisma dizini:** `/Users/omeryasironal/Projects/bitirme_projesi/akis-platform-devolopment/devagents`
+**Calisma dizini:** `/Users/omeryasironal/Projects/akisflow`
 **CLAUDE.md:** Projenin tum kurallari `CLAUDE.md`'de — mutlaka oku.
 **Production:** `akisflow.com` — frontend deploy: `tar + scp + ssh` ile `/opt/akis/frontend/`
 

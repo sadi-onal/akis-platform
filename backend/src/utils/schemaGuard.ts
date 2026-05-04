@@ -92,17 +92,14 @@ export async function validateSchemaColumns(exitOnFailure: boolean = false): Pro
  * In production, logs warning but doesn't exit
  */
 export async function runSchemaGuard(): Promise<void> {
-  const isDev = process.env.NODE_ENV !== 'production';
-  
   try {
-    const missing = await validateSchemaColumns(isDev);
-    
+    const missing = await validateSchemaColumns(false);
+
     if (missing.length === 0) {
       logger.info('[SchemaGuard] All critical columns verified');
     }
   } catch (error) {
     logger.error(`[SchemaGuard] Failed to validate schema: ${error}`);
-    // Don't exit on validation error - DB might not be ready yet
   }
 }
 

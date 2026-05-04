@@ -12,16 +12,9 @@
 name: Deploy to Production
 
 on:
-  # Auto-deploy when CI succeeds on main.
-  # - Only fires after the CI workflow finishes on main.
-  # - The first deploy job guards on `workflow_run.conclusion == success`
-  #   so a failed CI never reaches the server.
-  # - Manual dispatch is still available for ad-hoc / rollback deploys.
-  workflow_run:
-    workflows: ['CI']
-    types: [completed]
-    branches: [main]
-
+  # Manual-only deployment.
+  # Auto-deploy on CI success was removed on 2026-05-04 — main is now the
+  # development integration branch, prod ships only when explicitly triggered.
   workflow_dispatch:
     inputs:
       reason:
@@ -46,11 +39,6 @@ jobs:
     name: Validate Release
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # workflow_run fires on every CI completion (success OR failure).
-    # Skip auto-deploy when CI failed; manual dispatch always runs.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     outputs:
       version: ${{ steps.version.outputs.version }}

@@ -9,7 +9,7 @@
 AKIS şu an Shapiro Level 2'de: insan prompt veriyor → AI yazıyor → insan review ediyor.
 Level 3'e geçiş için 4 bağımsız iş yapılacak, sonra 1 entegrasyon adımı.
 
-**Proje dizini:** `~/Projects/bitirme_projesi/akis-platform-devolopment/devagents`
+**Proje dizini:** `~/Projects/akisflow`
 
 **YASAK KURALLAR (TÜM AGENT'LAR İÇİN):**
 - `.env` dosyalarına ASLA dokunma, değiştirme, oluşturma, silme
@@ -27,7 +27,7 @@ Bu adımda sen (master agent) şunları yap:
 
 ### 0.1 Projeyi tanı
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 ls backend/src/pipeline/agents/
 ls backend/src/pipeline/core/
@@ -74,7 +74,7 @@ AKIS pipeline'ına inter-stage adversarial review eklenecek. CriticAgent, diğer
 
 ## ADIM 0 — DISCOVERY
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 cat backend/src/pipeline/core/contracts/PipelineTypes.ts
 cat backend/src/pipeline/agents/scribe/ScribeAgent.ts
@@ -219,7 +219,7 @@ Bu StrongDM'in "holdout test" pattern'ı ve LLMloop araştırmasındaki "fix-tes
 
 ## ADIM 0 — DISCOVERY
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 cat backend/src/pipeline/core/contracts/PipelineTypes.ts
 cat backend/src/pipeline/agents/proto/ProtoAgent.ts
@@ -337,7 +337,7 @@ Her pipeline run'ından sonra agent'ların öğrendiklerini biriktiren bir knowl
 
 ## ADIM 0 — DISCOVERY
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 ls docs/
 cat backend/src/pipeline/agents/scribe/ScribeAgent.ts | head -50
@@ -470,7 +470,7 @@ J-curve'den çıkmak için ölçüm şart. Her pipeline run'ının metriklerini 
 
 ## ADIM 0 — DISCOVERY
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 cat backend/src/pipeline/core/contracts/PipelineTypes.ts
 ls backend/src/pipeline/core/
@@ -596,7 +596,7 @@ mkdir -p docs/plans
 4 agent'ı aynı anda başlat. Her biri kendi plan dosyasını okuyup bağımsız çalışacak:
 
 ```bash
-PROJECT_DIR=~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+PROJECT_DIR=~/Projects/akisflow
 
 # Agent A — Critic Agent
 claude --model claude-opus-4-6-20250710 --max-turns 80 -p \

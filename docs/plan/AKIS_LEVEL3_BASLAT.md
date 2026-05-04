@@ -3,7 +3,7 @@
 ## Dosyayı Koy
 `AKIS_LEVEL3_MASTER_PLAN.md` dosyasını şuraya kopyala:
 ```
-~/Projects/bitirme_projesi/akis-platform-devolopment/devagents/docs/plans/AKIS_LEVEL3_MASTER_PLAN.md
+~/Projects/akisflow/docs/plans/AKIS_LEVEL3_MASTER_PLAN.md
 ```
 
 ## Claude Code'a Yapıştır (TEK KOMUT)
@@ -17,7 +17,7 @@
 Eğer Claude Code UI yerine terminal'den başlatmak istersen:
 
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 
 claude --model claude-opus-4-6-20250710 --max-turns 150 -p \
   "Bu projede docs/plans/AKIS_LEVEL3_MASTER_PLAN.md dosyasını oku ve adım adım uygula. Act mode'da çalış. ADIM 0'da projeyi tanı ve 4 sub-plan dosyası oluştur. ADIM 2'de 4 paralel Claude Code instance'ı başlat (claude CLI ile). Her agent kendi dosya sınırlarında çalışsın. Hepsini bekle, raporlarını kontrol et. ADIM 4'te entegrasyonu yap. .env dosyalarına ASLA dokunma. Hata varsa düzelt, sonra devam et."

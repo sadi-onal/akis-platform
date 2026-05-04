@@ -12,7 +12,7 @@ AKIS pipeline'a inter-stage adversarial review eklenecek. CriticAgent, diger age
 
 ## ADIM 0 — DISCOVERY
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 cat backend/src/pipeline/core/contracts/PipelineTypes.ts
 cat backend/src/pipeline/agents/scribe/ScribeAgent.ts

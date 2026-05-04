@@ -10,7 +10,7 @@ J-curve'den cikmak icin olcum sart. Her pipeline run'inin metriklerini toplayan 
 
 ## ADIM 0 — DISCOVERY
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 cat backend/src/pipeline/core/contracts/PipelineTypes.ts
 ls backend/src/pipeline/core/

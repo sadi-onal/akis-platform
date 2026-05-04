@@ -884,7 +884,7 @@ Agent({
   description: "Senior <Role> — issue #<N>",
   prompt: `
 You are Senior <Role> Engineer for the AKIS platform.
-Project: /Users/omeryasironal/Projects/bitirme_projesi/devagents
+Project: /Users/omeryasironal/Projects/akisflow
 Read CLAUDE.md before anything.
 
 Your task: Issue #<N> — <başlık>.

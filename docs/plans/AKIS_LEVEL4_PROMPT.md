@@ -20,7 +20,7 @@ IMPORTANT: Launch 3 parallel Claude Code agents for the code tasks (Tech 1, 2, 5
 ## ADIM 0 — DISCOVERY
 
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 ls backend/src/pipeline/agents/
 ls backend/src/pipeline/core/
@@ -256,7 +256,7 @@ export interface SecurityGateDecision {
 Write the 3 sub-plans to docs/plans/ then launch:
 
 ```bash
-PROJECT_DIR=~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+PROJECT_DIR=~/Projects/akisflow
 
 # Tech 1 — Deterministic Validator
 claude --model claude-opus-4-6-20250710 --max-turns 80 -p \

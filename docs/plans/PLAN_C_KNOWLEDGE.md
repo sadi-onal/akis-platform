@@ -10,7 +10,7 @@ Her pipeline run'indan sonra agent'larin ogrendiklerini biriktiren bir knowledge
 
 ## ADIM 0 — DISCOVERY
 ```bash
-cd ~/Projects/bitirme_projesi/akis-platform-devolopment/devagents
+cd ~/Projects/akisflow
 cat CLAUDE.md
 ls docs/
 cat backend/src/pipeline/agents/scribe/ScribeAgent.ts | head -50
