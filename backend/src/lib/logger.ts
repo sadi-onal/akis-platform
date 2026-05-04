@@ -6,13 +6,24 @@
 import pino from 'pino';
 
 const isTest = process.env.NODE_ENV === 'test';
-const isDev = process.env.NODE_ENV === 'development';
+// Prod ships JSON; everything else (dev, undefined, etc.) gets pretty.
+// Module load happens BEFORE dotenv runs, so NODE_ENV is often undefined here
+// even in dev — checking !== 'production' is the only reliable signal.
+const isProd = process.env.NODE_ENV === 'production';
 
 export const logger = isTest
   ? pino({ level: 'silent' })
   : pino({
       level: process.env.LOG_LEVEL || 'info',
-      ...(isDev && {
-        transport: { target: 'pino-pretty', options: { colorize: true } },
+      ...(!isProd && {
+        transport: {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            singleLine: true,
+            ignore: 'pid,hostname',
+            translateTime: 'SYS:HH:MM:ss',
+          },
+        },
       }),
     });

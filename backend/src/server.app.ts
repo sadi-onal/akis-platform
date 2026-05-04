@@ -67,6 +67,12 @@ const QUIET_ROUTES = new Set([
   '/api/usage/current-month',
   '/health',
   '/ready',
+  // High-frequency dashboard polls — log only when they fail (the
+  // onResponse hook still records a metric, just no per-200 log line).
+  '/auth/me',
+  '/api/integrations/github/status',
+  '/api/pipelines',
+  '/api/settings/ai-keys/status',
 ]);
 
 /**
@@ -174,11 +180,14 @@ export async function buildApp() {
       : {
           level: process.env.LOG_LEVEL || 'info',
           transport:
-            process.env.NODE_ENV === 'development'
+            process.env.NODE_ENV !== 'production'
               ? {
                   target: 'pino-pretty',
                   options: {
                     colorize: true,
+                    singleLine: true,
+                    ignore: 'pid,hostname,reqId,responseTime',
+                    translateTime: 'SYS:HH:MM:ss',
                   },
                 }
               : undefined,
@@ -211,7 +220,8 @@ export async function buildApp() {
       duration
     );
 
-    if (app.log && !QUIET_ROUTES.has(route)) {
+    const isQuiet = QUIET_ROUTES.has(route) && reply.statusCode < 400;
+    if (app.log && !isQuiet) {
       const entry = {
         method: request.method,
         url: request.url,
