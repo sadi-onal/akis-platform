@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.6.0-blue?style=flat-square" alt="Version" />&nbsp;
+  <img src="https://img.shields.io/badge/version-0.7.0-blue?style=flat-square" alt="Version" />&nbsp;
   <img src="https://img.shields.io/github/actions/workflow/status/OmerYasirOnal/akis-platform/ci.yml?style=flat-square&label=CI" alt="CI Status" />&nbsp;
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
 </p>
@@ -160,6 +160,20 @@ Her agent'in ciktisi bir sonraki asamada dogrulanir. Bu **dogrulama zinciri** pl
 
 **Tam Lokalizasyon**<br/>
 <sub>Turkce ve Ingilizce arayuz destegi (i18n)</sub>
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**Aciklanabilir Pipeline (v0.7)**<br/>
+<sub>Her ajan kararinin gerekcesi, guven skoru ve riskleri UI'da gorunur</sub>
+
+</td>
+<td width="50%" valign="top">
+
+**Cinema Modu (v0.7)**<br/>
+<sub>4-kolon canli pipeline akisi — Scribe, Critic, Proto, Trace</sub>
 
 </td>
 </tr>

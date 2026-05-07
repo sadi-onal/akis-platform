@@ -5,7 +5,11 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createPipelineRoutes } from './pipeline.routes.js';
 import type { PipelineOrchestrator } from '../core/orchestrator/PipelineOrchestrator.js';
-import { PipelineNotFoundError, InvalidStageError, GitHubAPIError } from '../core/contracts/PipelineErrors.js';
+import {
+  PipelineNotFoundError,
+  InvalidStageError,
+  GitHubAPIError,
+} from '../core/contracts/PipelineErrors.js';
 import { StaleStateError } from '../db/DrizzlePipelineStore.js';
 import { ZodError } from 'zod';
 import { FileUploadService, type ProcessedAttachment } from '../services/FileUploadService.js';
@@ -13,10 +17,7 @@ import { logger } from '../../lib/logger.js';
 import { isDevMode } from '../../config/devMode.js';
 
 // ─── AKIS Platform Repo Guard ────────────────────
-const BLOCKED_PLATFORM_REPOS = [
-  'akis-platform',
-  'akis-platform-development',
-];
+const BLOCKED_PLATFORM_REPOS = ['akis-platform', 'akis-platform-development'];
 
 function isBlockedPlatformRepo(repoName: string): boolean {
   const name = repoName.trim().toLowerCase();
@@ -42,14 +43,17 @@ export interface PipelinePluginOptions {
  * Issue #402 step 4.
  */
 function toAnthropicImageBlocks(
-  attachments: readonly ProcessedAttachment[],
+  attachments: readonly ProcessedAttachment[]
 ): import('../../services/ai/multimodalClient.js').AnthropicImageBlock[] {
   const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
   const blocks: import('../../services/ai/multimodalClient.js').AnthropicImageBlock[] = [];
   for (const att of attachments) {
     if (att.type !== 'image' || !att.base64Data) continue;
     if (!ALLOWED.has(att.mimeType)) {
-      logger.warn({ file: att.originalName, mimeType: att.mimeType }, '[Pipeline] skipping unsupported image mime for multimodal');
+      logger.warn(
+        { file: att.originalName, mimeType: att.mimeType },
+        '[Pipeline] skipping unsupported image mime for multimodal'
+      );
       continue;
     }
     const commaIdx = att.base64Data.indexOf(',');
@@ -68,7 +72,7 @@ function toAnthropicImageBlocks(
 
 async function parseMultipartRequest(
   request: FastifyRequest,
-  fileUploadService: FileUploadService,
+  fileUploadService: FileUploadService
 ): Promise<{
   fields: Record<string, unknown>;
   attachments: ProcessedAttachment[];
@@ -111,18 +115,14 @@ async function parseMultipartRequest(
 
   fileUploadService.validateFileCount(attachments.length);
 
-  const attachmentContext = attachments.length > 0
-    ? fileUploadService.buildContextString(attachments)
-    : undefined;
+  const attachmentContext =
+    attachments.length > 0 ? fileUploadService.buildContextString(attachments) : undefined;
   const imageBlocks = toAnthropicImageBlocks(attachments);
 
   return { fields, attachments, attachmentContext, imageBlocks };
 }
 
-export async function pipelinePlugin(
-  fastify: FastifyInstance,
-  opts: PipelinePluginOptions,
-) {
+export async function pipelinePlugin(fastify: FastifyInstance, opts: PipelinePluginOptions) {
   const { orchestrator, requireAuth, devUserId } = opts;
   const isDevModeActive = isDevMode();
   const fileUploadService = new FileUploadService();
@@ -190,7 +190,10 @@ export async function pipelinePlugin(
     }
     if (error instanceof StaleStateError) {
       return reply.code(409).send({
-        error: { code: 'CONFLICT', message: 'Pipeline state changed concurrently. Please refresh and retry.' },
+        error: {
+          code: 'CONFLICT',
+          message: 'Pipeline state changed concurrently. Please refresh and retry.',
+        },
         requestId: request.id,
       });
     }
@@ -224,13 +227,20 @@ export async function pipelinePlugin(
 
   // POST /api/pipelines — start new pipeline (rate-limited: 5/min per user)
   // Supports both JSON and multipart/form-data (with file attachments)
-  fastify.post('/', { preHandler: authPreHandler, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { fields, attachmentContext, imageBlocks } = await parseMultipartRequest(request, fileUploadService);
-    // Inject parsed fields as body so downstream route handler can parse them
-    (request as unknown as { body: unknown }).body = fields;
-    const result = await routes.startPipeline(request, reply, attachmentContext, imageBlocks);
-    return reply.code(201).send(result);
-  });
+  fastify.post(
+    '/',
+    { preHandler: authPreHandler, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { fields, attachmentContext, imageBlocks } = await parseMultipartRequest(
+        request,
+        fileUploadService
+      );
+      // Inject parsed fields as body so downstream route handler can parse them
+      (request as unknown as { body: unknown }).body = fields;
+      const result = await routes.startPipeline(request, reply, attachmentContext, imageBlocks);
+      return reply.code(201).send(result);
+    }
+  );
 
   // GET /api/pipelines — list user's pipelines
   fastify.get('/', { preHandler: authPreHandler }, async (request: FastifyRequest) => {
@@ -238,58 +248,91 @@ export async function pipelinePlugin(
   });
 
   // GET /api/pipelines/:id — get pipeline status
-  fastify.get('/:id', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    return routes.getStatus(request);
-  });
+  fastify.get(
+    '/:id',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.getStatus(request);
+    }
+  );
 
   // GET /api/pipelines/:id/activities — replay buffered activities for state recovery
-  fastify.get('/:id/activities', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    return routes.getActivities(request);
-  });
+  fastify.get(
+    '/:id/activities',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.getActivities(request);
+    }
+  );
 
   // GET /api/pipelines/:id/children — iteration children (issue #388 / BUG-08)
-  fastify.get('/:id/children', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    return routes.listChildren(request);
-  });
+  fastify.get(
+    '/:id/children',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.listChildren(request);
+    }
+  );
 
   // POST /api/pipelines/:id/message — send message to Scribe
   // Supports both JSON and multipart/form-data (with file attachments)
-  fastify.post('/:id/message', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    const { fields, attachmentContext } = await parseMultipartRequest(request, fileUploadService);
-    (request as unknown as { body: unknown }).body = fields;
-    return routes.sendMessage(request, attachmentContext);
-  });
+  fastify.post(
+    '/:id/message',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      const { fields, attachmentContext } = await parseMultipartRequest(request, fileUploadService);
+      (request as unknown as { body: unknown }).body = fields;
+      return routes.sendMessage(request, attachmentContext);
+    }
+  );
 
   // POST /api/pipelines/:id/approve — approve spec
-  fastify.post('/:id/approve', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = (request as unknown as { body: Record<string, unknown> }).body;
-    const repoName = typeof body?.repoName === 'string' ? body.repoName.trim() : '';
-    if (isBlockedPlatformRepo(repoName)) {
-      return reply.code(400).send({
-        error: {
-          code: 'BLOCKED_TARGET_REPO',
-          message: 'AKIS platform reposuna pipeline çıktısı gönderilemez. Farklı bir hedef repo belirtin.',
-        },
-        requestId: request.id,
-      });
+  fastify.post(
+    '/:id/approve',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const body = (request as unknown as { body: Record<string, unknown> }).body;
+      const repoName = typeof body?.repoName === 'string' ? body.repoName.trim() : '';
+      if (isBlockedPlatformRepo(repoName)) {
+        return reply.code(400).send({
+          error: {
+            code: 'BLOCKED_TARGET_REPO',
+            message:
+              'AKIS platform reposuna pipeline çıktısı gönderilemez. Farklı bir hedef repo belirtin.',
+          },
+          requestId: request.id,
+        });
+      }
+      return routes.approveSpec(request);
     }
-    return routes.approveSpec(request);
-  });
+  );
 
   // POST /api/pipelines/:id/reject — reject spec
-  fastify.post('/:id/reject', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    return routes.rejectSpec(request);
-  });
+  fastify.post(
+    '/:id/reject',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.rejectSpec(request);
+    }
+  );
 
   // POST /api/pipelines/:id/retry — retry failed stage
-  fastify.post('/:id/retry', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    return routes.retryStage(request);
-  });
+  fastify.post(
+    '/:id/retry',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.retryStage(request);
+    }
+  );
 
   // POST /api/pipelines/:id/skip-trace — skip trace
-  fastify.post('/:id/skip-trace', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    return routes.skipTrace(request);
-  });
+  fastify.post(
+    '/:id/skip-trace',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.skipTrace(request);
+    }
+  );
 
   // PATCH /api/pipelines/:id/title — rename pipeline
   fastify.route({
@@ -332,14 +375,27 @@ export async function pipelinePlugin(
   });
 
   // GET /api/pipelines/:id/metrics — get pipeline run metrics (Level 3)
-  fastify.get('/:id/metrics', { preHandler: [authPreHandler, ownershipPreHandler] }, async (request: FastifyRequest) => {
-    return routes.getMetrics(request);
-  });
+  fastify.get(
+    '/:id/metrics',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.getMetrics(request);
+    }
+  );
 
   // GET /api/pipelines/:id/files-all — get all file contents for StackBlitz embed
   fastify.get('/:id/files-all', { preHandler: authPreHandler }, async (request: FastifyRequest) => {
     return routes.getAllFiles(request);
   });
+
+  // GET /api/pipelines/:id/explanation — Level 4 explainability surface
+  fastify.get(
+    '/:id/explanation',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.getExplanation(request);
+    }
+  );
 
   // GET /api/pipelines/:id/files/* — get file content from stored pipeline data
   fastify.get('/:id/files/*', { preHandler: authPreHandler }, async (request: FastifyRequest) => {

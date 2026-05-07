@@ -192,3 +192,32 @@ export interface Pipeline {
   createdAt: string;
   updatedAt: string;
 }
+
+// ─── Level 4: Explainability ─────────────────────────────────
+
+export interface AgentReasoning {
+  agentName: string;
+  timestamp: string; // ISO 8601 (backend Date → JSON string)
+  decision: string;
+  reasoning: string[];
+  assumptions: string[];
+  alternatives?: string[];
+  confidence: {
+    score: number;
+    factors: string[];
+  };
+  risks?: string[];
+}
+
+export interface AttentionPoint {
+  stage: string;
+  issue: string;
+  severity: 'high' | 'medium' | 'low';
+}
+
+export interface PipelineExplanation {
+  pipelineId: string;
+  stages: AgentReasoning[];
+  overallNarrative: string;
+  attentionPoints: AttentionPoint[];
+}

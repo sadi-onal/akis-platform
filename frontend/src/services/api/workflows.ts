@@ -5,7 +5,16 @@
 import { HttpClient } from './HttpClient';
 import { getApiBaseUrl } from './config';
 import type { Workflow, WorkflowStages, WorkflowStatus, StageResult, ConversationMessage } from '../../types/workflow';
-import type { Pipeline, PipelineStage, ScribeOutput, ProtoOutput, TraceOutput, ScribeMessageType, ScribeClarification } from '../../types/pipeline';
+import type {
+  Pipeline,
+  PipelineStage,
+  ScribeOutput,
+  ProtoOutput,
+  TraceOutput,
+  ScribeMessageType,
+  ScribeClarification,
+  PipelineExplanation,
+} from '../../types/pipeline';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
 
 const http = new HttpClient(getApiBaseUrl());
@@ -449,6 +458,14 @@ export const workflowsApi = {
 
   cancel: async (id: string): Promise<void> => {
     await http.delete(`/api/pipelines/${id}`);
+  },
+
+  /** Level 4 — fetch explainability narrative for a pipeline. */
+  getExplanation: async (id: string): Promise<PipelineExplanation> => {
+    const res = await http.get<{ explanation: PipelineExplanation }>(
+      `/api/pipelines/${id}/explanation`,
+    );
+    return res.explanation;
   },
 
   poll: async (id: string): Promise<Workflow> => {

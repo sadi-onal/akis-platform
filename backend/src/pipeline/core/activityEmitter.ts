@@ -6,7 +6,13 @@ pipelineBus.setMaxListeners(50);
 
 export interface PipelineActivity {
   pipelineId: string;
-  stage: 'scribe' | 'proto' | 'trace';
+  /**
+   * Originating stage. `critic` and `fix-loop` were added when the pipeline
+   * grew explicit adversarial review and self-repair phases — older clients
+   * that only know `scribe|proto|trace` should treat unknown values as
+   * pass-through cosmetic events rather than crashing.
+   */
+  stage: 'scribe' | 'proto' | 'trace' | 'critic' | 'fix-loop';
   step: string;
   message: string;
   detail?: string;
@@ -18,6 +24,17 @@ export interface PipelineActivity {
    * renders in the user's chosen locale. `message` stays as the Turkish fallback.
    */
   activityKey?: string;
+  /**
+   * Optional reasoning snippet attached for "cinema" / explainability
+   * surfaces. Compact subset of AgentReasoning so the SSE payload stays
+   * small; the full reasoning record is still queryable via
+   * GET /pipelines/:id/explanation.
+   */
+  reasoning?: {
+    decision: string;
+    snippet?: string;
+    confidence?: number; // 0-100
+  };
   timestamp: string;
 }
 
@@ -47,10 +64,7 @@ export function cleanupPipelineListeners(pipelineId: string): void {
   setTimeout(() => activityBuffers.delete(pipelineId), 5 * 60 * 1000).unref();
 }
 
-export function createActivityEmitter(
-  pipelineId: string,
-  stage: PipelineActivity['stage'],
-) {
+export function createActivityEmitter(pipelineId: string, stage: PipelineActivity['stage']) {
   return (
     step: string,
     message: string,
@@ -58,6 +72,7 @@ export function createActivityEmitter(
     detail?: string,
     retryCount?: number,
     activityKey?: string,
+    reasoning?: PipelineActivity['reasoning']
   ) => {
     emitActivity({
       pipelineId,
@@ -68,6 +83,7 @@ export function createActivityEmitter(
       detail,
       retryCount,
       ...(activityKey ? { activityKey } : {}),
+      ...(reasoning ? { reasoning } : {}),
       timestamp: new Date().toISOString(),
     });
   };

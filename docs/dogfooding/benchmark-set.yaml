@@ -1,0 +1,79 @@
+# AKIS Mini-Benchmark Set
+#
+# Stable, fixed-seed problems for the dogfooding benchmark.
+# Each item is intentionally narrow so a single AKIS run can complete
+# in ≤5 minutes against a real provider, and so manual verification
+# of acceptance criteria is feasible.
+#
+# Used by scripts/benchmark/run.mjs.
+
+version: 1
+problems:
+  - id: todo-001
+    title: Tek kullanıcılı görev listesi
+    idea: |
+      Tek kullanıcılı, tarayıcıda çalışan basit bir görev listesi uygulaması istiyorum.
+      Görev ekleyebilmeli, tamamlandı olarak işaretleyebilmeli, silebilmeliyim.
+      Veri tarayıcının localStorage'ında saklansın.
+    clarifying_answers:
+      stack: "React + Vite (basit kullanım için)"
+      auth: "Hayır, tek kullanıcılı"
+      persistence: "localStorage yeterli"
+    acceptance_criteria:
+      - "Görev ekleme ve listeleme çalışır"
+      - "Görev tamamlandı olarak işaretlenebilir"
+      - "Görev silinebilir"
+      - "Sayfa yenilense de görevler kaybolmaz"
+
+  - id: calc-002
+    title: Tarayıcı hesap makinesi
+    idea: |
+      Toplama, çıkarma, çarpma, bölme yapabilen basit bir hesap makinesi.
+      Klavyeden ve butonlardan giriş kabul etmeli. Hata durumlarını (örn. sıfıra bölme) ekranda göstersin.
+    clarifying_answers:
+      stack: "Vanilla TypeScript + Vite"
+      precision: "Float yeterli"
+    acceptance_criteria:
+      - "Dört temel işlem doğru sonuç verir"
+      - "Sıfıra bölme hata mesajı gösterir"
+      - "Klavye desteği vardır"
+
+  - id: currency-003
+    title: Döviz çevirici
+    idea: |
+      USD ve TRY arasında çeviri yapabilen tek sayfa bir uygulama.
+      Statik bir kur kullansın (örn. 1 USD = 32 TRY) — gerçek API entegrasyonu istemiyorum.
+    clarifying_answers:
+      stack: "React + Vite"
+      api: "Statik kur, hardcoded"
+    acceptance_criteria:
+      - "USD girince TRY karşılığı görünür"
+      - "TRY girince USD karşılığı görünür"
+      - "Hatalı/boş girdi temiz şekilde işlenir"
+
+  - id: blog-004
+    title: Read-only blog API
+    idea: |
+      JSON dosyasından okuyup blog yazılarını döndüren basit bir Express API.
+      İki endpoint: GET /posts (liste), GET /posts/:id (detay).
+    clarifying_answers:
+      stack: "Node.js + Express"
+      storage: "JSON dosyası"
+      auth: "Yok"
+    acceptance_criteria:
+      - "GET /posts tüm yazıları döner"
+      - "GET /posts/:id tek yazı döner"
+      - "Bilinmeyen id 404 döner"
+      - "JSON parse hatası 500 yerine 400 döner"
+
+  - id: qr-005
+    title: QR kod üretici
+    idea: |
+      Bir input'a metin yaz, QR kodu üret. Sayfa içinde, yapay zeka API kullanmadan.
+    clarifying_answers:
+      stack: "React + Vite"
+      library: "qrcode npm paketini kullanabilirsin"
+    acceptance_criteria:
+      - "Metin yazılınca QR kod canlı güncellenir"
+      - "QR kod indirilebilir (PNG)"
+      - "Boş input ile QR gösterilmez"

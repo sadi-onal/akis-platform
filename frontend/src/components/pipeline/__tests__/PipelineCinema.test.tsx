@@ -1,0 +1,164 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { PipelineCinema } from '../PipelineCinema';
+import { reduceStageViews } from '../PipelineCinema.utils';
+import type { PipelineActivity } from '../../../hooks/usePipelineStream';
+
+// Stub useReducedMotion so animations are deterministic in tests
+vi.mock('../../../hooks/useReducedMotion', () => ({
+  useReducedMotion: () => true,
+}));
+
+const mk = (overrides: Partial<PipelineActivity>): PipelineActivity => ({
+  pipelineId: 'p',
+  stage: 'scribe',
+  step: 'progress',
+  message: '',
+  timestamp: new Date().toISOString(),
+  ...overrides,
+});
+
+describe('reduceStageViews (pure)', () => {
+  it('marks all stages pending when no activities', () => {
+    const views = reduceStageViews([], null);
+    expect(views.map((v) => v.state)).toEqual(['pending', 'pending', 'pending', 'pending']);
+  });
+
+  it('marks stages left of current as complete and current as active', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'critic', progress: 100 }),
+      mk({ stage: 'proto', progress: 40 }),
+    ];
+    const current = acts[acts.length - 1]!;
+    const views = reduceStageViews(acts, current);
+    expect(views[0]!.state).toBe('complete'); // scribe
+    expect(views[1]!.state).toBe('complete'); // critic
+    expect(views[2]!.state).toBe('active'); // proto
+    expect(views[3]!.state).toBe('pending'); // trace
+    expect(views[2]!.progress).toBe(40);
+  });
+
+  it('marks current as complete when progress hits 100', () => {
+    const acts: PipelineActivity[] = [mk({ stage: 'trace', progress: 100 })];
+    const views = reduceStageViews(acts, acts[0]!);
+    expect(views[3]!.state).toBe('complete');
+  });
+
+  it('folds fix-loop activity into Proto column', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'critic', progress: 100 }),
+      mk({ stage: 'proto', progress: 100 }),
+      mk({ stage: 'trace', progress: 60, message: 'trace fail' }),
+      mk({ stage: 'fix-loop', progress: 30, message: 'fix retry' }),
+    ];
+    const current = acts[acts.length - 1]!;
+    const views = reduceStageViews(acts, current);
+    // fix-loop maps to proto column
+    expect(views[2]!.latest?.message).toBe('fix retry');
+    expect(views[2]!.state).toBe('active');
+  });
+
+  it('captures reasoning per stage when present', () => {
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'critic',
+        progress: 100,
+        reasoning: { decision: 'Spec onaylandi', confidence: 88 },
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[0]!);
+    expect(views[1]!.reasoning?.decision).toBe('Spec onaylandi');
+    expect(views[1]!.reasoning?.confidence).toBe(88);
+  });
+
+  it('keeps last reasoning when later events overwrite', () => {
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'critic',
+        progress: 50,
+        reasoning: { decision: 'Inceleniyor', confidence: 0 },
+      }),
+      mk({
+        stage: 'critic',
+        progress: 100,
+        reasoning: { decision: 'Spec onaylandi', confidence: 92 },
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!);
+    expect(views[1]!.reasoning?.decision).toBe('Spec onaylandi');
+    expect(views[1]!.reasoning?.confidence).toBe(92);
+  });
+
+  it('ignores unknown stage values', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'unknown' as PipelineActivity['stage'], progress: 50 }),
+    ];
+    const views = reduceStageViews(acts, acts[0]!);
+    // unknown stage doesn't crash and doesn't pollute any column
+    expect(views[0]!.state).toBe('complete');
+  });
+});
+
+describe('PipelineCinema component', () => {
+  it('renders all four stages', () => {
+    render(<PipelineCinema activities={[]} currentStep={null} />);
+    expect(screen.getByText('Scribe')).toBeInTheDocument();
+    expect(screen.getByText('Critic')).toBeInTheDocument();
+    expect(screen.getByText('Proto')).toBeInTheDocument();
+    expect(screen.getByText('Trace')).toBeInTheDocument();
+  });
+
+  it('renders compact toggle when callback provided', () => {
+    const onToggle = vi.fn();
+    render(<PipelineCinema activities={[]} currentStep={null} onToggleCompact={onToggle} />);
+    const btn = screen.getByRole('button', { name: /Kompakt görünüm/ });
+    fireEvent.click(btn);
+    expect(onToggle).toHaveBeenCalled();
+  });
+
+  it('switches button label when in compact mode', () => {
+    const onToggle = vi.fn();
+    render(
+      <PipelineCinema activities={[]} currentStep={null} compact onToggleCompact={onToggle} />
+    );
+    expect(screen.getByRole('button', { name: /Geniş görünüm/ })).toBeInTheDocument();
+  });
+
+  it('renders approval slot when provided', () => {
+    render(
+      <PipelineCinema activities={[]} currentStep={null} approvalSlot={<button>Onayla</button>} />
+    );
+    expect(screen.getByRole('button', { name: 'Onayla' })).toBeInTheDocument();
+  });
+
+  it('shows confidence badge for stage with reasoning', () => {
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'critic',
+        progress: 100,
+        reasoning: { decision: 'Approved', confidence: 88 },
+      }),
+    ];
+    render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
+    // ConfidenceBadge renders as a button with the score
+    const badge = screen.getAllByRole('button').find((b) => b.textContent?.includes('88%'));
+    expect(badge).toBeDefined();
+  });
+
+  it('exposes data-cinema-mode attribute', () => {
+    const { container, rerender } = render(<PipelineCinema activities={[]} currentStep={null} />);
+    expect(container.querySelector('[data-cinema-mode="full"]')).toBeTruthy();
+    rerender(<PipelineCinema activities={[]} currentStep={null} compact />);
+    expect(container.querySelector('[data-cinema-mode="compact"]')).toBeTruthy();
+  });
+
+  it('marks active stage with data-state=active', () => {
+    const acts: PipelineActivity[] = [mk({ stage: 'proto', progress: 50, message: 'Yazıyor' })];
+    const { container } = render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
+    const proto = container.querySelector('[data-stage="proto"]');
+    expect(proto).toHaveAttribute('data-state', 'active');
+  });
+});

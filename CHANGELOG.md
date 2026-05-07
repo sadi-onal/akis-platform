@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.7.0 (2026-05-07)
+
+### Level-4 Explainability Surface (Major Feature)
+- **feat:** ExplainabilityService now receives reasoning from **all four** agent layers (was 2). Scribe (analysis + regenerate), Critic (spec + code review), Proto (post-push), Trace (post-tests) all push `AgentReasoning` records via `reasoningFactory` pure builders.
+- **feat:** `GET /api/pipelines/:id/explanation` route mounted in `pipeline.plugin.ts` (handler existed but was unreachable in v0.6.x).
+- **feat:** PipelineActivity stage type extended with `'critic' | 'fix-loop'`; SSE payload now carries an optional compact `reasoning` snippet (decision + confidence) so cinema/explainability surfaces don't need a second fetch.
+- **feat:** Critic spec/code transitions emit start + done activity events with reasoning attached.
+
+### New Frontend Components
+- **feat:** `ConfidenceBadge` — colour-coded 0-100 score with hover/click tooltip surfacing factors.
+- **feat:** `AttentionBanner` — high/medium/low severity attention points sorted + capped with overflow note.
+- **feat:** `ExplanationPanel` — fetches `/explanation` (DI-friendly), renders per-stage reasoning cards with collapsible assumptions/alternatives/risks, surfaces overall narrative.
+- **feat:** `PipelineCinema` — four-column live pipeline view (Scribe / Critic / Proto / Trace), fix-loop folded into Proto column, reduced-motion-aware progress bars, reasoning bubble per active stage.
+- **feat:** `PipelineDetailRail` — opt-in collapsible rail wired into ChatPanel between header and messages. Auto-expands on `running` (Akış tab) and `awaiting_approval` (Açıklama tab); manual collapse + tab-switch persist for the conversation lifetime.
+
+### Dogfooding & Thesis Harness
+- **feat:** `docs/dogfooding/benchmark-set.yaml` — five fixed problems sized for ≤5min mock-provider runs.
+- **feat:** `scripts/benchmark/run.mjs` — dependency-free Node runner that drives the pipeline API end-to-end, captures `confidenceByStage` + `attentionPoints` + coverage, writes per-run JSON reports.
+- **feat:** `scripts/smoke/walkthrough.mjs` — Playwright-driven local smoke test: signup → activate → new chat → idea → screenshot rail in both tabs. Output goes to `docs/dogfooding/screenshots/`.
+- **docs:** `docs/learnings/benchmark-2026-may.md` — thesis chapter outline tying the empirical study to Sonar 2026 / Sherlock 2026 / FORGE'26 / TRiSM literature.
+
+### Local Dev Env Recovery
+- **fix:** `docker-compose.dev.yml` recreated (was missing locally; `dev-up.sh` references it). Uses `pgvector/pgvector:pg16` so backend migrations finish — vanilla `postgres:16-alpine` lacks the `vector` extension.
+
+### Tests
+- 27 new backend tests (`reasoningFactory`).
+- 51 new frontend tests (`ConfidenceBadge`, `AttentionBanner`, `ExplanationPanel`, `PipelineCinema`, `PipelineDetailRail`).
+- All test suites green: backend 3167/3167, frontend 786/786.
+
+### Notes
+- Level-4 backend scaffolding (ExplainabilityService, FixLoopService, LearningService, DeterministicValidator, SecurityGate) was already present in v0.6.5; this release wires the explainability layer end-to-end and adds the user-visible surface.
+- A live local smoke test verified the new rail renders both tabs (`docs/dogfooding/screenshots/2026-05-06T22-12-31*-0[678]-*.png`). Mock provider produces specs that fail Scribe schema validation, so reasoning records are empty in the captured run — pipeline run with a real provider will populate them.
+
 ## v0.6.5 (2026-04-15)
 
 ### File Upload (New Feature)

@@ -30,7 +30,14 @@ function computeTextareaMaxHeight(expanded: boolean): number {
     : Math.min(vh * 0.4, COLLAPSED_MAX_H_CAP);
 }
 
-export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, placeholder }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  onCancel,
+  disabled,
+  isSending,
+  showCancel,
+  placeholder,
+}: ChatInputProps) {
   const [value, setValue] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -77,7 +84,7 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
         textareaRef.current?.blur();
       }
     },
-    [handleSend, isSending, disabled],
+    [handleSend, isSending, disabled]
   );
 
   const hasContent = value.trim().length > 0;
@@ -87,7 +94,7 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
       data-expanded={expanded ? 'true' : 'false'}
       className={cn(
         'shrink-0 mx-auto w-full px-3 sm:px-6 pt-2 pb-2',
-        expanded ? 'max-w-6xl' : 'max-w-4xl md:max-w-5xl xl:max-w-6xl',
+        expanded ? 'max-w-6xl' : 'max-w-4xl md:max-w-5xl xl:max-w-6xl'
       )}
     >
       <div
@@ -95,6 +102,10 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
           'flex items-end gap-2 rounded-2xl border px-3 py-2 transition-all duration-200',
           'bg-white border-black/10 shadow-[0_1px_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(0,0,0,0.12)]',
           'dark:bg-[#12181B] dark:border-white/[0.08] dark:shadow-[0_1px_0_rgba(255,255,255,0.04),0_8px_24px_-12px_rgba(0,0,0,0.6)]',
+          // When the pipeline is running the composer is disabled but still
+          // accepts a "deferred" message — surface that with a soft primary
+          // halo so the user feels the system is busy, not broken.
+          disabled && 'border-ak-primary/40 shadow-[0_0_0_3px_rgba(7,209,175,0.10)]'
         )}
       >
         <textarea
@@ -112,7 +123,7 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
             'text-gray-900 placeholder:text-gray-400',
             'dark:text-white dark:placeholder:text-white/30',
             expanded ? 'min-h-[240px]' : 'min-h-[24px]',
-            (disabled || isSending) && 'cursor-not-allowed opacity-70 saturate-50',
+            (disabled || isSending) && 'cursor-not-allowed opacity-70 saturate-50'
           )}
         />
 
@@ -127,18 +138,38 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
             'text-gray-400 hover:bg-black/5 hover:text-gray-600',
             'dark:hover:bg-white/[0.06] dark:hover:text-white/80',
             'transition-colors duration-150',
-            !expanded && !isOverflowing && 'hidden',
+            !expanded && !isOverflowing && 'hidden'
           )}
         >
-            {expanded ? (
-              <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-              </svg>
-            ) : (
-              <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9M20.25 20.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-              </svg>
-            )}
+          {expanded ? (
+            <svg
+              className="h-[18px] w-[18px]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.8}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+              />
+            </svg>
+          ) : (
+            <svg
+              className="h-[18px] w-[18px]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.8}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9M20.25 20.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+              />
+            </svg>
+          )}
         </button>
 
         {showCancel ? (
@@ -147,10 +178,16 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
             aria-label="İptal et"
             className={cn(
               'h-8 w-8 rounded-lg flex items-center justify-center transition-colors shrink-0',
-              'bg-red-500/10 text-red-400 hover:bg-red-500/20 active:scale-95',
+              'bg-red-500/10 text-red-400 hover:bg-red-500/20 active:scale-95'
             )}
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
               <rect x="6" y="6" width="12" height="12" rx="2" />
             </svg>
           </button>
@@ -164,11 +201,21 @@ export function ChatInput({ onSend, onCancel, disabled, isSending, showCancel, p
               'h-8 w-8 rounded-lg flex items-center justify-center transition-colors shrink-0',
               hasContent && !disabled && !isSending
                 ? 'bg-[#07D1AF] hover:bg-[#06B89A] text-white active:scale-95'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-white/[0.06] dark:text-white/20',
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-white/[0.06] dark:text-white/20'
             )}
           >
-            <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
+            <svg
+              className="h-[18px] w-[18px]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.4}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18"
+              />
             </svg>
           </button>
         )}
