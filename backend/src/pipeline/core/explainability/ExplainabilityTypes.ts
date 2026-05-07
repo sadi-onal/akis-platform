@@ -14,6 +14,27 @@ export interface AgentReasoning {
     factors: string[];
   };
   risks?: string[];
+  /**
+   * Optional structured findings — populated for the Critic agent only.
+   * Allows the UI to group by category (testability / ambiguity /
+   * completeness / …) and surface severity + suggestion alongside the
+   * description, instead of flattening everything into `reasoning[]`.
+   */
+  findings?: ReasoningFinding[];
+}
+
+export interface ReasoningFinding {
+  severity: 'critical' | 'major' | 'minor' | 'info';
+  category:
+    | 'completeness'
+    | 'ambiguity'
+    | 'consistency'
+    | 'testability'
+    | 'spec_compliance'
+    | 'security';
+  description: string;
+  suggestion: string;
+  location?: string;
 }
 
 export interface AttentionPoint {

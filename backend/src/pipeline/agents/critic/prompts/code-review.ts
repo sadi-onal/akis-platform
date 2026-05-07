@@ -77,13 +77,21 @@ RULES:
 - Every finding MUST have a concrete suggestion for improvement.
 - Focus heavily on spec compliance — the code must implement what the spec says.
 - Security findings are always at least "major" severity.
-- Always return valid JSON. No markdown, no code fences.`;
+- Always return valid JSON. No markdown, no code fences.
+
+LANGUAGE REQUIREMENT (strict):
+- The AKIS UI is Turkish. \`description\`, \`suggestion\`, and \`summary\`
+  fields MUST be written in Turkish so they render cleanly in the
+  explainability surface.
+- Keep technical identifiers (file paths, function names, AC IDs,
+  category/severity enum values) in their original form — those are
+  not user-facing prose.`;
 
 export function buildCodeReviewUserPrompt(
   artifact: unknown,
   originalIdea: string,
   referenceSpec: unknown,
-  iteration: number,
+  iteration: number
 ): string {
   const parts: string[] = [
     `ORIGINAL USER IDEA: "${originalIdea}"`,

@@ -207,6 +207,22 @@ export interface AgentReasoning {
     factors: string[];
   };
   risks?: string[];
+  /** Critic only — structured findings with category + severity + suggestion. */
+  findings?: ReasoningFinding[];
+}
+
+export interface ReasoningFinding {
+  severity: 'critical' | 'major' | 'minor' | 'info';
+  category:
+    | 'completeness'
+    | 'ambiguity'
+    | 'consistency'
+    | 'testability'
+    | 'spec_compliance'
+    | 'security';
+  description: string;
+  suggestion: string;
+  location?: string;
 }
 
 export interface AttentionPoint {

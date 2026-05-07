@@ -146,5 +146,15 @@ export function buildCriticReasoning(
       ],
     },
     ...(criticalAndMajor.length > 0 ? { risks: criticalAndMajor } : {}),
+    // Structured findings — let the explainability surface group by
+    // category and surface severity + suggestion. Falls back to the
+    // flat `reasoning[]` bullets in clients that ignore this field.
+    findings: (result.findings ?? []).map((f) => ({
+      severity: f.severity,
+      category: f.category,
+      description: f.description,
+      suggestion: f.suggestion,
+      ...(f.location ? { location: f.location } : {}),
+    })),
   };
 }

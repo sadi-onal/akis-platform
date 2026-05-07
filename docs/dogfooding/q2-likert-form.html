@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AKIS · Q2 Likert anketi</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #f8f9fb;
+    color: #1f2328;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { margin: 0 0 4px; font-size: 24px; font-weight: 700; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  h3 { font-size: 15px; margin: 16px 0 8px; color: #1f6feb; }
+  p, li { font-size: 14px; }
+  .lead { color: #656d76; margin-bottom: 24px; }
+  .card {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(31, 35, 40, 0.04);
+  }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 24px; }
+  .pair > figure {
+    margin: 0;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fafbfc;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Screenshots are now full-page captures so the approval buttons +
+     composer aren't cropped. Cap the displayed height so the form
+     stays scannable; participants can hover/click to enlarge if they
+     want a closer look. */
+  .pair .img-frame {
+    max-height: 520px;
+    overflow-y: auto;
+    background: #fafbfc;
+  }
+  .pair img { width: 100%; display: block; }
+  .pair figcaption {
+    font-size: 11px;
+    color: #656d76;
+    padding: 6px 10px;
+    background: #f6f8fa;
+    border-top: 1px solid #d0d7de;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .question {
+    margin: 12px 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: #f6f8fa;
+  }
+  .question label.q-text {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .likert { display: flex; gap: 8px; flex-wrap: wrap; }
+  .likert label {
+    cursor: pointer;
+    padding: 6px 14px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    transition: all 0.15s;
+  }
+  .likert input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .likert input[type="radio"]:checked + span {
+    background: #07d1af;
+    color: #fff;
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin: -2px -2px;
+  }
+  .likert label:has(input:checked) {
+    border-color: #07d1af;
+    background: #07d1af10;
+  }
+  .scale-hint {
+    font-size: 11px;
+    color: #8b949e;
+    margin-top: 4px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+  }
+  input[type="text"], select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #ddf4ff;
+    color: #0969da;
+  }
+  .badge-A { background: #fff4d6; color: #9a6700; }
+  .badge-B { background: #dafbe1; color: #1a7f37; }
+  button.primary {
+    background: #07d1af;
+    color: #fff;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button.primary:hover { background: #06b89a; }
+  button.primary:disabled { background: #d0d7de; cursor: not-allowed; }
+  .status {
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 12px;
+    font-size: 13px;
+    background: #ddf4ff;
+    color: #0969da;
+  }
+  .order-note {
+    font-size: 12px;
+    color: #8b949e;
+    margin-top: 6px;
+    font-style: italic;
+  }
+  .note { font-size: 12px; color: #8b949e; margin-top: 8px; }
+  details summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+  .progress-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    border-bottom: 1px solid #d0d7de;
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    box-shadow: 0 1px 3px rgba(31, 35, 40, 0.04);
+  }
+  .progress-bar .track {
+    flex: 1;
+    height: 6px;
+    background: #eaeef2;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    background: #07d1af;
+    width: 0%;
+    transition: width 200ms ease-out;
+  }
+  .progress-bar .label { font-weight: 600; min-width: 60px; }
+  .progress-bar .saved {
+    font-size: 11px;
+    color: #1a7f37;
+    opacity: 0;
+    transition: opacity 300ms;
+  }
+  .progress-bar .saved.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" role="status" aria-live="polite">
+  <span class="label" id="progress-label">0 / 30</span>
+  <div class="track"><div class="fill" id="progress-fill"></div></div>
+  <span class="saved" id="saved-indicator">✓ taslak kaydedildi</span>
+</div>
+
+<div class="wrap">
+
+<h1>AKIS · Q2 Likert anketi</h1>
+<p class="lead">
+  AKIS pipeline'ı 5 farklı yazılım fikrine spec üretti. Her biri için iki versiyon göreceksin:
+  <span class="badge badge-A">A</span> sade chat — ek açıklama yok.
+  <span class="badge badge-B">B</span> Pipeline detayı paneli açık — Scribe & Critic'in gerekçeleri görünür.
+  Aynı pipeline çıktısı, sadece UI farkı. Her problem için 3 kısa Likert sorusunu hem A hem B için yanıtla.
+</p>
+
+<details class="card">
+<summary>Rıza & yöntem (kısa)</summary>
+<div class="note">
+  <p>
+    Bu anket bir lisans bitirme tezi pilotudur. Yanıtların anonim olarak <code>docs/learnings/benchmark-2026-may.md</code>'ye
+    aggregate hâlinde işlenecektir. Bireysel kimlik bilgisi sorulmaz, IP toplanmaz, herhangi bir sunucuya gönderim yoktur —
+    bittiğinde sayfa altındaki "İndir" butonu yanıtlarını <code>q2-likert-&lt;TS&gt;.json</code> olarak bilgisayarına indirir;
+    onu yazara DM/mail ile gönderirsin.
+  </p>
+  <p>
+    Cevaplama sırası counter-balanced'dır: sayfa yüklendiğinde rastgele yarısı A→B, yarısı B→A sırasında soruyu gösterir.
+    Sıra header'da görünür.
+  </p>
+</div>
+</details>
+
+<section class="card">
+<h2>Demografik bilgiler</h2>
+<div class="demo-grid">
+  <div>
+    <label>Yazılım deneyimi (yaklaşık yıl)
+      <input type="text" id="demo-experience" placeholder="örn. 3" />
+    </label>
+  </div>
+  <div>
+    <label>AI kodlama aracı kullanımı
+      <select id="demo-ai-tool">
+        <option value="">Seçin…</option>
+        <option>Hiç kullanmadım</option>
+        <option>Birkaç kez denedim</option>
+        <option>Düzenli kullanıyorum</option>
+        <option>Günlük iş akışımın parçası</option>
+      </select>
+    </label>
+  </div>
+  <div>
+    <label>Yaş aralığı
+      <select id="demo-age">
+        <option value="">Seçin…</option>
+        <option>18-22</option>
+        <option>23-27</option>
+        <option>28-35</option>
+        <option>35+</option>
+      </select>
+    </label>
+  </div>
+  <div>
+    <label>Bu pilotta kullanıcı kimliği (anonim — tezde sadece sayı geçer)
+      <input type="text" id="demo-id" placeholder="örn. P01" />
+    </label>
+  </div>
+</div>
+</section>
+
+<div id="problems"></div>
+
+<section class="card">
+<h2>Genel yorum (opsiyonel)</h2>
+<textarea id="comment" placeholder="Açıklama panelinin işine yaradığı / yaramadığı durumlar, gözlemler, öneriler…"></textarea>
+</section>
+
+<section style="text-align:center;margin-top:24px;">
+<button class="primary" id="download-btn">↓ Yanıtlarımı indir (JSON)</button>
+<p class="note">İndirilen dosyayı yazara mail / DM ile gönder. Cevaplar bu cihazdan ayrılmaz.</p>
+<div class="status" id="status" style="display:none;"></div>
+</section>
+
+</div>
+
+<script>
+// ─── Problem definitions ─────────────────────────────────────────
+const PROBLEMS = [
+  { id: 'todo-001',     title: 'Tek kullanıcılı görev listesi',  idea: 'Tek kullanıcılı, tarayıcıda çalışan basit bir görev listesi uygulaması.' },
+  { id: 'calc-002',     title: 'Tarayıcı hesap makinesi',       idea: 'Toplama, çıkarma, çarpma, bölme — sıfıra bölme hata mesajı dahil.' },
+  { id: 'currency-003', title: 'Döviz çevirici',                idea: 'USD ve TRY arasında çeviri yapan tek sayfa, statik kur kullanır.' },
+  { id: 'blog-004',     title: 'Read-only blog API',            idea: 'Express + JSON dosyası, GET /posts ve GET /posts/:id endpointleri.' },
+  { id: 'qr-005',       title: 'QR kod üretici',                idea: 'Metin yaz, QR kodu canlı üret, PNG indir.' },
+];
+
+const QUESTIONS = [
+  { id: 'q1', text: 'Bu çıktıya güvenebileceğimi hissediyorum.' },
+  { id: 'q2', text: 'Eğer bir hata olsaydı, ekranda gördüklerimden onu fark edebilirdim.' },
+  { id: 'q3', text: 'Bu pipeline\'ı kendim için yararlı buluyorum.' },
+];
+
+// ─── Counter-balance order ──────────────────────────────────────
+// Half participants see A then B; the other half B then A. Mark
+// stored in localStorage so a page reload doesn't flip.
+let order = window.localStorage.getItem('akis.q2.order');
+if (!order) {
+  order = Math.random() < 0.5 ? 'AB' : 'BA';
+  window.localStorage.setItem('akis.q2.order', order);
+}
+document.title += ' (' + order + ')';
+
+// ─── Render ─────────────────────────────────────────────────────
+const root = document.getElementById('problems');
+function pairBlock(prob, condition, badgeClass) {
+  const src = `q2-pairs/${prob.id}-${condition === 'A' ? 'A-baseline' : 'B-explainable'}.png`;
+  return `
+    <figure>
+      <div class="img-frame">
+        <img src="${src}" alt="${prob.id} ${condition}" loading="lazy" />
+      </div>
+      <figcaption><span class="badge ${badgeClass}">${condition}</span> ${condition === 'A' ? 'sade chat' : 'pipeline detayı açık'}</figcaption>
+    </figure>
+  `;
+}
+
+function questionBlock(probId, condition) {
+  return QUESTIONS.map((q) => `
+    <div class="question">
+      <label class="q-text">${condition} → ${q.text}</label>
+      <div class="likert" data-prob="${probId}" data-cond="${condition}" data-q="${q.id}">
+        ${[1, 2, 3, 4, 5].map((v) => `
+          <label><input type="radio" name="${probId}-${condition}-${q.id}" value="${v}" /><span>${v}</span></label>
+        `).join('')}
+      </div>
+      <div class="scale-hint">1 = Kesinlikle katılmıyorum · 3 = Kararsızım · 5 = Kesinlikle katılıyorum</div>
+    </div>
+  `).join('');
+}
+
+PROBLEMS.forEach((prob, i) => {
+  // Counter-balance: half the problems flip the within-problem order
+  const flip = (i % 2 === 0) === (order === 'BA');
+  const first = flip ? 'B' : 'A';
+  const second = flip ? 'A' : 'B';
+  const card = document.createElement('section');
+  card.className = 'card';
+  card.innerHTML = `
+    <h2>Problem ${i + 1}/5 — ${prob.title}</h2>
+    <p class="lead"><strong>Fikir:</strong> ${prob.idea}</p>
+    <div class="order-note">Bu problemde sıra: ${first} → ${second}</div>
+    <div class="pair">
+      ${pairBlock(prob, first, 'badge-' + first)}
+      ${pairBlock(prob, second, 'badge-' + second)}
+    </div>
+    <h3>${first} versiyonu için</h3>
+    ${questionBlock(prob.id, first)}
+    <h3>${second} versiyonu için</h3>
+    ${questionBlock(prob.id, second)}
+  `;
+  root.appendChild(card);
+});
+
+// ─── Autosave + progress tracking ──────────────────────────────
+// Re-hydrate any in-progress draft so a closed tab / refresh doesn't
+// nuke 15 minutes of Likert work. Saves on every input change.
+const DRAFT_KEY = 'akis.q2.draft';
+
+function snapshot() {
+  const radios = {};
+  document.querySelectorAll('input[type="radio"]:checked').forEach((r) => {
+    radios[r.name] = r.value;
+  });
+  return {
+    radios,
+    demographics: {
+      experience: document.getElementById('demo-experience').value,
+      aiTool: document.getElementById('demo-ai-tool').value,
+      ageBand: document.getElementById('demo-age').value,
+      participantId: document.getElementById('demo-id').value,
+    },
+    comment: document.getElementById('comment').value,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function restore() {
+  let raw;
+  try {
+    raw = window.localStorage.getItem(DRAFT_KEY);
+  } catch { return; }
+  if (!raw) return;
+  try {
+    const draft = JSON.parse(raw);
+    Object.entries(draft.radios ?? {}).forEach(([name, value]) => {
+      const radio = document.querySelector(
+        `input[type="radio"][name="${name}"][value="${value}"]`,
+      );
+      if (radio) radio.checked = true;
+    });
+    if (draft.demographics) {
+      document.getElementById('demo-experience').value = draft.demographics.experience ?? '';
+      document.getElementById('demo-ai-tool').value = draft.demographics.aiTool ?? '';
+      document.getElementById('demo-age').value = draft.demographics.ageBand ?? '';
+      document.getElementById('demo-id').value = draft.demographics.participantId ?? '';
+    }
+    if (draft.comment) document.getElementById('comment').value = draft.comment;
+  } catch { /* malformed draft, ignore */ }
+}
+
+function flashSaved() {
+  const el = document.getElementById('saved-indicator');
+  el.classList.add('visible');
+  clearTimeout(flashSaved._t);
+  flashSaved._t = setTimeout(() => el.classList.remove('visible'), 1200);
+}
+
+function updateProgress() {
+  const total = document.querySelectorAll('.likert').length;
+  const answered = document.querySelectorAll('.likert input:checked').length;
+  document.getElementById('progress-label').textContent = `${answered} / ${total}`;
+  document.getElementById('progress-fill').style.width =
+    total > 0 ? `${(answered / total) * 100}%` : '0%';
+}
+
+function persistDraft() {
+  try {
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(snapshot()));
+    flashSaved();
+  } catch {
+    /* private mode etc. — autosave silently disabled */
+  }
+}
+
+// Hook every input — radios, text, select, textarea
+document.addEventListener('change', () => {
+  persistDraft();
+  updateProgress();
+});
+document.addEventListener('input', persistDraft);
+
+restore();
+updateProgress();
+
+// ─── Collect + download ────────────────────────────────────────
+document.getElementById('download-btn').addEventListener('click', () => {
+  const responses = [];
+  document.querySelectorAll('.likert').forEach((g) => {
+    const checked = g.querySelector('input:checked');
+    responses.push({
+      problemId: g.dataset.prob,
+      condition: g.dataset.cond,
+      questionId: g.dataset.q,
+      score: checked ? Number(checked.value) : null,
+    });
+  });
+  const completed = responses.filter((r) => r.score !== null).length;
+  const total = responses.length;
+  const status = document.getElementById('status');
+  if (completed < total) {
+    status.style.display = 'block';
+    status.style.background = '#fff8c5';
+    status.style.color = '#9a6700';
+    status.textContent = `Eksik yanıt: ${total - completed} soru. Yine de indirebilirsin ama kısmi veri.`;
+  } else {
+    status.style.display = 'block';
+    status.style.background = '#dafbe1';
+    status.style.color = '#1a7f37';
+    status.textContent = `Tüm ${total} soru yanıtlandı. ✓`;
+  }
+
+  const payload = {
+    schemaVersion: 1,
+    capturedAt: new Date().toISOString(),
+    order, // 'AB' or 'BA'
+    demographics: {
+      experience: document.getElementById('demo-experience').value.trim(),
+      aiTool: document.getElementById('demo-ai-tool').value,
+      ageBand: document.getElementById('demo-age').value,
+      participantId: document.getElementById('demo-id').value.trim(),
+    },
+    comment: document.getElementById('comment').value.trim(),
+    responses,
+  };
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `q2-likert-${payload.demographics.participantId || 'anon'}-${ts}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

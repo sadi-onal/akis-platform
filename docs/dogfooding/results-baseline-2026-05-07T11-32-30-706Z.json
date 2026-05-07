@@ -1,0 +1,569 @@
+{
+  "label": "baseline",
+  "model": "claude-haiku-4-5-20251001",
+  "ranAt": "2026-05-07T11-32-30-706Z",
+  "results": [
+    {
+      "problemId": "todo-001",
+      "problemTitle": "Tek kullanıcılı görev listesi",
+      "pipelineId": "a32a443e-29ba-4be2-901a-537a04a0a6da",
+      "finalStage": "awaiting_approval",
+      "durationMs": 48218,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T11:29:04.334Z",
+        "decision": "Spec uretildi: \"Basit Görev Listesi Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "4 kullanici hikayesi tanimlandi",
+          "5 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 5",
+            "Kullanici hikayesi sayisi: 4"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T11:29:17.472Z",
+        "decision": "Spec onaylandi",
+        "reasoning": [
+          "AC-2 uses vague visual descriptions 'üzeri çizili veya gri renk alır' which could be implemented differently by different developers",
+          "AC-4 page refresh test may be flaky in automated testing environments due to timing issues",
+          "Missing acceptance criteria for localStorage data persistence mechanism",
+          "Technical constraints include responsive design which wasn't explicitly mentioned in original user idea"
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 82,
+          "factors": [
+            "4 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        }
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Orta guven skoru: 82%. Faktörler: 4 bulgu raporlandi, Inceleme: spec",
+          "severity": "medium"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "This is a well-structured specification that accurately captures the original Turkish user request for a simple task list application. The problem statement is clear, user stories comprehensively cover the core functionality, and acceptance criteria are mostly testable with proper Given/When/Then format. The technical constraints are realistic for a vanilla JavaScript implementation. Minor issues include some ambiguous visual descriptions and a missing AC for localStorage verification, but these don't significantly impact implementability. The spec demonstrates good understanding of scope boundaries and includes appropriate out-of-scope items.",
+        "approved": true,
+        "findings": [
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[1]",
+            "severity": "minor",
+            "suggestion": "Specify exact visual treatment, e.g., 'görev metni üzeri çizili (text-decoration: line-through) olur ve opacity 0.6 ile gri görünür'",
+            "description": "AC-2 uses vague visual descriptions 'üzeri çizili veya gri renk alır' which could be implemented differently by different developers"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[3]",
+            "severity": "minor",
+            "suggestion": "Add explicit wait condition: 'then sayfanın tamamen yüklenmesinden sonra tüm 3 görev hala listede görünür'",
+            "description": "AC-4 page refresh test may be flaky in automated testing environments due to timing issues"
+          },
+          {
+            "category": "completeness",
+            "location": "acceptanceCriteria",
+            "severity": "minor",
+            "suggestion": "Add AC to verify data is actually stored in localStorage: 'given görevler eklendiğinde, when tarayıcı geliştirici araçlarında localStorage kontrol edildiğinde, then görev verileri JSON formatında saklanmış olur'",
+            "description": "Missing acceptance criteria for localStorage data persistence mechanism"
+          },
+          {
+            "category": "spec_compliance",
+            "location": "technicalConstraints.nonFunctional",
+            "severity": "info",
+            "suggestion": "Consider if mobile responsiveness is truly required or if it's scope creep from the simple browser-based requirement",
+            "description": "Technical constraints include responsive design which wasn't explicitly mentioned in original user idea"
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 82
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 82% guvenle degerlendirme tamamladi. Karar: Spec onaylandi."
+    },
+    {
+      "problemId": "calc-002",
+      "problemTitle": "Tarayıcı hesap makinesi",
+      "pipelineId": "54350aec-a07b-4d62-a994-3eb0c3fb6679",
+      "finalStage": "awaiting_approval",
+      "durationMs": 54241,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T11:29:54.972Z",
+        "decision": "Spec uretildi: \"Basit Hesap Makinesi Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "5 kullanici hikayesi tanimlandi",
+          "10 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 10",
+            "Kullanici hikayesi sayisi: 5"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T11:30:13.036Z",
+        "decision": "Spec reddedildi",
+        "reasoning": [
+          "AC-9 uses vague term 'geçersiz bir işlem sırası' without defining what constitutes invalid operation sequences beyond the examples given",
+          "AC-10 'farklı ekran boyutlarında görüntülendiğinde' is not testable as written - no specific breakpoints or dimensions defined",
+          "Technical constraint 'Hata mesajları 3 saniye görünür kalır' is ambiguous - unclear if messages auto-disappear or require user action",
+          "AC-1 'tüm butonlar aktif durumdadır' is not precisely testable - what does 'aktif' mean in UI terms?",
+          "Multiple ACs mention 'ekranda görünür' without specifying which part of the screen or UI element",
+          "No acceptance criteria for decimal number support, though basic calculator functionality typically includes decimals",
+          "AC-3 and other keyboard tests are well-structured and testable with Playwright keyboard events"
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 68,
+          "factors": [
+            "7 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "risks": [
+          "AC-9 uses vague term 'geçersiz bir işlem sırası' without defining what constitutes invalid operation sequences beyond the examples given",
+          "AC-10 'farklı ekran boyutlarında görüntülendiğinde' is not testable as written - no specific breakpoints or dimensions defined",
+          "Technical constraint 'Hata mesajları 3 saniye görünür kalır' is ambiguous - unclear if messages auto-disappear or require user action"
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Dusuk guven skoru: 68%. Faktörler: 7 bulgu raporlandi, Inceleme: spec",
+          "severity": "high"
+        },
+        {
+          "stage": "critic",
+          "issue": "Tanimlanan riskler: AC-9 uses vague term 'geçersiz bir işlem sırası' without defining what constitutes invalid operation sequences beyond the examples given; AC-10 'farklı ekran boyutlarında görüntülendiğinde' is not testable as written - no specific breakpoints or dimensions defined; Technical constraint 'Hata mesajları 3 saniye görünür kalır' is ambiguous - unclear if messages auto-disappear or require user action",
+          "severity": "low"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "The spec covers the core calculator functionality well with mostly testable acceptance criteria in proper Given/When/Then format. However, several ambiguous terms like 'geçersiz işlem sırası' and 'aktif durumdadır' need clarification. The responsive design requirement lacks specific breakpoints making it untestable. Technical constraints about error message timing are unclear. The spec would benefit from more precise definitions and measurable criteria to reach approval threshold.",
+        "approved": false,
+        "findings": [
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[8]",
+            "severity": "major",
+            "suggestion": "Define all invalid operation patterns explicitly: consecutive operators (++, --, **, //), starting with operator except minus, ending with operator, empty input followed by operator",
+            "description": "AC-9 uses vague term 'geçersiz bir işlem sırası' without defining what constitutes invalid operation sequences beyond the examples given"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[9]",
+            "severity": "major",
+            "suggestion": "Specify exact breakpoints: 'when browser width is 320px (mobile), 768px (tablet), and 1024px (desktop)', and define what 'okunabilir ve erişilebilir' means measurably",
+            "description": "AC-10 'farklı ekran boyutlarında görüntülendiğinde' is not testable as written - no specific breakpoints or dimensions defined"
+          },
+          {
+            "category": "ambiguity",
+            "location": "technicalConstraints.nonFunctional[2]",
+            "severity": "major",
+            "suggestion": "Clarify: 'Error messages automatically disappear after 3 seconds OR remain until user presses C/clicks clear button'",
+            "description": "Technical constraint 'Hata mesajları 3 saniye görünür kalır' is ambiguous - unclear if messages auto-disappear or require user action"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[0]",
+            "severity": "minor",
+            "suggestion": "Specify: 'all buttons are clickable and not disabled (no disabled attribute or grayed-out styling)'",
+            "description": "AC-1 'tüm butonlar aktif durumdadır' is not precisely testable - what does 'aktif' mean in UI terms?"
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[1,2,3,4,5,6,7,8]",
+            "severity": "minor",
+            "suggestion": "Specify the display element: 'result appears in the calculator display area' or 'error message appears below the display'",
+            "description": "Multiple ACs mention 'ekranda görünür' without specifying which part of the screen or UI element"
+          },
+          {
+            "category": "completeness",
+            "location": "acceptanceCriteria",
+            "severity": "minor",
+            "suggestion": "Add AC for decimal point handling or explicitly add 'decimal operations' to out of scope section",
+            "description": "No acceptance criteria for decimal number support, though basic calculator functionality typically includes decimals"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[2]",
+            "severity": "info",
+            "suggestion": "No change needed - good testable format",
+            "description": "AC-3 and other keyboard tests are well-structured and testable with Playwright keyboard events"
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 68
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 68% guvenle degerlendirme tamamladi. Karar: Spec reddedildi."
+    },
+    {
+      "problemId": "currency-003",
+      "problemTitle": "Döviz çevirici",
+      "pipelineId": "4c4cc7dc-e9f5-42b5-9c0b-c710ab4f4fb2",
+      "finalStage": "awaiting_approval",
+      "durationMs": 48227,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T11:30:43.244Z",
+        "decision": "Spec uretildi: \"USD-TRY Döviz Çevirici Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "3 kullanici hikayesi tanimlandi",
+          "8 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 8",
+            "Kullanici hikayesi sayisi: 3"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T11:31:02.074Z",
+        "decision": "Spec reddedildi",
+        "reasoning": [
+          "AC-1 'when' clause is not a user action - 'Sayfa yüklendiğinde' describes a system event, not a testable user interaction",
+          "AC-8 'when' clause repeats the same non-user action as AC-1 - 'Sayfa yüklendiğinde' is not testable as a user interaction",
+          "AC-8 uses vague terms 'okunaklı ve kullanılabilir' without specific criteria for what constitutes readable and usable on mobile",
+          "AC-2 and AC-3 'given' clauses could be more specific about the initial page state",
+          "AC-7 uses ambiguous phrase 'harf/karakter giriş engellenir' - unclear if this means prevention or rejection after input",
+          "Missing decimal number handling in acceptance criteria - only integer examples provided",
+          "AC-4 and AC-5 could benefit from more specific 'given' context about the current state before clearing"
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 68,
+          "factors": [
+            "7 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "risks": [
+          "AC-1 'when' clause is not a user action - 'Sayfa yüklendiğinde' describes a system event, not a testable user interaction",
+          "AC-8 'when' clause repeats the same non-user action as AC-1 - 'Sayfa yüklendiğinde' is not testable as a user interaction",
+          "AC-8 uses vague terms 'okunaklı ve kullanılabilir' without specific criteria for what constitutes readable and usable on mobile"
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Dusuk guven skoru: 68%. Faktörler: 7 bulgu raporlandi, Inceleme: spec",
+          "severity": "high"
+        },
+        {
+          "stage": "critic",
+          "issue": "Tanimlanan riskler: AC-1 'when' clause is not a user action - 'Sayfa yüklendiğinde' describes a system event, not a testable user interaction; AC-8 'when' clause repeats the same non-user action as AC-1 - 'Sayfa yüklendiğinde' is not testable as a user interaction; AC-8 uses vague terms 'okunaklı ve kullanılabilir' without specific criteria for what constitutes readable and usable on mobile",
+          "severity": "low"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "The spec has a clear problem statement and comprehensive user stories, but suffers from testability issues in two acceptance criteria that describe system events rather than user actions. The mobile responsiveness criteria lacks specific measurable requirements, making it difficult to verify. While the core functionality is well-defined with good bidirectional conversion logic, the spec needs refinement in testable user interactions and concrete success criteria to meet the approval threshold.",
+        "approved": false,
+        "findings": [
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[0]",
+            "severity": "major",
+            "suggestion": "Change to a user action like 'when kullanıcı sayfayı ziyaret ettiğinde' or 'when kullanıcı URL'yi tarayıcıda açtığında'",
+            "description": "AC-1 'when' clause is not a user action - 'Sayfa yüklendiğinde' describes a system event, not a testable user interaction"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[7]",
+            "severity": "major",
+            "suggestion": "Change to 'when kullanıcı mobil tarayıcıda sayfayı açtığında' to make it a concrete user action",
+            "description": "AC-8 'when' clause repeats the same non-user action as AC-1 - 'Sayfa yüklendiğinde' is not testable as a user interaction"
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[7]",
+            "severity": "major",
+            "suggestion": "Define specific criteria like 'input alanları minimum 44px yüksekliğinde, metin minimum 16px boyutunda, ve tüm elementler ekran genişliğine sığar'",
+            "description": "AC-8 uses vague terms 'okunaklı ve kullanılabilir' without specific criteria for what constitutes readable and usable on mobile"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[1], acceptanceCriteria[2]",
+            "severity": "minor",
+            "suggestion": "Add context like 'Given kullanıcı boş input alanları olan ana sayfada' to make the starting state clearer",
+            "description": "AC-2 and AC-3 'given' clauses could be more specific about the initial page state"
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[6]",
+            "severity": "minor",
+            "suggestion": "Specify the behavior: 'harf/karakter tuşları basıldığında input alanına yazılmaz' or 'geçersiz karakterler girildiğinde anında silinir'",
+            "description": "AC-7 uses ambiguous phrase 'harf/karakter giriş engellenir' - unclear if this means prevention or rejection after input"
+          },
+          {
+            "category": "completeness",
+            "location": "acceptanceCriteria",
+            "severity": "minor",
+            "suggestion": "Add AC for decimal inputs like 'when kullanıcı 10.5 USD girdiğinde, then 336 TRY gösterilir'",
+            "description": "Missing decimal number handling in acceptance criteria - only integer examples provided"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[3], acceptanceCriteria[4]",
+            "severity": "info",
+            "suggestion": "Consider adding 'Given USD alanında değer varken' to make the precondition clearer",
+            "description": "AC-4 and AC-5 could benefit from more specific 'given' context about the current state before clearing"
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 68
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 68% guvenle degerlendirme tamamladi. Karar: Spec reddedildi."
+    },
+    {
+      "problemId": "blog-004",
+      "problemTitle": "Read-only blog API",
+      "pipelineId": "64871857-045e-4a7e-aed0-097806199aa7",
+      "finalStage": "awaiting_approval",
+      "durationMs": 36174,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T11:31:25.370Z",
+        "decision": "Spec uretildi: \"Express Blog API - JSON Veri Kaynağı\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "2 kullanici hikayesi tanimlandi",
+          "4 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 4",
+            "Kullanici hikayesi sayisi: 2"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T11:31:38.053Z",
+        "decision": "Spec onaylandi",
+        "reasoning": [
+          "AC-1 and AC-4 lack specific 'given' states that specify how to reach the API endpoint for testing",
+          "Technical constraints mention 500 status code but no acceptance criteria covers server error scenarios",
+          "Response time constraint '< 100ms' is vague without specifying measurement conditions",
+          "No specification of posts.json file structure or location"
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 82,
+          "factors": [
+            "4 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "risks": [
+          "AC-1 and AC-4 lack specific 'given' states that specify how to reach the API endpoint for testing"
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Orta guven skoru: 82%. Faktörler: 4 bulgu raporlandi, Inceleme: spec",
+          "severity": "medium"
+        },
+        {
+          "stage": "critic",
+          "issue": "Tanimlanan riskler: AC-1 and AC-4 lack specific 'given' states that specify how to reach the API endpoint for testing",
+          "severity": "low"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "This is a well-structured spec that clearly defines a simple blog API with appropriate scope limitations. The problem statement is clear, user stories are focused, and most acceptance criteria are testable with concrete Given/When/Then format. The main issues are minor testability gaps where the 'given' states could be more specific about API endpoints, and a small completeness gap regarding server error handling. The technical constraints are realistic and the out-of-scope section effectively prevents scope creep. Overall, this spec provides sufficient guidance for implementation.",
+        "approved": true,
+        "findings": [
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[0] and acceptanceCriteria[3]",
+            "severity": "major",
+            "suggestion": "Change 'given' to specify 'API sunucusu localhost:3000 üzerinde çalışır durumda' or similar concrete URL/port information",
+            "description": "AC-1 and AC-4 lack specific 'given' states that specify how to reach the API endpoint for testing"
+          },
+          {
+            "category": "completeness",
+            "location": "technicalConstraints.nonFunctional and acceptanceCriteria",
+            "severity": "minor",
+            "suggestion": "Add an acceptance criterion for when posts.json file is missing or corrupted, expecting 500 status code",
+            "description": "Technical constraints mention 500 status code but no acceptance criteria covers server error scenarios"
+          },
+          {
+            "category": "ambiguity",
+            "location": "technicalConstraints.nonFunctional[0]",
+            "severity": "minor",
+            "suggestion": "Specify 'Response time < 100ms under normal load with posts.json containing up to 100 entries'",
+            "description": "Response time constraint '< 100ms' is vague without specifying measurement conditions"
+          },
+          {
+            "category": "completeness",
+            "location": "technicalConstraints",
+            "severity": "info",
+            "suggestion": "Consider adding technical constraint about posts.json file format and location (e.g., 'posts.json file in project root with array of post objects')",
+            "description": "No specification of posts.json file structure or location"
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 82
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 82% guvenle degerlendirme tamamladi. Karar: Spec onaylandi."
+    },
+    {
+      "problemId": "qr-005",
+      "problemTitle": "QR kod üretici",
+      "pipelineId": "a524c60d-3710-4393-a7a8-c6263259ced2",
+      "finalStage": "awaiting_approval",
+      "durationMs": 51287,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T11:32:15.983Z",
+        "decision": "Spec uretildi: \"QR Kod Üretici Web Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "3 kullanici hikayesi tanimlandi",
+          "6 kabul kriteri yazildi"
+        ],
+        "assumptions": [
+          "Web tarayıcısı hedef platform olarak varsayıldı",
+          "QR kod indirme özelliği MVP'ye dahil edildi",
+          "Mobil responsive tasarım bekleniyor"
+        ],
+        "confidence": {
+          "score": 88,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 6",
+            "Kullanici hikayesi sayisi: 3"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T11:32:30.035Z",
+        "decision": "Spec onaylandi",
+        "reasoning": [
+          "AC-3 and AC-4 lack specific UI element identification for the error messages",
+          "AC-6 uses vague terms 'uygun şekilde düzenlenir' which is not measurably testable",
+          "AC-1 doesn't specify QR code size or positioning details",
+          "Technical constraints don't specify which QR code library or generation method to use",
+          "AC-2 could benefit from specifying the downloaded file name format"
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 82,
+          "factors": [
+            "5 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "risks": [
+          "AC-3 and AC-4 lack specific UI element identification for the error messages",
+          "AC-6 uses vague terms 'uygun şekilde düzenlenir' which is not measurably testable"
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Orta guven skoru: 82%. Faktörler: 5 bulgu raporlandi, Inceleme: spec",
+          "severity": "medium"
+        },
+        {
+          "stage": "critic",
+          "issue": "Tanimlanan riskler: AC-3 and AC-4 lack specific UI element identification for the error messages; AC-6 uses vague terms 'uygun şekilde düzenlenir' which is not measurably testable",
+          "severity": "low"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "This is a well-structured spec for a QR code generator with clear problem statement, comprehensive user stories, and mostly testable acceptance criteria. The main issues are around testability - some ACs need more specific UI element identification and measurable outcomes, particularly for error handling and responsive behavior. The technical constraints are realistic and the scope is appropriately defined. With minor improvements to make the acceptance criteria more specific and testable, this would be an excellent specification.",
+        "approved": true,
+        "findings": [
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[2] and acceptanceCriteria[3]",
+            "severity": "major",
+            "suggestion": "Specify where error messages appear (e.g., 'then a red error message appears below the input field with id=\"error-message\"' or 'then an error div with class=\"error\" becomes visible')",
+            "description": "AC-3 and AC-4 lack specific UI element identification for the error messages"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[5]",
+            "severity": "major",
+            "suggestion": "Define specific responsive behavior (e.g., 'then the input field width is 90% of screen width, buttons stack vertically on screens < 768px, and QR code scales to maximum 300px width')",
+            "description": "AC-6 uses vague terms 'uygun şekilde düzenlenir' which is not measurably testable"
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[0]",
+            "severity": "minor",
+            "suggestion": "Add specific dimensions or relative sizing (e.g., 'QR kod görseli 200x200 piksel boyutunda input'un 20px altında görüntülenir')",
+            "description": "AC-1 doesn't specify QR code size or positioning details"
+          },
+          {
+            "category": "completeness",
+            "location": "technicalConstraints",
+            "severity": "minor",
+            "suggestion": "Add constraint specifying QR code generation approach (e.g., 'Client-side QR generation using qrcode.js library or similar browser-compatible solution')",
+            "description": "Technical constraints don't specify which QR code library or generation method to use"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[1]",
+            "severity": "info",
+            "suggestion": "Consider adding expected filename pattern (e.g., 'qrcode-YYYYMMDD-HHMMSS.png' or 'qrcode.png')",
+            "description": "AC-2 could benefit from specifying the downloaded file name format"
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 82
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 88% guvenle bir spesifikasyon uretti. 3 varsayim yapildi. Critic, ciktiyi inceledi ve 82% guvenle degerlendirme tamamladi. Karar: Spec onaylandi."
+    }
+  ]
+}

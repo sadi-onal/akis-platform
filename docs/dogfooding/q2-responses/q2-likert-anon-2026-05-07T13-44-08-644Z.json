@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-05-07T13:44:08.643Z",
+  "order": "AB",
+  "demographics": {
+    "experience": "3",
+    "aiTool": "Günlük iş akışımın parçası",
+    "ageBand": "23-27",
+    "participantId": ""
+  },
+  "comment": "Genel olarak \"Pipeline Detayı Açık\" versiyonda daha fazla detay ve critic gösterimiyle kullanıcıya güven vermeye çalışılsada yapılacak olan işlerin sade görünümdeki gibi de anlaşılır bir bicimde verilmesi gerekmektedir. Critic'de koşulların neden geçmediği karışık verilmiş. Genel kullanım için aslında \"Sade Chat\" daha anlaşılır olsa da pipeline detayında ki güvenilirlik skorları görünebilir. Bir de Pipeline Detayı Açıkta ingilizce-türkçe karışmış ve (Önemli ve Bilgi) kartları dublicate olarak yani iki tane görünüyor.",
+  "responses": [
+    {
+      "problemId": "todo-001",
+      "condition": "A",
+      "questionId": "q1",
+      "score": 4
+    },
+    {
+      "problemId": "todo-001",
+      "condition": "A",
+      "questionId": "q2",
+      "score": 2
+    },
+    {
+      "problemId": "todo-001",
+      "condition": "A",
+      "questionId": "q3",
+      "score": 4
+    },
+    {
+      "problemId": "todo-001",
+      "condition": "B",
+      "questionId": "q1",
+      "score": 5
+    },
+    {
+      "problemId": "todo-001",
+      "condition": "B",
+      "questionId": "q2",
+      "score": 2
+    },
+    {
+      "problemId": "todo-001",
+      "condition": "B",
+      "questionId": "q3",
+      "score": 3
+    },
+    {
+      "problemId": "calc-002",
+      "condition": "B",
+      "questionId": "q1",
+      "score": 4
+    },
+    {
+      "problemId": "calc-002",
+      "condition": "B",
+      "questionId": "q2",
+      "score": 4
+    },
+    {
+      "problemId": "calc-002",
+      "condition": "B",
+      "questionId": "q3",
+      "score": 4
+    },
+    {
+      "problemId": "calc-002",
+      "condition": "A",
+      "questionId": "q1",
+      "score": 4
+    },
+    {
+      "problemId": "calc-002",
+      "condition": "A",
+      "questionId": "q2",
+      "score": 3
+    },
+    {
+      "problemId": "calc-002",
+      "condition": "A",
+      "questionId": "q3",
+      "score": 4
+    },
+    {
+      "problemId": "currency-003",
+      "condition": "A",
+      "questionId": "q1",
+      "score": 1
+    },
+    {
+      "problemId": "currency-003",
+      "condition": "A",
+      "questionId": "q2",
+      "score": 2
+    },
+    {
+      "problemId": "currency-003",
+      "condition": "A",
+      "questionId": "q3",
+      "score": 1
+    },
+    {
+      "problemId": "currency-003",
+      "condition": "B",
+      "questionId": "q1",
+      "score": 4
+    },
+    {
+      "problemId": "currency-003",
+      "condition": "B",
+      "questionId": "q2",
+      "score": 5
+    },
+    {
+      "problemId": "currency-003",
+      "condition": "B",
+      "questionId": "q3",
+      "score": 4
+    },
+    {
+      "problemId": "blog-004",
+      "condition": "B",
+      "questionId": "q1",
+      "score": 3
+    },
+    {
+      "problemId": "blog-004",
+      "condition": "B",
+      "questionId": "q2",
+      "score": 2
+    },
+    {
+      "problemId": "blog-004",
+      "condition": "B",
+      "questionId": "q3",
+      "score": 2
+    },
+    {
+      "problemId": "blog-004",
+      "condition": "A",
+      "questionId": "q1",
+      "score": 4
+    },
+    {
+      "problemId": "blog-004",
+      "condition": "A",
+      "questionId": "q2",
+      "score": 1
+    },
+    {
+      "problemId": "blog-004",
+      "condition": "A",
+      "questionId": "q3",
+      "score": 1
+    },
+    {
+      "problemId": "qr-005",
+      "condition": "A",
+      "questionId": "q1",
+      "score": 2
+    },
+    {
+      "problemId": "qr-005",
+      "condition": "A",
+      "questionId": "q2",
+      "score": 2
+    },
+    {
+      "problemId": "qr-005",
+      "condition": "A",
+      "questionId": "q3",
+      "score": 2
+    },
+    {
+      "problemId": "qr-005",
+      "condition": "B",
+      "questionId": "q1",
+      "score": 3
+    },
+    {
+      "problemId": "qr-005",
+      "condition": "B",
+      "questionId": "q2",
+      "score": 4
+    },
+    {
+      "problemId": "qr-005",
+      "condition": "B",
+      "questionId": "q3",
+      "score": 2
+    }
+  ]
+}

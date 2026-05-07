@@ -94,6 +94,37 @@ export function PipelineDetailRail({
   if (!pipelineId || pipelineId === 'pending') return null;
   if (uiState === 'idle' && activities.length === 0) return null;
 
+  // Q2 A/B-test escape hatch: ?baseline=1 hides the entire Level-4 rail
+  // so the same pipeline can be screenshotted with and without the
+  // explainability surface. Used by docs/dogfooding/q2-likert-form.html.
+  // Lives behind URL param + localStorage so participants don't need to
+  // touch source. Persists across reloads for a smooth flow.
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('baseline') === '1') {
+      try {
+        window.localStorage.setItem('akis.experiment.baseline', '1');
+      } catch {
+        /* private mode etc. — no-op */
+      }
+      return null;
+    }
+    if (params.get('baseline') === '0') {
+      try {
+        window.localStorage.removeItem('akis.experiment.baseline');
+      } catch {
+        /* no-op */
+      }
+    }
+    try {
+      if (window.localStorage.getItem('akis.experiment.baseline') === '1') {
+        return null;
+      }
+    } catch {
+      /* no-op */
+    }
+  }
+
   const tabBtnBase = 'rounded-md px-2.5 py-1 text-xs font-medium transition-colors';
   const tabBtnActive = 'bg-ak-primary/15 text-ak-primary ring-1 ring-inset ring-ak-primary/30';
   const tabBtnInactive = 'text-ak-text-secondary hover:bg-ak-surface-2 hover:text-ak-text-primary';
@@ -257,6 +288,7 @@ export function PipelineDetailRail({
                   pipelineId={pipelineId}
                   explanation={explanation ?? undefined}
                   fetcher={explanationFetcher}
+                  hideAttentionBanner
                 />
               )}
             </>

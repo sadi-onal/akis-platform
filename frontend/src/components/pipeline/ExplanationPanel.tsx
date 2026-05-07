@@ -1,8 +1,132 @@
 import { useEffect, useState } from 'react';
-import type { PipelineExplanation, AgentReasoning } from '../../types/pipeline';
+import type { PipelineExplanation, AgentReasoning, ReasoningFinding } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { AttentionBanner } from './AttentionBanner';
+
+// Per-category surface metadata. Icons are simple text glyphs (not
+// emoji) so they stay legible across systems and don't fight the AKIS
+// type system. Order intentionally matches Critic's review weights:
+// completeness → ambiguity → testability → consistency → spec_compliance → security.
+const CATEGORY_META: Record<
+  ReasoningFinding['category'],
+  { label: string; icon: string; tint: string }
+> = {
+  completeness: {
+    label: 'Eksiklik',
+    icon: '◌',
+    tint: 'border-sky-400/40 bg-sky-500/5',
+  },
+  ambiguity: {
+    label: 'Belirsizlik',
+    icon: '?',
+    tint: 'border-amber-400/40 bg-amber-500/5',
+  },
+  testability: {
+    label: 'Test edilebilirlik',
+    icon: '↗',
+    tint: 'border-violet-400/40 bg-violet-500/5',
+  },
+  consistency: {
+    label: 'Tutarlılık',
+    icon: '⇆',
+    tint: 'border-fuchsia-400/40 bg-fuchsia-500/5',
+  },
+  spec_compliance: {
+    label: 'Spec uyumu',
+    icon: '✓',
+    tint: 'border-emerald-400/40 bg-emerald-500/5',
+  },
+  security: {
+    label: 'Güvenlik',
+    icon: '!',
+    tint: 'border-rose-400/40 bg-rose-500/5',
+  },
+};
+
+const SEVERITY_META: Record<ReasoningFinding['severity'], { label: string; chip: string }> = {
+  critical: {
+    label: 'Kritik',
+    chip: 'bg-rose-500/15 text-rose-700 border-rose-500/40 dark:bg-rose-500/15 dark:text-rose-200 dark:border-rose-500/30',
+  },
+  major: {
+    label: 'Önemli',
+    chip: 'bg-amber-500/15 text-amber-700 border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
+  },
+  minor: {
+    label: 'Küçük',
+    chip: 'bg-slate-500/10 text-slate-700 border-slate-500/30 dark:bg-slate-500/15 dark:text-slate-200 dark:border-slate-500/30',
+  },
+  info: {
+    label: 'Bilgi',
+    chip: 'bg-ak-surface-2 text-ak-text-secondary border-ak-border-subtle',
+  },
+};
+
+const SEVERITY_RANK: Record<ReasoningFinding['severity'], number> = {
+  critical: 0,
+  major: 1,
+  minor: 2,
+  info: 3,
+};
+
+function CriticFindingsSection({ findings }: { findings: ReasoningFinding[] }) {
+  // Group by category, then sort each group by severity (worst first).
+  const byCategory = new Map<ReasoningFinding['category'], ReasoningFinding[]>();
+  for (const f of findings) {
+    if (!byCategory.has(f.category)) byCategory.set(f.category, []);
+    byCategory.get(f.category)!.push(f);
+  }
+  const orderedCats = Array.from(byCategory.keys()).sort((a, b) => {
+    const aMin = Math.min(...byCategory.get(a)!.map((f) => SEVERITY_RANK[f.severity]));
+    const bMin = Math.min(...byCategory.get(b)!.map((f) => SEVERITY_RANK[f.severity]));
+    return aMin - bMin || a.localeCompare(b);
+  });
+  return (
+    <section className="space-y-2">
+      <h4 className="font-semibold text-ak-text-primary">Bulgular</h4>
+      {orderedCats.map((cat) => {
+        const meta = CATEGORY_META[cat];
+        const items = byCategory
+          .get(cat)!
+          .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
+        return (
+          <div key={cat} className={`rounded-md border p-2 ${meta.tint}`}>
+            <header className="mb-1 flex items-center gap-2 text-xs font-semibold text-ak-text-primary">
+              <span aria-hidden="true" className="font-bold">
+                {meta.icon}
+              </span>
+              <span>{meta.label}</span>
+              <span className="text-ak-text-tertiary">({items.length})</span>
+            </header>
+            <ul className="space-y-1.5 pl-5 text-xs">
+              {items.map((f, i) => {
+                const sev = SEVERITY_META[f.severity];
+                return (
+                  <li key={i} className="space-y-0.5">
+                    <div className="flex flex-wrap items-start gap-2">
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold ${sev.chip}`}
+                      >
+                        {sev.label}
+                      </span>
+                      <span className="flex-1 text-ak-text-primary">{f.description}</span>
+                    </div>
+                    {f.suggestion && (
+                      <p className="pl-1 text-ak-text-tertiary">
+                        <span className="text-ak-text-secondary">Öneri:</span> {f.suggestion}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
 
 export interface ExplanationPanelProps {
   pipelineId: string;
@@ -10,6 +134,13 @@ export interface ExplanationPanelProps {
   defaultExpanded?: boolean;
   className?: string;
   fetcher?: (id: string) => Promise<PipelineExplanation>;
+  /**
+   * Skip the inline AttentionBanner — use when the host (e.g.
+   * PipelineDetailRail) already renders attention points itself, so we
+   * don't end up showing the same banner twice. Defaults to false so
+   * standalone usage keeps the banner.
+   */
+  hideAttentionBanner?: boolean;
 }
 
 const AGENT_LABEL: Record<string, string> = {
@@ -43,6 +174,7 @@ interface ReasoningCardProps {
 }
 
 function ReasoningCard({ stage, expanded, onToggle }: ReasoningCardProps) {
+  const hasStructuredFindings = !!stage.findings && stage.findings.length > 0;
   const hasDetail =
     stage.assumptions.length > 0 ||
     (stage.alternatives && stage.alternatives.length > 0) ||
@@ -66,12 +198,22 @@ function ReasoningCard({ stage, expanded, onToggle }: ReasoningCardProps) {
         <span className="text-ak-text-tertiary">Karar: </span>
         {stage.decision}
       </p>
-      {stage.reasoning.length > 0 && (
-        <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-ak-text-secondary">
-          {stage.reasoning.map((r, i) => (
-            <li key={i}>{r}</li>
-          ))}
-        </ul>
+      {/* When the agent produced structured findings (Critic), render them
+          grouped by category so users can parse "neden geçmedi" — instead
+          of a flat bullet list. Falls back to bullets for other agents
+          and for older runs that lack the findings field. */}
+      {hasStructuredFindings ? (
+        <div className="mt-2">
+          <CriticFindingsSection findings={stage.findings!} />
+        </div>
+      ) : (
+        stage.reasoning.length > 0 && (
+          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-ak-text-secondary">
+            {stage.reasoning.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        )
       )}
       {hasDetail && (
         <button
@@ -130,6 +272,7 @@ export function ExplanationPanel({
   defaultExpanded = false,
   className,
   fetcher,
+  hideAttentionBanner = false,
 }: ExplanationPanelProps) {
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(priming ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +348,7 @@ export function ExplanationPanel({
 
   return (
     <section aria-label="Pipeline açıklaması" className={`flex flex-col gap-3 ${className ?? ''}`}>
-      {explanation.attentionPoints.length > 0 && (
+      {!hideAttentionBanner && explanation.attentionPoints.length > 0 && (
         <AttentionBanner points={explanation.attentionPoints} />
       )}
       <div className="flex flex-col gap-2">

@@ -77,12 +77,24 @@ RULES:
 - Every finding MUST have a concrete suggestion for improvement.
 - Do NOT invent problems that don't exist.
 - If the spec is genuinely good, give it a high score.
-- Always return valid JSON. No markdown, no code fences.`;
+- Always return valid JSON. No markdown, no code fences.
+
+LANGUAGE REQUIREMENT (strict):
+- The AKIS UI is Turkish. \`description\`, \`suggestion\`, and \`summary\`
+  fields MUST be written in Turkish so they render cleanly in the
+  explainability surface.
+- Keep technical identifiers (acceptance criterion IDs like "AC-1",
+  field names like "userStories", category/severity enum values) in
+  their original form — those are not user-facing prose.
+- Example (Turkish): {"description": "AC-2'de 'üzeri çizili veya gri renk
+  alır' ifadesi belirsiz; otomatik test için tek bir görsel kontrol
+  seçilmeli.", "suggestion": "Hangi seçeneğin baseline olduğunu
+  belirtin: 'üzeri çizili' VEYA 'gri renk', ikisi birden değil."}`;
 
 export function buildSpecReviewUserPrompt(
   artifact: unknown,
   originalIdea: string,
-  iteration: number,
+  iteration: number
 ): string {
   const parts: string[] = [
     `ORIGINAL USER IDEA: "${originalIdea}"`,

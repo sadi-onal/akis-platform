@@ -1,0 +1,812 @@
+{
+  "label": "q2v2",
+  "model": "claude-haiku-4-5-20251001",
+  "ranAt": "2026-05-07T14-44-52-032Z",
+  "results": [
+    {
+      "problemId": "todo-001",
+      "problemTitle": "Tek kullanıcılı görev listesi",
+      "pipelineId": "f636d5a8-e891-4f99-ad58-01f03211eec7",
+      "finalStage": "awaiting_approval",
+      "durationMs": 45408,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T14:41:01.733Z",
+        "decision": "Spec uretildi: \"Basit Görev Listesi Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "4 kullanici hikayesi tanimlandi",
+          "6 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 6",
+            "Kullanici hikayesi sayisi: 4"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T14:41:19.745Z",
+        "decision": "Spec onaylandi",
+        "reasoning": [
+          "AC-3'te 'üstü çizili görünür' ifadesi belirsiz - görsel durumun tam olarak nasıl olacağı net değil",
+          "AC-1'de 'boş bir görev listesi' ifadesi test açısından belirsiz - tam olarak hangi elementin kontrol edileceği belirtilmemiş",
+          "AC-6'da 'uyarı mesajı gösterilir' ifadesi test için yeterince spesifik değil - mesajın nerede ve nasıl görüneceği belirtilmemiş",
+          "localStorage kullanımı user story'lerde belirtilmiş ancak technical constraints'te localStorage'a özel kısıtlama yok",
+          "AC-5 tarayıcı kapatma/açma işlemini test etmek için session storage temizleme gerekebilir"
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 82,
+          "factors": [
+            "5 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "findings": [
+          {
+            "severity": "minor",
+            "category": "ambiguity",
+            "description": "AC-3'te 'üstü çizili görünür' ifadesi belirsiz - görsel durumun tam olarak nasıl olacağı net değil",
+            "suggestion": "Tamamlanan görevlerin görsel durumunu daha spesifik tanımlayın: 'görev metni üstü çizili olur ve opacity 0.6 değerine düşer' gibi",
+            "location": "acceptanceCriteria[2]"
+          },
+          {
+            "severity": "minor",
+            "category": "testability",
+            "description": "AC-1'de 'boş bir görev listesi' ifadesi test açısından belirsiz - tam olarak hangi elementin kontrol edileceği belirtilmemiş",
+            "suggestion": "Kontrol edilecek elementi spesifik hale getirin: 'görev listesi container'ı boş görünür' veya 'hiçbir görev item elementi bulunmaz'",
+            "location": "acceptanceCriteria[0]"
+          },
+          {
+            "severity": "minor",
+            "category": "testability",
+            "description": "AC-6'da 'uyarı mesajı gösterilir' ifadesi test için yeterince spesifik değil - mesajın nerede ve nasıl görüneceği belirtilmemiş",
+            "suggestion": "Uyarı mesajının konumunu ve içeriğini belirtin: 'input alanının altında kırmızı renkte \"Görev adı boş olamaz\" mesajı görünür'",
+            "location": "acceptanceCriteria[5]"
+          },
+          {
+            "severity": "minor",
+            "category": "completeness",
+            "description": "localStorage kullanımı user story'lerde belirtilmiş ancak technical constraints'te localStorage'a özel kısıtlama yok",
+            "suggestion": "Technical constraints bölümüne localStorage kapasitesi veya veri formatı ile ilgili kısıtlama ekleyin",
+            "location": "technicalConstraints"
+          },
+          {
+            "severity": "info",
+            "category": "testability",
+            "description": "AC-5 tarayıcı kapatma/açma işlemini test etmek için session storage temizleme gerekebilir",
+            "suggestion": "Test senaryosunda localStorage'ın nasıl test edileceğini belirtin veya alternatif test yöntemi önerin",
+            "location": "acceptanceCriteria[4]"
+          }
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Orta guven skoru: 82%. Faktörler: 5 bulgu raporlandi, Inceleme: spec",
+          "severity": "medium"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "Spec genel olarak iyi yapılandırılmış ve kullanıcının basit görev listesi ihtiyacını karşılayacak şekilde tasarlanmış. Problem tanımı net, user story'ler temel işlevleri kapsıyor ve acceptance criteria'lar çoğunlukla test edilebilir formatta. Teknik kısıtlamalar uygun ve kapsam dışı bırakılan özellikler açık. Ana sorunlar görsel durumların ve UI elementlerinin daha spesifik tanımlanması gerektiği yönünde. Küçük iyileştirmelerle mükemmel bir spec haline gelebilir.",
+        "approved": true,
+        "findings": [
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[2]",
+            "severity": "minor",
+            "suggestion": "Tamamlanan görevlerin görsel durumunu daha spesifik tanımlayın: 'görev metni üstü çizili olur ve opacity 0.6 değerine düşer' gibi",
+            "description": "AC-3'te 'üstü çizili görünür' ifadesi belirsiz - görsel durumun tam olarak nasıl olacağı net değil"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[0]",
+            "severity": "minor",
+            "suggestion": "Kontrol edilecek elementi spesifik hale getirin: 'görev listesi container'ı boş görünür' veya 'hiçbir görev item elementi bulunmaz'",
+            "description": "AC-1'de 'boş bir görev listesi' ifadesi test açısından belirsiz - tam olarak hangi elementin kontrol edileceği belirtilmemiş"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[5]",
+            "severity": "minor",
+            "suggestion": "Uyarı mesajının konumunu ve içeriğini belirtin: 'input alanının altında kırmızı renkte \"Görev adı boş olamaz\" mesajı görünür'",
+            "description": "AC-6'da 'uyarı mesajı gösterilir' ifadesi test için yeterince spesifik değil - mesajın nerede ve nasıl görüneceği belirtilmemiş"
+          },
+          {
+            "category": "completeness",
+            "location": "technicalConstraints",
+            "severity": "minor",
+            "suggestion": "Technical constraints bölümüne localStorage kapasitesi veya veri formatı ile ilgili kısıtlama ekleyin",
+            "description": "localStorage kullanımı user story'lerde belirtilmiş ancak technical constraints'te localStorage'a özel kısıtlama yok"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[4]",
+            "severity": "info",
+            "suggestion": "Test senaryosunda localStorage'ın nasıl test edileceğini belirtin veya alternatif test yöntemi önerin",
+            "description": "AC-5 tarayıcı kapatma/açma işlemini test etmek için session storage temizleme gerekebilir"
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 82
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 82% guvenle degerlendirme tamamladi. Karar: Spec onaylandi."
+    },
+    {
+      "problemId": "calc-002",
+      "problemTitle": "Tarayıcı hesap makinesi",
+      "pipelineId": "e3e366df-749f-47ac-8eb5-e07e614d3820",
+      "finalStage": "awaiting_approval",
+      "durationMs": 60415,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T14:41:54.746Z",
+        "decision": "Spec uretildi: \"Basit Hesap Makinesi Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "4 kullanici hikayesi tanimlandi",
+          "10 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 10",
+            "Kullanici hikayesi sayisi: 4"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T14:42:17.756Z",
+        "decision": "Spec reddedildi",
+        "reasoning": [
+          "AC-3'te klavye girişi testi için konkret UI elementi belirtilmemiş. 'Fiziksel klavyeden sayı tuşlarına bastığında' ifadesi otomatik test için yeterli değil.",
+          "AC-10'da 'yeni işlem başlatılabilir' ifadesi belirsiz. Bu durumda ekranda ne gösterilmesi gerektiği açık değil.",
+          "Ondalık sayı desteği hiç belirtilmemiş. Temel hesap makinesi için ondalık nokta (.) butonu ve işlevselliği eksik.",
+          "AC-1'de 'tüm sayı butonları görünür' ifadesi belirsiz. Butonların düzeni, boyutu veya konumu belirtilmemiş.",
+          "AC-8'de hata mesajının tam metni belirtilmiş ancak bu mesajın ne kadar süre gösterileceği veya nasıl temizleneceği belirsiz.",
+          "Klavye kısayolları sadece sayılar için belirtilmiş, işlem tuşları (+, -, *, /, =, C) için klavye desteği eksik.",
+          "Teknik kısıtlamalar bölümünde 'ondalık sayılardan daha fazla hassasiyet' outOfScope'ta belirtilmiş ancak temel ondalık destek durumu belirsiz."
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 68,
+          "factors": [
+            "7 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "risks": [
+          "AC-3'te klavye girişi testi için konkret UI elementi belirtilmemiş. 'Fiziksel klavyeden sayı tuşlarına bastığında' ifadesi otomatik test için yeterli değil.",
+          "AC-10'da 'yeni işlem başlatılabilir' ifadesi belirsiz. Bu durumda ekranda ne gösterilmesi gerektiği açık değil.",
+          "Ondalık sayı desteği hiç belirtilmemiş. Temel hesap makinesi için ondalık nokta (.) butonu ve işlevselliği eksik."
+        ],
+        "findings": [
+          {
+            "severity": "major",
+            "category": "testability",
+            "description": "AC-3'te klavye girişi testi için konkret UI elementi belirtilmemiş. 'Fiziksel klavyeden sayı tuşlarına bastığında' ifadesi otomatik test için yeterli değil.",
+            "suggestion": "Given kısmında hangi sayfada/alanda klavye girişinin aktif olduğunu belirtin. Örnek: 'Given kullanıcı hesap makinesi ekranında ve giriş alanı aktifken'",
+            "location": "acceptanceCriteria[2]"
+          },
+          {
+            "severity": "major",
+            "category": "ambiguity",
+            "description": "AC-10'da 'yeni işlem başlatılabilir' ifadesi belirsiz. Bu durumda ekranda ne gösterilmesi gerektiği açık değil.",
+            "suggestion": "Then kısmını daha spesifik yapın: 'Ekranda son girilen sayı (5) gösterilir ve bir sonraki sayı girişi için hazır duruma geçer'",
+            "location": "acceptanceCriteria[9]"
+          },
+          {
+            "severity": "major",
+            "category": "completeness",
+            "description": "Ondalık sayı desteği hiç belirtilmemiş. Temel hesap makinesi için ondalık nokta (.) butonu ve işlevselliği eksik.",
+            "suggestion": "Ondalık sayı girişi için AC ekleyin veya outOfScope'a 'Ondalık sayı desteği' maddesini açık şekilde ekleyin",
+            "location": "acceptanceCriteria"
+          },
+          {
+            "severity": "minor",
+            "category": "ambiguity",
+            "description": "AC-1'de 'tüm sayı butonları görünür' ifadesi belirsiz. Butonların düzeni, boyutu veya konumu belirtilmemiş.",
+            "suggestion": "Buton düzenini belirtin: '0-9 sayı butonları, +/-/*/÷ işlem butonları, = ve C butonları standart hesap makinesi düzeninde görünür'",
+            "location": "acceptanceCriteria[0]"
+          },
+          {
+            "severity": "minor",
+            "category": "testability",
+            "description": "AC-8'de hata mesajının tam metni belirtilmiş ancak bu mesajın ne kadar süre gösterileceği veya nasıl temizleneceği belirsiz.",
+            "suggestion": "Hata mesajının davranışını belirtin: 'Hata mesajı C butonuna basılana kadar ekranda kalır' gibi",
+            "location": "acceptanceCriteria[7]"
+          },
+          {
+            "severity": "minor",
+            "category": "completeness",
+            "description": "Klavye kısayolları sadece sayılar için belirtilmiş, işlem tuşları (+, -, *, /, =, C) için klavye desteği eksik.",
+            "suggestion": "Klavye işlem tuşları için AC ekleyin: Enter tuşu için =, Escape için C, +/-/*/÷ tuşları için ilgili işlemler",
+            "location": "acceptanceCriteria"
+          },
+          {
+            "severity": "info",
+            "category": "spec_compliance",
+            "description": "Teknik kısıtlamalar bölümünde 'ondalık sayılardan daha fazla hassasiyet' outOfScope'ta belirtilmiş ancak temel ondalık destek durumu belirsiz.",
+            "suggestion": "Ondalık sayı desteğinin temel seviyede olup olmadığını netleştirin",
+            "location": "outOfScope[4]"
+          }
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Dusuk guven skoru: 68%. Faktörler: 7 bulgu raporlandi, Inceleme: spec",
+          "severity": "high"
+        },
+        {
+          "stage": "critic",
+          "issue": "Tanimlanan riskler: AC-3'te klavye girişi testi için konkret UI elementi belirtilmemiş. 'Fiziksel klavyeden sayı tuşlarına bastığında' ifadesi otomatik test için yeterli değil.; AC-10'da 'yeni işlem başlatılabilir' ifadesi belirsiz. Bu durumda ekranda ne gösterilmesi gerektiği açık değil.; Ondalık sayı desteği hiç belirtilmemiş. Temel hesap makinesi için ondalık nokta (.) butonu ve işlevselliği eksik.",
+          "severity": "low"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "Spec genel olarak iyi yapılandırılmış ve temel hesap makinesi işlevselliğini kapsıyor. Ancak klavye girişi testability'si, ondalık sayı desteğinin eksikliği ve bazı belirsiz ifadeler nedeniyle iyileştirme gerekiyor. AC'ler çoğunlukla Given/When/Then formatında ve test edilebilir durumda. Teknik kısıtlamalar uygun ve gerçekçi. Temel matematiksel işlemler için yeterli kapsama sahip.",
+        "approved": false,
+        "findings": [
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[2]",
+            "severity": "major",
+            "suggestion": "Given kısmında hangi sayfada/alanda klavye girişinin aktif olduğunu belirtin. Örnek: 'Given kullanıcı hesap makinesi ekranında ve giriş alanı aktifken'",
+            "description": "AC-3'te klavye girişi testi için konkret UI elementi belirtilmemiş. 'Fiziksel klavyeden sayı tuşlarına bastığında' ifadesi otomatik test için yeterli değil."
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[9]",
+            "severity": "major",
+            "suggestion": "Then kısmını daha spesifik yapın: 'Ekranda son girilen sayı (5) gösterilir ve bir sonraki sayı girişi için hazır duruma geçer'",
+            "description": "AC-10'da 'yeni işlem başlatılabilir' ifadesi belirsiz. Bu durumda ekranda ne gösterilmesi gerektiği açık değil."
+          },
+          {
+            "category": "completeness",
+            "location": "acceptanceCriteria",
+            "severity": "major",
+            "suggestion": "Ondalık sayı girişi için AC ekleyin veya outOfScope'a 'Ondalık sayı desteği' maddesini açık şekilde ekleyin",
+            "description": "Ondalık sayı desteği hiç belirtilmemiş. Temel hesap makinesi için ondalık nokta (.) butonu ve işlevselliği eksik."
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[0]",
+            "severity": "minor",
+            "suggestion": "Buton düzenini belirtin: '0-9 sayı butonları, +/-/*/÷ işlem butonları, = ve C butonları standart hesap makinesi düzeninde görünür'",
+            "description": "AC-1'de 'tüm sayı butonları görünür' ifadesi belirsiz. Butonların düzeni, boyutu veya konumu belirtilmemiş."
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[7]",
+            "severity": "minor",
+            "suggestion": "Hata mesajının davranışını belirtin: 'Hata mesajı C butonuna basılana kadar ekranda kalır' gibi",
+            "description": "AC-8'de hata mesajının tam metni belirtilmiş ancak bu mesajın ne kadar süre gösterileceği veya nasıl temizleneceği belirsiz."
+          },
+          {
+            "category": "completeness",
+            "location": "acceptanceCriteria",
+            "severity": "minor",
+            "suggestion": "Klavye işlem tuşları için AC ekleyin: Enter tuşu için =, Escape için C, +/-/*/÷ tuşları için ilgili işlemler",
+            "description": "Klavye kısayolları sadece sayılar için belirtilmiş, işlem tuşları (+, -, *, /, =, C) için klavye desteği eksik."
+          },
+          {
+            "category": "spec_compliance",
+            "location": "outOfScope[4]",
+            "severity": "info",
+            "suggestion": "Ondalık sayı desteğinin temel seviyede olup olmadığını netleştirin",
+            "description": "Teknik kısıtlamalar bölümünde 'ondalık sayılardan daha fazla hassasiyet' outOfScope'ta belirtilmiş ancak temel ondalık destek durumu belirsiz."
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 68
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 68% guvenle degerlendirme tamamladi. Karar: Spec reddedildi."
+    },
+    {
+      "problemId": "currency-003",
+      "problemTitle": "Döviz çevirici",
+      "pipelineId": "f9b5a078-7063-45a7-bf98-a69020af5dec",
+      "finalStage": "awaiting_approval",
+      "durationMs": 48326,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T14:42:46.822Z",
+        "decision": "Spec uretildi: \"USD-TRY Döviz Çevirici Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "3 kullanici hikayesi tanimlandi",
+          "6 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 6",
+            "Kullanici hikayesi sayisi: 3"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T14:43:06.192Z",
+        "decision": "Spec reddedildi",
+        "reasoning": [
+          "AC-1 ve AC-2'de 'otomatik hesaplama tetiklenirse' ifadesi belirsiz - hangi UI olayının tetikleyeceği belirtilmemiş",
+          "AC-3 ve AC-4'te 'anında (gecikme olmadan)' ifadesi test edilebilir değil - somut bir zaman sınırı yok",
+          "AC-6'da 'kabul etmez veya sıfır olarak gösterir' - iki farklı davranış seçeneği var",
+          "AC-1 ve AC-2'de 'given' kısmı spesifik UI durumu belirtmiyor - hangi sayfada, hangi elemanlarda",
+          "Ondalık sayı girişi için davranış belirtilmemiş (örn. 10.5 USD)",
+          "AC-3 ve AC-4'te 'sıfırdan büyükse' koşulu - sıfır değeri için davranış belirsiz",
+          "Sayı formatı (binlik ayırıcı, ondalık basamak sayısı) belirtilmemiş"
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 68,
+          "factors": [
+            "7 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "risks": [
+          "AC-1 ve AC-2'de 'otomatik hesaplama tetiklenirse' ifadesi belirsiz - hangi UI olayının tetikleyeceği belirtilmemiş",
+          "AC-3 ve AC-4'te 'anında (gecikme olmadan)' ifadesi test edilebilir değil - somut bir zaman sınırı yok",
+          "AC-6'da 'kabul etmez veya sıfır olarak gösterir' - iki farklı davranış seçeneği var",
+          "AC-1 ve AC-2'de 'given' kısmı spesifik UI durumu belirtmiyor - hangi sayfada, hangi elemanlarda"
+        ],
+        "findings": [
+          {
+            "severity": "major",
+            "category": "testability",
+            "description": "AC-1 ve AC-2'de 'otomatik hesaplama tetiklenirse' ifadesi belirsiz - hangi UI olayının tetikleyeceği belirtilmemiş",
+            "suggestion": "Spesifik tetikleyici belirtin: 'input değeri değiştiğinde' veya 'blur olayında' gibi",
+            "location": "acceptanceCriteria[0], acceptanceCriteria[1]"
+          },
+          {
+            "severity": "major",
+            "category": "testability",
+            "description": "AC-3 ve AC-4'te 'anında (gecikme olmadan)' ifadesi test edilebilir değil - somut bir zaman sınırı yok",
+            "suggestion": "Teknik kısıtlamalardaki '< 100ms' değerini AC'lerde de kullanın: 'hesaplama 100ms içinde tamamlanır'",
+            "location": "acceptanceCriteria[2], acceptanceCriteria[3]"
+          },
+          {
+            "severity": "major",
+            "category": "ambiguity",
+            "description": "AC-6'da 'kabul etmez veya sıfır olarak gösterir' - iki farklı davranış seçeneği var",
+            "suggestion": "Tek bir davranış seçin: 'negatif değer girildiğinde input otomatik olarak boş hale gelir' veya 'negatif değer 0 olarak değiştirilir'",
+            "location": "acceptanceCriteria[5]"
+          },
+          {
+            "severity": "major",
+            "category": "testability",
+            "description": "AC-1 ve AC-2'de 'given' kısmı spesifik UI durumu belirtmiyor - hangi sayfada, hangi elemanlarda",
+            "suggestion": "Spesifik UI durumu ekleyin: 'Kullanıcı ana sayfada USD ve TRY input alanlarını görüyor'",
+            "location": "acceptanceCriteria[0], acceptanceCriteria[1]"
+          },
+          {
+            "severity": "minor",
+            "category": "completeness",
+            "description": "Ondalık sayı girişi için davranış belirtilmemiş (örn. 10.5 USD)",
+            "suggestion": "Ondalık sayı desteği için AC ekleyin veya out-of-scope'a dahil edin",
+            "location": "acceptanceCriteria"
+          },
+          {
+            "severity": "minor",
+            "category": "ambiguity",
+            "description": "AC-3 ve AC-4'te 'sıfırdan büyükse' koşulu - sıfır değeri için davranış belirsiz",
+            "suggestion": "Sıfır değeri için açık davranış belirtin: 'sıfır veya pozitif sayı girildiğinde'",
+            "location": "acceptanceCriteria[2], acceptanceCriteria[3]"
+          },
+          {
+            "severity": "info",
+            "category": "completeness",
+            "description": "Sayı formatı (binlik ayırıcı, ondalık basamak sayısı) belirtilmemiş",
+            "suggestion": "Görüntüleme formatını belirtin: '1,234.56' veya '1234.56' gibi",
+            "location": "acceptanceCriteria"
+          }
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Dusuk guven skoru: 68%. Faktörler: 7 bulgu raporlandi, Inceleme: spec",
+          "severity": "high"
+        },
+        {
+          "stage": "critic",
+          "issue": "Tanimlanan riskler: AC-1 ve AC-2'de 'otomatik hesaplama tetiklenirse' ifadesi belirsiz - hangi UI olayının tetikleyeceği belirtilmemiş; AC-3 ve AC-4'te 'anında (gecikme olmadan)' ifadesi test edilebilir değil - somut bir zaman sınırı yok; AC-6'da 'kabul etmez veya sıfır olarak gösterir' - iki farklı davranış seçeneği var; AC-1 ve AC-2'de 'given' kısmı spesifik UI durumu belirtmiyor - hangi sayfada, hangi elemanlarda",
+          "severity": "low"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "Spec temel gereksinimleri karşılıyor ancak test edilebilirlik açısından önemli eksiklikler var. AC'lerde belirsiz ifadeler (otomatik tetikleme, anında hesaplama) ve çelişkili davranış seçenekleri mevcut. Given-When-Then formatı kullanılmış ama 'given' kısımları spesifik UI durumlarını belirtmiyor. Problem tanımı net, user story'ler uygun, teknik kısıtlamalar makul. Belirsizliklerin giderilmesi ve test edilebilir AC'lerin yazılması gerekiyor.",
+        "approved": false,
+        "findings": [
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[0], acceptanceCriteria[1]",
+            "severity": "major",
+            "suggestion": "Spesifik tetikleyici belirtin: 'input değeri değiştiğinde' veya 'blur olayında' gibi",
+            "description": "AC-1 ve AC-2'de 'otomatik hesaplama tetiklenirse' ifadesi belirsiz - hangi UI olayının tetikleyeceği belirtilmemiş"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[2], acceptanceCriteria[3]",
+            "severity": "major",
+            "suggestion": "Teknik kısıtlamalardaki '< 100ms' değerini AC'lerde de kullanın: 'hesaplama 100ms içinde tamamlanır'",
+            "description": "AC-3 ve AC-4'te 'anında (gecikme olmadan)' ifadesi test edilebilir değil - somut bir zaman sınırı yok"
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[5]",
+            "severity": "major",
+            "suggestion": "Tek bir davranış seçin: 'negatif değer girildiğinde input otomatik olarak boş hale gelir' veya 'negatif değer 0 olarak değiştirilir'",
+            "description": "AC-6'da 'kabul etmez veya sıfır olarak gösterir' - iki farklı davranış seçeneği var"
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[0], acceptanceCriteria[1]",
+            "severity": "major",
+            "suggestion": "Spesifik UI durumu ekleyin: 'Kullanıcı ana sayfada USD ve TRY input alanlarını görüyor'",
+            "description": "AC-1 ve AC-2'de 'given' kısmı spesifik UI durumu belirtmiyor - hangi sayfada, hangi elemanlarda"
+          },
+          {
+            "category": "completeness",
+            "location": "acceptanceCriteria",
+            "severity": "minor",
+            "suggestion": "Ondalık sayı desteği için AC ekleyin veya out-of-scope'a dahil edin",
+            "description": "Ondalık sayı girişi için davranış belirtilmemiş (örn. 10.5 USD)"
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[2], acceptanceCriteria[3]",
+            "severity": "minor",
+            "suggestion": "Sıfır değeri için açık davranış belirtin: 'sıfır veya pozitif sayı girildiğinde'",
+            "description": "AC-3 ve AC-4'te 'sıfırdan büyükse' koşulu - sıfır değeri için davranış belirsiz"
+          },
+          {
+            "category": "completeness",
+            "location": "acceptanceCriteria",
+            "severity": "info",
+            "suggestion": "Görüntüleme formatını belirtin: '1,234.56' veya '1234.56' gibi",
+            "description": "Sayı formatı (binlik ayırıcı, ondalık basamak sayısı) belirtilmemiş"
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 68
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 68% guvenle degerlendirme tamamladi. Karar: Spec reddedildi."
+    },
+    {
+      "problemId": "blog-004",
+      "problemTitle": "Read-only blog API",
+      "pipelineId": "467e07c0-364b-4e8e-97ba-bb72bfc0c80f",
+      "finalStage": "awaiting_approval",
+      "durationMs": 51349,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T14:43:31.248Z",
+        "decision": "Spec uretildi: \"Express Blog API - JSON Veri Kaynağı\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "2 kullanici hikayesi tanimlandi",
+          "4 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 4",
+            "Kullanici hikayesi sayisi: 2"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T14:43:59.604Z",
+        "decision": "Spec onaylandi",
+        "reasoning": [
+          "AC-4'te 'Her istek 2 saniyeden kısa sürede yanıt döndürür' ifadesi otomatik test için belirsiz - hangi isteklerin test edileceği ve nasıl ölçüleceği net değil",
+          "posts.json dosyasının yapısı ve örnek içeriği belirtilmemiş - geliştiriciler hangi alanların olması gerektiğini bilemez",
+          "AC-3'te 'Yazı bulunamadı' mesajının tam JSON formatı belirsiz - error response yapısı net değil",
+          "CORS desteği opsiyonel olarak belirtilmiş ancak frontend entegrasyonu için gerekli olabilir"
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 82,
+          "factors": [
+            "4 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "risks": [
+          "AC-4'te 'Her istek 2 saniyeden kısa sürede yanıt döndürür' ifadesi otomatik test için belirsiz - hangi isteklerin test edileceği ve nasıl ölçüleceği net değil"
+        ],
+        "findings": [
+          {
+            "severity": "major",
+            "category": "testability",
+            "description": "AC-4'te 'Her istek 2 saniyeden kısa sürede yanıt döndürür' ifadesi otomatik test için belirsiz - hangi isteklerin test edileceği ve nasıl ölçüleceği net değil",
+            "suggestion": "Spesifik test senaryosu ekleyin: 'GET /posts isteği 2 saniyeden kısa sürede tamamlanır ve GET /posts/1 isteği 2 saniyeden kısa sürede tamamlanır' şeklinde ayrı AC'ler oluşturun",
+            "location": "acceptanceCriteria[3]"
+          },
+          {
+            "severity": "minor",
+            "category": "completeness",
+            "description": "posts.json dosyasının yapısı ve örnek içeriği belirtilmemiş - geliştiriciler hangi alanların olması gerektiğini bilemez",
+            "suggestion": "Technical constraints bölümüne posts.json şema örneği ekleyin: 'posts.json formatı: [{\"id\": number, \"title\": string, \"content\": string, \"author\": string, \"date\": string}]'",
+            "location": "technicalConstraints"
+          },
+          {
+            "severity": "minor",
+            "category": "ambiguity",
+            "description": "AC-3'te 'Yazı bulunamadı' mesajının tam JSON formatı belirsiz - error response yapısı net değil",
+            "suggestion": "Hata yanıtının tam formatını belirtin: '{\"error\": \"Yazı bulunamadı\"}' veya '{\"message\": \"Yazı bulunamadı\"}' gibi",
+            "location": "acceptanceCriteria[2]"
+          },
+          {
+            "severity": "info",
+            "category": "completeness",
+            "description": "CORS desteği opsiyonel olarak belirtilmiş ancak frontend entegrasyonu için gerekli olabilir",
+            "suggestion": "Eğer browser'dan erişim planlanıyorsa CORS'u zorunlu hale getirin veya hangi durumlarda gerekli olduğunu açıklayın",
+            "location": "technicalConstraints.nonFunctional"
+          }
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Orta guven skoru: 82%. Faktörler: 4 bulgu raporlandi, Inceleme: spec",
+          "severity": "medium"
+        },
+        {
+          "stage": "critic",
+          "issue": "Tanimlanan riskler: AC-4'te 'Her istek 2 saniyeden kısa sürede yanıt döndürür' ifadesi otomatik test için belirsiz - hangi isteklerin test edileceği ve nasıl ölçüleceği net değil",
+          "severity": "low"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "Spec genel olarak iyi yapılandırılmış ve basit blog API gereksinimlerini net bir şekilde tanımlıyor. Problem statement açık, user story'ler uygun, ve temel acceptance criteria'lar mevcut. Ana sorunlar performans testinin belirsizliği ve JSON şemasının eksikliği. Bu düzeltmelerle birlikte spec, geliştiriciler için yeterli rehberlik sağlayacak durumda.",
+        "approved": true,
+        "findings": [
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[3]",
+            "severity": "major",
+            "suggestion": "Spesifik test senaryosu ekleyin: 'GET /posts isteği 2 saniyeden kısa sürede tamamlanır ve GET /posts/1 isteği 2 saniyeden kısa sürede tamamlanır' şeklinde ayrı AC'ler oluşturun",
+            "description": "AC-4'te 'Her istek 2 saniyeden kısa sürede yanıt döndürür' ifadesi otomatik test için belirsiz - hangi isteklerin test edileceği ve nasıl ölçüleceği net değil"
+          },
+          {
+            "category": "completeness",
+            "location": "technicalConstraints",
+            "severity": "minor",
+            "suggestion": "Technical constraints bölümüne posts.json şema örneği ekleyin: 'posts.json formatı: [{\"id\": number, \"title\": string, \"content\": string, \"author\": string, \"date\": string}]'",
+            "description": "posts.json dosyasının yapısı ve örnek içeriği belirtilmemiş - geliştiriciler hangi alanların olması gerektiğini bilemez"
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[2]",
+            "severity": "minor",
+            "suggestion": "Hata yanıtının tam formatını belirtin: '{\"error\": \"Yazı bulunamadı\"}' veya '{\"message\": \"Yazı bulunamadı\"}' gibi",
+            "description": "AC-3'te 'Yazı bulunamadı' mesajının tam JSON formatı belirsiz - error response yapısı net değil"
+          },
+          {
+            "category": "completeness",
+            "location": "technicalConstraints.nonFunctional",
+            "severity": "info",
+            "suggestion": "Eğer browser'dan erişim planlanıyorsa CORS'u zorunlu hale getirin veya hangi durumlarda gerekli olduğunu açıklayın",
+            "description": "CORS desteği opsiyonel olarak belirtilmiş ancak frontend entegrasyonu için gerekli olabilir"
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 82
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 82% guvenle degerlendirme tamamladi. Karar: Spec onaylandi."
+    },
+    {
+      "problemId": "qr-005",
+      "problemTitle": "QR kod üretici",
+      "pipelineId": "58783bc4-dfea-4941-9ac1-d17e389156c4",
+      "finalStage": "awaiting_approval",
+      "durationMs": 51287,
+      "error": null,
+      "scribe": {
+        "agentName": "scribe",
+        "timestamp": "2026-05-07T14:44:28.665Z",
+        "decision": "Spec uretildi: \"QR Kod Üretici Web Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "4 kullanici hikayesi tanimlandi",
+          "6 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidence": {
+          "score": 92,
+          "factors": [
+            "Aciklayici sorulara cevap: 0",
+            "Kabul kriteri sayisi: 6",
+            "Kullanici hikayesi sayisi: 4"
+          ]
+        }
+      },
+      "critic": {
+        "agentName": "critic",
+        "timestamp": "2026-05-07T14:44:50.747Z",
+        "decision": "Spec reddedildi",
+        "reasoning": [
+          "AC-1'de 'Enter tuşuna bastığında' koşulu otomatik test için belirsiz. Playwright gibi test araçları için spesifik olay tetikleyicisi gerekli.",
+          "AC-5'te 'QR kod alanı boş veya 'Metin girin' mesajı gösterilir' ifadesi belirsiz. İki farklı durum tanımlanmış ama hangisinin ne zaman olacağı belirtilmemiş.",
+          "QR kod kütüphanesi teknik kısıtlamalarda belirtilmemiş. Vanilla JavaScript ile QR kod oluşturmak için harici kütüphane gerekli.",
+          "AC-4'te 'Boyut slider'ını 100 pikselden 300 piksele çektiğinde' ifadesi test için belirsiz. Slider'ın DOM'daki konumu ve değer aralığı belirtilmemiş.",
+          "AC-2'de 'anında güncellenir' ifadesi belirsiz. Güncelleme tetikleyicisi (keyup, input event, vs.) belirtilmemiş.",
+          "AC-3'te 'İndir' butonunun DOM'daki konumu belirtilmemiş. Test için button selector gerekli.",
+          "User story'lerde 'otomatik olarak QR kod görüntülenebilmeli' ifadesi belirsiz. Hangi koşulda otomatik güncelleme olacağı net değil."
+        ],
+        "assumptions": [
+          "Spec yapısal kontrolleri tamamlandi"
+        ],
+        "confidence": {
+          "score": 68,
+          "factors": [
+            "7 bulgu raporlandi",
+            "Inceleme: spec"
+          ]
+        },
+        "risks": [
+          "AC-1'de 'Enter tuşuna bastığında' koşulu otomatik test için belirsiz. Playwright gibi test araçları için spesifik olay tetikleyicisi gerekli.",
+          "AC-5'te 'QR kod alanı boş veya 'Metin girin' mesajı gösterilir' ifadesi belirsiz. İki farklı durum tanımlanmış ama hangisinin ne zaman olacağı belirtilmemiş.",
+          "QR kod kütüphanesi teknik kısıtlamalarda belirtilmemiş. Vanilla JavaScript ile QR kod oluşturmak için harici kütüphane gerekli.",
+          "AC-4'te 'Boyut slider'ını 100 pikselden 300 piksele çektiğinde' ifadesi test için belirsiz. Slider'ın DOM'daki konumu ve değer aralığı belirtilmemiş."
+        ],
+        "findings": [
+          {
+            "severity": "critical",
+            "category": "testability",
+            "description": "AC-1'de 'Enter tuşuna bastığında' koşulu otomatik test için belirsiz. Playwright gibi test araçları için spesifik olay tetikleyicisi gerekli.",
+            "suggestion": "AC-1'i şu şekilde değiştirin: 'Input alanına 'https://example.com' yazdığında (keyup veya input event ile)' veya 'Input alanına 'https://example.com' yazıp odağı başka yere verdiğinde'",
+            "location": "acceptanceCriteria[0]"
+          },
+          {
+            "severity": "major",
+            "category": "ambiguity",
+            "description": "AC-5'te 'QR kod alanı boş veya 'Metin girin' mesajı gösterilir' ifadesi belirsiz. İki farklı durum tanımlanmış ama hangisinin ne zaman olacağı belirtilmemiş.",
+            "suggestion": "Tek bir davranış seçin: 'QR kod alanında 'Metin girin' placeholder mesajı gösterilir' VEYA 'QR kod alanı tamamen boş bırakılır'",
+            "location": "acceptanceCriteria[4]"
+          },
+          {
+            "severity": "major",
+            "category": "completeness",
+            "description": "QR kod kütüphanesi teknik kısıtlamalarda belirtilmemiş. Vanilla JavaScript ile QR kod oluşturmak için harici kütüphane gerekli.",
+            "suggestion": "technicalConstraints.integrations bölümüne 'qrcode.js veya benzeri istemci tarafı QR kod kütüphanesi' ekleyin",
+            "location": "technicalConstraints"
+          },
+          {
+            "severity": "major",
+            "category": "testability",
+            "description": "AC-4'te 'Boyut slider'ını 100 pikselden 300 piksele çektiğinde' ifadesi test için belirsiz. Slider'ın DOM'daki konumu ve değer aralığı belirtilmemiş.",
+            "suggestion": "AC-4'ü şu şekilde netleştirin: 'Boyut kontrolü slider'ında (id='size-slider') değeri 300'e ayarladığında'",
+            "location": "acceptanceCriteria[3]"
+          },
+          {
+            "severity": "minor",
+            "category": "ambiguity",
+            "description": "AC-2'de 'anında güncellenir' ifadesi belirsiz. Güncelleme tetikleyicisi (keyup, input event, vs.) belirtilmemiş.",
+            "suggestion": "Güncelleme tetikleyicisini belirtin: 'Kullanıcı metni değiştirdiğinde (input event ile) QR kod otomatik güncellenir'",
+            "location": "acceptanceCriteria[1]"
+          },
+          {
+            "severity": "minor",
+            "category": "testability",
+            "description": "AC-3'te 'İndir' butonunun DOM'daki konumu belirtilmemiş. Test için button selector gerekli.",
+            "suggestion": "AC-3'ü şu şekilde netleştirin: ''İndir' butonuna (id='download-btn') tıkladığında'",
+            "location": "acceptanceCriteria[2]"
+          },
+          {
+            "severity": "minor",
+            "category": "ambiguity",
+            "description": "User story'lerde 'otomatik olarak QR kod görüntülenebilmeli' ifadesi belirsiz. Hangi koşulda otomatik güncelleme olacağı net değil.",
+            "suggestion": "User story'yi netleştirin: 'Girilen metne göre gerçek zamanlı olarak QR kod görüntülenebilmeli'",
+            "location": "userStories[1]"
+          }
+        ]
+      },
+      "attentionPoints": [
+        {
+          "stage": "critic",
+          "issue": "Dusuk guven skoru: 68%. Faktörler: 7 bulgu raporlandi, Inceleme: spec",
+          "severity": "high"
+        },
+        {
+          "stage": "critic",
+          "issue": "Tanimlanan riskler: AC-1'de 'Enter tuşuna bastığında' koşulu otomatik test için belirsiz. Playwright gibi test araçları için spesifik olay tetikleyicisi gerekli.; AC-5'te 'QR kod alanı boş veya 'Metin girin' mesajı gösterilir' ifadesi belirsiz. İki farklı durum tanımlanmış ama hangisinin ne zaman olacağı belirtilmemiş.; QR kod kütüphanesi teknik kısıtlamalarda belirtilmemiş. Vanilla JavaScript ile QR kod oluşturmak için harici kütüphane gerekli.; AC-4'te 'Boyut slider'ını 100 pikselden 300 piksele çektiğinde' ifadesi test için belirsiz. Slider'ın DOM'daki konumu ve değer aralığı belirtilmemiş.",
+          "severity": "low"
+        }
+      ],
+      "criticSpecOutput": {
+        "summary": "Spec genel olarak iyi yapılandırılmış ancak test edilebilirlik açısından kritik eksikleri var. AC-1'deki Enter tuşu koşulu ve AC-5'teki çifte seçenek belirsizliği otomatik test yazımını engelliyor. QR kod kütüphanesi teknik kısıtlamalarda eksik. DOM element selector'ları ve olay tetikleyicileri netleştirilmeli. Bu düzeltmeler yapıldığında spec onaylanabilir duruma gelecek.",
+        "approved": false,
+        "findings": [
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[0]",
+            "severity": "critical",
+            "suggestion": "AC-1'i şu şekilde değiştirin: 'Input alanına 'https://example.com' yazdığında (keyup veya input event ile)' veya 'Input alanına 'https://example.com' yazıp odağı başka yere verdiğinde'",
+            "description": "AC-1'de 'Enter tuşuna bastığında' koşulu otomatik test için belirsiz. Playwright gibi test araçları için spesifik olay tetikleyicisi gerekli."
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[4]",
+            "severity": "major",
+            "suggestion": "Tek bir davranış seçin: 'QR kod alanında 'Metin girin' placeholder mesajı gösterilir' VEYA 'QR kod alanı tamamen boş bırakılır'",
+            "description": "AC-5'te 'QR kod alanı boş veya 'Metin girin' mesajı gösterilir' ifadesi belirsiz. İki farklı durum tanımlanmış ama hangisinin ne zaman olacağı belirtilmemiş."
+          },
+          {
+            "category": "completeness",
+            "location": "technicalConstraints",
+            "severity": "major",
+            "suggestion": "technicalConstraints.integrations bölümüne 'qrcode.js veya benzeri istemci tarafı QR kod kütüphanesi' ekleyin",
+            "description": "QR kod kütüphanesi teknik kısıtlamalarda belirtilmemiş. Vanilla JavaScript ile QR kod oluşturmak için harici kütüphane gerekli."
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[3]",
+            "severity": "major",
+            "suggestion": "AC-4'ü şu şekilde netleştirin: 'Boyut kontrolü slider'ında (id='size-slider') değeri 300'e ayarladığında'",
+            "description": "AC-4'te 'Boyut slider'ını 100 pikselden 300 piksele çektiğinde' ifadesi test için belirsiz. Slider'ın DOM'daki konumu ve değer aralığı belirtilmemiş."
+          },
+          {
+            "category": "ambiguity",
+            "location": "acceptanceCriteria[1]",
+            "severity": "minor",
+            "suggestion": "Güncelleme tetikleyicisini belirtin: 'Kullanıcı metni değiştirdiğinde (input event ile) QR kod otomatik güncellenir'",
+            "description": "AC-2'de 'anında güncellenir' ifadesi belirsiz. Güncelleme tetikleyicisi (keyup, input event, vs.) belirtilmemiş."
+          },
+          {
+            "category": "testability",
+            "location": "acceptanceCriteria[2]",
+            "severity": "minor",
+            "suggestion": "AC-3'ü şu şekilde netleştirin: ''İndir' butonuna (id='download-btn') tıkladığında'",
+            "description": "AC-3'te 'İndir' butonunun DOM'daki konumu belirtilmemiş. Test için button selector gerekli."
+          },
+          {
+            "category": "ambiguity",
+            "location": "userStories[1]",
+            "severity": "minor",
+            "suggestion": "User story'yi netleştirin: 'Girilen metne göre gerçek zamanlı olarak QR kod görüntülenebilmeli'",
+            "description": "User story'lerde 'otomatik olarak QR kod görüntülenebilmeli' ifadesi belirsiz. Hangi koşulda otomatik güncelleme olacağı net değil."
+          }
+        ],
+        "iteration": 1,
+        "reviewType": "spec_review",
+        "overallScore": 68
+      },
+      "overallNarrative": "Scribe, kullanicinin fikrini analiz etti ve 92% guvenle bir spesifikasyon uretti. 0 varsayim yapildi. Critic, ciktiyi inceledi ve 68% guvenle degerlendirme tamamladi. Karar: Spec reddedildi."
+    }
+  ]
+}
