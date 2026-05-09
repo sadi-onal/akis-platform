@@ -299,7 +299,10 @@ export function PipelineDetailRail({
         )}
       </header>
       {!effectiveCollapsed && (
-        <div id="pipeline-rail-body" className="px-4 pb-3">
+        <div
+          id="pipeline-rail-body"
+          className="max-h-[55vh] overflow-y-auto px-4 pb-3 sm:max-h-[60vh]"
+        >
           {attentionPoints.length > 0 && (
             <div className="mb-3">
               <AttentionBanner points={attentionPoints} limit={2} />
