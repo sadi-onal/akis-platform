@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AKIS · Q4 Rubric (Critic kalibrasyonu)</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #f8f9fb;
+    color: #1f2328;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { margin: 0 0 4px; font-size: 24px; font-weight: 700; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  h3 { font-size: 15px; margin: 16px 0 8px; color: #1f6feb; }
+  p, li { font-size: 14px; }
+  .lead { color: #656d76; margin-bottom: 24px; }
+  .card {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(31, 35, 40, 0.04);
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 12px 0;
+  }
+  .meta-block {
+    background: #f6f8fa;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .meta-block .lbl {
+    text-transform: uppercase;
+    font-size: 10px;
+    color: #8b949e;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .meta-block ul { padding-left: 18px; margin: 4px 0; }
+  .idea-box {
+    background: #fffbe6;
+    border-left: 3px solid #d4a72c;
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-style: italic;
+    font-size: 13px;
+  }
+  .body-box {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: ui-monospace, 'SF Mono', monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    max-height: 360px;
+    overflow-y: auto;
+    margin: 8px 0 16px;
+  }
+  .body-box.empty {
+    font-family: inherit;
+    color: #8b949e;
+    font-style: italic;
+    background: #fff8f0;
+    border-color: #f1c40f55;
+  }
+  .criterion {
+    margin: 14px 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: #f6f8fa;
+  }
+  .criterion .crit-title {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .criterion .crit-help {
+    font-size: 12px;
+    color: #656d76;
+    margin-bottom: 8px;
+  }
+  .scale {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .scale label {
+    cursor: pointer;
+    padding: 5px 10px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    transition: all 0.15s;
+    min-width: 32px;
+    text-align: center;
+  }
+  .scale input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .scale label:has(input:checked) {
+    border-color: #07d1af;
+    background: #07d1af;
+    color: #fff;
+    font-weight: 600;
+  }
+  .scale-anchor {
+    font-size: 10px;
+    color: #8b949e;
+    margin: 0 4px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+  }
+  input[type="text"], select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #ddf4ff;
+    color: #0969da;
+  }
+  .running-total {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: #07d1af20;
+    color: #027b66;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  button.primary {
+    background: #07d1af;
+    color: #fff;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button.primary:hover { background: #06b89a; }
+  button.primary:disabled { background: #d0d7de; cursor: not-allowed; }
+  .status {
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 12px;
+    font-size: 13px;
+    background: #ddf4ff;
+    color: #0969da;
+  }
+  .note { font-size: 12px; color: #8b949e; margin-top: 8px; }
+  details summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+  .progress-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    border-bottom: 1px solid #d0d7de;
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    box-shadow: 0 1px 3px rgba(31, 35, 40, 0.04);
+  }
+  .progress-bar .track {
+    flex: 1;
+    height: 6px;
+    background: #eaeef2;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    background: #07d1af;
+    width: 0%;
+    transition: width 200ms ease-out;
+  }
+  .progress-bar .label { font-weight: 600; min-width: 80px; }
+  .progress-bar .saved {
+    font-size: 11px;
+    color: #1a7f37;
+    opacity: 0;
+    transition: opacity 300ms;
+  }
+  .progress-bar .saved.visible { opacity: 1; }
+  .bias-warning {
+    background: #fff8c5;
+    border: 1px solid #d4a72c;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin: 16px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" role="status" aria-live="polite">
+  <span class="label" id="progress-label">0 / 30</span>
+  <div class="track"><div class="fill" id="progress-fill"></div></div>
+  <span class="saved" id="saved-indicator">✓ taslak kaydedildi</span>
+</div>
+
+<div class="wrap">
+
+<h1>AKIS · Q4 Rubric (Critic skoru kalibrasyonu)</h1>
+<p class="lead">
+  AKIS pipeline'ı 5 yazılım fikrine spec üretti. Her spec için 6 ürün-perspektifi kriterini 0-10
+  arası puanla. <strong>Critic'in kendi skoru, kararı ve bulguları bu formda kasıtlı olarak
+  görünmüyor</strong> — bias engellemek için. Senin notun bağımsız olmalı.
+</p>
+
+<details class="card">
+<summary>Yöntem ve gerekçe</summary>
+<div class="note">
+  <p>
+    Q4 sorusu: <em>Critic'in 68% verdiği spec gerçekten kötü, 82% verdiği gerçekten iyi mi?</em>
+    Bunu test etmek için bağımsız bir manuel skor üretiyoruz; sonra Pearson r ile Critic skoruyla
+    korelasyona bakıyoruz.
+  </p>
+  <p>
+    Rubric kasıtlı olarak Critic'in kendi rubric'inden (completeness, ambiguity, testability,
+    consistency, spec_compliance, security) <strong>FARKLI</strong> kriterler kullanır — circular
+    reference önlemek için. Sen <em>spec dokümanının iyi yazılıp yazılmadığını</em> değil,
+    <em>üretilen ürünün kullanıcı/iş açısından sağlamlığını</em> değerlendiriyorsun.
+  </p>
+  <p>
+    Yanıtların yerel kalır (sayfa altındaki "İndir" → JSON). Yazara DM/mail ile gönderdikten sonra
+    aggregator <code>scripts/benchmark/q4-aggregate.mjs</code> Critic skoruyla karşılaştırır.
+  </p>
+  <p>
+    <strong>Bu çalışmanın N=5 olduğu unutulmamalı</strong> — Pearson r anlamlılık testi anlamlı
+    sonuç vermez. Tezde "small-N illustrative correlation" olarak raporlanır.
+  </p>
+</div>
+</details>
+
+<div class="bias-warning">
+  ⚠️ <strong>Bias uyarısı:</strong> Tüm 5 spec'i puanlamadan önce Critic skorlarını
+  <code>results-baseline-*.json</code>'dan açıp bakma. Sonuç korelasyonun anlamı bu sebeple
+  yok olur. Skorların görüntülenmesi sadece formu indirip aggregator'ı koşturduktan sonra
+  yapılmalı.
+</div>
+
+<section class="card">
+<h2>Değerlendirici bilgileri</h2>
+<div class="demo-grid">
+  <div>
+    <label>Yazılım deneyimi (yaklaşık yıl)
+      <input type="text" id="demo-experience" placeholder="örn. 3" />
+    </label>
+  </div>
+  <div>
+    <label>Ürün/spec yazma deneyimi
+      <select id="demo-product">
+        <option value="">Seçin…</option>
+        <option>Hiç yok</option>
+        <option>Az (birkaç spec)</option>
+        <option>Orta (düzenli)</option>
+        <option>Yüksek (yıllar)</option>
+      </select>
+    </label>
+  </div>
+  <div>
+    <label>Bakkal/esnaf gibi yazılım dışı paydaşlarla çalışma deneyimi
+      <select id="demo-stakeholder">
+        <option value="">Seçin…</option>
+        <option>Yok</option>
+        <option>Sınırlı</option>
+        <option>Düzenli</option>
+      </select>
+    </label>
+  </div>
+  <div>
+    <label>Rater kimliği (anonim — tezde sayı geçer)
+      <input type="text" id="demo-id" placeholder="örn. R01" />
+    </label>
+  </div>
+</div>
+</section>
+
+<section class="card">
+<h2>Rubric kriterleri (her spec için tekrarlanır)</h2>
+<p class="lead">
+  Her spec için aşağıdaki 6 kriteri 0-10 arası puanla. Toplam 60 puana normalize edilip
+  yüzdeye çevrilir, Critic skorunun da yüzde olduğu yapılan korelasyonla karşılaştırılır.
+</p>
+<ol style="font-size:13px">
+  <li><strong>Ürün vizyonu netliği</strong> — Spec yalnızca okunarak <em>ne inşa ediliyor?</em>
+    sorusu cevaplanabiliyor mu? (0 = belirsiz, 10 = tek bakışta net)</li>
+  <li><strong>Kullanıcı yararı belirginliği</strong> — Bu yazılımı kim, neden kullanır net mi?
+    (0 = yarar yok/mistik, 10 = ilk paragraftan değer önerisi belli)</li>
+  <li><strong>Kullanıcı fikrine sadakat</strong> — Spec, sarı kutuda gösterilen orijinal fikirle
+    örtüşüyor mu? (0 = farklı bir ürüne dönüşmüş, 10 = aynen aktarılmış)</li>
+  <li><strong>MVP kapsamı uygunluğu</strong> — Kapsam doğru ölçekte mi? (0 = ya iskelet ya
+    şişkin, 10 = MVP için tam isabet)</li>
+  <li><strong>Yazılımcı olmayan anlaşılabilirliği</strong> — Bakkal/esnaf gibi non-developer bir
+    paydaş bunu okuyup ne alacağını anlayabilir mi? (0 = jargon yığını, 10 = tertemiz)</li>
+  <li><strong>Pratik fizibilite (1 hafta · 1 dev)</strong> — Tek bir geliştirici, AI-asisted ile
+    bunu bir hafta içinde teslim eder mi? (0 = yarısı bile zor, 10 = rahatça)</li>
+</ol>
+</section>
+
+<div id="specs"></div>
+
+<section class="card">
+<h2>Genel yorum (opsiyonel)</h2>
+<textarea id="comment" placeholder="Genel gözlemler, dikkat çeken örnekler, rubric ile ilgili öneriler…"></textarea>
+</section>
+
+<section style="text-align:center;margin-top:24px;">
+<button class="primary" id="download-btn">↓ Yanıtlarımı indir (JSON)</button>
+<p class="note">İndirilen dosyayı <code>docs/dogfooding/q4-responses/</code> altına koy ve aggregator'ı çalıştır.</p>
+<div class="status" id="status" style="display:none;"></div>
+</section>
+
+</div>
+
+<script>
+// ─── Rubric criteria (Critic-disjoint by design) ────────────────
+const CRITERIA = [
+  { id: 'product_vision',     short: 'Ürün vizyonu netliği',
+    help: 'Spec\'i okuyan biri "ne inşa ediliyor?" sorusunu net cevaplayabiliyor mu?' },
+  { id: 'user_benefit',       short: 'Kullanıcı yararı belirginliği',
+    help: 'Bu yazılımı kim, neden kullanır — değer önerisi açık mı?' },
+  { id: 'idea_faithfulness',  short: 'Kullanıcı fikrine sadakat',
+    help: 'Spec, orijinal kullanıcı fikriyle örtüşüyor mu, sapmış mı?' },
+  { id: 'mvp_scope',          short: 'MVP kapsamı uygunluğu',
+    help: 'Kapsam doğru ölçekte mi (ne iskelet ne şişkin)?' },
+  { id: 'non_dev_clarity',    short: 'Yazılımcı olmayan anlaşılabilirliği',
+    help: 'Bakkal/esnaf gibi non-dev bir paydaş okuyup ne alacağını anlar mı?' },
+  { id: 'practical_feasibility', short: 'Pratik fizibilite (1 hafta · 1 dev)',
+    help: 'Tek geliştirici, AI-asisted, bunu bir haftada teslim eder mi?' },
+];
+
+// ─── Render after fetching snapshot ─────────────────────────────
+async function loadSnapshot() {
+  try {
+    const res = await fetch('q4-specs-snapshot.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+function escapeHTML(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])
+  );
+}
+
+function metaList(items, fallback) {
+  if (!items || !items.length) return `<em style="color:#8b949e">${fallback}</em>`;
+  return '<ul>' + items.map((x) => `<li>${escapeHTML(x)}</li>`).join('') + '</ul>';
+}
+
+function specCard(spec, idx) {
+  const bodyHtml = spec.specBodyMarkdown
+    ? `<div class="body-box">${escapeHTML(spec.specBodyMarkdown)}</div>`
+    : `<div class="body-box empty">Spec body bu snapshot'ta yok. q4-capture-specs.mjs scripti backend
+        :3000'de çalışırken koşulursa <code>specBodyMarkdown</code> alanı doldurulur. Şimdilik
+        scribe metadata'sından (story/AC sayıları, varsayımlar, üretilen başlık) yola çıkarak
+        skor verebilirsin — ya da bu spec'i kendi UI'da açıp gör, sonra geri dön.</div>`;
+
+  const criteriaHtml = CRITERIA.map((c) => `
+    <div class="criterion">
+      <div class="crit-title">${c.short}</div>
+      <div class="crit-help">${c.help}</div>
+      <div class="scale" data-spec="${spec.problemId}" data-crit="${c.id}">
+        <span class="scale-anchor">0 (kötü)</span>
+        ${[0,1,2,3,4,5,6,7,8,9,10].map((v) => `
+          <label><input type="radio" name="${spec.problemId}-${c.id}" value="${v}" />${v}</label>
+        `).join('')}
+        <span class="scale-anchor">10 (mükemmel)</span>
+      </div>
+    </div>
+  `).join('');
+
+  return `
+    <section class="card" data-spec="${spec.problemId}">
+      <h2>Spec ${idx + 1}/5 — ${escapeHTML(spec.problemTitle)}
+        <span class="badge">${escapeHTML(spec.problemId)}</span>
+        <span class="running-total" id="total-${spec.problemId}">— / 60</span>
+      </h2>
+      <div class="idea-box">
+        <strong>Orijinal kullanıcı fikri:</strong><br/>${escapeHTML(spec.idea)}
+      </div>
+      <h3>Üretilen spec metadata</h3>
+      <div class="meta-grid">
+        <div class="meta-block">
+          <div class="lbl">Spec başlığı</div>
+          ${escapeHTML(spec.specTitle)}
+        </div>
+        <div class="meta-block">
+          <div class="lbl">Scribe gerekçesi (sayım)</div>
+          ${metaList(spec.scribe.reasoning, 'yok')}
+        </div>
+        <div class="meta-block">
+          <div class="lbl">Scribe varsayımları</div>
+          ${metaList(spec.scribe.assumptions, '(varsayım yok)')}
+        </div>
+        <div class="meta-block">
+          <div class="lbl">Scribe güven faktörleri</div>
+          ${metaList(spec.scribe.confidenceFactors, 'yok')}
+        </div>
+      </div>
+      <h3>Spec body (raw)</h3>
+      ${bodyHtml}
+      <h3>Senin rubric skorların</h3>
+      ${criteriaHtml}
+      <div class="criterion">
+        <div class="crit-title">Notlar (opsiyonel)</div>
+        <textarea data-spec-note="${spec.problemId}" placeholder="Neden bu skorlar? Dikkat çeken yön…"></textarea>
+      </div>
+    </section>
+  `;
+}
+
+(async function init() {
+  const snapshot = await loadSnapshot();
+  const root = document.getElementById('specs');
+  if (!snapshot) {
+    root.innerHTML = `
+      <section class="card" style="background:#fff8f0;border-color:#d4a72c">
+        <h2>Snapshot yüklenemedi</h2>
+        <p>Form, <code>q4-specs-snapshot.json</code> dosyasını fetch ile bekler. Yan yana
+        olmalı. Bu dosya Critic verisinin sızdırılmadığı bias-free bir kopyasıdır.
+        <code>file://</code> ile açıldığında bazı tarayıcılar fetch'i bloklar — formu
+        <code>python3 -m http.server</code> gibi basit bir static server ile aç.</p>
+      </section>
+    `;
+    return;
+  }
+  root.innerHTML = snapshot.specs.map(specCard).join('');
+  attachListeners(snapshot);
+  restore();
+  updateProgress();
+})();
+
+// ─── Autosave + progress + per-spec running total ──────────────
+const DRAFT_KEY = 'akis.q4.draft';
+
+function snapshotDraft() {
+  const radios = {};
+  document.querySelectorAll('input[type="radio"]:checked').forEach((r) => {
+    radios[r.name] = r.value;
+  });
+  const notes = {};
+  document.querySelectorAll('textarea[data-spec-note]').forEach((t) => {
+    notes[t.dataset.specNote] = t.value;
+  });
+  return {
+    radios,
+    notes,
+    demographics: {
+      experience: document.getElementById('demo-experience').value,
+      productExp: document.getElementById('demo-product').value,
+      stakeholderExp: document.getElementById('demo-stakeholder').value,
+      raterId: document.getElementById('demo-id').value,
+    },
+    comment: document.getElementById('comment').value,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function restore() {
+  let raw;
+  try { raw = window.localStorage.getItem(DRAFT_KEY); } catch { return; }
+  if (!raw) return;
+  try {
+    const draft = JSON.parse(raw);
+    Object.entries(draft.radios ?? {}).forEach(([name, value]) => {
+      const radio = document.querySelector(
+        `input[type="radio"][name="${name}"][value="${value}"]`,
+      );
+      if (radio) radio.checked = true;
+    });
+    Object.entries(draft.notes ?? {}).forEach(([sid, val]) => {
+      const t = document.querySelector(`textarea[data-spec-note="${sid}"]`);
+      if (t) t.value = val;
+    });
+    if (draft.demographics) {
+      document.getElementById('demo-experience').value = draft.demographics.experience ?? '';
+      document.getElementById('demo-product').value = draft.demographics.productExp ?? '';
+      document.getElementById('demo-stakeholder').value = draft.demographics.stakeholderExp ?? '';
+      document.getElementById('demo-id').value = draft.demographics.raterId ?? '';
+    }
+    if (draft.comment) document.getElementById('comment').value = draft.comment;
+  } catch { /* malformed — ignore */ }
+  updateAllTotals();
+}
+
+function flashSaved() {
+  const el = document.getElementById('saved-indicator');
+  el.classList.add('visible');
+  clearTimeout(flashSaved._t);
+  flashSaved._t = setTimeout(() => el.classList.remove('visible'), 1200);
+}
+
+function updateProgress() {
+  const total = document.querySelectorAll('.scale').length;
+  const answered = document.querySelectorAll('.scale input:checked').length;
+  document.getElementById('progress-label').textContent = `${answered} / ${total}`;
+  document.getElementById('progress-fill').style.width =
+    total > 0 ? `${(answered / total) * 100}%` : '0%';
+}
+
+function updateAllTotals() {
+  const cards = document.querySelectorAll('section.card[data-spec]');
+  cards.forEach((card) => {
+    const sid = card.dataset.spec;
+    let sum = 0; let answered = 0;
+    card.querySelectorAll('.scale input:checked').forEach((r) => {
+      sum += Number(r.value);
+      answered++;
+    });
+    const el = document.getElementById(`total-${sid}`);
+    if (el) {
+      el.textContent = answered === CRITERIA.length
+        ? `${sum} / 60 = ${Math.round((sum / 60) * 100)}%`
+        : `${sum} / 60 (${answered}/${CRITERIA.length} kriter)`;
+    }
+  });
+}
+
+function persistDraft() {
+  try {
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(snapshotDraft()));
+    flashSaved();
+  } catch { /* private mode etc. */ }
+}
+
+function attachListeners() {
+  document.addEventListener('change', () => {
+    persistDraft();
+    updateProgress();
+    updateAllTotals();
+  });
+  document.addEventListener('input', persistDraft);
+
+  document.getElementById('download-btn').addEventListener('click', () => {
+    const responses = [];
+    document.querySelectorAll('.scale').forEach((g) => {
+      const checked = g.querySelector('input:checked');
+      responses.push({
+        problemId: g.dataset.spec,
+        criterion: g.dataset.crit,
+        score: checked ? Number(checked.value) : null,
+      });
+    });
+    const notes = {};
+    document.querySelectorAll('textarea[data-spec-note]').forEach((t) => {
+      if (t.value.trim()) notes[t.dataset.specNote] = t.value.trim();
+    });
+
+    const completed = responses.filter((r) => r.score !== null).length;
+    const total = responses.length;
+    const status = document.getElementById('status');
+    if (completed < total) {
+      status.style.display = 'block';
+      status.style.background = '#fff8c5';
+      status.style.color = '#9a6700';
+      status.textContent = `Eksik: ${total - completed} kriter. Yine de indirebilirsin.`;
+    } else {
+      status.style.display = 'block';
+      status.style.background = '#dafbe1';
+      status.style.color = '#1a7f37';
+      status.textContent = `Tüm ${total} kriter yanıtlandı. ✓`;
+    }
+
+    const payload = {
+      schemaVersion: 1,
+      capturedAt: new Date().toISOString(),
+      rubricCriteria: CRITERIA.map((c) => ({ id: c.id, short: c.short })),
+      demographics: {
+        experience: document.getElementById('demo-experience').value.trim(),
+        productExp: document.getElementById('demo-product').value,
+        stakeholderExp: document.getElementById('demo-stakeholder').value,
+        raterId: document.getElementById('demo-id').value.trim(),
+      },
+      comment: document.getElementById('comment').value.trim(),
+      notes,
+      responses,
+    };
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `q4-rubric-${payload.demographics.raterId || 'anon'}-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
+</script>
+</body>
+</html>

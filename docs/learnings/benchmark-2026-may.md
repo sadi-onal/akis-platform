@@ -146,6 +146,78 @@ Scribe çok dar bir bant'ta (88-92), Critic geniş bant'ta (68-82). **Critic'in 
 4. **Confidence skor varyansı, sinyal taşıyor.** Critic 68 ile 82 arasında üç farklı skor verdi (68, 82). Bu ayrım approval kararına da yansıyor (68 reject, 82 approve). Skor → karar zinciri kalibre görünüyor.
 5. **Security kategorisi sıfır** — bu problem seti (todo, hesap makinesi, döviz çevirici, blog API, QR) güvenlik-yoğun olmadığı için doğal. Auth/payment içeren bir benchmark seti güvenlik bulgularını ortaya çıkarır.
 
+### 3.7 Q4 — Critic Skoru Kalibrasyonu (manuel rubric karşılaştırması)
+
+> **Durum:** Bu bölüm kullanıcı manuel skor verene kadar TBD placeholder'larıyla yazıldı.
+> Manuel skor `docs/dogfooding/q4-responses/` altına düşünce
+> `node scripts/benchmark/q4-aggregate.mjs` koşulup tablolar/sayılar yerlerine yapıştırılır.
+
+#### 3.7.1 Yöntem
+
+Q4 sorusu (THESIS_FOCUS § 3 Q4): _Critic 68% verdiğinde gerçekten %32 kötü mü? 82% verdiğinde
+gerçekten iyi mi?_ Bunu test etmek için, Critic'ten **bağımsız** bir manuel rubric ile
+aynı 5 spec'i puanladık ve iki skor arasında Pearson korelasyonuna baktık.
+
+Rubric, Critic'in kendi kategorilerinden (`completeness`, `ambiguity`, `testability`,
+`consistency`, `spec_compliance`, `security`) **kasıtlı olarak ayrık** seçildi —
+circular reference önlemek için. Kriterler ürün/iş perspektifindendir, _spec dokümanının
+yapısal kalitesi_ değil _spec'in oluşturduğu ürünün kullanıcı/iş açısından sağlamlığı_
+ölçülür:
+
+1. **Ürün vizyonu netliği** — spec yalnızca okunarak ne inşa ediliyor sorusu cevaplanabiliyor mu?
+2. **Kullanıcı yararı belirginliği** — değer önerisi açık mı?
+3. **Kullanıcı fikrine sadakat** — orijinal idea ile örtüşme.
+4. **MVP kapsamı uygunluğu** — doğru ölçek (ne iskelet ne şişkin).
+5. **Yazılımcı olmayan anlaşılabilirliği** — bakkal-persona okuyup ne aldığını anlar mı?
+6. **Pratik fizibilite (1 hafta · 1 dev)** — tek geliştirici, AI-asisted, bir haftada teslim?
+
+Her kriter 0-10 puan; toplam 60 → yüzdeye normalize edilir, Critic'in `overallScore`
+yüzdesiyle karşılaştırılır. Form: `docs/dogfooding/q4-rubric-form.html`. Bias engellemek
+için form Critic skorunu/kararını/bulgularını **göstermez** — `q4-specs-snapshot.json` o
+verileri içermez. Aggregator: `scripts/benchmark/q4-aggregate.mjs`.
+
+#### 3.7.2 Bulgular — özet
+
+| Spec | Critic skoru | Manuel ort | Δ (M − C) | Yön |
+|------|--------------|------------|-----------|-----|
+| todo-001 | 82% | TBD | TBD | TBD |
+| calc-002 | 68% | TBD | TBD | TBD |
+| currency-003 | 68% | TBD | TBD | TBD |
+| blog-004 | 82% | TBD | TBD | TBD |
+| qr-005 | 82% | TBD | TBD | TBD |
+
+- **Pearson r (Critic × Manuel ort):** TBD
+- **n (spec çiftleri):** 5
+- **Onay kararı uyumu** (Critic approved vs manual ≥80% eşiği): TBD/5
+
+> N=5 küçüktür; Pearson r anlamlılık testi yapılmaz. Aşağıdaki yorum
+> "small-N illustrative correlation" çerçevesinde okunmalıdır.
+
+#### 3.7.3 Yorum şablonu (gerçek r geldiğinde uygula)
+
+THESIS_FOCUS § 3 Q4'teki yorum tablosu:
+
+| \|r\| aralığı | Yorum |
+|---|---|
+| ≥ 0.7 | Critic skor ↔ insan değerlendirmesi güçlü uyum: kalibre. Threshold-tabanlı approval rasyonel. |
+| 0.4 – 0.7 | Orta uyum: Critic sinyal taşıyor ama kesin değil. Threshold ayarı düşünülebilir. |
+| 0.2 – 0.4 | Zayıf uyum: skor kalibre değil; threshold tek başına karar için yetersiz. |
+| < 0.2 | Korelasyon yok: Critic skoru rastgele görünüyor → kalibrasyon problemi. |
+
+**TBD — gerçek r aggregator'dan üretildikten sonra ilgili satır buraya kopyalanır.**
+
+#### 3.7.4 Sınırlılıklar (Q4'e özel)
+
+- **N=5 spec çifti** — istatistiksel güç düşük. Korelasyon yön/büyüklük gösterir,
+  population-level genelleme değildir.
+- **Tek baseline koşumu** — aynı spec yeniden üretildiğinde Critic skoru oynayabilir
+  (LLM stochasticity). Test-retest kalibrasyon başka bir Q.
+- **Rater havuzu küçük** — yazar + 1-2 bitirme arkadaşı düzeyinde. Aggregator
+  rater-arası varyansı raporlar; rater sayısı ≥3 olduğunda anlamlıdır.
+- **Rubric kasıtlı disjoint** — bu sebeple "Critic ile uyumsuzluk" sürpriz değil;
+  pozitif korelasyon `bulunduğunda` Critic'in iki bağımsız sinyali yakaladığını gösterir,
+  çakıştığı için değil.
+
 ## 4. Tartışma (birinci koşum sonrası)
 
 ### 4.1 Doğrulama Zinciri Tamamlanma Oranı (Q1)

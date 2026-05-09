@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "docs/dogfooding/results-baseline-2026-05-07T11-32-30-706Z.json",
+  "note": "Bu dosya Q4 rubric formunda gösterilen bias-free veridir. Critic skoru/kararı/bulguları KASITLI YOK — manuel skor verilirken görünmemeli. Form bu dosyayı fetch ile okur.",
+  "specs": [
+    {
+      "problemId": "todo-001",
+      "problemTitle": "Tek kullanıcılı görev listesi",
+      "pipelineId": "a32a443e-29ba-4be2-901a-537a04a0a6da",
+      "idea": "Tek kullanıcılı, tarayıcıda çalışan basit bir görev listesi uygulaması istiyorum. Görev ekleyebilmeli, tamamlandı olarak işaretleyebilmeli, silebilmeliyim. Veri tarayıcının localStorage'ında saklansın.",
+      "specTitle": "Basit Görev Listesi Uygulaması",
+      "scribe": {
+        "decision": "Spec uretildi: \"Basit Görev Listesi Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "4 kullanici hikayesi tanimlandi",
+          "5 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidenceScore": 92,
+        "confidenceFactors": [
+          "Aciklayici sorulara cevap: 0",
+          "Kabul kriteri sayisi: 5",
+          "Kullanici hikayesi sayisi: 4"
+        ]
+      },
+      "specBodyMarkdown": null
+    },
+    {
+      "problemId": "calc-002",
+      "problemTitle": "Tarayıcı hesap makinesi",
+      "pipelineId": "54350aec-a07b-4d62-a994-3eb0c3fb6679",
+      "idea": "Toplama, çıkarma, çarpma, bölme yapabilen basit bir hesap makinesi. Klavyeden ve butonlardan giriş kabul etmeli. Hata durumlarını (örn. sıfıra bölme) ekranda göstersin.",
+      "specTitle": "Basit Hesap Makinesi Uygulaması",
+      "scribe": {
+        "decision": "Spec uretildi: \"Basit Hesap Makinesi Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "5 kullanici hikayesi tanimlandi",
+          "10 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidenceScore": 92,
+        "confidenceFactors": [
+          "Aciklayici sorulara cevap: 0",
+          "Kabul kriteri sayisi: 10",
+          "Kullanici hikayesi sayisi: 5"
+        ]
+      },
+      "specBodyMarkdown": null
+    },
+    {
+      "problemId": "currency-003",
+      "problemTitle": "Döviz çevirici",
+      "pipelineId": "4c4cc7dc-e9f5-42b5-9c0b-c710ab4f4fb2",
+      "idea": "USD ve TRY arasında çeviri yapabilen tek sayfa bir uygulama. Statik bir kur kullansın (örn. 1 USD = 32 TRY) — gerçek API entegrasyonu istemiyorum.",
+      "specTitle": "USD-TRY Döviz Çevirici Uygulaması",
+      "scribe": {
+        "decision": "Spec uretildi: \"USD-TRY Döviz Çevirici Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "3 kullanici hikayesi tanimlandi",
+          "8 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidenceScore": 92,
+        "confidenceFactors": [
+          "Aciklayici sorulara cevap: 0",
+          "Kabul kriteri sayisi: 8",
+          "Kullanici hikayesi sayisi: 3"
+        ]
+      },
+      "specBodyMarkdown": null
+    },
+    {
+      "problemId": "blog-004",
+      "problemTitle": "Read-only blog API",
+      "pipelineId": "64871857-045e-4a7e-aed0-097806199aa7",
+      "idea": "JSON dosyasından okuyup blog yazılarını döndüren basit bir Express API. İki endpoint: GET /posts (liste), GET /posts/:id (detay).",
+      "specTitle": "Express Blog API - JSON Veri Kaynağı",
+      "scribe": {
+        "decision": "Spec uretildi: \"Express Blog API - JSON Veri Kaynağı\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "2 kullanici hikayesi tanimlandi",
+          "4 kabul kriteri yazildi"
+        ],
+        "assumptions": [],
+        "confidenceScore": 92,
+        "confidenceFactors": [
+          "Aciklayici sorulara cevap: 0",
+          "Kabul kriteri sayisi: 4",
+          "Kullanici hikayesi sayisi: 2"
+        ]
+      },
+      "specBodyMarkdown": null
+    },
+    {
+      "problemId": "qr-005",
+      "problemTitle": "QR kod üretici",
+      "pipelineId": "a524c60d-3710-4393-a7a8-c6263259ced2",
+      "idea": "Bir input'a metin yaz, QR kodu üret. Sayfa içinde, yapay zeka API kullanmadan.",
+      "specTitle": "QR Kod Üretici Web Uygulaması",
+      "scribe": {
+        "decision": "Spec uretildi: \"QR Kod Üretici Web Uygulaması\"",
+        "reasoning": [
+          "0 aciklayici soru soruldu",
+          "3 kullanici hikayesi tanimlandi",
+          "6 kabul kriteri yazildi"
+        ],
+        "assumptions": [
+          "Web tarayıcısı hedef platform olarak varsayıldı",
+          "QR kod indirme özelliği MVP'ye dahil edildi",
+          "Mobil responsive tasarım bekleniyor"
+        ],
+        "confidenceScore": 88,
+        "confidenceFactors": [
+          "Aciklayici sorulara cevap: 0",
+          "Kabul kriteri sayisi: 6",
+          "Kullanici hikayesi sayisi: 3"
+        ]
+      },
+      "specBodyMarkdown": null
+    }
+  ]
+}
