@@ -17,6 +17,7 @@ import { extractJsonSafe, sanitizeJsonControlChars, repairTruncatedJson } from '
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { PROTO_TOOLS, createProtoToolHandlers, type ProtoToolDeps } from './proto-tools.js';
+import { ScaffoldEnricher, type ScaffoldFile } from './ScaffoldEnricher.js';
 import type { SkillRegistry } from '../skills/index.js';
 import {
   buildSystemPromptWithSkills,
@@ -238,6 +239,13 @@ export class ProtoAgent {
   private github: ProtoGitHubDeps;
   private agenticDeps?: AgenticLoopDeps;
   private skillRegistry?: SkillRegistry;
+  /**
+   * F-08 / FR-6.5..6.8 — adds install.sh, Turkish README sections, optional
+   * Dockerfile and .env.example so the bakkal can run / deploy / share the
+   * project. Invoked at all push paths via {@link applyEnrichment} so the
+   * portability layer ships with every scaffold (legacy, iteration, agentic).
+   */
+  private enricher: ScaffoldEnricher = new ScaffoldEnricher();
 
   constructor(
     ai: ProtoAIDeps,
@@ -249,6 +257,25 @@ export class ProtoAgent {
     this.github = github;
     this.agenticDeps = agenticDeps;
     this.skillRegistry = skillRegistry;
+  }
+
+  /**
+   * Run scaffold enrichment on Proto-shape files (filePath/content) and
+   * return enriched Proto-shape files. Detects the stack, generates the
+   * portability layer (install.sh, README sections, optional Dockerfile,
+   * .env.example), and merges with what the AI produced.
+   */
+  private applyEnrichment(
+    files: ProtoOutput['files'],
+    spec: { title: string; description?: string },
+  ): ProtoOutput['files'] {
+    const scaffoldFiles: ScaffoldFile[] = files.map((f) => ({ path: f.filePath, content: f.content }));
+    const enriched = this.enricher.enrich(scaffoldFiles, spec);
+    return enriched.map((f) => ({
+      filePath: f.path,
+      content: f.content,
+      linesOfCode: f.content.split('\n').length,
+    }));
   }
 
   private enhance(basePrompt: string): string {
@@ -280,8 +307,15 @@ export class ProtoAgent {
       return scaffoldResult;
     }
 
-    const { files, setupCommands, metadata } = scaffoldResult.data;
-    emit?.('parsing', `AI yanıtından dosya yapısı çıkarıldı: ${files.length} dosya`, 55);
+    const { files: rawFiles, setupCommands, metadata } = scaffoldResult.data;
+    emit?.('parsing', `AI yanıtından dosya yapısı çıkarıldı: ${rawFiles.length} dosya`, 55);
+
+    // F-08: enrich AI output with portability layer (install.sh + Turkish
+    // README + optional Dockerfile + .env.example) — see ScaffoldEnricher.ts.
+    const files = this.applyEnrichment(rawFiles, {
+      title: input.spec.title,
+      description: input.spec.problemStatement,
+    });
 
     if (input.dryRun) {
       return {
@@ -444,11 +478,19 @@ JSON format (respond with ONLY this, nothing else):
       };
     }
 
-    const files = parsedFiles.map((f) => ({
+    const rawIterFiles = parsedFiles.map((f) => ({
       filePath: f.filePath,
       content: f.content,
       linesOfCode: f.linesOfCode ?? f.content.split('\n').length,
     }));
+
+    // F-08: re-enrich on iteration so re-runs keep the portability layer.
+    // The enricher is idempotent — README sections won't double-append, and
+    // existing install.sh / Dockerfile / .env.example are preserved as-is.
+    const files = this.applyEnrichment(rawIterFiles, {
+      title: input.spec.title,
+      description: input.spec.problemStatement,
+    });
 
     // Push updated files to GitHub
     emit?.('github_push', `${files.length} dosya güncelleniyor...`, 75);
@@ -497,11 +539,34 @@ JSON format (respond with ONLY this, nothing else):
       return repoResult;
     }
 
+    // F-08: track the LLM's pre-enrichment file list so we report what was
+    // actually pushed (enriched superset) downstream. Closure-captured so the
+    // post-tool block below can prefer enriched files over the raw tool input.
+    let enrichedPushed: ProtoOutput['files'] | undefined;
+
     // Build tool handlers — create_repository is excluded from the tool list
     // passed to the loop (repo already exists), only push_files is needed.
+    // F-08: wrap pushFiles to enrich the AI's file array right before the
+    // GitHub commit. This is the single agentic-path interception point —
+    // the LLM still sees push_files succeed and reports its summary, but
+    // the bytes that land on GitHub include install.sh + Turkish README +
+    // Dockerfile + .env.example. See FR-6.5..6.8 / 03-architecture § 5.4.
     const toolDeps: ProtoToolDeps = {
       createRepository: (owner, name, isPrivate) => this.github.createRepository(owner, name, isPrivate),
-      pushFiles: (owner, repo, branch, files, message) => this.github.pushFiles!(owner, repo, branch, files, message),
+      pushFiles: async (owner, repo, branch, files, message) => {
+        const enriched = this.applyEnrichment(
+          files.map((f) => ({ filePath: f.path, content: f.content, linesOfCode: f.content.split('\n').length })),
+          { title: input.spec.title, description: input.spec.problemStatement },
+        );
+        enrichedPushed = enriched;
+        await this.github.pushFiles!(
+          owner,
+          repo,
+          branch,
+          enriched.map((f) => ({ path: f.filePath, content: f.content })),
+          message,
+        );
+      },
     };
     const handlers = createProtoToolHandlers(toolDeps);
 
@@ -601,11 +666,17 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
         };
       }
 
-      const files = (pushCall.input.files as Array<{ path: string; content: string }>).map((f) => ({
-        filePath: f.path,
-        content: f.content,
-        linesOfCode: f.content.split('\n').length,
-      }));
+      // F-08: if the wrapped pushFiles ran successfully it stored the enriched
+      // file array in `enrichedPushed`. Prefer that over `pushCall.input.files`
+      // so downstream metadata (filesCreated, totalLinesOfCode) reflects what
+      // actually landed on GitHub — including the bakkal portability layer.
+      const files: ProtoOutput['files'] =
+        enrichedPushed ??
+        (pushCall.input.files as Array<{ path: string; content: string }>).map((f) => ({
+          filePath: f.path,
+          content: f.content,
+          linesOfCode: f.content.split('\n').length,
+        }));
 
       const totalLOC = files.reduce((sum, f) => sum + f.linesOfCode, 0);
 
