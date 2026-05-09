@@ -29,6 +29,7 @@ import { dashboardMetricsRoutes } from './api/dashboard-metrics.js';
 import { aiModelsRoutes } from './api/ai-models.js';
 import { feedbackRoutes } from './api/feedback.js';
 import { chatIntentRoutes } from './api/chat-intent.js';
+import { chatQARoutes } from './api/chat-qa.js';
 import { conversationsRoutes } from './api/conversations.js';
 import { studioRoutes } from './api/studio.js';
 import { knowledgeRoutes } from './api/knowledge.js';
@@ -294,6 +295,12 @@ export async function buildApp() {
   await app.register(feedbackRoutes);
   await app.register(async (instance) =>
     chatIntentRoutes(instance, {
+      aiService,
+      provider: aiService.getConfigSummary().provider,
+    }),
+  );
+  await app.register(async (instance) =>
+    chatQARoutes(instance, {
       aiService,
       provider: aiService.getConfigSummary().provider,
     }),
