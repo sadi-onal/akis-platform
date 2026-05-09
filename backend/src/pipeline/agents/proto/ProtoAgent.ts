@@ -1090,11 +1090,20 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
         '[Proto] verifyRepoPushed: listFiles result',
       );
 
-      // If we know which paths were pushed, require at least one to be present.
-      // This catches the auto_init false-positive: repo has only README.md from
-      // GitHub init, but none of the scaffold files we tried to push.
+      // If we know which paths were pushed, require at least one *non-trivial*
+      // path to be present. This catches the auto_init false-positive: repo
+      // has only README.md from GitHub init, but none of the scaffold files
+      // we tried to push.
+      // F-08: ScaffoldEnricher now ALSO adds README.md to every scaffold, so a
+      // README.md match alone is no longer sufficient evidence of a real push
+      // — auto_init's README would still match. Exclude README.md (and the
+      // similarly-trivial root .gitignore) from the match set so the detector
+      // remains as strict as it was pre-F-08.
+      const TRIVIAL_AUTO_INIT_PATHS = new Set(['README.md', '.gitignore']);
       if (pushedPaths && pushedPaths.length > 0) {
-        const matchedCount = pushedPaths.filter((p) => repoFileSet.has(p)).length;
+        const matchedCount = pushedPaths
+          .filter((p) => !TRIVIAL_AUTO_INIT_PATHS.has(p))
+          .filter((p) => repoFileSet.has(p)).length;
         if (matchedCount === 0) {
           logger.error(
             { owner, repo, branch, expectedFileCount, actualFileCount: repoFiles.length, pushedPaths: pushedPaths.slice(0, 5) },

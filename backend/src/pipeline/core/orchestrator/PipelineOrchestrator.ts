@@ -1337,20 +1337,26 @@ export class PipelineOrchestrator {
 
     // ─── Level 4: Deterministic Validator (before CriticCode) ───
     if (protoResult.data.files && protoResult.data.files.length > 0) {
+      // F-08: ScaffoldEnricher adds portability files (install.sh, Dockerfile,
+      // docker-compose.yml, .env.example) that aren't source code. Validators
+      // only know typescript/javascript/json/html/css; sending unrelated files
+      // through the JS brace-balance check produces false-positive errors.
+      // Only forward files whose extension maps to a real source language.
+      const isValidatableLang = (path: string): 'typescript' | 'javascript' | 'json' | 'html' | 'css' | null => {
+        if (path.endsWith('.ts') || path.endsWith('.tsx')) return 'typescript';
+        if (path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.mjs') || path.endsWith('.cjs')) return 'javascript';
+        if (path.endsWith('.json')) return 'json';
+        if (path.endsWith('.html') || path.endsWith('.htm')) return 'html';
+        if (path.endsWith('.css')) return 'css';
+        return null;
+      };
       const validationInput = {
-        files: protoResult.data.files.map((f) => ({
-          path: f.filePath,
-          content: f.content,
-          language: (f.filePath.endsWith('.ts') || f.filePath.endsWith('.tsx')
-            ? 'typescript'
-            : f.filePath.endsWith('.json')
-              ? 'json'
-              : f.filePath.endsWith('.html')
-                ? 'html'
-                : f.filePath.endsWith('.css')
-                  ? 'css'
-                  : 'javascript') as 'typescript' | 'javascript' | 'json' | 'html' | 'css',
-        })),
+        files: protoResult.data.files
+          .map((f) => {
+            const lang = isValidatableLang(f.filePath);
+            return lang ? { path: f.filePath, content: f.content, language: lang } : null;
+          })
+          .filter((f): f is { path: string; content: string; language: 'typescript' | 'javascript' | 'json' | 'html' | 'css' } => f !== null),
         spec,
       };
 
