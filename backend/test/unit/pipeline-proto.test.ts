@@ -100,7 +100,14 @@ describe('Proto — Scaffold generation', () => {
       assert.equal(result.data.repo, 'testuser/my-todo-app');
       assert.ok(result.data.repoUrl.includes('github.com'));
       assert.equal(result.data.branch, 'main');
-      assert.equal(result.data.files.length, 3);
+      // F-08: ScaffoldEnricher adds install.sh + Dockerfile + docker-compose.yml +
+      // .env.example to the AI's 3-file output (README is enriched in place).
+      // Final = 3 (AI) + 4 (enrichment) = 7. Use ≥ to stay tolerant of future
+      // additions to the portability layer.
+      assert.ok(result.data.files.length >= 3, 'AI files should not be dropped');
+      const paths = new Set(result.data.files.map((f) => f.filePath));
+      assert.ok(paths.has('install.sh'), 'F-08: install.sh added');
+      assert.ok(paths.has('.env.example'), 'F-08: .env.example added');
       assert.ok(result.data.setupCommands.length >= 3); // clone + cd + npm install + npm run dev
       assert.equal(result.data.metadata.committed, true);
       assert.equal(result.data.metadata.stackUsed, 'React + Vite + TypeScript');
@@ -155,7 +162,10 @@ describe('Proto — Dry run mode', () => {
     if (result.type === 'output') {
       assert.equal(result.data.branch, 'dry-run');
       assert.equal(result.data.metadata.committed, false);
-      assert.equal(result.data.files.length, 3);
+      // F-08: dry-run also returns enriched files (install.sh + Docker + .env.example).
+      assert.ok(result.data.files.length >= 3);
+      const paths = new Set(result.data.files.map((f) => f.filePath));
+      assert.ok(paths.has('install.sh'));
     }
   });
 });

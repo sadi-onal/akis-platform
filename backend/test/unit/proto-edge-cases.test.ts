@@ -344,8 +344,18 @@ describe('Proto edge — duplicate file paths', () => {
     const result = await agent.execute(baseInput({ dryRun: true }));
     assert.equal(result.type, 'output');
     if (result.type === 'output') {
-      assert.equal(result.data.files.length, minValidFiles.length + 1);
-      assert.equal(result.data.metadata.filesCreated, minValidFiles.length + 1);
+      // F-08: ScaffoldEnricher adds portability files (install.sh, Dockerfile,
+      // docker-compose.yml, .env.example). Duplicate package.json must still be
+      // present in the output — the enricher does not de-dup AI output, it only
+      // adds. Count = 8 base + 1 dup + N enrichment additions.
+      const aiInputCount = minValidFiles.length + 1; // 9 (with duplicate)
+      assert.ok(
+        result.data.files.length >= aiInputCount,
+        `enriched count should be at least ${aiInputCount}, got ${result.data.files.length}`,
+      );
+      // Duplicate package.json preserved.
+      const pkgCount = result.data.files.filter((f) => f.filePath === 'package.json').length;
+      assert.equal(pkgCount, 2, 'duplicate package.json should still be tracked');
     }
   });
 });
