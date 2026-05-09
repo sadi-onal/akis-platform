@@ -1669,6 +1669,17 @@ export type DevMessage = typeof devMessages.$inferSelect;
 // ============================================================================
 export { agentActivities } from '../pipeline/db/agent-activity-schema.js';
 export type { AgentActivityInsert, AgentActivitySelect } from '../pipeline/db/agent-activity-schema.js';
+
+// ============================================================================
+// Pipeline: Intent Classifications (FR-11 / F-10)
+// Re-exported so Drizzle's generator includes intent_classifications in
+// migrations. See pipeline/db/intent-classifications-schema.ts for column docs.
+// ============================================================================
+export { intentClassifications } from '../pipeline/db/intent-classifications-schema.js';
+export type {
+  IntentClassificationInsert,
+  IntentClassificationSelect,
+} from '../pipeline/db/intent-classifications-schema.js';
 export type NewDevMessage = typeof devMessages.$inferInsert;
 
 // ============================================================================
