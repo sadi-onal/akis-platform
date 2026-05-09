@@ -74,8 +74,12 @@ vi.mock('../../../components/ErrorBoundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('../../../components/onboarding/GithubConnectModal', () => ({
-  GithubConnectModal: () => null,
+vi.mock('../../../components/onboarding/GithubConnectGate', () => ({
+  GithubConnectGate: () => null,
+}));
+
+vi.mock('../../../components/onboarding/githubConnectStorage', () => ({
+  PENDING_GITHUB_IDEA_KEY: 'akis-pending-idea',
 }));
 
 vi.mock('../../../components/onboarding/AgentFeatureCard', () => ({

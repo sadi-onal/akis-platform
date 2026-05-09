@@ -16,6 +16,7 @@ import { githubIntegrations } from '../../db/schema.js';
 import { getEnv } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
 import { oauthTokenCrypto } from './OAuthTokenCrypto.js';
+import { DEV_BYPASS_SENTINEL_TOKEN } from './githubOauthDevBypass.js';
 
 export type GitHubTokenSource = 'github_integrations' | 'dev_env_fallback' | 'none';
 
@@ -76,8 +77,16 @@ export async function resolveGitHubToken(
           rawToken: raw,
           kind: 'access',
         });
-        if (decrypted) {
+        if (decrypted && decrypted !== DEV_BYPASS_SENTINEL_TOKEN) {
           return { token: decrypted, source: 'github_integrations' };
+        }
+        if (decrypted === DEV_BYPASS_SENTINEL_TOKEN) {
+          // Connected via DEV_MODE bypass without a real GITHUB_TOKEN —
+          // user is "linked" so the modal stays dismissed, but pipeline
+          // calls must fail with a clear "no token" signal.
+          logger.warn(
+            `[github-token] dev-bypass sentinel detected userId=${userId}; skipping`,
+          );
         }
       } catch (error) {
         logger.warn(

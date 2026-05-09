@@ -7,7 +7,8 @@ import { EmptyState } from '../../components/chat/EmptyState';
 import { useConversationState } from '../../hooks/useConversationState';
 import { usePipelineStream } from '../../hooks/usePipelineStream';
 import { useProfileCompleteness } from '../../hooks/useProfileCompleteness';
-import { GithubConnectModal } from '../../components/onboarding/GithubConnectModal';
+import { GithubConnectGate } from '../../components/onboarding/GithubConnectGate';
+import { PENDING_GITHUB_IDEA_KEY } from '../../components/onboarding/githubConnectStorage';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { toast } from '../../components/ui/Toast';
 import { mapStageToMode } from '../../utils/mapPipelineEvent';
@@ -302,34 +303,11 @@ export default function ChatPage() {
   const isDraggingRef = useRef(false);
   const { hasGitHub, loading: profileLoading } = useProfileCompleteness();
 
-  // GitHub-integration modal: shown on first visit when the account has no
-  // integration row yet, regardless of which login method (Google / GitHub /
-  // password) the user came in with. Login and integration are deliberately
-  // separate flows — see services/auth/githubToken.ts.
-  const [githubModalDismissed, setGithubModalDismissed] = useState(() =>
-    sessionStorage.getItem('akis-github-connect-dismissed') === 'true',
-  );
-  const handleGithubModalDismiss = useCallback(() => {
-    sessionStorage.setItem('akis-github-connect-dismissed', 'true');
-    setGithubModalDismissed(true);
-  }, []);
-  const showGithubConnectModal =
-    !profileLoading && !hasGitHub && !githubModalDismissed;
-
-  // Auto-dismiss when user returns from successful integration OAuth.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('github') === 'connected') {
-      sessionStorage.removeItem('akis-github-connect-dismissed');
-      params.delete('github');
-      const qs = params.toString();
-      window.history.replaceState(
-        {},
-        '',
-        window.location.pathname + (qs ? `?${qs}` : ''),
-      );
-    }
-  }, []);
+  // GitHub-integration JIT gate: instead of an upfront modal we hold the
+  // user's idea here when they hit Send without a connected GitHub. The gate
+  // saves the idea to sessionStorage, redirects through OAuth, and the
+  // `?github=connected` effect below restores + auto-resumes the send.
+  const [pendingGithubIdea, setPendingGithubIdea] = useState<string | null>(null);
 
   // Drag-to-resize handler for the split pane
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -664,6 +642,21 @@ export default function ChatPage() {
   const handleSend = useCallback(async (content: string, attachments?: ChatAttachment[]) => {
     // In-flight guard — blocks duplicate submits from double-Enter / slow network
     if (sendingRef.current) return;
+
+    // JIT GitHub gate: only intercept on the first send of a brand-new
+    // conversation (when we'd otherwise call workflowsApi.create). Iteration
+    // sends in an existing pipeline reuse the linked GitHub from earlier.
+    const isNewConversationSend = pendingConvRef.current && !conversationId;
+    if (
+      isNewConversationSend &&
+      !profileLoading &&
+      !hasGitHub &&
+      content.trim().length >= 10
+    ) {
+      setPendingGithubIdea(content);
+      return;
+    }
+
     sendingRef.current = true;
 
     try {
@@ -919,7 +912,36 @@ export default function ChatPage() {
     } finally {
       sendingRef.current = false;
     }
-  }, [conversationId, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, syncFromStage, pendingModel]);
+  }, [conversationId, refreshWorkflow, refreshList, navigate, traceEnabled, selectedRepo, syncFromStage, pendingModel, hasGitHub, profileLoading]);
+
+  // OAuth return — phase 1: detect ?github=connected, stash the "just completed"
+  // intent in sessionStorage, and clean the URL. Runs once on mount.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('github') !== 'connected') return;
+    sessionStorage.setItem('akis-oauth-just-completed', '1');
+    params.delete('github');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+  }, []);
+
+  // OAuth return — phase 2: once hasGitHub flips true (after the status fetch
+  // resolves), if we just completed the OAuth dance, fire a success toast and
+  // auto-resume the saved idea. Idempotent: storage flags are cleared after
+  // the first run so navigating back here later doesn't re-fire.
+  useEffect(() => {
+    if (!hasGitHub) return;
+    const justCompleted = sessionStorage.getItem('akis-oauth-just-completed') === '1';
+    if (!justCompleted) return;
+    sessionStorage.removeItem('akis-oauth-just-completed');
+    toast('GitHub bağlandı. Pipeline başlatılıyor…', 'success');
+    const savedIdea = sessionStorage.getItem(PENDING_GITHUB_IDEA_KEY);
+    sessionStorage.removeItem(PENDING_GITHUB_IDEA_KEY);
+    setPendingGithubIdea(null);
+    if (savedIdea) {
+      handleSend(savedIdea).catch(() => {});
+    }
+  }, [hasGitHub, handleSend]);
 
   const approveInFlightRef = useRef(false);
   const handleApprove = useCallback(async () => {
@@ -1053,11 +1075,17 @@ export default function ChatPage() {
         <span className="text-[15px] font-extrabold tracking-tight text-ak-primary">AKIS</span>
       </div>
 
-      {/* GitHub integration modal — first visit nudge */}
-      <GithubConnectModal
-        open={showGithubConnectModal}
-        onDismiss={handleGithubModalDismiss}
-      />
+      {/* GitHub JIT gate — surfaces when user submits an idea without GitHub.
+          Lives outside the chat flow so it can preserve the idea across the
+          OAuth redirect and auto-resume the send on return. */}
+      {pendingGithubIdea && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-ak-bg/80 px-4 py-8 backdrop-blur-sm">
+          <GithubConnectGate
+            pendingIdea={pendingGithubIdea}
+            onCancel={() => setPendingGithubIdea(null)}
+          />
+        </div>
+      )}
 
       {/* Main content — top padding only on mobile for the top bar */}
       <div className={cn('flex min-w-0 flex-1 flex-col min-h-0', 'pt-[52px] md:pt-0')}>

@@ -14,6 +14,7 @@ import {
   getGitHubToken,
   type GitHubTokenDeps,
 } from '../../src/services/auth/githubToken.js';
+import { DEV_BYPASS_SENTINEL_TOKEN } from '../../src/services/auth/githubOauthDevBypass.js';
 
 function makeDeps(overrides: Partial<GitHubTokenDeps> = {}): GitHubTokenDeps {
   return {
@@ -86,6 +87,16 @@ describe('resolveGitHubToken', () => {
       }),
     });
     const result = await resolveGitHubToken('user-6', deps);
+    assert.equal(result.source, 'none');
+    assert.equal(result.token, null);
+  });
+
+  it('treats dev-bypass sentinel as no token (so pipeline fails fast)', async () => {
+    const deps = makeDeps({
+      readIntegrationRow: async () => ({ accessToken: 'encrypted-sentinel' }),
+      decrypt: () => DEV_BYPASS_SENTINEL_TOKEN,
+    });
+    const result = await resolveGitHubToken('user-sentinel', deps);
     assert.equal(result.source, 'none');
     assert.equal(result.token, null);
   });

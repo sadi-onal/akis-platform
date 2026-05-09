@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Bakkal onboarding — JIT GitHub gate (no upfront modal, no PAT)
+- **feat(auth):** Replace the upfront `GithubConnectModal` with a **just-in-time** `GithubConnectGate` panel. The gate only appears the moment the user submits their first idea on `/chat` — at which point the value of GitHub is concrete (we need it to ship the user's app). The user's idea is persisted to `sessionStorage`; after the OAuth redirect returns to `/chat?github=connected`, the page surfaces a success toast and **auto-resumes** the pipeline send with the saved idea. No interruption on first-visit, no idea lost across the OAuth dance.
+- **feat(auth):** Settings → Integrations remains the canonical permanent home for the connect/disconnect button (`SettingsPage > GitHubSection`) — no changes there; the JIT gate is an additional contextual entry point, not a replacement.
+- **feat(frontend):** New copy for the bakkal persona — three plain-Turkish permission bullets ("Senin için yeni bir depo açar / Yazdığı kodu o depoya gönderir / Mevcut depolarına dokunmaz") + the user's own idea quoted back so it's clear what's being authorized for.
+- **feat(auth):** Wire the GitHub integration OAuth flow into the bakkal onboarding so the user goes from signup → "GitHub ile Bağla" → fikir → spec → onay → kod without ever pasting a personal access token. The full chain (`/api/integrations/github/oauth/start` with `read:user user:email repo`, encrypted token in `github_integrations`, `getGitHubToken(userId)` resolver, pipeline factory using the per-user OAuth token) was already in place; this change makes the flow demoable on a dev box and softens the surface copy for non-developers.
+- **feat(auth):** DEV_MODE bypass for `/api/integrations/github/oauth/start`. When `DEV_MODE=true`, `NODE_ENV !== 'production'`, and `GITHUB_OAUTH_CLIENT_ID/SECRET` are unset/placeholder, the start route synthesizes a successful OAuth callback: writes a `github_integrations` row using `GITHUB_TOKEN` (encrypted) when it looks real, or the `__AKIS_DEV_MOCK_GITHUB_TOKEN__` sentinel otherwise. The sentinel is filtered out by `getGitHubToken` so pipeline calls fail fast instead of silently sending a junk token. Production is double-gated and never bypasses.
+- **test:** Pure-function unit tests for `evaluateGithubOAuthDevBypass` (production-safe, dev-only, sentinel selection) and the new `getGitHubToken` filter that rejects the dev sentinel. Vitest tests for `GithubConnectGate` (render + persist + cancel). **Playwright e2e** for the full JIT round-trip: idea → gate appears → connect (mocked OAuth-callback redirect) → toast + URL cleanup → state idempotency.
+- **docs:** `backend/.env.example` documents the dev-mode bypass and the OAuth scopes the integration uses.
+
+Backward compatible: the legacy server-side `GITHUB_TOKEN` env fallback in `getGitHubToken` still works for single-tenant deploys; user-stored OAuth tokens take precedence as before.
+
 ## v0.7.0 (2026-05-07)
 
 ### Level-4 Explainability Surface (Major Feature)

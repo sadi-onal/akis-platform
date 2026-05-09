@@ -42,6 +42,9 @@ import {
   OAuthTokenCryptoError,
 } from '../services/auth/OAuthTokenCrypto.js';
 import { getGitHubToken } from '../services/auth/githubToken.js';
+import {
+  evaluateGithubOAuthDevBypass,
+} from '../services/auth/githubOauthDevBypass.js';
 import { logger } from '../lib/logger.js';
 
 // GitHub API helper
@@ -68,8 +71,81 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         // Require AKIS session
-        await requireAuth(request);
+        const user = await requireAuth(request);
         const config = getEnv();
+
+        // DEV_MODE: bypass real GitHub OAuth when credentials are not configured.
+        // Lets the bakkal flow be exercised end-to-end on a dev box without a
+        // real OAuth App. Production-safe: gated on NODE_ENV !== 'production'.
+        const bypass = evaluateGithubOAuthDevBypass({
+          DEV_MODE: process.env.DEV_MODE,
+          NODE_ENV: config.NODE_ENV,
+          GITHUB_OAUTH_CLIENT_ID: config.GITHUB_OAUTH_CLIENT_ID,
+          GITHUB_OAUTH_CLIENT_SECRET: config.GITHUB_OAUTH_CLIENT_SECRET,
+          GITHUB_TOKEN: config.GITHUB_TOKEN,
+        });
+
+        if (bypass.bypassEnabled) {
+          logger.warn(
+            `[integrations] DEV_MODE GitHub OAuth bypass active for user ${user.id}; tokenIsReal=${bypass.tokenIsReal}`
+          );
+          try {
+            const encryptedAccessToken = oauthTokenCrypto.encryptForStorage({
+              userId: user.id,
+              provider: 'github',
+              token: bypass.fallbackToken,
+              kind: 'access',
+            });
+
+            const existing = await db.query.githubIntegrations.findFirst({
+              where: eq(githubIntegrations.userId, user.id),
+            });
+
+            const devLogin = `dev-user-${user.id.slice(0, 8)}`;
+            if (existing) {
+              await db
+                .update(githubIntegrations)
+                .set({
+                  providerAccountId: existing.providerAccountId || `dev-${user.id}`,
+                  login: existing.login || devLogin,
+                  scope: 'read:user user:email repo',
+                  accessToken: encryptedAccessToken,
+                  updatedAt: new Date(),
+                })
+                .where(eq(githubIntegrations.userId, user.id));
+            } else {
+              await db.insert(githubIntegrations).values({
+                userId: user.id,
+                providerAccountId: `dev-${user.id}`,
+                login: devLogin,
+                avatarUrl: null,
+                scope: 'read:user user:email repo',
+                accessToken: encryptedAccessToken,
+              });
+            }
+
+            return reply
+              .code(302)
+              .header('Location', `${appPublicUrl}/chat?github=connected`)
+              .send();
+          } catch (devErr) {
+            if (
+              devErr instanceof OAuthTokenCryptoError &&
+              devErr.code === 'OAUTH_TOKEN_ENCRYPTION_KEY_MISSING'
+            ) {
+              return reply.code(503).send({
+                error: {
+                  code: 'OAUTH_ENCRYPTION_KEY_MISSING',
+                  message:
+                    'AI_KEY_ENCRYPTION_KEY is not configured — cannot store dev-bypass token securely.',
+                },
+              });
+            }
+            logger.error(`[integrations] DEV_MODE bypass failed: ${devErr}`);
+            const errorUrl = `${appPublicUrl}/dashboard/settings?tab=github&github=error&reason=dev_bypass_failed`;
+            return reply.code(302).header('Location', errorUrl).send();
+          }
+        }
 
         // Check OAuth configuration
         if (!config.GITHUB_OAUTH_CLIENT_ID || !config.GITHUB_OAUTH_CLIENT_SECRET) {
