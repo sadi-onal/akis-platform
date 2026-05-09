@@ -13,6 +13,14 @@
 
 Backward compatible: the legacy server-side `GITHUB_TOKEN` env fallback in `getGitHubToken` still works for single-tenant deploys; user-stored OAuth tokens take precedence as before.
 
+## v0.7.1 (2026-05-09)
+
+### Regression Confidence Surface (Tier 1.A)
+- **feat:** New `RegressionReport` aggregating per-pipeline regression signals (files changed in iteration, parent baseline test summary, FixLoop runs, status).
+- **feat:** `GET /api/pipelines/:id/regression` route mounted in pipeline.plugin.ts; same auth as /explanation.
+- **feat:** New `RegressionPanel` component + third "Regresyon" tab in PipelineDetailRail, surfacing the bakkal-readable confidence summary.
+- 18 new backend tests (regressionFactory + RegressionService + route handler), 18 new frontend tests (RegressionPanel + rail tab + workflowsApi).
+
 ## v0.7.0 (2026-05-07)
 
 ### Level-4 Explainability Surface (Major Feature)

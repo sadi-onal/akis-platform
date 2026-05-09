@@ -1,0 +1,24 @@
+{
+  "report": {
+    "pipelineId": "51da210e-ae01-4188-b990-a9563fc10c27",
+    "baseline": {
+      "totalTests": 12,
+      "coveragePercentage": 100,
+      "coveredCriteria": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4"
+      ],
+      "uncoveredCriteria": []
+    },
+    "fixLoop": {
+      "runs": 0,
+      "triggered": false,
+      "succeeded": false
+    },
+    "status": "verified_baseline",
+    "headline": "Doğrulanmış baseline: 12 test, %100 kapsam",
+    "bakkalSummary": "Projenin baseline güveni: 12 testle %100 kapsam."
+  }
+}

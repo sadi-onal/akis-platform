@@ -397,6 +397,15 @@ export async function pipelinePlugin(fastify: FastifyInstance, opts: PipelinePlu
     }
   );
 
+  // GET /api/pipelines/:id/regression — Tier 1.A regression confidence surface
+  fastify.get(
+    '/:id/regression',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.getRegression(request);
+    }
+  );
+
   // GET /api/pipelines/:id/files/* — get file content from stored pipeline data
   fastify.get('/:id/files/*', { preHandler: authPreHandler }, async (request: FastifyRequest) => {
     return routes.getFileContent(request);

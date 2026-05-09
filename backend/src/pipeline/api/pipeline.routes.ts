@@ -37,7 +37,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
     const userId = getUserId(request);
     const pipeline = await orchestrator.getStatus(pipelineId);
     if (pipeline.userId !== userId) {
-      throw Object.assign(new Error('Bu pipeline\'a erişim yetkiniz yok'), { statusCode: 403 });
+      throw Object.assign(new Error("Bu pipeline'a erişim yetkiniz yok"), { statusCode: 403 });
     }
     return pipeline;
   }
@@ -47,20 +47,28 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       request: unknown,
       _reply: unknown,
       attachmentContext?: string,
-      imageBlocks?: readonly import('../../services/ai/multimodalClient.js').AnthropicImageBlock[],
+      imageBlocks?: readonly import('../../services/ai/multimodalClient.js').AnthropicImageBlock[]
     ) {
       const userId = getUserId(request);
 
       const body = StartPipelineRequestSchema.parse((request as { body: unknown }).body);
 
-      const pipeline = await orchestrator.startPipeline(userId, {
-        idea: body.idea,
-        context: body.context,
-        targetStack: body.targetStack,
-        existingRepo: body.existingRepo,
-        attachmentContext,
-        imageBlocks: imageBlocks && imageBlocks.length > 0 ? imageBlocks : undefined,
-      }, body.model, body.jiraConfig, body.parentPipelineId, body.skipScribe, body.traceEnabled);
+      const pipeline = await orchestrator.startPipeline(
+        userId,
+        {
+          idea: body.idea,
+          context: body.context,
+          targetStack: body.targetStack,
+          existingRepo: body.existingRepo,
+          attachmentContext,
+          imageBlocks: imageBlocks && imageBlocks.length > 0 ? imageBlocks : undefined,
+        },
+        body.model,
+        body.jiraConfig,
+        body.parentPipelineId,
+        body.skipScribe,
+        body.traceEnabled
+      );
       return { pipeline };
     },
 
@@ -84,9 +92,8 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const model = pipeline.model ?? 'claude-sonnet-4-6';
       const live = orchestrator.getLiveTokenUsage(id, pipeline.metrics);
       const contextWindow = getContextWindow(model);
-      const percentUsed = contextWindow > 0
-        ? Number(((live.totalTokens / contextWindow) * 100).toFixed(2))
-        : 0;
+      const percentUsed =
+        contextWindow > 0 ? Number(((live.totalTokens / contextWindow) * 100).toFixed(2)) : 0;
 
       return {
         pipeline,
@@ -137,7 +144,14 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
       const body = ApproveSpecRequestSchema.parse((request as { body: unknown }).body);
-      const pipeline = await orchestrator.approveSpec(id, body.repoName, body.repoVisibility, body.spec, body.jiraConfig, body.cucumberEnabled);
+      const pipeline = await orchestrator.approveSpec(
+        id,
+        body.repoName,
+        body.repoVisibility,
+        body.spec,
+        body.jiraConfig,
+        body.cucumberEnabled
+      );
       return { pipeline };
     },
 
@@ -187,17 +201,24 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const body = (request as { body: { model?: unknown } }).body ?? {};
       const rawModel = body.model;
       if (typeof rawModel !== 'string' || rawModel.trim().length === 0) {
-        throw Object.assign(new Error('model field must be a non-empty string'), { statusCode: 400 });
+        throw Object.assign(new Error('model field must be a non-empty string'), {
+          statusCode: 400,
+        });
       }
       const model = rawModel.trim();
       if (model.length > 255) {
         throw Object.assign(new Error('model too long (max 255 chars)'), { statusCode: 400 });
       }
 
-      const { getAllKnownModels, isModelAllowed } = await import('../../services/ai/modelAllowlist.js');
+      const { getAllKnownModels, isModelAllowed } = await import(
+        '../../services/ai/modelAllowlist.js'
+      );
       const allowlist = getAllKnownModels();
       if (!isModelAllowed(model, allowlist)) {
-        throw Object.assign(new Error(`Model '${model}' is not in the allowlist`), { statusCode: 400, code: 'MODEL_NOT_ALLOWED' });
+        throw Object.assign(new Error(`Model '${model}' is not in the allowlist`), {
+          statusCode: 400,
+          code: 'MODEL_NOT_ALLOWED',
+        });
       }
 
       const pipeline = await orchestrator.setModel(id, userId, model);
@@ -211,6 +232,15 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const explainability = orchestrator.getExplainability();
       const explanation = explainability.getExplanation(id);
       return { explanation };
+    },
+
+    /** Tier 1.A: Get regression confidence report for a pipeline. */
+    async getRegression(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const regression = orchestrator.getRegressionService();
+      const report = await regression.getReport(id);
+      return { report };
     },
 
     /** Level 4: Configure adaptive autonomy — auto-approve threshold */
@@ -301,9 +331,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const pipeline = await assertOwnership(request, id);
 
       // Search in proto output files
-      const protoFile = pipeline.protoOutput?.files?.find(
-        (f) => f.filePath === filePath,
-      );
+      const protoFile = pipeline.protoOutput?.files?.find((f) => f.filePath === filePath);
       if (protoFile) {
         return {
           path: protoFile.filePath,
@@ -315,9 +343,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       }
 
       // Search in trace output files
-      const traceFile = pipeline.traceOutput?.testFiles?.find(
-        (f) => f.filePath === filePath,
-      );
+      const traceFile = pipeline.traceOutput?.testFiles?.find((f) => f.filePath === filePath);
       if (traceFile) {
         return {
           path: traceFile.filePath,
@@ -336,10 +362,22 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
 function detectLanguage(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   const langMap: Record<string, string> = {
-    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
-    json: 'json', html: 'html', css: 'css', scss: 'scss',
-    md: 'markdown', yaml: 'yaml', yml: 'yaml', sh: 'shell',
-    py: 'python', sql: 'sql', toml: 'toml', xml: 'xml',
+    ts: 'typescript',
+    tsx: 'typescript',
+    js: 'javascript',
+    jsx: 'javascript',
+    json: 'json',
+    html: 'html',
+    css: 'css',
+    scss: 'scss',
+    md: 'markdown',
+    yaml: 'yaml',
+    yml: 'yaml',
+    sh: 'shell',
+    py: 'python',
+    sql: 'sql',
+    toml: 'toml',
+    xml: 'xml',
   };
   return langMap[ext] || 'text';
 }

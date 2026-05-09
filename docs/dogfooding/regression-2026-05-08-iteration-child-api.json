@@ -1,0 +1,27 @@
+{
+  "report": {
+    "pipelineId": "d663fa4e-cd8e-4652-9cac-be13261b3417",
+    "baseline": {
+      "totalTests": 12,
+      "coveragePercentage": 100,
+      "coveredCriteria": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4"
+      ],
+      "uncoveredCriteria": []
+    },
+    "fixLoop": {
+      "runs": 0,
+      "triggered": false,
+      "succeeded": false
+    },
+    "status": "verified_baseline",
+    "headline": "Doğrulanmış: 12 test, %100 kapsam",
+    "bakkalSummary": "Bu değişiklik 3 dosyaya dokundu. Projenin baseline güveni: 12 testle %100 kapsam.",
+    "parentPipelineId": "51da210e-ae01-4188-b990-a9563fc10c27",
+    "iterationFilesChanged": 3,
+    "iterationRequest": "Musteri grubu de ekle, her gruba ozel indirim verilebilsin"
+  }
+}

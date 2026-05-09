@@ -237,3 +237,32 @@ export interface PipelineExplanation {
   overallNarrative: string;
   attentionPoints: AttentionPoint[];
 }
+
+// ─── Tier 1.A: Regression Confidence ─────────────────────────
+
+export type RegressionStatus = 'verified_baseline' | 'self_healed' | 'no_baseline' | 'degraded';
+
+export interface RegressionBaseline {
+  totalTests: number;
+  coveragePercentage: number;
+  coveredCriteria: string[];
+  uncoveredCriteria: string[];
+}
+
+export interface RegressionFixLoop {
+  runs: number;
+  succeeded: boolean;
+  triggered: boolean;
+}
+
+export interface RegressionReport {
+  pipelineId: string;
+  parentPipelineId?: string;
+  iterationRequest?: string;
+  iterationFilesChanged?: number;
+  baseline: RegressionBaseline | null;
+  fixLoop: RegressionFixLoop;
+  status: RegressionStatus;
+  headline: string;
+  bakkalSummary: string;
+}

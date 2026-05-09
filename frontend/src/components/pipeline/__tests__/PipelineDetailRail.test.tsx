@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PipelineDetailRail } from '../PipelineDetailRail';
 import type { PipelineActivity } from '../../../hooks/usePipelineStream';
-import type { PipelineExplanation } from '../../../types/pipeline';
+import type { PipelineExplanation, RegressionReport } from '../../../types/pipeline';
 
 vi.mock('../../../hooks/useReducedMotion', () => ({
   useReducedMotion: () => true,
@@ -200,5 +200,85 @@ describe('PipelineDetailRail — interactions', () => {
       />
     );
     expect(await screen.findByRole('alert')).toHaveTextContent('Network down');
+  });
+});
+
+const mkRegression = (overrides: Partial<RegressionReport> = {}): RegressionReport => ({
+  pipelineId: 'p-1',
+  baseline: {
+    totalTests: 4,
+    coveragePercentage: 100,
+    coveredCriteria: ['ac-1'],
+    uncoveredCriteria: [],
+  },
+  fixLoop: { runs: 0, succeeded: false, triggered: false },
+  status: 'verified_baseline',
+  headline: 'Doğrulanmış baseline: 4 test, %100 kapsam',
+  bakkalSummary: 'Projenin baseline güveni: 4 testle %100 kapsam.',
+  ...overrides,
+});
+
+describe('PipelineDetailRail — Regresyon tab', () => {
+  it('shows the Regresyon tab when the user opens an idle rail with activities', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('proto')]}
+        currentStep={null}
+      />
+    );
+    // Auto-collapsed at idle — opening the rail reveals tabs.
+    fireEvent.click(screen.getByText(/Pipeline detayı/));
+    expect(screen.getByRole('tab', { name: 'Regresyon' })).toBeInTheDocument();
+  });
+
+  it('does not show the Regresyon tab while a stage is still running', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+      />
+    );
+    expect(screen.queryByRole('tab', { name: 'Regresyon' })).not.toBeInTheDocument();
+  });
+
+  it('calls regressionFetcher once after the user opens the rail and clicks Regresyon', async () => {
+    const fetcher = vi.fn().mockResolvedValue(mkRegression());
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('proto')]}
+        currentStep={null}
+        regressionFetcher={fetcher}
+      />
+    );
+    // Auto-collapsed at idle — open it.
+    fireEvent.click(screen.getByText(/Pipeline detayı/));
+    fireEvent.click(screen.getByRole('tab', { name: 'Regresyon' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('p-1'));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders RegressionPanel content when the Regresyon tab is active', async () => {
+    const fetcher = vi.fn().mockResolvedValue(mkRegression());
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('proto')]}
+        currentStep={null}
+        regressionFetcher={fetcher}
+      />
+    );
+    fireEvent.click(screen.getByText(/Pipeline detayı/));
+    fireEvent.click(screen.getByRole('tab', { name: 'Regresyon' }));
+    expect(
+      await screen.findByText(/Doğrulanmış baseline: 4 test, %100 kapsam/)
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Regresyon güven yüzeyi')).toBeInTheDocument();
   });
 });

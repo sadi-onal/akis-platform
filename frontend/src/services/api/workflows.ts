@@ -4,7 +4,13 @@
  */
 import { HttpClient } from './HttpClient';
 import { getApiBaseUrl } from './config';
-import type { Workflow, WorkflowStages, WorkflowStatus, StageResult, ConversationMessage } from '../../types/workflow';
+import type {
+  Workflow,
+  WorkflowStages,
+  WorkflowStatus,
+  StageResult,
+  ConversationMessage,
+} from '../../types/workflow';
 import type {
   Pipeline,
   PipelineStage,
@@ -14,12 +20,16 @@ import type {
   ScribeMessageType,
   ScribeClarification,
   PipelineExplanation,
+  RegressionReport,
 } from '../../types/pipeline';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
 
 const http = new HttpClient(getApiBaseUrl());
 
-function mapStageStatus(pipelineStage: PipelineStage, traceEnabled?: boolean): { workflowStatus: WorkflowStatus; stages: WorkflowStages } {
+function mapStageStatus(
+  pipelineStage: PipelineStage,
+  traceEnabled?: boolean
+): { workflowStatus: WorkflowStatus; stages: WorkflowStages } {
   const idle: StageResult = { status: 'idle' };
 
   const stages: WorkflowStages = {
@@ -86,21 +96,23 @@ function mapScribeOutput(scribeOutput?: ScribeOutput): Partial<StageResult> {
   const spec = scribeOutput.spec;
   return {
     confidence: scribeOutput.confidence,
-    spec: spec ? {
-      title: spec.title,
-      problemStatement: spec.problemStatement,
-      userStories: spec.userStories.map(s => ({
-        persona: s.persona,
-        as: s.persona,
-        action: s.action,
-        iWant: s.action,
-        benefit: s.benefit,
-        soThat: s.benefit,
-      })),
-      acceptanceCriteria: spec.acceptanceCriteria,
-      technicalConstraints: spec.technicalConstraints,
-      outOfScope: spec.outOfScope,
-    } : undefined,
+    spec: spec
+      ? {
+          title: spec.title,
+          problemStatement: spec.problemStatement,
+          userStories: spec.userStories.map((s) => ({
+            persona: s.persona,
+            as: s.persona,
+            action: s.action,
+            iWant: s.action,
+            benefit: s.benefit,
+            soThat: s.benefit,
+          })),
+          acceptanceCriteria: spec.acceptanceCriteria,
+          technicalConstraints: spec.technicalConstraints,
+          outOfScope: spec.outOfScope,
+        }
+      : undefined,
   };
 }
 
@@ -110,7 +122,7 @@ function mapProtoOutput(protoOutput?: ProtoOutput): Partial<StageResult> {
     branch: protoOutput.branch,
     repo: protoOutput.repo,
     repoUrl: protoOutput.repoUrl,
-    files: protoOutput.files.map(f => f.filePath),
+    files: protoOutput.files.map((f) => f.filePath),
   };
 }
 
@@ -170,7 +182,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
           spec: {
             title: specOutput.spec.title,
             problemStatement: specOutput.spec.problemStatement,
-            userStories: specOutput.spec.userStories.map(s => ({
+            userStories: specOutput.spec.userStories.map((s) => ({
               persona: s.persona,
               as: s.persona,
               action: s.action,
@@ -222,7 +234,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
       protoResult: {
         branch: pipeline.protoOutput.branch,
         repo: pipeline.protoOutput.repo,
-        files: pipeline.protoOutput.files.map(f => ({
+        files: pipeline.protoOutput.files.map((f) => ({
           name: f.filePath.split('/').pop() || f.filePath,
           type: 'file' as const,
           path: f.filePath,
@@ -253,7 +265,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
         failing: 0,
         coverage: `${ts.coveragePercentage}%`,
         duration: '',
-        testFiles: pipeline.traceOutput.testFiles.map(f => ({
+        testFiles: pipeline.traceOutput.testFiles.map((f) => ({
           name: f.filePath.split('/').pop() || f.filePath,
           type: 'file' as const,
           path: f.filePath,
@@ -269,7 +281,10 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
   return messages;
 }
 
-export function mapPipelineToWorkflow(pipeline: Pipeline, tokenUsage?: import('../../types/workflow').WorkflowTokenUsage): Workflow {
+export function mapPipelineToWorkflow(
+  pipeline: Pipeline,
+  tokenUsage?: import('../../types/workflow').WorkflowTokenUsage
+): Workflow {
   const { workflowStatus, stages } = mapStageStatus(pipeline.stage, pipeline.traceEnabled);
 
   // Enrich stages with actual output data
@@ -363,7 +378,9 @@ interface PipelineResponse {
   children?: PipelineChildSummary[];
   tokenUsage?: import('../../types/workflow').WorkflowTokenUsage;
 }
-interface PipelinesResponse { pipelines: Pipeline[] }
+interface PipelinesResponse {
+  pipelines: Pipeline[];
+}
 
 export const workflowsApi = {
   list: async (): Promise<Workflow[]> => {
@@ -377,16 +394,19 @@ export const workflowsApi = {
     return mapPipelineToWorkflow(res.pipeline, res.tokenUsage);
   },
 
-  create: async (data: {
-    idea: string;
-    context?: string;
-    targetStack?: string;
-    model?: string;
-    existingRepo?: { owner: string; repo: string; branch: string };
-    parentPipelineId?: string;
-    skipScribe?: boolean;
-    traceEnabled?: boolean;
-  }, attachments?: ChatAttachment[]): Promise<Workflow> => {
+  create: async (
+    data: {
+      idea: string;
+      context?: string;
+      targetStack?: string;
+      model?: string;
+      existingRepo?: { owner: string; repo: string; branch: string };
+      parentPipelineId?: string;
+      skipScribe?: boolean;
+      traceEnabled?: boolean;
+    },
+    attachments?: ChatAttachment[]
+  ): Promise<Workflow> => {
     if (attachments && attachments.length > 0) {
       const formData = new FormData();
       formData.append('idea', data.idea);
@@ -411,7 +431,7 @@ export const workflowsApi = {
     id: string,
     repoName: string,
     repoVisibility: 'public' | 'private' = 'private',
-    options?: { jiraConfig?: { projectKey: string; enabled: boolean }; cucumberEnabled?: boolean },
+    options?: { jiraConfig?: { projectKey: string; enabled: boolean }; cucumberEnabled?: boolean }
   ): Promise<Workflow> => {
     const body: Record<string, unknown> = { repoName, repoVisibility };
     if (options?.jiraConfig) body.jiraConfig = options.jiraConfig;
@@ -421,7 +441,10 @@ export const workflowsApi = {
   },
 
   reject: async (id: string, feedback?: string): Promise<Workflow> => {
-    const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/reject`, feedback ? { feedback } : undefined);
+    const res = await http.post<PipelineResponse>(
+      `/api/pipelines/${id}/reject`,
+      feedback ? { feedback } : undefined
+    );
     return mapPipelineToWorkflow(res.pipeline);
   },
 
@@ -436,7 +459,9 @@ export const workflowsApi = {
   },
 
   toggleTrace: async (id: string, enabled: boolean): Promise<Workflow> => {
-    const res = await http.patch<PipelineResponse>(`/api/pipelines/${id}/trace-toggle`, { enabled });
+    const res = await http.patch<PipelineResponse>(`/api/pipelines/${id}/trace-toggle`, {
+      enabled,
+    });
     return mapPipelineToWorkflow(res.pipeline);
   },
 
@@ -446,8 +471,11 @@ export const workflowsApi = {
   },
 
   listSupportedModels: async (
-    provider?: 'anthropic' | 'openai',
-  ): Promise<{ provider: string; models: Array<{ id: string; name: string; provider: string; recommended: boolean }> }> => {
+    provider?: 'anthropic' | 'openai'
+  ): Promise<{
+    provider: string;
+    models: Array<{ id: string; name: string; provider: string; recommended: boolean }>;
+  }> => {
     const qs = provider ? `?provider=${provider}` : '';
     return http.get(`/api/ai/supported-models${qs}`);
   },
@@ -463,9 +491,15 @@ export const workflowsApi = {
   /** Level 4 — fetch explainability narrative for a pipeline. */
   getExplanation: async (id: string): Promise<PipelineExplanation> => {
     const res = await http.get<{ explanation: PipelineExplanation }>(
-      `/api/pipelines/${id}/explanation`,
+      `/api/pipelines/${id}/explanation`
     );
     return res.explanation;
+  },
+
+  /** Tier 1.A — fetch regression confidence report for a pipeline. */
+  getRegression: async (id: string): Promise<RegressionReport> => {
+    const res = await http.get<{ report: RegressionReport }>(`/api/pipelines/${id}/regression`);
+    return res.report;
   },
 
   poll: async (id: string): Promise<Workflow> => {
@@ -473,21 +507,30 @@ export const workflowsApi = {
     return mapPipelineToWorkflow(res.pipeline);
   },
 
-  sendMessage: async (id: string, message: string, attachments?: ChatAttachment[]): Promise<Workflow> => {
+  sendMessage: async (
+    id: string,
+    message: string,
+    attachments?: ChatAttachment[]
+  ): Promise<Workflow> => {
     if (attachments && attachments.length > 0) {
       const formData = new FormData();
       formData.append('message', message);
       for (const att of attachments) {
         formData.append('files', att.file);
       }
-      const res = await http.postFormData<PipelineResponse>(`/api/pipelines/${id}/message`, formData);
+      const res = await http.postFormData<PipelineResponse>(
+        `/api/pipelines/${id}/message`,
+        formData
+      );
       return mapPipelineToWorkflow(res.pipeline);
     }
     const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/message`, { message });
     return mapPipelineToWorkflow(res.pipeline);
   },
 
-  getAllFiles: async (pipelineId: string): Promise<{
+  getAllFiles: async (
+    pipelineId: string
+  ): Promise<{
     files: Record<string, string>;
     title: string;
   }> => {
@@ -496,14 +539,19 @@ export const workflowsApi = {
 
   getProtoFiles: async (pipelineId: string): Promise<Record<string, string>> => {
     try {
-      const res = await http.get<{ files: Record<string, string> }>(`/api/pipelines/${pipelineId}/files-all`);
+      const res = await http.get<{ files: Record<string, string> }>(
+        `/api/pipelines/${pipelineId}/files-all`
+      );
       return res.files ?? {};
     } catch {
       return {};
     }
   },
 
-  getFileContent: async (pipelineId: string, filePath: string): Promise<{
+  getFileContent: async (
+    pipelineId: string,
+    filePath: string
+  ): Promise<{
     path: string;
     content: string;
     language: string;

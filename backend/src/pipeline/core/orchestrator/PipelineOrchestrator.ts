@@ -45,6 +45,7 @@ import { PipelineMetricsService } from '../metrics/PipelineMetricsService.js';
 import { DeterministicValidator } from '../validator/DeterministicValidator.js';
 import { SecurityGate } from '../security-gate/SecurityGate.js';
 import { ExplainabilityService } from '../explainability/ExplainabilityService.js';
+import { RegressionService } from '../regression/RegressionService.js';
 import {
   buildScribeReasoning,
   buildProtoReasoning,
@@ -253,6 +254,8 @@ export class PipelineOrchestrator {
   private securityGate = new SecurityGate();
   private explainability = new ExplainabilityService();
   private learningService = new LearningService();
+  // ─── Tier 1.A — Regression Confidence ──────────────
+  private regressionService: RegressionService | null = null;
 
   // ─── Chat memory (issue #462) ────────────────────
   private chatMemory: ChatMemoryContextService = chatMemoryContextService;
@@ -358,6 +361,27 @@ export class PipelineOrchestrator {
   /** Level 4: Access explainability service */
   getExplainability(): ExplainabilityService {
     return this.explainability;
+  }
+
+  /**
+   * Tier 1.A: Lazily-built RegressionService.
+   * Reuses the orchestrator's PipelineStore (for parent lookup) +
+   * PipelineMetricsService (for FixLoop run/success signal). The
+   * activity-log fallback is intentionally not wired here — we'd need
+   * a `listByPipeline` slice that the orchestrator's `activityLogger`
+   * does not currently expose. The metrics service path is enough for
+   * the rail; the report falls through to "0 runs" gracefully when
+   * neither source has data (e.g. iteration child whose parent ran on
+   * a previous process where in-memory metrics are gone).
+   */
+  getRegressionService(): RegressionService {
+    if (!this.regressionService) {
+      this.regressionService = new RegressionService({
+        store: this.store,
+        metricsService: this.metricsService,
+      });
+    }
+    return this.regressionService;
   }
 
   /** Level 4: Access learning service */

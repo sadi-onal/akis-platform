@@ -113,45 +113,51 @@ describe('mapPipelineToWorkflow', () => {
     });
 
     it('falls back to user idea content when no title', () => {
-      const w = mapPipelineToWorkflow(makePipeline({
-        title: undefined,
-        scribeConversation: [
-          { type: 'user_idea', content: 'Build a todo app with React' },
-        ],
-      }));
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          title: undefined,
+          scribeConversation: [{ type: 'user_idea', content: 'Build a todo app with React' }],
+        })
+      );
       expect(w.title).toBe('Build a todo app with React');
     });
 
     it('uses only the first line when idea is multi-line (BUG-25)', () => {
-      const w = mapPipelineToWorkflow(makePipeline({
-        title: undefined,
-        scribeConversation: [
-          {
-            type: 'user_idea',
-            content:
-              'Implement proper logging and monitoring infrastructure\n\nSet up structured logging (Winston, Pino, or similar)...',
-          },
-        ],
-      }));
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          title: undefined,
+          scribeConversation: [
+            {
+              type: 'user_idea',
+              content:
+                'Implement proper logging and monitoring infrastructure\n\nSet up structured logging (Winston, Pino, or similar)...',
+            },
+          ],
+        })
+      );
       expect(w.title).toBe('Implement proper logging and monitoring infrastructure');
     });
   });
 
   describe('error mapping to stage', () => {
     it('marks trace as failed when completed_partial has error', () => {
-      const w = mapPipelineToWorkflow(makePipeline({
-        stage: 'completed_partial',
-        error: { code: 'TRACE_FAILED', message: 'Test writing failed', retryable: true },
-      }));
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'completed_partial',
+          error: { code: 'TRACE_FAILED', message: 'Test writing failed', retryable: true },
+        })
+      );
       expect(w.stages.trace.status).toBe('failed');
       expect(w.stages.trace.error).toBe('Test writing failed');
     });
 
     it('marks proto as failed when proto_building has error', () => {
-      const w = mapPipelineToWorkflow(makePipeline({
-        stage: 'failed',
-        error: { code: 'PROTO_FAILED', message: 'GitHub push failed', retryable: true },
-      }));
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'failed',
+          error: { code: 'PROTO_FAILED', message: 'GitHub push failed', retryable: true },
+        })
+      );
       // Scribe was completed since stage progressed past it
       expect(w.stages.scribe.status).toBe('completed');
     });
@@ -249,7 +255,33 @@ describe('workflowsApi', () => {
 
       await workflowsApi.sendMessage('p-123', 'Here is my answer');
 
-      expect(mockPost).toHaveBeenCalledWith('/api/pipelines/p-123/message', { message: 'Here is my answer' });
+      expect(mockPost).toHaveBeenCalledWith('/api/pipelines/p-123/message', {
+        message: 'Here is my answer',
+      });
+    });
+  });
+
+  describe('getRegression', () => {
+    it('calls GET /api/pipelines/:id/regression and unwraps the report envelope', async () => {
+      const report = {
+        pipelineId: 'p-123',
+        baseline: {
+          totalTests: 6,
+          coveragePercentage: 100,
+          coveredCriteria: ['ac-1'],
+          uncoveredCriteria: [],
+        },
+        fixLoop: { runs: 0, succeeded: false, triggered: false },
+        status: 'verified_baseline',
+        headline: 'Doğrulanmış baseline',
+        bakkalSummary: 'Projenin baseline güveni: 6 test, %100 kapsam.',
+      };
+      mockGet.mockResolvedValueOnce({ report });
+
+      const result = await workflowsApi.getRegression('p-123');
+
+      expect(mockGet).toHaveBeenCalledWith('/api/pipelines/p-123/regression');
+      expect(result).toEqual(report);
     });
   });
 });

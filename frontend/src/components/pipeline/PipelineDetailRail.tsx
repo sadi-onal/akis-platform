@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import type { ConversationUIState } from '../../types/chat';
-import type { PipelineExplanation } from '../../types/pipeline';
+import type { PipelineExplanation, RegressionReport } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
 import { PipelineCinema } from './PipelineCinema';
 import { ExplanationPanel } from './ExplanationPanel';
 import { AttentionBanner } from './AttentionBanner';
+import { RegressionPanel } from './RegressionPanel';
 
 export interface PipelineDetailRailProps {
   pipelineId: string | undefined;
@@ -14,10 +15,18 @@ export interface PipelineDetailRailProps {
   currentStep: PipelineActivity | null;
   /** DI for tests — falls back to workflowsApi.getExplanation */
   explanationFetcher?: (id: string) => Promise<PipelineExplanation>;
+  /** DI for tests — falls back to workflowsApi.getRegression */
+  regressionFetcher?: (id: string) => Promise<RegressionReport>;
   className?: string;
 }
 
-type Tab = 'flow' | 'why';
+type Tab = 'flow' | 'why' | 'regression';
+
+// uiStates after which the regression confidence surface makes sense.
+// Both root pipelines and iteration children settle into `idle` once
+// finished — at that point the regression report is the user's "did it
+// stay green?" answer.
+const REGRESSION_VISIBLE_STATES: ConversationUIState[] = ['idle'];
 
 const RUNNING_STATES: ConversationUIState[] = [
   'scribe_clarifying',
@@ -36,6 +45,9 @@ function isRunning(uiState: ConversationUIState): boolean {
 function isExplainable(uiState: ConversationUIState): boolean {
   return REASONING_VISIBLE_STATES.includes(uiState);
 }
+function isRegressionVisible(uiState: ConversationUIState, hasActivities: boolean): boolean {
+  return REGRESSION_VISIBLE_STATES.includes(uiState) && hasActivities;
+}
 
 /**
  * PipelineDetailRail — opt-in Level-4 rail between the chat header and the
@@ -50,6 +62,7 @@ export function PipelineDetailRail({
   activities,
   currentStep,
   explanationFetcher,
+  regressionFetcher,
   className,
 }: PipelineDetailRailProps) {
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
@@ -57,6 +70,11 @@ export function PipelineDetailRail({
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(null);
   const [explanationError, setExplanationError] = useState<string | null>(null);
 
+  const regressionVisible = isRegressionVisible(uiState, activities.length > 0);
+  // Keep the collapse contract from v0.7.0: collapse on idle. The
+  // Regresyon tab is still clickable and renders content when the user
+  // manually expands the rail; auto-expansion would clobber the chat
+  // viewport every time a pipeline finishes.
   const autoCollapsed = !isRunning(uiState) && !isExplainable(uiState);
   const autoTab: Tab = isRunning(uiState) ? 'flow' : 'why';
   const effectiveCollapsed = collapsed ?? autoCollapsed;
@@ -84,6 +102,11 @@ export function PipelineDetailRail({
       cancelled = true;
     };
   }, [pipelineId, effectiveCollapsed, effectiveTab, currentStep, explanationFetcher]);
+
+  // Note: the regression report is fetched lazily by the embedded
+  // `RegressionPanel` itself (via `regressionFetcher`). The rail does
+  // not duplicate that effect — it only forwards the DI fetcher and
+  // mounts the panel when the user activates the Regresyon tab.
 
   const attentionPoints = useMemo(() => explanation?.attentionPoints ?? [], [explanation]);
   const highSevCount = useMemo(
@@ -230,6 +253,17 @@ export function PipelineDetailRail({
               >
                 Açıklama
               </button>
+              {regressionVisible && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={effectiveTab === 'regression'}
+                  onClick={() => setTab('regression')}
+                  className={`${tabBtnBase} ${effectiveTab === 'regression' ? tabBtnActive : tabBtnInactive}`}
+                >
+                  Regresyon
+                </button>
+              )}
             </div>
           )}
           {effectiveCollapsed && (
@@ -292,6 +326,9 @@ export function PipelineDetailRail({
                 />
               )}
             </>
+          )}
+          {effectiveTab === 'regression' && (
+            <RegressionPanel pipelineId={pipelineId} fetcher={regressionFetcher} />
           )}
         </div>
       )}
