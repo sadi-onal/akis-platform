@@ -17,6 +17,14 @@ describe('useConversationState', () => {
       expect(result.current.uiState).toBe('scribe_running');
     });
 
+    it('maps critic_reviewing_spec to critic_running', () => {
+      const { result } = renderHook(() => useConversationState('critic_reviewing_spec'));
+      expect(result.current.uiState).toBe('critic_running');
+      expect(result.current.runningAgentName).toBe('Critic');
+      expect(result.current.showCancelButton).toBe(true);
+      expect(result.current.inputPlaceholder).toContain('Critic');
+    });
+
     it('maps awaiting_approval to awaiting_approval', () => {
       const { result } = renderHook(() => useConversationState('awaiting_approval'));
       expect(result.current.uiState).toBe('awaiting_approval');
@@ -62,8 +70,14 @@ describe('useConversationState', () => {
 
   describe('isInputEnabled', () => {
     const allStages: PipelineStage[] = [
-      'scribe_clarifying', 'awaiting_approval', 'completed', 'cancelled',
-      'scribe_generating', 'proto_building', 'trace_testing', 'ci_running',
+      'scribe_clarifying',
+      'awaiting_approval',
+      'completed',
+      'cancelled',
+      'scribe_generating',
+      'proto_building',
+      'trace_testing',
+      'ci_running',
     ];
 
     it.each(allStages)('is always true for %s (user can always type)', (stage) => {
@@ -80,8 +94,19 @@ describe('useConversationState', () => {
   // ── showCancelButton ─────────────────────────────
 
   describe('showCancelButton', () => {
-    const showCancelStages: PipelineStage[] = ['scribe_generating', 'proto_building', 'trace_testing', 'ci_running'];
-    const hideCancelStages: PipelineStage[] = ['scribe_clarifying', 'awaiting_approval', 'completed', 'failed', 'cancelled'];
+    const showCancelStages: PipelineStage[] = [
+      'scribe_generating',
+      'proto_building',
+      'trace_testing',
+      'ci_running',
+    ];
+    const hideCancelStages: PipelineStage[] = [
+      'scribe_clarifying',
+      'awaiting_approval',
+      'completed',
+      'failed',
+      'cancelled',
+    ];
 
     it.each(showCancelStages)('is true for %s (running agent)', (stage) => {
       const { result } = renderHook(() => useConversationState(stage));

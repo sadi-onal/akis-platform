@@ -16,6 +16,7 @@ import type { PipelineError } from '../../types/pipeline';
 
 function getAgentInfo(uiState: ConversationUIState) {
   if (uiState.includes('scribe')) return { label: 'Scribe', color: 'var(--ak-scribe, #3b82f6)' };
+  if (uiState === 'critic_running') return { label: 'Critic', color: 'var(--ak-critic, #f43f5e)' };
   if (uiState === 'proto_running') return { label: 'Proto', color: 'var(--ak-proto, #f59e0b)' };
   if (uiState === 'trace_running') return { label: 'Trace', color: 'var(--ak-trace, #8b5cf6)' };
   if (uiState === 'ci_running') return { label: 'CI', color: 'var(--color-yellow-400, #facc15)' };
@@ -211,6 +212,7 @@ export const ChatPanel = memo(function ChatPanel({
       {/* Stage glow — shows colored gradient when an agent is running */}
       {(uiState === 'scribe_running' ||
         uiState === 'scribe_revise' ||
+        uiState === 'critic_running' ||
         uiState === 'proto_running' ||
         uiState === 'trace_running') && (
         <div
@@ -218,9 +220,11 @@ export const ChatPanel = memo(function ChatPanel({
           style={{
             background: uiState.includes('scribe')
               ? 'linear-gradient(90deg, transparent, #38bdf8, transparent)'
-              : uiState === 'proto_running'
-                ? 'linear-gradient(90deg, transparent, #f59e0b, transparent)'
-                : 'linear-gradient(90deg, transparent, #a78bfa, transparent)',
+              : uiState === 'critic_running'
+                ? 'linear-gradient(90deg, transparent, #f43f5e, transparent)'
+                : uiState === 'proto_running'
+                  ? 'linear-gradient(90deg, transparent, #f59e0b, transparent)'
+                  : 'linear-gradient(90deg, transparent, #a78bfa, transparent)',
           }}
         />
       )}
@@ -257,6 +261,7 @@ export const ChatPanel = memo(function ChatPanel({
             {/* Activity indicator for running agents */}
             {(uiState === 'scribe_running' ||
               uiState === 'scribe_revise' ||
+              uiState === 'critic_running' ||
               uiState === 'proto_running' ||
               uiState === 'trace_running' ||
               uiState === 'ci_running') &&
@@ -276,11 +281,13 @@ export const ChatPanel = memo(function ChatPanel({
                         'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition-colors duration-300',
                         uiState.includes('scribe')
                           ? 'border-ak-scribe/30 bg-ak-scribe/10'
-                          : uiState === 'proto_running'
-                            ? 'border-ak-proto/30 bg-ak-proto/10'
-                            : uiState === 'ci_running'
-                              ? 'border-yellow-400/30 bg-yellow-400/10'
-                              : 'border-ak-trace/30 bg-ak-trace/10'
+                          : uiState === 'critic_running'
+                            ? 'border-rose-500/30 bg-rose-500/10'
+                            : uiState === 'proto_running'
+                              ? 'border-ak-proto/30 bg-ak-proto/10'
+                              : uiState === 'ci_running'
+                                ? 'border-yellow-400/30 bg-yellow-400/10'
+                                : 'border-ak-trace/30 bg-ak-trace/10'
                       )}
                     >
                       <span

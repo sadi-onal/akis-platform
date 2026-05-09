@@ -7,6 +7,7 @@ export type ConversationUIState =
   | 'idle'
   | 'scribe_clarifying'
   | 'scribe_running'
+  | 'critic_running'
   | 'awaiting_approval'
   | 'scribe_revise'
   | 'proto_running'
@@ -71,7 +72,17 @@ export type ChatMessage =
       timestamp: string;
     }
   | { type: 'file_created'; path: string; repo: string; timestamp: string }
-  | { type: 'pr_opened'; url: string; number: number; title: string; branch: string; filesChanged: number; linesChanged: number; timestamp: string; jiraEpicKey?: string }
+  | {
+      type: 'pr_opened';
+      url: string;
+      number: number;
+      title: string;
+      branch: string;
+      filesChanged: number;
+      linesChanged: number;
+      timestamp: string;
+      jiraEpicKey?: string;
+    }
   | {
       type: 'test_result';
       passed: number;

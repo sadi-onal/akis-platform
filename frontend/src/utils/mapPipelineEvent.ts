@@ -1,5 +1,11 @@
 import type { Pipeline, PipelineStage, CriticReviewOutput } from '../types/pipeline';
-import type { ChatMessage, ChatMode, ConversationUIState, ConversationListItem, ConversationStatus } from '../types/chat';
+import type {
+  ChatMessage,
+  ChatMode,
+  ConversationUIState,
+  ConversationListItem,
+  ConversationStatus,
+} from '../types/chat';
 
 /**
  * Maps a backend PipelineStage to the frontend ConversationUIState.
@@ -9,12 +15,13 @@ export function mapStageToUIState(stage: PipelineStage): ConversationUIState {
     case 'scribe_clarifying':
       return 'scribe_clarifying'; // Scribe finished — waiting for user answers
     case 'scribe_generating':
-    case 'critic_reviewing_spec':
       return 'scribe_running';
+    case 'critic_reviewing_spec':
+    case 'critic_reviewing_code':
+      return 'critic_running';
     case 'awaiting_approval':
       return 'awaiting_approval';
     case 'proto_building':
-    case 'critic_reviewing_code':
       return 'proto_running';
     case 'trace_testing':
     case 'fix_loop_iteration':
@@ -123,7 +130,10 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
         messages.push({
           type: 'clarification',
           role: 'scribe' as const,
-          content: typeof clar.message === 'string' ? clar.message : 'Fikrini daha iyi anlayabilmem için birkaç sorum var:',
+          content:
+            typeof clar.message === 'string'
+              ? clar.message
+              : 'Fikrini daha iyi anlayabilmem için birkaç sorum var:',
           questions: Array.isArray(clar.questions) ? clar.questions : [],
           timestamp: now,
         });
@@ -225,7 +235,9 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
       lineCount: po?.metadata?.totalLinesOfCode ?? 0,
       testCount: to?.testSummary?.totalTests,
       coverage: to?.testSummary?.coveragePercentage?.toString(),
-      cloneCommand: repoUrl ? `git clone ${repoUrl}.git && cd ${repoName} && npm install && npm run dev` : '',
+      cloneCommand: repoUrl
+        ? `git clone ${repoUrl}.git && cd ${repoName} && npm install && npm run dev`
+        : '',
       setupCommands: po?.setupCommands,
       timestamp: now,
     });
@@ -257,6 +269,8 @@ export function getRunningAgentName(state: ConversationUIState): string | null {
     case 'scribe_running':
     case 'scribe_revise':
       return 'Scribe';
+    case 'critic_running':
+      return 'Critic';
     case 'proto_running':
       return 'Proto';
     case 'trace_running':

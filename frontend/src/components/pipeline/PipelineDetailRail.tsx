@@ -32,6 +32,7 @@ const RUNNING_STATES: ConversationUIState[] = [
   'scribe_clarifying',
   'scribe_running',
   'scribe_revise',
+  'critic_running',
   'proto_running',
   'trace_running',
   'ci_running',

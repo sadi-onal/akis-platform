@@ -185,7 +185,8 @@ describe('analyzePreviewCapability', () => {
   it('does not flag source that only mentions "api" in a comment', () => {
     const files: Record<string, string> = {
       'package.json': makePkg({ react: '^19.0.0' }),
-      'src/App.tsx': "// note: no real api here, just a stub\nexport default function App() { return <div>hi</div>; }",
+      'src/App.tsx':
+        '// note: no real api here, just a stub\nexport default function App() { return <div>hi</div>; }',
     };
     const result = analyzePreviewCapability(files);
     expect(result.capability).toBe('sandpack');
@@ -204,6 +205,14 @@ describe('mapStageToUIState', () => {
 
   it('maps scribe_generating to scribe_running', () => {
     expect(mapStageToUIState('scribe_generating')).toBe('scribe_running');
+  });
+
+  it('maps critic_reviewing_spec to critic_running (Critic owns its own UI state)', () => {
+    expect(mapStageToUIState('critic_reviewing_spec')).toBe('critic_running');
+  });
+
+  it('maps critic_reviewing_code to critic_running', () => {
+    expect(mapStageToUIState('critic_reviewing_code')).toBe('critic_running');
   });
 
   it('maps awaiting_approval to awaiting_approval', () => {
@@ -332,6 +341,10 @@ describe('getRunningAgentName', () => {
 
   it('returns Scribe for scribe_revise', () => {
     expect(getRunningAgentName('scribe_revise')).toBe('Scribe');
+  });
+
+  it('returns Critic for critic_running', () => {
+    expect(getRunningAgentName('critic_running')).toBe('Critic');
   });
 
   it('returns Proto for proto_running', () => {
