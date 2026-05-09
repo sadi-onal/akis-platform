@@ -23,6 +23,7 @@ import { LOGO_MARK_SVG } from '../../theme/brand';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
 import { ChatSkeleton } from '../../components/chat/ChatSkeleton';
 import { attachDocumentsToChat } from '../../services/api/chatAttach';
+import { ChatRouter } from '../../components/chat/ChatRouter';
 
 function localizeError(e: unknown): string {
   if (e instanceof Error) {
@@ -868,6 +869,60 @@ export default function ChatPage() {
     ]
   );
 
+  // ───────────────────────────────────────────────────────────────────────
+  // Intent routing (FR-11). ChatRouter classifies each send and dispatches
+  // here. Today only BUILD has a real implementation (handleSend); the
+  // others surface a Bakkal-language placeholder until F-09 (chat-qa) and
+  // FEEDBACK/CHAT handlers ship in later waves. We deliberately route ASK
+  // to the placeholder rather than silently to BUILD because falling into
+  // a code-generating pipeline on a question would be far more confusing
+  // than a friendly "yakında" message — see PR description for rationale.
+  // ───────────────────────────────────────────────────────────────────────
+  const intentPlaceholder = useCallback(
+    (label: string, message: string) => {
+      const stamp = new Date().toISOString();
+      setMessages((prev) => [
+        ...prev,
+        { type: 'user', content: message, timestamp: stamp },
+        {
+          type: 'info',
+          content: `${label}: bu özellik yakında — şimdilik soru veya geri bildirimini chat'e bırakabilirsin.`,
+          timestamp: stamp,
+        },
+      ]);
+      toast(`${label}: yakında.`, 'info');
+    },
+    [],
+  );
+  const handleIntentAsk = useCallback(
+    (message: string) => intentPlaceholder('Soru', message),
+    [intentPlaceholder],
+  );
+  const handleIntentFeedback = useCallback(
+    (message: string) => intentPlaceholder('Geribildirim', message),
+    [intentPlaceholder],
+  );
+  const handleIntentChat = useCallback(
+    (message: string) => intentPlaceholder('Sohbet', message),
+    [intentPlaceholder],
+  );
+
+  /**
+   * Last 8 messages flattened to plain text. The classifier uses these for
+   * minor context (e.g. "rapor" right after a discussion of weekly reports →
+   * lifts ASK confidence). We don't include attachments or pipeline events.
+   */
+  const recentTextMessages = useMemo(() => {
+    return messages
+      .filter((m) => m.type === 'user' || m.type === 'agent')
+      .slice(-8)
+      .map((m) => {
+        const content = (m as { content?: string; message?: string }).content ?? (m as { message?: string }).message ?? '';
+        return typeof content === 'string' ? content : '';
+      })
+      .filter((c) => c.length > 0);
+  }, [messages]);
+
   // OAuth return — phase 1: detect ?github=connected, stash the "just completed"
   // intent in sessionStorage, and clean the URL. Runs once on mount.
   useEffect(() => {
@@ -1092,6 +1147,15 @@ export default function ChatPage() {
               }
             >
               <ErrorBoundary>
+                <ChatRouter
+                  pipelineId={conversationId}
+                  recentMessages={recentTextMessages}
+                  onBuild={handleSend}
+                  onAsk={handleIntentAsk}
+                  onFeedback={handleIntentFeedback}
+                  onChat={handleIntentChat}
+                >
+                  {({ send: routedSend, busy: intentBusy }) => (
                 <ChatPanel
                   conversationId={conversationId ?? 'pending'}
                   repoShortName={activeWorkflow?.title ?? pendingConv?.displayName ?? ''}
@@ -1105,10 +1169,10 @@ export default function ChatPage() {
                   messages={messages}
                   uiState={uiState}
                   isInputEnabled={pendingConv ? !creating : creating ? false : isInputEnabled}
-                  isSending={creating}
+                  isSending={creating || intentBusy}
                   showCancelButton={showCancelButton}
                   inputPlaceholder={pendingConv ? 'Projenizi anlatın...' : inputPlaceholder}
-                  onSend={handleSend}
+                  onSend={routedSend}
                   onCancel={handleCancel}
                   onApprove={handleApprove}
                   onReject={handleReject}
@@ -1138,6 +1202,8 @@ export default function ChatPage() {
                   // the activities array is empty.
                   pipelineHasOutputs={hasPipelineOutputs(activeWorkflow)}
                 />
+                  )}
+                </ChatRouter>
               </ErrorBoundary>
             </div>
 
