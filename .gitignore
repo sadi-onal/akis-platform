@@ -191,7 +191,16 @@ docs/ENV_PRODUCTION.md
 .github/workflows/oci-staging-deploy.yml
 
 # ─── İç geliştirme dosyaları (GitHub'da olmaz) ───
-.claude/
+# .claude/ tooling pack (.claude/agents, skills, commands, hooks, state, README)
+# IS tracked. Only session-local + auto-generated bits are ignored:
+.claude/projects/
+.claude/cache/
+.claude/plugins/
+.claude/settings.local.json
+.claude/state/orchestrator.json
+.claude/state/pdp-progress.json
+.claude/state/implementation-log.jsonl
+.claude/state/simplifier-findings.md
 CLAUDE.md
 Makefile
 .cursorignore
