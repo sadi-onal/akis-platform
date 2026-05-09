@@ -671,7 +671,7 @@ export default function ChatPage() {
                 ...prev,
                 {
                   type: 'info',
-                  content: `İterasyon başlatıldı — Proto mevcut repo üstüne değişiklikleri uyguluyor.`,
+                  content: `İterasyon başlatıldı — Proto mevcut depo üstüne değişiklikleri uyguluyor.`,
                   timestamp: new Date().toISOString(),
                 },
               ]);
