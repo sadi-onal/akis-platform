@@ -337,6 +337,13 @@
       "when": 1777766400000,
       "tag": "0046_remove_openrouter_lock_model",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1778832000000,
+      "tag": "0047_pipeline_reasonings_and_activities",
+      "breakpoints": true
     }
   ]
 }
