@@ -131,6 +131,9 @@ export function buildCriticReasoning(
       .map((f) => f.description) ?? [];
   return {
     agentName: 'critic',
+    // Distinct stage key per review type — keeps `pipeline_reasonings`'s
+    // (pipeline_id, stage) UNIQUE index from collapsing spec vs code review.
+    stageKey: opts.reviewType === 'spec' ? 'critic-spec' : 'critic-code',
     timestamp: opts.now ?? new Date(),
     decision: decisionLabel,
     reasoning: result.findings?.map((f) => f.description) ?? [],

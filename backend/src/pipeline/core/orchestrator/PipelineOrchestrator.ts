@@ -401,13 +401,34 @@ export class PipelineOrchestrator {
       .catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
   }
 
+  /**
+   * Persist a reasoning entry without blocking the caller.
+   *
+   * `addReasoning` is async since PDP-2 Wave 2 (F-03 + F-11 / NFR-1) — it
+   * upserts into `pipeline_reasonings`. Most call sites in this orchestrator
+   * are inside long-running stage transitions where adding ~5ms of DB latency
+   * sequentially would compound; we fire-and-forget and surface failures via
+   * the logger instead.
+   */
+  private persistReasoning(
+    pipelineId: string,
+    reasoning: import('../explainability/ExplainabilityTypes.js').AgentReasoning
+  ): void {
+    this.explainability.addReasoning(pipelineId, reasoning).catch((err) => {
+      logger.warn(
+        { err, pipelineId, agent: reasoning.agentName },
+        '[Pipeline] Failed to persist reasoning (cache still hot)'
+      );
+    });
+  }
+
   /** Level 4: Explainability — Scribe reasoning after spec generation. */
   private recordScribeReasoning(
     pipelineId: string,
     output: import('../contracts/PipelineTypes.js').ScribeOutput,
     regenerated: boolean
   ): void {
-    this.explainability.addReasoning(pipelineId, buildScribeReasoning(output, { regenerated }));
+    this.persistReasoning(pipelineId, buildScribeReasoning(output, { regenerated }));
   }
 
   /** Level 4: Explainability — Proto reasoning after scaffold push. */
@@ -415,7 +436,7 @@ export class PipelineOrchestrator {
     pipelineId: string,
     output: import('../contracts/PipelineTypes.js').ProtoOutput
   ): void {
-    this.explainability.addReasoning(pipelineId, buildProtoReasoning(output));
+    this.persistReasoning(pipelineId, buildProtoReasoning(output));
   }
 
   /** Level 4: Explainability — Trace reasoning after test generation. */
@@ -423,7 +444,7 @@ export class PipelineOrchestrator {
     pipelineId: string,
     output: import('../contracts/PipelineTypes.js').TraceOutput
   ): void {
-    this.explainability.addReasoning(pipelineId, buildTraceReasoning(output));
+    this.persistReasoning(pipelineId, buildTraceReasoning(output));
   }
 
   /**
@@ -1380,7 +1401,7 @@ export class PipelineOrchestrator {
       });
 
       // Add explainability reasoning
-      this.explainability.addReasoning(pipelineId, {
+      this.persistReasoning(pipelineId, {
         agentName: 'validator',
         timestamp: new Date(),
         decision: validationResult.passed ? 'Kod dogrulama basarili' : 'Kod dogrulama basarisiz',
@@ -1477,7 +1498,7 @@ export class PipelineOrchestrator {
         });
 
         // Level 4: Explainability — record critic-code reasoning
-        this.explainability.addReasoning(
+        this.persistReasoning(
           pipelineId,
           buildCriticReasoning(criticResult, { reviewType: 'code' })
         );
@@ -1878,7 +1899,7 @@ export class PipelineOrchestrator {
 
         // Level 4: Explainability — record critic-spec reasoning
         if (criticResult) {
-          this.explainability.addReasoning(
+          this.persistReasoning(
             pipelineId,
             buildCriticReasoning(criticResult, { reviewType: 'spec' })
           );

@@ -22,7 +22,7 @@ import {
 } from '../core/contracts/PipelineSchemas.js';
 import type { PipelineOrchestrator } from '../core/orchestrator/PipelineOrchestrator.js';
 import type { PipelineState } from '../core/contracts/PipelineTypes.js';
-import { getActivities } from '../core/activityEmitter.js';
+import { getRecentActivities } from '../core/activityEmitter.js';
 
 export interface PipelineRoutesDeps {
   orchestrator: PipelineOrchestrator;
@@ -129,7 +129,9 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
     async getActivities(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
-      return { activities: getActivities(id) };
+      // PDP-2 Wave 2 (NFR-1): falls back to pipeline_activities when the
+      // ring buffer is cold so reloads after a backend restart still work.
+      return { activities: await getRecentActivities(id) };
     },
 
     async sendMessage(request: unknown, attachmentContext?: string) {
@@ -230,7 +232,7 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
       const explainability = orchestrator.getExplainability();
-      const explanation = explainability.getExplanation(id);
+      const explanation = await explainability.getExplanation(id);
       return { explanation };
     },
 
