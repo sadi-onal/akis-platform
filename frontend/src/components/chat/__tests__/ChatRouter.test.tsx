@@ -75,6 +75,17 @@ describe('ChatRouter', () => {
     fireEvent.click(screen.getByText('send'));
     await waitFor(() => expect(t.onAsk).toHaveBeenCalledTimes(1));
     expect(t.onAsk).toHaveBeenCalledWith('test message');
+    // F-09: ASK fires only the chat-qa handler, never the BUILD pipeline.
+    expect(t.onBuild).not.toHaveBeenCalled();
+  });
+
+  it('does not invoke onBuild when ASK is the winner — chat Q&A is pipeline-free', async () => {
+    const t = setup(classification({ intent: 'ASK', confidence: 0.92 }));
+    fireEvent.click(screen.getByText('send'));
+    await waitFor(() => expect(t.onAsk).toHaveBeenCalledTimes(1));
+    expect(t.onBuild).not.toHaveBeenCalled();
+    expect(t.onFeedback).not.toHaveBeenCalled();
+    expect(t.onChat).not.toHaveBeenCalled();
   });
 
   it('routes high-confidence FEEDBACK to onFeedback', async () => {
