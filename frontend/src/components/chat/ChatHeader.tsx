@@ -10,11 +10,13 @@ const MODE_STYLES: Record<ChatMode, string> = {
   review: 'bg-yellow-500/15 text-yellow-400',
 };
 
+// Bakkal-language one-liners — see docs/product/02-ux.md § 6 + 05-findings F-05.
+// Tooltip text is intentionally jargon-free (no "Scribe / Proto / Trace / spec").
 const MODE_DESCRIPTIONS: Record<ChatMode, string> = {
-  ask: 'Bekliyorum: Scribe sorularına cevap verin',
-  plan: 'Spec hazır: planı inceleyin ve onaylayın',
-  act: 'Çalışıyor: Proto/Trace kod ve test üretiyor',
-  review: 'Tamamlandı: sonucu inceleyin',
+  ask: 'Sorularını yanıtlıyoruz',
+  plan: 'Yapılacakları planlıyoruz',
+  act: 'Kodu yazıyoruz',
+  review: 'Sonucu birlikte gözden geçiriyoruz',
 };
 
 interface ChatHeaderProps {
@@ -71,17 +73,23 @@ export function ChatHeader({
         </button>
       )}
 
-      {/* Mode badge — overridden by HATA when pipeline has failed */}
+      {/* Mode badge — overridden by HATA when pipeline has failed.
+          F-05: each mode carries a bakkal-language tooltip + aria-label so the
+          rozet is meaningful (NFR-5.3: "ya net açıklamalı ya yok"). */}
       {isFailed ? (
         <span
+          role="status"
+          data-testid="chat-mode-badge"
           className="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400"
-          title="Pipeline hata aldı: detaylar için sohbeti inceleyin"
-          aria-label="Pipeline hata aldı"
+          title="Bir sorun çıktı: detaylar için sohbeti inceleyin"
+          aria-label="Bir sorun çıktı"
         >
           HATA
         </span>
       ) : mode ? (
         <span
+          role="status"
+          data-testid="chat-mode-badge"
           className={cn(
             'rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
             MODE_STYLES[mode]

@@ -45,6 +45,40 @@ describe('ChatHeader', () => {
     expect(screen.getByText('review')).toBeInTheDocument();
   });
 
+  // F-05: bakkal-language tooltip per mode (see docs/product/02-ux § 6 + 05-findings F-05).
+  // Each mode badge must carry a jargon-free Türkçe açıklama as `title` + `aria-label`.
+  it('ASK mode badge carries bakkal-language tooltip', () => {
+    render(<ChatHeader {...baseProps} mode="ask" />);
+    const badge = screen.getByRole('status');
+    expect(badge).toHaveAttribute('title', 'Sorularını yanıtlıyoruz');
+    expect(badge).toHaveAttribute('aria-label', 'Sorularını yanıtlıyoruz');
+    expect(badge).toHaveTextContent('ask');
+  });
+
+  it('PLAN mode badge carries bakkal-language tooltip', () => {
+    render(<ChatHeader {...baseProps} mode="plan" />);
+    const badge = screen.getByRole('status');
+    expect(badge).toHaveAttribute('title', 'Yapılacakları planlıyoruz');
+    expect(badge).toHaveAttribute('aria-label', 'Yapılacakları planlıyoruz');
+    expect(badge).toHaveTextContent('plan');
+  });
+
+  it('ACT mode badge carries bakkal-language tooltip', () => {
+    render(<ChatHeader {...baseProps} mode="act" />);
+    const badge = screen.getByRole('status');
+    expect(badge).toHaveAttribute('title', 'Kodu yazıyoruz');
+    expect(badge).toHaveAttribute('aria-label', 'Kodu yazıyoruz');
+    expect(badge).toHaveTextContent('act');
+  });
+
+  it('REVIEW mode badge carries bakkal-language tooltip', () => {
+    render(<ChatHeader {...baseProps} mode="review" />);
+    const badge = screen.getByRole('status');
+    expect(badge).toHaveAttribute('title', 'Sonucu birlikte gözden geçiriyoruz');
+    expect(badge).toHaveAttribute('aria-label', 'Sonucu birlikte gözden geçiriyoruz');
+    expect(badge).toHaveTextContent('review');
+  });
+
   it('does not render mode badge when mode is undefined', () => {
     render(<ChatHeader {...baseProps} />);
     expect(screen.queryByText('ask')).not.toBeInTheDocument();
