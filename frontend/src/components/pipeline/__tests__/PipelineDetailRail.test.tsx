@@ -72,6 +72,61 @@ describe('PipelineDetailRail — render gating', () => {
     );
     expect(screen.getByLabelText('Pipeline detayı')).toBeInTheDocument();
   });
+
+  // F-04 — completed pipelines whose in-memory activity buffer was lost
+  // (e.g. after a backend restart) must still surface the rail so the
+  // user can reach Akış / Açıklama / Regresyon for finished work.
+  describe('F-04 — pipelineHasOutputs override', () => {
+    it('returns null when idle + zero activities + pipelineHasOutputs=false (default)', () => {
+      const { container } = render(
+        <PipelineDetailRail
+          pipelineId="p-1"
+          uiState="idle"
+          activities={[]}
+          currentStep={null}
+          pipelineHasOutputs={false}
+        />
+      );
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('renders the rail (collapsed) when idle + zero activities + pipelineHasOutputs=true', () => {
+      render(
+        <PipelineDetailRail
+          pipelineId="p-1"
+          uiState="idle"
+          activities={[]}
+          currentStep={null}
+          pipelineHasOutputs
+        />
+      );
+      const region = screen.getByLabelText('Pipeline detayı');
+      expect(region).toBeInTheDocument();
+      // Idle + completed → auto-collapsed by default
+      expect(region).toHaveAttribute('data-collapsed', 'true');
+    });
+
+    it('keeps tabs accessible when expanded with outputs but no activities', () => {
+      render(
+        <PipelineDetailRail
+          pipelineId="p-1"
+          uiState="idle"
+          activities={[]}
+          currentStep={null}
+          pipelineHasOutputs
+        />
+      );
+      // Expand the rail
+      fireEvent.click(screen.getByText(/Pipeline detayı/));
+      const region = screen.getByLabelText('Pipeline detayı');
+      expect(region).toHaveAttribute('data-collapsed', 'false');
+      // Akış + Açıklama tabs always available
+      expect(screen.getByRole('tab', { name: 'Akış' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Açıklama' })).toBeInTheDocument();
+      // Regresyon requires activities — gracefully hidden when buffer is empty
+      expect(screen.queryByRole('tab', { name: 'Regresyon' })).not.toBeInTheDocument();
+    });
+  });
 });
 
 describe('PipelineDetailRail — auto state', () => {

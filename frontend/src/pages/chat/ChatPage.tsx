@@ -1111,6 +1111,17 @@ export default function ChatPage() {
                     (activeWorkflow?.currentStage === 'failed' ? activeWorkflow?.error : undefined)
                   }
                   isRetrying={retryingError !== null}
+                  // F-04: keep the rail visible for completed pipelines whose
+                  // in-memory activity buffer was lost (e.g. after backend
+                  // restart). Outputs persist on the workflow record, so we
+                  // use them as the "has something to show" signal even when
+                  // the activities array is empty.
+                  pipelineHasOutputs={Boolean(
+                    (activeWorkflow?.stages?.proto?.files &&
+                      activeWorkflow.stages.proto.files.length > 0) ||
+                      (activeWorkflow?.stages?.trace?.tests ?? 0) > 0 ||
+                      activeWorkflow?.stages?.scribe?.spec
+                  )}
                 />
               </ErrorBoundary>
             </div>

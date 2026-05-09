@@ -13,6 +13,14 @@ export interface PipelineDetailRailProps {
   uiState: ConversationUIState;
   activities: PipelineActivity[];
   currentStep: PipelineActivity | null;
+  /**
+   * F-04: when true, the rail stays mounted for completed pipelines even
+   * if the in-memory activity buffer was lost (e.g. backend restart).
+   * Without this, the user could no longer access the Akış / Açıklama /
+   * Regresyon tabs for finished work. Derived from the workflow's
+   * proto/trace output presence in the parent.
+   */
+  pipelineHasOutputs?: boolean;
   /** DI for tests — falls back to workflowsApi.getExplanation */
   explanationFetcher?: (id: string) => Promise<PipelineExplanation>;
   /** DI for tests — falls back to workflowsApi.getRegression */
@@ -62,6 +70,7 @@ export function PipelineDetailRail({
   uiState,
   activities,
   currentStep,
+  pipelineHasOutputs = false,
   explanationFetcher,
   regressionFetcher,
   className,
@@ -116,7 +125,12 @@ export function PipelineDetailRail({
   );
 
   if (!pipelineId || pipelineId === 'pending') return null;
-  if (uiState === 'idle' && activities.length === 0) return null;
+  // F-04: only fully hide the rail when the pipeline has *no* state to
+  // surface — neither live activity nor persisted outputs. This keeps
+  // the tabs reachable for completed pipelines whose activity buffer was
+  // lost (e.g. backend restart). Tabs render their own empty states
+  // gracefully when activities are absent.
+  if (uiState === 'idle' && activities.length === 0 && !pipelineHasOutputs) return null;
 
   // Q2 A/B-test escape hatch: ?baseline=1 hides the entire Level-4 rail
   // so the same pipeline can be screenshotted with and without the
