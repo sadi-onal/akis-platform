@@ -330,15 +330,15 @@ describe('buildCriticReasoning', () => {
 // ─── End-to-end via ExplainabilityService ──────────────────
 
 describe('ExplainabilityService integration with factories', () => {
-  it('aggregates a 4-stage pipeline narrative correctly', () => {
-    const svc = new ExplainabilityService();
+  it('aggregates a 4-stage pipeline narrative correctly', async () => {
+    const svc = new ExplainabilityService({ db: null });
     const pid = 'p-001';
-    svc.addReasoning(pid, buildScribeReasoning(makeScribeOutput(), { regenerated: false }));
-    svc.addReasoning(pid, buildCriticReasoning(makeCriticResult(), { reviewType: 'spec' }));
-    svc.addReasoning(pid, buildProtoReasoning(makeProtoOutput()));
-    svc.addReasoning(pid, buildTraceReasoning(makeTraceOutput()));
+    await svc.addReasoning(pid, buildScribeReasoning(makeScribeOutput(), { regenerated: false }));
+    await svc.addReasoning(pid, buildCriticReasoning(makeCriticResult(), { reviewType: 'spec' }));
+    await svc.addReasoning(pid, buildProtoReasoning(makeProtoOutput()));
+    await svc.addReasoning(pid, buildTraceReasoning(makeTraceOutput()));
 
-    const explanation = svc.getExplanation(pid);
+    const explanation = await svc.getExplanation(pid);
     assert.equal(explanation.stages.length, 4);
     assert.equal(explanation.stages[0]!.agentName, 'scribe');
     assert.equal(explanation.stages[1]!.agentName, 'critic');
@@ -353,17 +353,17 @@ describe('ExplainabilityService integration with factories', () => {
     assert.match(narrative, /Trace/);
   });
 
-  it('flags Trace uncovered AC as low-severity attention point', () => {
-    const svc = new ExplainabilityService();
-    svc.addReasoning('p', buildTraceReasoning(makeTraceOutput()));
-    const points = svc.getAttentionPoints('p');
+  it('flags Trace uncovered AC as low-severity attention point', async () => {
+    const svc = new ExplainabilityService({ db: null });
+    await svc.addReasoning('p', buildTraceReasoning(makeTraceOutput()));
+    const points = await svc.getAttentionPoints('p');
     // Trace risk → low severity per ExplainabilityService rules
     assert.ok(points.some((p) => p.severity === 'low' && p.issue.includes('riskler')));
   });
 
-  it('flags rejected critic-code as high-severity attention via medium-confidence path', () => {
-    const svc = new ExplainabilityService();
-    svc.addReasoning(
+  it('flags rejected critic-code as high-severity attention via medium-confidence path', async () => {
+    const svc = new ExplainabilityService({ db: null });
+    await svc.addReasoning(
       'p',
       buildCriticReasoning(
         makeCriticResult({
@@ -381,8 +381,18 @@ describe('ExplainabilityService integration with factories', () => {
         { reviewType: 'code' }
       )
     );
-    const points = svc.getAttentionPoints('p');
+    const points = await svc.getAttentionPoints('p');
     // overallScore 60 → low confidence → high severity
     assert.ok(points.some((p) => p.severity === 'high'));
+  });
+
+  it('keeps critic-spec and critic-code as separate stage rows', async () => {
+    const svc = new ExplainabilityService({ db: null });
+    await svc.addReasoning('p2', buildCriticReasoning(makeCriticResult(), { reviewType: 'spec' }));
+    await svc.addReasoning('p2', buildCriticReasoning(makeCriticResult(), { reviewType: 'code' }));
+    const explanation = await svc.getExplanation('p2');
+    assert.equal(explanation.stages.length, 2, 'critic-spec and critic-code must not collapse');
+    const keys = explanation.stages.map((s) => s.stageKey ?? s.agentName);
+    assert.deepEqual(keys.sort(), ['critic-code', 'critic-spec']);
   });
 });
