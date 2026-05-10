@@ -222,7 +222,7 @@ describe('PipelineDetailRail — body scrollability (F-02)', () => {
   // F-02: when ExplanationPanel renders many stage cards or AttentionBanner
   // accumulates findings, the rail used to expand past the viewport with
   // no scroll affordance. Body must cap height + allow vertical scroll.
-  it('body wrapper has overflow-y-auto and a max-h class on the Akış tab', () => {
+  it('body wrapper has overflow-y-auto and exact max-h tokens on the Akış tab', () => {
     const { container } = render(
       <PipelineDetailRail
         pipelineId="p-1"
@@ -236,12 +236,17 @@ describe('PipelineDetailRail — body scrollability (F-02)', () => {
     const body = container.querySelector('#pipeline-rail-body');
     expect(body).not.toBeNull();
     const classes = body!.className;
-    expect(classes).toMatch(/overflow-y-auto/);
-    // Tailwind arbitrary-value max-h-[<n>vh] (or its sm: variant) — either form proves the cap exists.
-    expect(classes).toMatch(/max-h-\[\d+vh\]/);
+    expect(classes).toContain('overflow-y-auto');
+    // Lock the exact breakpoint tokens so silent drift (e.g. md:max-h-screen) fails the test.
+    expect(classes).toContain('max-h-[55vh]');
+    expect(classes).toContain('sm:max-h-[60vh]');
+    // Prevent scroll-chain into the parent chat container.
+    expect(classes).toContain('overscroll-contain');
+    // Keyboard-only users must be able to focus the scroll viewport (WCAG 2.1.1).
+    expect(body).toHaveAttribute('tabindex', '0');
   });
 
-  it('body wrapper retains overflow + max-h on the Açıklama tab with many attention points', async () => {
+  it('body wrapper retains overflow + exact max-h tokens on the Açıklama tab with many attention points', async () => {
     const longAttention = Array.from({ length: 12 }, (_, i) => ({
       severity: (i % 3 === 0 ? 'high' : 'medium') as 'high' | 'medium',
       stage: 'critic' as const,
@@ -266,8 +271,28 @@ describe('PipelineDetailRail — body scrollability (F-02)', () => {
     const body = container.querySelector('#pipeline-rail-body');
     expect(body).not.toBeNull();
     const classes = body!.className;
-    expect(classes).toMatch(/overflow-y-auto/);
-    expect(classes).toMatch(/max-h-\[\d+vh\]/);
+    expect(classes).toContain('overflow-y-auto');
+    expect(classes).toContain('max-h-[55vh]');
+    expect(classes).toContain('sm:max-h-[60vh]');
+  });
+
+  it('body wrapper remains scrollable on the Regresyon tab', () => {
+    const { container } = render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('proto')]}
+        currentStep={null}
+      />
+    );
+    fireEvent.click(screen.getByText(/Pipeline detayı/));
+    fireEvent.click(screen.getByRole('tab', { name: 'Regresyon' }));
+    const body = container.querySelector('#pipeline-rail-body');
+    expect(body).not.toBeNull();
+    const classes = body!.className;
+    expect(classes).toContain('overflow-y-auto');
+    expect(classes).toContain('max-h-[55vh]');
+    expect(classes).toContain('sm:max-h-[60vh]');
   });
 });
 

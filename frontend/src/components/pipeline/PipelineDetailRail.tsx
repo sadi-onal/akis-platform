@@ -301,7 +301,10 @@ export function PipelineDetailRail({
       {!effectiveCollapsed && (
         <div
           id="pipeline-rail-body"
-          className="max-h-[55vh] overflow-y-auto px-4 pb-3 sm:max-h-[60vh]"
+          tabIndex={0}
+          role="region"
+          aria-label="Pipeline detayı içeriği"
+          className="max-h-[55vh] overflow-y-auto overscroll-contain px-4 pb-3 sm:max-h-[60vh]"
         >
           {attentionPoints.length > 0 && (
             <div className="mb-3">
