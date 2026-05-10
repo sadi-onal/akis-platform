@@ -317,6 +317,16 @@ export class ProtoAgent {
       description: input.spec.problemStatement,
     });
 
+    // F-08 review fix: keep metadata counts in sync with the post-enrichment
+    // `files` array. The AI's metadata reports the pre-enrichment count, but
+    // `files` is the enriched superset that's actually pushed and surfaced to
+    // the user. The agentic path already does this (line 705); legacy did not.
+    const enrichedMetadata = {
+      ...metadata,
+      filesCreated: files.length,
+      totalLinesOfCode: files.reduce((sum, f) => sum + f.linesOfCode, 0),
+    };
+
     if (input.dryRun) {
       return {
         type: 'output',
@@ -327,7 +337,7 @@ export class ProtoAgent {
           repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
           files,
           setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
-          metadata: { ...metadata, committed: false },
+          metadata: { ...enrichedMetadata, committed: false },
         },
       };
     }
@@ -365,7 +375,7 @@ export class ProtoAgent {
         files,
         prUrl,
         setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
-        metadata: { ...metadata, committed: true },
+        metadata: { ...enrichedMetadata, committed: true },
       },
     };
   }

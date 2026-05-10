@@ -339,6 +339,85 @@ describe('ProtoAgent — Adapter Hardening (issue #470 BUG-E re-open)', () => {
   });
 
   /**
+   * SCENARIO F (F-08 review fix #3): regression-prevention for the
+   * `TRIVIAL_AUTO_INIT_PATHS` exclusion in verifyRepoPushed.
+   *
+   * Why this exists:
+   *   ScaffoldEnricher always emits a `README.md`, so `pushedPaths` always
+   *   includes "README.md". GitHub auto_init also creates a README.md when a
+   *   repo is created with `auto_init=true`. Without the trivial-path filter,
+   *   a silently-failed push would still match (pushedPaths ∩ listFiles ⊇
+   *   {"README.md"}) → matchedCount=1 → false-pass.
+   *
+   *   The fix excludes README.md and root .gitignore from the match-set so the
+   *   detector remains as strict as it was pre-F-08.
+   *
+   * Pre-fix (regression) behaviour:  matchedCount = 1 → ok:true (BAD)
+   * Post-fix behaviour:              matchedCount = 0 → PROTO_PUSH_FAILED
+   */
+  it('SCENARIO F: pushed=[README.md] + listFiles=[README.md] (auto_init) → PROTO_PUSH_FAILED, not false-pass', async () => {
+    const github: ProtoGitHubDeps = {
+      async createRepository() { return { url: 'https://github.com/OmerYasirOnal/vanilla-stopwatch-test' }; },
+      async createBranch() {},
+      async commitFile() {},
+      async createPR() { return { url: 'https://github.com/OmerYasirOnal/vanilla-stopwatch-test/pull/1' }; },
+      async pushFiles() { /* silently "succeeds" — files never actually land */ },
+      // listFiles returns ONLY the auto_init README.md
+      async listFiles() { return ['README.md']; },
+    };
+
+    let iteration = 0;
+    const agenticDeps: AgenticLoopDeps = {
+      async callWithTools(_messages, _tools, _opts): Promise<AnthropicResponse> {
+        iteration++;
+        if (iteration === 1) {
+          return {
+            id: 'msg-1', stop_reason: 'tool_use',
+            content: [{ type: 'tool_use', id: 'toolu_create', name: 'create_repository', input: { owner: 'OmerYasirOnal', name: 'vanilla-stopwatch-test', isPrivate: false } }],
+          };
+        }
+        if (iteration === 2) {
+          // The LLM "pushes" only README.md — exactly what the enricher would
+          // emit if the AI returned a single readme. After enrichment this
+          // becomes README.md (preserved) + install.sh + .env.example, but the
+          // input here exercises the README-only edge case directly.
+          return {
+            id: 'msg-2', stop_reason: 'tool_use',
+            content: [{
+              type: 'tool_use', id: 'toolu_push', name: 'push_files',
+              input: {
+                owner: 'OmerYasirOnal', repo: 'vanilla-stopwatch-test', branch: 'main',
+                files: [{ path: 'README.md', content: '# Stopwatch' }],
+                message: 'feat: scaffold',
+              },
+            }],
+          };
+        }
+        return {
+          id: 'msg-3', stop_reason: 'end_turn',
+          content: [{ type: 'text', text: '{"ok":true}' }],
+        };
+      },
+    };
+
+    const agent = new ProtoAgent(createMockAI(), github, agenticDeps);
+    const result = await agent.execute(baseInput());
+
+    assert.equal(
+      result.type,
+      'error',
+      'Expected PROTO_PUSH_FAILED — README.md alone must not satisfy the auto_init detector',
+    );
+    if (result.type !== 'error') return;
+    assert.equal(result.error.code, 'PROTO_PUSH_FAILED');
+    const detail = result.error.technicalDetail ?? '';
+    assert.ok(
+      detail.toLowerCase().includes('none of the') || detail.toLowerCase().includes('scaffold files'),
+      `technicalDetail should mention scaffold files not found; got: "${detail}"`,
+    );
+  });
+
+  /**
    * SCENARIO E: push_files never called by agentic loop → PROTO_PUSH_FAILED.
    * Guards against model hallucinating success without calling the tool.
    */

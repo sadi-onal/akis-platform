@@ -111,7 +111,14 @@ export class ScaffoldEnricher {
 
     // 3. Dockerfile + docker-compose.yml — optional, skipped for unknown / static.
     if (generateDockerfile && supportsDocker(stack) && !has('Dockerfile')) {
-      upsert('Dockerfile', renderDockerfile(stack));
+      // F-08 review fix: for node stacks, detect whether the scaffold's
+      // `package.json` exposes a `start` or `preview` script so the Dockerfile
+      // CMD targets a real entry point (Vite scaffolds typically have only
+      // `dev` + `preview`, no `start`). See renderDockerfile() comment.
+      const nodeRuntime = isNodeStack(stack)
+        ? detectNodeRuntime(out)
+        : undefined;
+      upsert('Dockerfile', renderDockerfile(stack, nodeRuntime));
     }
     if (generateCompose && supportsDocker(stack) && !has('docker-compose.yml')) {
       upsert('docker-compose.yml', renderCompose(stack, spec));
@@ -184,6 +191,65 @@ function supportsDocker(stack: Stack): boolean {
     stack === 'go' ||
     stack === 'rust'
   );
+}
+
+function isNodeStack(stack: Stack): boolean {
+  return stack === 'node-npm' || stack === 'node-pnpm' || stack === 'node-yarn';
+}
+
+/**
+ * Which runtime entry point the Node Dockerfile's CMD should target.
+ *
+ *   - `start`      → `package.json` has a `start` script (Express, Next, etc.)
+ *   - `preview`    → `package.json` has `preview` but no `start` (Vite default)
+ *   - `serve-dist` → neither — fall back to a static-file server over `dist/`
+ *                    (covers built-output-only scaffolds and broken/missing scripts)
+ *
+ * The detector reads the scaffold's `package.json` from the in-memory file
+ * list. If we can't parse it we default to `preview` because the AKIS
+ * reference scaffold is React+Vite and the previous `start` default left
+ * Vite containers exiting immediately on `docker compose up`.
+ */
+type NodeRuntime = 'start' | 'preview' | 'serve-dist';
+
+function detectNodeRuntime(files: ScaffoldFile[]): NodeRuntime {
+  const pkg = files.find((f) => normalizePath(f.path) === 'package.json');
+  if (!pkg) return 'preview';
+  let parsed: { scripts?: Record<string, unknown> } | null = null;
+  try {
+    parsed = JSON.parse(pkg.content) as { scripts?: Record<string, unknown> };
+  } catch {
+    return 'preview';
+  }
+  const scripts = parsed?.scripts;
+  if (scripts && typeof scripts === 'object') {
+    if (typeof (scripts as Record<string, unknown>).start === 'string') return 'start';
+    if (typeof (scripts as Record<string, unknown>).preview === 'string') return 'preview';
+  }
+  return 'serve-dist';
+}
+
+function renderNodeDockerCmd(pm: 'npm' | 'pnpm' | 'yarn', runtime: NodeRuntime): string {
+  switch (runtime) {
+    case 'start':
+      return `CMD ["${pm}", "start"]`;
+    case 'preview':
+      return `CMD ["${pm}", "run", "preview"]`;
+    case 'serve-dist':
+      // `serve` is installed globally above so this works for any pm.
+      return `CMD ["serve", "dist", "-l", "3000"]`;
+  }
+}
+
+function renderNodeDockerCmdComment(runtime: NodeRuntime): string {
+  switch (runtime) {
+    case 'start':
+      return '# CMD: package.json has `start` script.';
+    case 'preview':
+      return '# CMD: package.json has no `start` — using `preview` (Vite default).';
+    case 'serve-dist':
+      return '# CMD: package.json has no `start`/`preview` — serving built `dist/` statically.';
+  }
 }
 
 // ─── install.sh templates ─────────────────────────
@@ -454,13 +520,24 @@ function primaryInstallCommand(stack: Stack): string {
 
 // ─── Dockerfile templates ─────────────────────────
 
-function renderDockerfile(stack: Stack): string {
+function renderDockerfile(stack: Stack, nodeRuntime?: NodeRuntime): string {
   switch (stack) {
     case 'node-npm':
     case 'node-pnpm':
     case 'node-yarn': {
       const pm = stack === 'node-pnpm' ? 'pnpm' : stack === 'node-yarn' ? 'yarn' : 'npm';
       const installCmd = pm === 'npm' ? 'npm ci || npm install' : pm === 'yarn' ? 'yarn install --frozen-lockfile || yarn install' : 'pnpm install --frozen-lockfile || pnpm install';
+      // F-08 review fix: pick the runtime CMD based on what's actually in
+      // `package.json`. Three cases — in priority order:
+      //   1) `start`   → CMD ["<pm>", "start"]            (Express/Next/etc.)
+      //   2) `preview` → CMD ["<pm>", "run", "preview"]   (Vite default)
+      //   3) (none)    → CMD ["npx", "serve", "dist", ...]
+      // We default to `preview` when the package.json wasn't readable so
+      // Vite scaffolds (the AKIS reference) don't get a broken CMD.
+      // We also drop the `|| true` from RUN so real build failures surface.
+      const runtime = nodeRuntime ?? 'preview';
+      const cmdLine = renderNodeDockerCmd(pm, runtime);
+      const cmdComment = renderNodeDockerCmdComment(runtime);
       return [
         '# AKIS tarafından üretilen Dockerfile — basit, çok aşamalı.',
         'FROM node:20-alpine AS builder',
@@ -470,14 +547,16 @@ function renderDockerfile(stack: Stack): string {
         ...(stack === 'node-yarn' ? ['COPY yarn.lock ./'] : []),
         `RUN ${installCmd}`,
         'COPY . .',
-        `RUN ${pm} run build || true`,
+        `RUN ${pm} run build`,
         '',
         'FROM node:20-alpine AS runner',
         'WORKDIR /app',
         'COPY --from=builder /app /app',
         'ENV NODE_ENV=production',
         'EXPOSE 3000',
-        `CMD ["${pm}", "start"]`,
+        ...(runtime === 'serve-dist' ? ['RUN npm install -g serve'] : []),
+        cmdComment,
+        cmdLine,
         '',
       ].join('\n');
     }

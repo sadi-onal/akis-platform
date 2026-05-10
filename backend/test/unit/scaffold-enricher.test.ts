@@ -318,6 +318,72 @@ describe('ScaffoldEnricher.enrich → Docker', () => {
     assert.match(docker.content, /FROM node:20-alpine AS runner/);
   });
 
+  // F-08 review fix #1: Node Dockerfile must (a) drop `|| true` so build
+  // failures are visible, and (b) pick a CMD that works for the actual
+  // scaffold's package.json. The previous CMD `[<pm>, "start"]` produced a
+  // container that exited immediately on Vite scaffolds (no `start` script).
+  it('Node Dockerfile build step does not swallow failures (no `|| true`)', () => {
+    const out = e.enrich([f('package.json', '{}')], sampleSpec);
+    const docker = out.find((x) => x.path === 'Dockerfile');
+    assert.ok(docker);
+    // Old behaviour was `RUN <pm> run build || true` — assert it's gone.
+    assert.doesNotMatch(docker.content, /run build \|\| true/);
+    assert.match(docker.content, /RUN (npm|pnpm|yarn) run build\b/);
+  });
+
+  it('Node Dockerfile CMD targets `start` when package.json declares it', () => {
+    const pkg = JSON.stringify({
+      name: 'app',
+      scripts: { start: 'node server.js', dev: 'nodemon server.js' },
+    });
+    const out = e.enrich([f('package.json', pkg)], sampleSpec);
+    const docker = out.find((x) => x.path === 'Dockerfile');
+    assert.ok(docker);
+    assert.match(docker.content, /CMD \["npm", "start"\]/);
+    assert.doesNotMatch(docker.content, /run preview/);
+  });
+
+  it('Node Dockerfile CMD falls back to `preview` for Vite scaffolds (no `start`)', () => {
+    // The AKIS reference scaffold — React + Vite — has `dev` and `preview`
+    // but no `start`. The previous default CMD ["npm","start"] would fail
+    // immediately. The fix uses `preview` for this case.
+    const pkg = JSON.stringify({
+      name: 'app',
+      scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+    });
+    const out = e.enrich([f('package.json', pkg)], sampleSpec);
+    const docker = out.find((x) => x.path === 'Dockerfile');
+    assert.ok(docker);
+    assert.match(docker.content, /CMD \["npm", "run", "preview"\]/);
+    assert.doesNotMatch(docker.content, /CMD \["npm", "start"\]/);
+  });
+
+  it('Node Dockerfile CMD falls back to `serve dist` when neither start nor preview exists', () => {
+    const pkg = JSON.stringify({
+      name: 'app',
+      scripts: { dev: 'vite', build: 'vite build' }, // no start, no preview
+    });
+    const out = e.enrich([f('package.json', pkg)], sampleSpec);
+    const docker = out.find((x) => x.path === 'Dockerfile');
+    assert.ok(docker);
+    assert.match(docker.content, /RUN npm install -g serve/);
+    assert.match(docker.content, /CMD \["serve", "dist", "-l", "3000"\]/);
+  });
+
+  it('Node Dockerfile CMD respects pnpm package manager when start is present', () => {
+    const pkg = JSON.stringify({
+      name: 'app',
+      scripts: { start: 'node server.js' },
+    });
+    const out = e.enrich(
+      [f('package.json', pkg), f('pnpm-lock.yaml', 'lockfileVersion: 9.0')],
+      sampleSpec,
+    );
+    const docker = out.find((x) => x.path === 'Dockerfile');
+    assert.ok(docker);
+    assert.match(docker.content, /CMD \["pnpm", "start"\]/);
+  });
+
   it('uses python:3.12-slim for python-pip Dockerfile', () => {
     const out = e.enrich(
       [f('requirements.txt', ''), f('main.py', 'pass')],
