@@ -281,6 +281,9 @@ export default function ChatPage() {
         setActiveWorkflow(null);
         setMessages([]);
         loadedIdRef.current = undefined;
+        // F-01: also reset the message-key cache so revisiting the same chat
+        // re-runs setMessages instead of treating the unchanged key as a no-op.
+        lastMessagesKeyRef.current = '';
       }
       return;
     }
@@ -310,6 +313,10 @@ export default function ChatPage() {
       })
       .catch(() => {
         if (loadedIdRef.current !== targetId) return;
+        // F-01: reset the message-key cache on the error redirect — without it
+        // the next conversation load can hit a stale matching key and skip
+        // setMessages, leaving the panel blank.
+        lastMessagesKeyRef.current = '';
         navigate('/chat', { replace: true });
       });
   }, [conversationId, navigate, syncFromStage]);
@@ -470,7 +477,12 @@ export default function ChatPage() {
       try {
         await workflowsApi.cancel(id);
         setConversations((prev) => prev.filter((c) => c.id !== id));
-        if (conversationId === id) navigate('/chat', { replace: true });
+        if (conversationId === id) {
+          // F-01: reset the message-key cache before leaving so the next chat
+          // load isn't a no-op due to a stale matching key.
+          lastMessagesKeyRef.current = '';
+          navigate('/chat', { replace: true });
+        }
       } catch (e) {
         if (import.meta.env.DEV) console.error('Failed to delete:', e);
       }
@@ -506,6 +518,10 @@ export default function ChatPage() {
     setMessages([]);
     setActiveWorkflow(null);
     loadedIdRef.current = undefined;
+    // F-01: reset the message-key cache. Otherwise clicking back into the
+    // previous chat finds the same `<id>:<len>:<ts>` key and skips setMessages,
+    // leaving the panel empty until F5.
+    lastMessagesKeyRef.current = '';
     navigate('/chat');
   }, [navigate]);
 
@@ -513,6 +529,9 @@ export default function ChatPage() {
   const handleTogglePreview = useCallback(() => setShowPreview((p) => !p), []);
   const handleBack = useCallback(() => {
     setPendingConv(null);
+    // F-01: reset the message-key cache so the next chat selection re-runs
+    // setMessages even if the cached key matches.
+    lastMessagesKeyRef.current = '';
     navigate('/chat');
   }, [navigate]);
   const handleToggleCollapse = useCallback(() => setSidebarCollapsed((c) => !c), []);

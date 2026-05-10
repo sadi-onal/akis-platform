@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ChatPage from '../ChatPage';
 
@@ -62,6 +62,9 @@ vi.mock('../../../services/api/workflows', () => ({
     rename: vi.fn(),
     cancel: vi.fn(),
     sendMessage: vi.fn(),
+    getProtoFiles: vi.fn().mockResolvedValue(null),
+    updateModel: vi.fn(),
+    toggleTrace: vi.fn(),
   },
   mapPipelineToWorkflow: vi.fn(),
 }));
@@ -154,5 +157,189 @@ describe('ChatPage — mount', () => {
     renderChatPage('/chat');
     expect(errorSpy).not.toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+});
+
+// ── F-01 regression: navigating between sohbets after Yeni Sohbet ──
+//
+// Bug: ChatPage held a global `lastMessagesKeyRef` cached as
+// `<conversationId>:<convLen>:<lastTs>`. handleNewConversation reset every
+// other ref but not this one. Clicking the original chat after Yeni Sohbet
+// re-fetched the same payload, computed an identical key, and skipped
+// setMessages — leaving the panel empty until F5.
+//
+// These tests load a real workflow, exercise the New-Sohbet → re-select flow,
+// and assert messages render the second time.
+
+describe('ChatPage — F-01 lastMessagesKeyRef reset on Yeni Sohbet', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // jsdom doesn't implement scrollIntoView — ChatPanel uses it on the
+    // bottom-of-list ref whenever messages change. Stub it so the auto-scroll
+    // effect doesn't throw in the test environment.
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = vi.fn();
+    }
+  });
+
+  // Build a minimal Workflow shape that ChatPage will treat as a normal completed
+  // conversation with one user message. Returned by workflowsApi.get() in tests.
+  function buildWorkflow(id: string, content: string) {
+    return {
+      id,
+      title: 'Test workflow',
+      status: 'completed' as const,
+      currentStage: 'completed' as const,
+      traceEnabled: false,
+      createdAt: '2026-05-09T12:00:00.000Z',
+      updatedAt: '2026-05-09T12:00:01.000Z',
+      stages: {
+        scribe: { status: 'completed' as const },
+        approve: { status: 'completed' as const },
+        proto: { status: 'completed' as const },
+        trace: { status: 'idle' as const },
+      },
+      conversation: [
+        {
+          role: 'user' as const,
+          type: 'message' as const,
+          content,
+          timestamp: '2026-05-09T12:00:00.500Z',
+        },
+      ],
+    };
+  }
+
+  async function getMockedWorkflowsApi() {
+    const mod = await import('../../../services/api/workflows');
+    return vi.mocked(mod.workflowsApi);
+  }
+
+  // Selector helpers — scoped to the sidebar so we don't collide with ChatHeader
+  // (which also renders the workflow title at the top of the chat panel).
+  function getSidebarRoot(container: HTMLElement) {
+    const search = container.querySelector('[data-sidebar-search]');
+    // Sidebar root is two levels above the search input (search container
+    // wrapper → sidebar nav). Scope to the nearest aside-like container.
+    const root = search?.closest('div.flex.h-dvh') ?? container;
+    return root as HTMLElement;
+  }
+
+  it('re-renders messages after Yeni Sohbet → re-selecting the same conversation', async () => {
+    const api = await getMockedWorkflowsApi();
+    const wf = buildWorkflow('chat-A', 'merhaba dünya — F-01 fixture');
+    api.list.mockResolvedValue([
+      {
+        id: 'chat-A',
+        title: 'Sidebar Convo A',
+        status: 'completed',
+        currentStage: 'completed',
+        traceEnabled: false,
+        createdAt: '2026-05-09T12:00:00.000Z',
+        updatedAt: '2026-05-09T12:00:01.000Z',
+        stages: wf.stages,
+      } as unknown as ReturnType<typeof buildWorkflow>,
+    ]);
+    api.get.mockResolvedValue(wf as unknown as ReturnType<typeof buildWorkflow>);
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/chat/chat-A']}>
+        <Routes>
+          <Route path="/chat/*" element={<ChatPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Initial load: the user message renders.
+    await waitFor(() => {
+      expect(screen.getByText(/F-01 fixture/)).toBeInTheDocument();
+    });
+    expect(api.get).toHaveBeenCalledWith('chat-A');
+
+    // Click Yeni Sohbet — drives handleNewConversation which (post-fix) resets
+    // lastMessagesKeyRef. The chat surface flips to the pending-conversation view.
+    // Multiple "Yeni Sohbet" buttons may exist (search-area button + collapsed
+    // icon-only button); just click the first.
+    const newSohbetBtns = await screen.findAllByText(/Yeni Sohbet/);
+    const newSohbetBtn = newSohbetBtns[0].closest('button')!;
+    await act(async () => {
+      fireEvent.click(newSohbetBtn);
+    });
+
+    // Now click the original sohbet in the sidebar to re-select it.
+    // ConversationItem renders the conversation title as a button.
+    const sidebar = getSidebarRoot(container);
+    const sidebarTitleSpans = await within(sidebar).findAllByText('Sidebar Convo A');
+    const conversationButton = sidebarTitleSpans[0].closest('button')!;
+    await act(async () => {
+      fireEvent.click(conversationButton);
+    });
+
+    // Pre-fix: the cached key matched, setMessages was skipped, panel stayed empty.
+    // Post-fix: the cache key was reset on Yeni Sohbet, so setMessages re-runs
+    // and the original user message becomes visible again.
+    await waitFor(() => {
+      expect(screen.getByText(/F-01 fixture/)).toBeInTheDocument();
+    });
+
+    // Sanity: workflowsApi.get was called twice with the same id (initial load
+    // + re-selection), confirming the second fetch actually happened and the
+    // result was rendered rather than silently de-duped by the cache key.
+    const callsForA = api.get.mock.calls.filter((c) => c[0] === 'chat-A');
+    expect(callsForA.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('handleBack also clears the message-key cache (defense-in-depth)', async () => {
+    // The Back button in ChatHeader routes through handleBack which navigates
+    // to /chat. This test covers the same code path as Yeni Sohbet from a
+    // different entry point — once we're back at /chat with no id, re-selecting
+    // must still work. Without the F-01 fix the cache key collision blanks the
+    // panel here too.
+    const api = await getMockedWorkflowsApi();
+    const wf = buildWorkflow('chat-B', 'F-01 back-button fixture');
+    api.list.mockResolvedValue([
+      {
+        id: 'chat-B',
+        title: 'Sidebar Convo B',
+        status: 'completed',
+        currentStage: 'completed',
+        traceEnabled: false,
+        createdAt: '2026-05-09T12:00:00.000Z',
+        updatedAt: '2026-05-09T12:00:01.000Z',
+        stages: wf.stages,
+      } as unknown as ReturnType<typeof buildWorkflow>,
+    ]);
+    api.get.mockResolvedValue(wf as unknown as ReturnType<typeof buildWorkflow>);
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/chat/chat-B']}>
+        <Routes>
+          <Route path="/chat/*" element={<ChatPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/back-button fixture/)).toBeInTheDocument();
+    });
+
+    // ChatHeader exposes a back button with aria-label="Geri". It calls
+    // handleBack → navigate('/chat') → effect-driven cleanup with the
+    // lastMessagesKeyRef reset added by F-01.
+    const backBtn = await screen.findByLabelText('Geri');
+    await act(async () => {
+      fireEvent.click(backBtn);
+    });
+
+    const sidebar = getSidebarRoot(container);
+    const sidebarTitleSpans = await within(sidebar).findAllByText('Sidebar Convo B');
+    const conversationButton = sidebarTitleSpans[0].closest('button')!;
+    await act(async () => {
+      fireEvent.click(conversationButton);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/back-button fixture/)).toBeInTheDocument();
+    });
   });
 });
