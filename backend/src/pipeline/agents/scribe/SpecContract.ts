@@ -40,10 +40,10 @@ export function isSpecMinimallyValid(spec: StructuredSpec): {
     issues.push('En az 1 acceptance criteria gerekli');
   }
   if (spec.title.length < 3) {
-    issues.push('Başlık en az 3 karakter olmalı');
+    issues.push('Başlık en az 3 karakter olmalı'); // allow:push
   }
   if (spec.problemStatement.length < 10) {
-    issues.push('Problem tanımı en az 10 karakter olmalı');
+    issues.push('Problem tanımı en az 10 karakter olmalı'); // allow:push
   }
 
   return { valid: issues.length === 0, issues };

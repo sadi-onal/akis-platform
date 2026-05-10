@@ -300,10 +300,10 @@ export class ProtoAgent {
 
     // Fallback: legacy text-generation path
     // Step 1: Generate scaffold via AI
-    emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_scaffold');
+    emit?.('ai_call', 'Claude AI ile MVP iskeleti oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_scaffold');
     const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
-      emit?.('error', 'Scaffold üretimi başarısız oldu', 0);
+      emit?.('error', 'İskelet üretimi başarısız oldu', 0);
       return scaffoldResult;
     }
 
@@ -345,7 +345,7 @@ export class ProtoAgent {
     // Step 2: Create GitHub repo
     const repoResult = await this.createRepo(input);
     if (repoResult.type === 'error') {
-      emit?.('error', 'GitHub repo oluşturulamadı', 0);
+      emit?.('error', 'GitHub deposu oluşturulamadı', 0);
       return repoResult;
     }
 
@@ -353,18 +353,18 @@ export class ProtoAgent {
     const branchName = 'main';
 
     // Step 4: Push files
-    emit?.('github_push', `${files.length} dosya GitHub'a push ediliyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
+    emit?.('github_push', `${files.length} dosya GitHub'a yükleniyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
     const pushResult = await this.pushFiles(input.owner, input.repoName, branchName, files, emit);
     if (pushResult.type === 'error') {
-      emit?.('error', 'Dosyalar push edilemedi', 0);
+      emit?.('error', 'Dosyalar yüklenemedi', 0);
       return pushResult;
     }
 
     // Step 5: Verify scaffold integrity (PR skipped — files pushed directly to main)
-    emit?.('verification', 'Scaffold bütünlüğü doğrulanıyor...', 90);
+    emit?.('verification', 'İskelet bütünlüğü doğrulanıyor...', 90);
     const prUrl: string | undefined = undefined;
 
-    emit?.('complete', `Scaffold hazır: ${files.length} dosya push edildi`, 100);
+    emit?.('complete', `İskelet hazır: ${files.length} dosya yüklendi`, 100);
     return {
       type: 'output',
       data: {
@@ -506,7 +506,7 @@ JSON format (respond with ONLY this, nothing else):
     emit?.('github_push', `${files.length} dosya güncelleniyor...`, 75);
     const pushResult = await this.pushFiles(input.owner, input.repoName, 'main', files, emit);
     if (pushResult.type === 'error') {
-      emit?.('error', 'Güncellenmiş dosyalar push edilemedi', 0);
+      emit?.('error', 'Güncellenmiş dosyalar yüklenemedi', 0);
       return pushResult;
     }
 
@@ -537,15 +537,15 @@ JSON format (respond with ONLY this, nothing else):
     input: ProtoInput,
     emit?: ReturnType<typeof createActivityEmitter>,
   ): Promise<ProtoResult> {
-    emit?.('ai_call', 'Claude AI tool_use ile scaffold oluşturuluyor...', 10);
+    emit?.('ai_call', 'Claude AI tool_use ile iskelet oluşturuluyor...', 10);
 
     // Issue #483 BUG-J: Hard-enforce repo creation BEFORE the agentic loop so the
     // LLM cannot skip create_repository and call push_files on a non-existent repo.
     // Tool-orchestration for a deterministic step must not depend on LLM reasoning.
-    emit?.('github_push', 'GitHub repo oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_repo');
+    emit?.('github_push', 'GitHub deposu oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_repo');
     const repoResult = await this.createRepo(input);
     if (repoResult.type === 'error') {
-      emit?.('error', 'GitHub repo oluşturulamadı', 0);
+      emit?.('error', 'GitHub deposu oluşturulamadı', 0);
       return repoResult;
     }
 
@@ -629,7 +629,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           // vision-capable model can reference the mockup while scaffolding.
           initialImages: hasImages ? input.imageBlocks : undefined,
           onToolCall: (name, _input) => {
-            if (name === 'push_files') emit?.('github_push', 'Dosyalar push ediliyor...', 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
+            if (name === 'push_files') emit?.('github_push', 'Dosyalar yükleniyor...', 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
           },
           onToolResult: (name, _result, isError) => {
             if (isError) emit?.('error', `Tool ${name} başarısız`, 0);
@@ -692,15 +692,15 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
       // BUG-E fix: verify the repo actually has files on GitHub before reporting success.
       // Pass pushedPaths so verifyRepoPushed can detect auto_init false-positives.
-      emit?.('verification', 'GitHub repo içeriği doğrulanıyor...', 92);
+      emit?.('verification', 'GitHub deposu içeriği doğrulanıyor...', 92);
       const pushedPaths = files.map((f) => f.filePath);
       const verifyResult = await this.verifyRepoPushed(input.owner, input.repoName, 'main', files.length, pushedPaths);
       if (verifyResult.type === 'error') {
-        emit?.('error', 'GitHub doğrulaması başarısız — repo boş veya bulunamadı', 0);
+        emit?.('error', 'GitHub doğrulaması başarısız — depo boş veya bulunamadı', 0);
         return verifyResult;
       }
 
-      emit?.('complete', `Scaffold hazır: ${files.length} dosya push edildi (tool_use)`, 100);
+      emit?.('complete', `İskelet hazır: ${files.length} dosya yüklendi (tool_use)`, 100);
       const summary = extractProtoSummary(result.text);
       return {
         type: 'output',
@@ -724,10 +724,10 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
   private async executeLegacy(input: ProtoInput, emit?: ReturnType<typeof createActivityEmitter>): Promise<ProtoResult> {
     // Re-enter the legacy flow from Step 1
-    emit?.('ai_call', 'Claude AI ile MVP scaffold oluşturuluyor (fallback)...', 20);
+    emit?.('ai_call', 'Claude AI ile MVP iskeleti oluşturuluyor (fallback)...', 20);
     const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
-      emit?.('error', 'Scaffold üretimi başarısız oldu', 0);
+      emit?.('error', 'İskelet üretimi başarısız oldu', 0);
       return scaffoldResult;
     }
 
@@ -751,12 +751,12 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     if (repoResult.type === 'error') return repoResult;
 
     const branchName = 'main';
-    emit?.('github_push', `${files.length} dosya GitHub'a push ediliyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
+    emit?.('github_push', `${files.length} dosya GitHub'a yükleniyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
     const pushResult = await this.pushFiles(input.owner, input.repoName, branchName, files, emit);
     if (pushResult.type === 'error') return pushResult;
 
-    emit?.('verification', 'Scaffold bütünlüğü doğrulanıyor...', 90);
-    emit?.('complete', `Scaffold hazır: ${files.length} dosya push edildi`, 100);
+    emit?.('verification', 'İskelet bütünlüğü doğrulanıyor...', 90);
+    emit?.('complete', `İskelet hazır: ${files.length} dosya yüklendi`, 100);
     return {
       type: 'output',
       data: {
@@ -1026,7 +1026,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
             files.map((f) => ({ path: f.filePath, content: f.content })),
             `feat: initial scaffold (${files.length} files)`,
           );
-          emit?.('github_push', 'Tüm dosyalar push edildi', 90);
+          emit?.('github_push', 'Tüm dosyalar yüklendi', 90);
         } else {
           // Fallback: per-file commits (legacy adapters)
           for (let i = 0; i < totalFiles; i++) {
@@ -1195,7 +1195,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       '### User Stories',
       ...spec.userStories.map((s) => `- ${s.persona} olarak ${s.action} istiyorum, ${s.benefit}`),
       '',
-      '> Bu scaffold AKIS Proto agent tarafından otomatik oluşturuldu.',
+      '> Bu iskelet AKIS Proto agent tarafından otomatik oluşturuldu.',
     ].join('\n');
   }
 
