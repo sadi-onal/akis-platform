@@ -10,6 +10,11 @@
 	},
 	"keywords": ["ai-agents", "workflow-engine", "code-generation", "playwright", "typescript", "knowledge-integrity"],
 	"type": "module",
+	"scripts": {
+		"lint:bakkal": "node scripts/lint/bakkal-language.mjs",
+		"lint:bakkal:all": "node scripts/lint/bakkal-language.mjs --all",
+		"test:bakkal-lint": "node --test scripts/lint/__tests__/bakkal-language.test.mjs"
+	},
 	"devDependencies": {
 		"@playwright/test": "^1.58.2",
 		"puppeteer": "^24.37.2",

@@ -77,7 +77,7 @@ function StageContent({ stageKey, stage, workflow, onApprove, onReject, onRetry 
       return (
         <div className="flex items-center gap-2 text-sm text-ak-text-secondary">
           <span className="h-2 w-2 animate-pulse rounded-full bg-ak-proto" />
-          Scaffold oluşturuluyor...
+          İskelet oluşturuluyor...
           {stage.elapsed && <span className="font-mono text-xs">{stage.elapsed}</span>}
         </div>
       );
