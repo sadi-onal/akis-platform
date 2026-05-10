@@ -47,6 +47,8 @@ interface ChatPanelProps {
   onReject: () => void;
   onRetry: () => void;
   onSkip: () => void;
+  /** F-09: invoked when user clicks the "[BUILD]" CTA on a chat_qa_response. */
+  onSuggestBuild?: (sourceMessage: string) => void;
   onBack?: () => void;
   showBackButton?: boolean;
   currentStep?: PipelineActivity | null;
@@ -97,6 +99,7 @@ export const ChatPanel = memo(function ChatPanel({
   onReject,
   onRetry,
   onSkip,
+  onSuggestBuild,
   onBack,
   showBackButton,
   currentStep,
@@ -263,6 +266,7 @@ export const ChatPanel = memo(function ChatPanel({
                   onReject={onReject}
                   onRetry={onRetry}
                   onSkip={onSkip}
+                  onSuggestBuild={onSuggestBuild}
                 />
               </div>
             ))}

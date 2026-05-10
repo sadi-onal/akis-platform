@@ -23,6 +23,8 @@ import { LOGO_MARK_SVG } from '../../theme/brand';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
 import { ChatSkeleton } from '../../components/chat/ChatSkeleton';
 import { attachDocumentsToChat } from '../../services/api/chatAttach';
+import { ChatRouter } from '../../components/chat/ChatRouter';
+import { chatQaApi, type QACitation, type ChatHistoryEntry } from '../../services/api/chatQa';
 
 function localizeError(e: unknown): string {
   if (e instanceof Error) {
@@ -868,6 +870,194 @@ export default function ChatPage() {
     ]
   );
 
+  // ───────────────────────────────────────────────────────────────────────
+  // Intent routing (FR-11). ChatRouter classifies each send and dispatches
+  // here. BUILD wires to the existing handleSend; ASK now (F-09) drives a
+  // real RAG-augmented chat-qa flow. FEEDBACK and CHAT remain placeholders
+  // until later waves — they fall back to a friendly "yakında" line because
+  // routing them silently into BUILD would generate code on accident.
+  // ───────────────────────────────────────────────────────────────────────
+  const intentPlaceholder = useCallback(
+    (label: string, message: string) => {
+      const stamp = new Date().toISOString();
+      setMessages((prev) => [
+        ...prev,
+        { type: 'user', content: message, timestamp: stamp },
+        {
+          type: 'info',
+          content: `${label}: bu özellik yakında — şimdilik soru veya geri bildirimini chat'e bırakabilirsin.`,
+          timestamp: stamp,
+        },
+      ]);
+      toast(`${label}: yakında.`, 'info');
+    },
+    [],
+  );
+
+  // Chat Q&A (F-09 / FR-10) — pipeline-free streaming RAG answer.
+  // Inserts a user bubble + a streaming `chat_qa_response`. The response is
+  // updated in place as `chunk` events arrive. On `done` we flip
+  // streaming=false and surface citations + the optional [BUILD] CTA.
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  // Sync the ref in a useEffect rather than during render — keeps render pure
+  // (the previous in-render assignment was a stale-on-bail correctness footgun).
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // One AbortController per in-flight chat-qa request. Aborting on (a) unmount,
+  // (b) a new send arriving while the previous one is still streaming.
+  // Without this, navigating away or re-asking would orphan the stream and
+  // double-bill the AI provider.
+  const askAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      askAbortRef.current?.abort();
+      askAbortRef.current = null;
+    };
+  }, []);
+
+  const handleIntentAsk = useCallback(
+    async (message: string) => {
+      const stamp = new Date().toISOString();
+      // Snapshot the prior chat — mapped to the API history shape — before we
+      // mutate state. We only include user + assistant turns and the last 10.
+      const history: ChatHistoryEntry[] = messagesRef.current
+        .filter((m) => m.type === 'user' || m.type === 'agent' || m.type === 'chat_qa_response')
+        .slice(-10)
+        .map((m): ChatHistoryEntry => {
+          if (m.type === 'user') return { role: 'user', content: m.content };
+          if (m.type === 'chat_qa_response')
+            return { role: 'assistant', content: m.content };
+          return { role: 'assistant', content: (m as { content: string }).content };
+        });
+
+      // Cancel any previous in-flight ask before starting a new one.
+      askAbortRef.current?.abort();
+      const controller = new AbortController();
+      askAbortRef.current = controller;
+
+      setMessages((prev) => [
+        ...prev,
+        { type: 'user', content: message, timestamp: stamp },
+        {
+          type: 'chat_qa_response',
+          content: '',
+          streaming: true,
+          sourceMessage: message,
+          timestamp: stamp,
+        },
+      ]);
+
+      // Walk the SSE stream — append chunks to the last chat_qa_response, set
+      // citations on `done`, render an error info line on `error`.
+      const updateLast = (
+        patch: (prev: Extract<ChatMessage, { type: 'chat_qa_response' }>) => Extract<ChatMessage, { type: 'chat_qa_response' }>,
+      ) => {
+        setMessages((prev) => {
+          const next = prev.slice();
+          for (let i = next.length - 1; i >= 0; i -= 1) {
+            const m = next[i];
+            if (m.type === 'chat_qa_response') {
+              next[i] = patch(m);
+              return next;
+            }
+          }
+          return prev;
+        });
+      };
+
+      const collectedCitations: QACitation[] = [];
+      try {
+        for await (const ev of chatQaApi.ask({
+          message,
+          // The `/chat/*` splat in App.tsx is the pipeline UUID — workflow IDs
+          // and pipeline IDs are 1:1 in this codebase (workflowsApi.get hits
+          // `/api/pipelines/${id}`), so `conversationId` is the pipelineId
+          // backend `eq(pipelines.id, pipelineId)` lookup expects.
+          pipelineId: conversationId ?? undefined,
+          history,
+          signal: controller.signal,
+        })) {
+          if (ev.type === 'chunk') {
+            updateLast((m) => ({ ...m, content: m.content + ev.text }));
+          } else if (ev.type === 'citation') {
+            collectedCitations.push(ev.citation);
+            updateLast((m) => ({ ...m, citations: [...(m.citations ?? []), ev.citation] }));
+          } else if (ev.type === 'done') {
+            updateLast((m) => ({
+              ...m,
+              streaming: false,
+              content: ev.answer || m.content,
+              citations: ev.citations.length ? ev.citations : (m.citations ?? collectedCitations),
+              needsBuild: ev.needsBuild,
+            }));
+            if (askAbortRef.current === controller) askAbortRef.current = null;
+            return;
+          } else if (ev.type === 'error') {
+            updateLast((m) => ({ ...m, streaming: false }));
+            toast(`Soru cevaplanamadı: ${ev.message}`, 'error');
+            if (askAbortRef.current === controller) askAbortRef.current = null;
+            return;
+          }
+        }
+        // Stream ended without a `done` event — clean up the streaming flag.
+        updateLast((m) => ({ ...m, streaming: false }));
+      } catch (err) {
+        // Aborts (unmount or superseded send) are expected — swallow them so
+        // the user doesn't see a "Soru cevaplanamadı" toast for their own action.
+        const isAbort =
+          err instanceof DOMException && err.name === 'AbortError';
+        if (!isAbort) {
+          updateLast((m) => ({ ...m, streaming: false }));
+          toast(`Soru cevaplanamadı: ${localizeError(err)}`, 'error');
+        } else {
+          updateLast((m) => ({ ...m, streaming: false }));
+        }
+      } finally {
+        if (askAbortRef.current === controller) askAbortRef.current = null;
+      }
+    },
+    [conversationId],
+  );
+
+  const handleIntentFeedback = useCallback(
+    (message: string) => intentPlaceholder('Geribildirim', message),
+    [intentPlaceholder],
+  );
+  const handleIntentChat = useCallback(
+    (message: string) => intentPlaceholder('Sohbet', message),
+    [intentPlaceholder],
+  );
+
+  /**
+   * F-09 / FR-10.4: user clicked "Bunu özellik olarak ekleyelim mi?" CTA. We
+   * route the original question into the BUILD path so the existing pipeline
+   * handles it. handleSend is the legacy create/iterate dispatcher.
+   */
+  const handleSuggestBuild = useCallback(
+    (sourceMessage: string) => {
+      void handleSend(sourceMessage);
+    },
+    [handleSend],
+  );
+
+  /**
+   * Last 8 messages flattened to plain text. The classifier uses these for
+   * minor context (e.g. "rapor" right after a discussion of weekly reports →
+   * lifts ASK confidence). We don't include attachments or pipeline events.
+   */
+  const recentTextMessages = useMemo(() => {
+    return messages
+      .filter((m) => m.type === 'user' || m.type === 'agent')
+      .slice(-8)
+      .map((m) => {
+        const content = (m as { content?: string; message?: string }).content ?? (m as { message?: string }).message ?? '';
+        return typeof content === 'string' ? content : '';
+      })
+      .filter((c) => c.length > 0);
+  }, [messages]);
+
   // OAuth return — phase 1: detect ?github=connected, stash the "just completed"
   // intent in sessionStorage, and clean the URL. Runs once on mount.
   useEffect(() => {
@@ -1092,6 +1282,15 @@ export default function ChatPage() {
               }
             >
               <ErrorBoundary>
+                <ChatRouter
+                  pipelineId={conversationId}
+                  recentMessages={recentTextMessages}
+                  onBuild={handleSend}
+                  onAsk={handleIntentAsk}
+                  onFeedback={handleIntentFeedback}
+                  onChat={handleIntentChat}
+                >
+                  {({ send: routedSend, busy: intentBusy }) => (
                 <ChatPanel
                   conversationId={conversationId ?? 'pending'}
                   repoShortName={activeWorkflow?.title ?? pendingConv?.displayName ?? ''}
@@ -1105,15 +1304,16 @@ export default function ChatPage() {
                   messages={messages}
                   uiState={uiState}
                   isInputEnabled={pendingConv ? !creating : creating ? false : isInputEnabled}
-                  isSending={creating}
+                  isSending={creating || intentBusy}
                   showCancelButton={showCancelButton}
                   inputPlaceholder={pendingConv ? 'Projenizi anlatın...' : inputPlaceholder}
-                  onSend={handleSend}
+                  onSend={routedSend}
                   onCancel={handleCancel}
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onRetry={handleRetry}
                   onSkip={handleSkip}
+                  onSuggestBuild={handleSuggestBuild}
                   onBack={handleBack}
                   showBackButton
                   currentStep={currentStep}
@@ -1138,6 +1338,8 @@ export default function ChatPage() {
                   // the activities array is empty.
                   pipelineHasOutputs={hasPipelineOutputs(activeWorkflow)}
                 />
+                  )}
+                </ChatRouter>
               </ErrorBoundary>
             </div>
 

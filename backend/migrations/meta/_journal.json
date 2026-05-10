@@ -344,6 +344,13 @@
       "when": 1778832000000,
       "tag": "0047_pipeline_reasonings_and_activities",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1778976000000,
+      "tag": "0048_add_intent_classifications",
+      "breakpoints": true
     }
   ]
 }

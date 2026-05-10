@@ -150,6 +150,21 @@ export type ChatMessage =
       timestamp: string;
     }
   | {
+      /**
+       * Chat Q&A response (FR-10). Pipeline-free — does NOT trigger a build.
+       * `streaming=true` while tokens are arriving via SSE; flips to false on
+       * the `done` event. `needsBuild=true` renders a "[BUILD]" suggestion CTA.
+       */
+      type: 'chat_qa_response';
+      content: string;
+      citations?: Array<{ source: string; excerpt: string; refKey?: string }>;
+      needsBuild?: boolean;
+      streaming?: boolean;
+      /** The original user question — surfaced for the optional [BUILD] CTA. */
+      sourceMessage?: string;
+      timestamp: string;
+    }
+  | {
       type: 'gherkin_spec';
       features: Array<{
         featureName: string;
