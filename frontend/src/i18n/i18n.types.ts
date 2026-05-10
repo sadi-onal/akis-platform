@@ -1059,6 +1059,12 @@ export const MESSAGE_KEYS = [
   'chat.toast.dismiss',
   'chat.toast.pipelineCompleted',
   'chat.toast.running',
+  'chat.modeBadge.ask',
+  'chat.modeBadge.plan',
+  'chat.modeBadge.act',
+  'chat.modeBadge.review',
+  'chat.modeBadge.failed.title',
+  'chat.modeBadge.failed.aria',
 
   // Pipeline Stages
   'pipeline.stage.awaitingApproval',
