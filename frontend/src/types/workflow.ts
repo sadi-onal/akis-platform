@@ -180,3 +180,26 @@ export interface WorkflowStats {
   successRate: number;
   thisWeek: number;
 }
+
+/**
+ * F-04 helper — does this workflow have any persisted output worth showing?
+ *
+ * Used to decide whether the Pipeline detail rail should stay mounted for
+ * completed pipelines whose in-memory activity buffer was lost (e.g. after
+ * backend restart). Outputs persist on the workflow record, so we treat them
+ * as the "has something to show" signal even when the live activities array
+ * is empty.
+ *
+ * Cheap O(1) check — call inline at render time. No useMemo needed.
+ *
+ * Reusable: dashboard / conversation list will likely need the same signal
+ * once F-03 (activity persistence, NFR-1) lands.
+ */
+export function hasPipelineOutputs(w: Workflow | null | undefined): boolean {
+  if (!w?.stages) return false;
+  return Boolean(
+    (w.stages.proto?.files?.length ?? 0) > 0 ||
+      (w.stages.trace?.tests ?? 0) > 0 ||
+      w.stages.scribe?.spec
+  );
+}

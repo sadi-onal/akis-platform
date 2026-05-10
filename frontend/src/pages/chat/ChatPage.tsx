@@ -14,6 +14,7 @@ import { toast } from '../../components/ui/Toast';
 import { mapStageToMode } from '../../utils/mapPipelineEvent';
 import { conversationToChatMessages } from '../../utils/conversationToChatMessages';
 import type { ConversationListItem, ChatMessage, ConversationStatus } from '../../types/chat';
+import { hasPipelineOutputs } from '../../types/workflow';
 import type { Workflow, WorkflowStatus } from '../../types/workflow';
 import type { PipelineStage, PipelineError } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
@@ -1116,12 +1117,7 @@ export default function ChatPage() {
                   // restart). Outputs persist on the workflow record, so we
                   // use them as the "has something to show" signal even when
                   // the activities array is empty.
-                  pipelineHasOutputs={Boolean(
-                    (activeWorkflow?.stages?.proto?.files &&
-                      activeWorkflow.stages.proto.files.length > 0) ||
-                      (activeWorkflow?.stages?.trace?.tests ?? 0) > 0 ||
-                      activeWorkflow?.stages?.scribe?.spec
-                  )}
+                  pipelineHasOutputs={hasPipelineOutputs(activeWorkflow)}
                 />
               </ErrorBoundary>
             </div>

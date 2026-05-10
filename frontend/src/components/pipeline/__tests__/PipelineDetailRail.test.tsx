@@ -107,6 +107,7 @@ describe('PipelineDetailRail — render gating', () => {
     });
 
     it('keeps tabs accessible when expanded with outputs but no activities', () => {
+      const fetcher = vi.fn().mockResolvedValue(mkExpl());
       render(
         <PipelineDetailRail
           pipelineId="p-1"
@@ -114,6 +115,7 @@ describe('PipelineDetailRail — render gating', () => {
           activities={[]}
           currentStep={null}
           pipelineHasOutputs
+          explanationFetcher={fetcher}
         />
       );
       // Expand the rail
@@ -123,8 +125,10 @@ describe('PipelineDetailRail — render gating', () => {
       // Akış + Açıklama tabs always available
       expect(screen.getByRole('tab', { name: 'Akış' })).toBeInTheDocument();
       expect(screen.getByRole('tab', { name: 'Açıklama' })).toBeInTheDocument();
-      // Regresyon requires activities — gracefully hidden when buffer is empty
-      expect(screen.queryByRole('tab', { name: 'Regresyon' })).not.toBeInTheDocument();
+      // F-04: Regresyon is also reachable on persisted outputs alone —
+      // RegressionPanel fetches its report straight from the workflow
+      // record, so it works fine even with an empty activity buffer.
+      expect(screen.getByRole('tab', { name: 'Regresyon' })).toBeInTheDocument();
     });
   });
 });
@@ -275,12 +279,14 @@ const mkRegression = (overrides: Partial<RegressionReport> = {}): RegressionRepo
 
 describe('PipelineDetailRail — Regresyon tab', () => {
   it('shows the Regresyon tab when the user opens an idle rail with activities', () => {
+    const fetcher = vi.fn().mockResolvedValue(mkExpl());
     render(
       <PipelineDetailRail
         pipelineId="p-1"
         uiState="idle"
         activities={[mkActivity('proto')]}
         currentStep={null}
+        explanationFetcher={fetcher}
       />
     );
     // Auto-collapsed at idle — opening the rail reveals tabs.
@@ -302,6 +308,7 @@ describe('PipelineDetailRail — Regresyon tab', () => {
 
   it('calls regressionFetcher once after the user opens the rail and clicks Regresyon', async () => {
     const fetcher = vi.fn().mockResolvedValue(mkRegression());
+    const explFetcher = vi.fn().mockResolvedValue(mkExpl());
     render(
       <PipelineDetailRail
         pipelineId="p-1"
@@ -309,6 +316,7 @@ describe('PipelineDetailRail — Regresyon tab', () => {
         activities={[mkActivity('proto')]}
         currentStep={null}
         regressionFetcher={fetcher}
+        explanationFetcher={explFetcher}
       />
     );
     // Auto-collapsed at idle — open it.
@@ -320,6 +328,7 @@ describe('PipelineDetailRail — Regresyon tab', () => {
 
   it('renders RegressionPanel content when the Regresyon tab is active', async () => {
     const fetcher = vi.fn().mockResolvedValue(mkRegression());
+    const explFetcher = vi.fn().mockResolvedValue(mkExpl());
     render(
       <PipelineDetailRail
         pipelineId="p-1"
@@ -327,6 +336,7 @@ describe('PipelineDetailRail — Regresyon tab', () => {
         activities={[mkActivity('proto')]}
         currentStep={null}
         regressionFetcher={fetcher}
+        explanationFetcher={explFetcher}
       />
     );
     fireEvent.click(screen.getByText(/Pipeline detayı/));
