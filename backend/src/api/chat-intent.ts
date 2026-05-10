@@ -64,7 +64,7 @@ export async function chatIntentRoutes(
           additionalProperties: false,
           properties: {
             message: { type: 'string', minLength: 1, maxLength: 8000 },
-            pipelineId: { type: 'string' },
+            pipelineId: { type: 'string', format: 'uuid' },
             recentMessages: {
               type: 'array',
               items: { type: 'string' },
@@ -170,7 +170,7 @@ export async function chatIntentRoutes(
     },
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        await requireAuth(request);
+        const user = await requireAuth(request);
         const { classificationId } = request.params as { classificationId: string };
         const body = (request.body ?? {}) as Record<string, unknown>;
         const overrideIntent = isString(body.overrideIntent) ? body.overrideIntent.toUpperCase() : '';
@@ -180,12 +180,23 @@ export async function chatIntentRoutes(
           });
         }
         try {
-          await classifier.overrideClassification(classificationId, overrideIntent as IntentLabel);
+          // IDOR fix: scope override to the authenticated user — `userId` is
+          // included in the WHERE so a user cannot mutate someone else's row.
+          await classifier.overrideClassification(
+            classificationId,
+            overrideIntent as IntentLabel,
+            user.id,
+          );
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           if (msg === 'INVALID_CLASSIFICATION_ID') {
             return reply.code(400).send({
               error: { code: 'VALIDATION_ERROR', message: 'classificationId is malformed' },
+            });
+          }
+          if (msg === 'NOT_FOUND') {
+            return reply.code(404).send({
+              error: { code: 'NOT_FOUND', message: 'Classification not found' },
             });
           }
           throw err;

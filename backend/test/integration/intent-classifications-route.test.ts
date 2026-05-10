@@ -145,6 +145,88 @@ test('Chat intent route (FR-11)', { skip: !hasDatabase }, async (t) => {
     assert.strictEqual(response.statusCode, 400);
   });
 
+  // ── 🚨 IDOR regression — cross-user PATCH must not mutate the row ─────
+  await t.test('PATCH /api/chat/intent/:id — 404 when other user attempts override (IDOR)', async () => {
+    // Stage user B and a fresh classification that belongs to user A.
+    const userBId = randomUUID();
+    const userBEmail = `intent-route-attacker-${Date.now()}@test.local`;
+    const userBHash = await hashPassword(password);
+    await db.insert(users).values({
+      id: userBId,
+      name: 'Intent Attacker',
+      email: userBEmail,
+      passwordHash: userBHash,
+      emailVerified: true,
+      status: 'active',
+    });
+    const userBJwt = await sign({ sub: userBId, email: userBEmail, name: 'Intent Attacker' });
+    const userBCookie = `${authEnv.AUTH_COOKIE_NAME}=${userBJwt}`;
+
+    try {
+      // User A creates a fresh classification.
+      const createResp = await app.inject({
+        method: 'POST',
+        url: '/api/chat/intent',
+        headers: { cookie },
+        payload: { message: 'add an export button' },
+      });
+      assert.strictEqual(createResp.statusCode, 200);
+      const targetClassificationId = JSON.parse(createResp.body).classificationId as string;
+      assert.ok(targetClassificationId);
+
+      // Capture pre-state — the row currently has no override.
+      const beforeRows = await db
+        .select()
+        .from(intentClassifications)
+        .where(eq(intentClassifications.id, BigInt(targetClassificationId)));
+      assert.strictEqual(beforeRows.length, 1);
+      const beforeOverride = beforeRows[0].overrideIntent;
+      const beforeIntent = beforeRows[0].intent;
+
+      // User B attempts to mutate user A's row via PATCH.
+      const attackResp = await app.inject({
+        method: 'PATCH',
+        url: `/api/chat/intent/${targetClassificationId}`,
+        headers: { cookie: userBCookie },
+        payload: { overrideIntent: 'CHAT' },
+      });
+      assert.strictEqual(
+        attackResp.statusCode,
+        404,
+        `expected 404 (IDOR blocked), got ${attackResp.statusCode}: ${attackResp.body}`,
+      );
+
+      // Row must be unchanged — overrideIntent stays exactly what it was.
+      const afterRows = await db
+        .select()
+        .from(intentClassifications)
+        .where(eq(intentClassifications.id, BigInt(targetClassificationId)));
+      assert.strictEqual(afterRows.length, 1);
+      assert.strictEqual(afterRows[0].overrideIntent, beforeOverride);
+      assert.strictEqual(afterRows[0].intent, beforeIntent);
+      assert.strictEqual(afterRows[0].userId, userId);
+    } finally {
+      await db.delete(intentClassifications).where(eq(intentClassifications.userId, userBId));
+      await db.delete(users).where(eq(users.id, userBId));
+    }
+  });
+
+  // ── pipelineId UUID validation — bad shape must be 400, not 200 with a
+  // silently-dropped audit row.
+  await t.test('POST /api/chat/intent — 400 when pipelineId is not a UUID', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/chat/intent',
+      headers: { cookie },
+      payload: { message: 'add a button', pipelineId: 'not-a-uuid' },
+    });
+    assert.strictEqual(
+      response.statusCode,
+      400,
+      `expected 400 for malformed pipelineId, got ${response.statusCode}: ${response.body}`,
+    );
+  });
+
   // Always close + clean up at end so suite doesn't leak rows.
   await t.test('Cleanup', async () => {
     await cleanup();

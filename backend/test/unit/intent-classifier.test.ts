@@ -271,7 +271,11 @@ describe('IntentClassifier with mock provider + fake DB', () => {
       provider: 'mock',
     });
     await assert.rejects(
-      classifier.overrideClassification('not-a-bigint', 'ASK'),
+      classifier.overrideClassification(
+        'not-a-bigint',
+        'ASK',
+        '00000000-0000-0000-0000-000000000007',
+      ),
       /INVALID_CLASSIFICATION_ID/,
     );
   });
@@ -287,9 +291,106 @@ describe('IntentClassifier with mock provider + fake DB', () => {
       provider: 'mock',
     });
     await assert.rejects(
-      classifier.overrideClassification('1', 'BAD' as IntentLabel),
+      classifier.overrideClassification(
+        '1',
+        'BAD' as IntentLabel,
+        '00000000-0000-0000-0000-000000000007',
+      ),
       /INVALID_INTENT/,
     );
+  });
+});
+
+// ─── Turkish word-boundary regression (mock regex) ─────────────────────────
+describe('classifyByRegex: Turkish word boundaries', () => {
+  test('"yapı" (noun) does NOT match BUILD imperative "yap"', () => {
+    // ASCII `\b` would falsely fire on `yap` inside "yapı" because `ı` is a
+    // non-word char in JS — Turkish-aware boundaries fix that.
+    const out = classifyByRegex('yapı');
+    assert.notStrictEqual(
+      out.intent,
+      'BUILD',
+      `"yapı" should not classify as BUILD (got intent=${out.intent}, conf=${out.confidence})`,
+    );
+  });
+
+  test('"yapılan" (passive participle) does NOT match BUILD imperative "yap"', () => {
+    const out = classifyByRegex('yapılan');
+    assert.notStrictEqual(
+      out.intent,
+      'BUILD',
+      `"yapılan" should not classify as BUILD (got intent=${out.intent}, conf=${out.confidence})`,
+    );
+  });
+
+  test('"yap" (action imperative) DOES match BUILD', () => {
+    const out = classifyByRegex('yap');
+    assert.strictEqual(out.intent, 'BUILD');
+  });
+});
+
+// ─── IDOR regression: ownership-scoped overrideClassification ──────────────
+// The cross-user IDOR scenario (user A's row, user B PATCH → 404, row
+// unchanged) is exercised in the integration test
+// `intent-classifications-route.test.ts` against real Postgres + drizzle so
+// the SQL WHERE is genuinely evaluated. At the unit layer we only verify the
+// runtime contract — a non-matching update returns no rows → NOT_FOUND.
+describe('IntentClassifier.overrideClassification: NOT_FOUND on no-match (IDOR fix)', () => {
+  test('throws NOT_FOUND when update affects zero rows', async () => {
+    // Fake update().set().where().returning() that resolves [] — i.e. the
+    // SQL filter (id + userId) didn't match any row. The classifier must
+    // surface this as NOT_FOUND so the route returns 404 instead of 200.
+    const db = {
+      update: () => ({
+        set: () => ({
+          where: () => ({
+            returning: () => Promise.resolve([]),
+          }),
+        }),
+      }),
+    };
+    const classifier = new IntentClassifier({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      aiService: makeAiServiceReturning('') as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db: db as any,
+      logger: silentLogger,
+      provider: 'mock',
+    });
+    await assert.rejects(
+      classifier.overrideClassification(
+        '42',
+        'ASK',
+        '00000000-0000-0000-0000-00000000000B',
+      ),
+      /NOT_FOUND/,
+    );
+  });
+
+  test('resolves OK when update affects at least one row', async () => {
+    const db = {
+      update: () => ({
+        set: () => ({
+          where: () => ({
+            returning: () => Promise.resolve([{ id: 42n }]),
+          }),
+        }),
+      }),
+    };
+    const classifier = new IntentClassifier({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      aiService: makeAiServiceReturning('') as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db: db as any,
+      logger: silentLogger,
+      provider: 'mock',
+    });
+    await classifier.overrideClassification(
+      '42',
+      'ASK',
+      '00000000-0000-0000-0000-00000000000A',
+    );
+    // No throw → success
   });
 });
 

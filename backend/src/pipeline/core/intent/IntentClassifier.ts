@@ -17,7 +17,7 @@
  *  - 05-findings F-10
  */
 import { createHash } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type * as schemaNs from '../../../db/schema.js';
@@ -65,30 +65,39 @@ const VALID_INTENTS: readonly IntentLabel[] = ['BUILD', 'ASK', 'FEEDBACK', 'CHAT
  *
  * Each pattern contributes a fixed weight; a winner is normalised over the
  * total weight (or 0.5 if no pattern fires → falls into CHAT/disambiguation).
+ *
+ * Turkish-aware word boundaries: ASCII `\b` treats `ı/ş/ğ/ü/ö/ç` as
+ * non-word, so `\byap\b` falsely matches "yapı" / "yapılan". We replace `\b`
+ * with explicit lookbehind / lookahead character classes that include the
+ * Turkish letter set, matching at start/end-of-string only when the
+ * surrounding character is *not* a Turkish or ASCII word character.
  */
+const TR_WB_BEFORE = '(?<![A-Za-zÇĞİÖŞÜçğıöşü0-9_])';
+const TR_WB_AFTER = '(?![A-Za-zÇĞİÖŞÜçğıöşü0-9_])';
+
 const MOCK_PATTERNS: ReadonlyArray<{
   intent: IntentLabel;
   pattern: RegExp;
   weight: number;
 }> = [
   // BUILD — imperative "do X / add X / build X"
-  { intent: 'BUILD', pattern: /\b(yap(ar mısın|abilir misin)?|ekle|ekler misin|olsun|istiyorum|yaz(ar mısın)?|oluştur|kur)\b/i, weight: 1 },
-  { intent: 'BUILD', pattern: /\b(build|create|add|make|implement|develop|set up|generate)\b/i, weight: 1 },
+  { intent: 'BUILD', pattern: new RegExp(`${TR_WB_BEFORE}(yap(ar mısın|abilir misin)?|ekle|ekler misin|olsun|istiyorum|yaz(ar mısın)?|oluştur|kur)${TR_WB_AFTER}`, 'i'), weight: 1 },
+  { intent: 'BUILD', pattern: new RegExp(`${TR_WB_BEFORE}(build|create|add|make|implement|develop|set up|generate)${TR_WB_AFTER}`, 'i'), weight: 1 },
   // BUILD — feature-shaped nouns (sayfa/özellik/modal/...)
-  { intent: 'BUILD', pattern: /\b(sayfa|özellik|modal|form|buton|ekran|api|endpoint)\b/i, weight: 0.4 },
+  { intent: 'BUILD', pattern: new RegExp(`${TR_WB_BEFORE}(sayfa|özellik|modal|form|buton|ekran|api|endpoint)${TR_WB_AFTER}`, 'i'), weight: 0.4 },
 
   // ASK — explicit question signals
   { intent: 'ASK', pattern: /\?/, weight: 1 },
-  { intent: 'ASK', pattern: /\b(nedir|nasıl|niye|neden|ne demek|açıkla|anlat)\b/i, weight: 1 },
-  { intent: 'ASK', pattern: /\b(what|why|how|explain|describe|what's|whats)\b/i, weight: 0.8 },
+  { intent: 'ASK', pattern: new RegExp(`${TR_WB_BEFORE}(nedir|nasıl|niye|neden|ne demek|açıkla|anlat)${TR_WB_AFTER}`, 'i'), weight: 1 },
+  { intent: 'ASK', pattern: new RegExp(`${TR_WB_BEFORE}(what|why|how|explain|describe|what's|whats)${TR_WB_AFTER}`, 'i'), weight: 0.8 },
 
   // FEEDBACK — bug / wrong-behaviour signals
-  { intent: 'FEEDBACK', pattern: /\b(çalışmıyor|sorun|hata|yanlış|olmadı|kırık|patladı|bozuk)\b/i, weight: 1 },
-  { intent: 'FEEDBACK', pattern: /\b(broken|bug|error|wrong|doesn'?t work|isn'?t working|failed|fails)\b/i, weight: 1 },
-  { intent: 'FEEDBACK', pattern: /\b(beklediğim|beklemedim|olmamalıydı|silindi)\b/i, weight: 0.7 },
+  { intent: 'FEEDBACK', pattern: new RegExp(`${TR_WB_BEFORE}(çalışmıyor|sorun|hata|yanlış|olmadı|kırık|patladı|bozuk)${TR_WB_AFTER}`, 'i'), weight: 1 },
+  { intent: 'FEEDBACK', pattern: new RegExp(`${TR_WB_BEFORE}(broken|bug|error|wrong|doesn'?t work|isn'?t working|failed|fails)${TR_WB_AFTER}`, 'i'), weight: 1 },
+  { intent: 'FEEDBACK', pattern: new RegExp(`${TR_WB_BEFORE}(beklediğim|beklemedim|olmamalıydı|silindi)${TR_WB_AFTER}`, 'i'), weight: 0.7 },
 
   // CHAT — greetings / smalltalk
-  { intent: 'CHAT', pattern: /\b(merhaba|selam|hey|hi|hello|teşekkür|sağol|thanks?)\b/i, weight: 0.6 },
+  { intent: 'CHAT', pattern: new RegExp(`${TR_WB_BEFORE}(merhaba|selam|hey|hi|hello|teşekkür|sağol|thanks?)${TR_WB_AFTER}`, 'i'), weight: 0.6 },
 ];
 
 /** SHA-256 hex of a message (privacy: we never store the raw prose). */
@@ -252,8 +261,16 @@ export class IntentClassifier {
    * User picked an option in the disambiguation modal. Stamps the chosen
    * intent into `override_intent` so we keep the original AI/regex pick and
    * the final user-confirmed pick side by side for analytics.
+   *
+   * Authorization: the update is scoped to `userId` so a logged-in user can
+   * only mutate their own classifications. Throws `NOT_FOUND` if no row
+   * matches (which covers both wrong id and wrong owner) — IDOR fix.
    */
-  async overrideClassification(classificationId: string, intent: IntentLabel): Promise<void> {
+  async overrideClassification(
+    classificationId: string,
+    intent: IntentLabel,
+    userId: string,
+  ): Promise<void> {
     if (!VALID_INTENTS.includes(intent)) {
       throw new Error(`INVALID_INTENT: ${intent}`);
     }
@@ -263,10 +280,19 @@ export class IntentClassifier {
     } catch {
       throw new Error('INVALID_CLASSIFICATION_ID');
     }
-    await this.db
+    const updated = await this.db
       .update(intentClassifications)
       .set({ overrideIntent: intent })
-      .where(eq(intentClassifications.id, id));
+      .where(
+        and(
+          eq(intentClassifications.id, id),
+          eq(intentClassifications.userId, userId),
+        ),
+      )
+      .returning({ id: intentClassifications.id });
+    if (updated.length === 0) {
+      throw new Error('NOT_FOUND');
+    }
   }
 
   /**
