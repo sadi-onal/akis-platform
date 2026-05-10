@@ -6,6 +6,7 @@
   { "term": "commit",               "suggested": "kayıt",                      "severity": "warn" },
   { "term": "branch",               "suggested": "dal",                        "severity": "warn" },
   { "term": "scaffold",             "suggested": "iskelet",                    "severity": "warn" },
+  { "term": "push",                 "suggested": "yükle / gönder",             "severity": "warn" },
   { "term": "boilerplate",          "suggested": "hazır şablon",               "severity": "warn" },
   { "term": "stack",                "suggested": "kullanılan teknolojiler",    "severity": "info" },
   { "term": "spec",                 "suggested": "plan",                       "severity": "info" },
@@ -19,7 +20,7 @@
   { "term": "endpoint",             "suggested": "bağlantı adresi",            "severity": "info" },
   { "term": "session",              "suggested": "oturum",                     "severity": "info" },
   { "term": "authentication",       "suggested": "kimlik doğrulama",           "severity": "info" },
-  { "term": "OAuth",                "suggested": "X ile bağlan",               "severity": "info" },
+  { "term": "OAuth",                "suggested": "(bağlam-özgü)",              "severity": "info", "note": "Tek-cümle pattern: 'X ile bağlan' (örn. 'GitHub ile Bağla')" },
   { "term": "webhook",              "suggested": "bildirim ucu",               "severity": "info" },
   { "term": "rate limit",           "suggested": "kullanım sınırı",            "severity": "info" }
 ]

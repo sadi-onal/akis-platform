@@ -39,6 +39,9 @@ export function loadGlossary(path = join(__dirname, 'bakkal-glossary.json')) {
     if (!(entry.severity in SEVERITY_RANK)) {
       throw new Error(`Invalid severity for term "${entry.term}": ${entry.severity}`);
     }
+    if (entry.note !== undefined && typeof entry.note !== 'string') {
+      throw new Error(`Invalid note for term "${entry.term}": must be string`);
+    }
   }
   // Sort by length DESC so multi-word terms ("pull request") match before "PR".
   list.sort((a, b) => b.term.length - a.term.length);
@@ -204,6 +207,7 @@ export function scanContent(filePath, content, glossary, regex = buildScannerReg
         canonical: entry.term,
         severity: entry.severity,
         suggested: entry.suggested,
+        note: entry.note,
         snippet: rawLine.trim().slice(0, 160),
       });
     }
@@ -257,7 +261,10 @@ export function exitCodeFor(findings) {
 function formatFindingHuman(f, root) {
   const rel = relative(root, f.file);
   const sev = f.severity.toUpperCase().padEnd(4);
-  return `  [${sev}] ${rel}:${f.line}:${f.column}  "${f.term}" → "${f.suggested}"\n         ${f.snippet}`;
+  const head = `  [${sev}] ${rel}:${f.line}:${f.column}  "${f.term}" → "${f.suggested}"`;
+  const lines = [head, `         ${f.snippet}`];
+  if (f.note) lines.push(`         note: ${f.note}`);
+  return lines.join('\n');
 }
 
 function isMain() {
