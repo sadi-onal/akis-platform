@@ -81,8 +81,8 @@ describe('useIterationChildPoll', () => {
 
   it('appends a completion message when the child completes', async () => {
     const { hook, refreshList, refreshWorkflow, messages } = setup();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedGet.mockResolvedValueOnce(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       buildChild('c-1', 'completed', { filesCreated: 3, branch: 'iter-1' }) as any,
     );
 

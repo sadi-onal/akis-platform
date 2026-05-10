@@ -49,7 +49,6 @@ function buildWorkflow(id: string, content: string, ts = '2026-05-09T12:00:00.50
 
 interface HookProps {
   conversationId: string | undefined;
-  isRunning?: boolean;
   isConnected?: boolean;
 }
 
@@ -61,10 +60,9 @@ function renderLoader(
   const syncFromStage = vi.fn();
   const onWorkflowSnapshot = extra?.onWorkflowSnapshot ?? vi.fn();
   const { rerender, result, unmount } = renderHook(
-    ({ conversationId, isRunning, isConnected }: HookProps) =>
+    ({ conversationId, isConnected }: HookProps) =>
       useConversationLoader({
         conversationId,
-        isRunning: isRunning ?? false,
         isConnected: isConnected ?? false,
         syncFromStage,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -202,6 +200,27 @@ describe('useConversationLoader', () => {
       await result.current.refreshWorkflow();
     });
     expect(mockedGet).not.toHaveBeenCalled();
+  });
+
+  it('exposes a derived isRunning flag based on the workflow stage', async () => {
+    const running = buildWorkflow('R', 'still running');
+    running.currentStage = 'proto_building' as typeof running.currentStage;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedGet.mockResolvedValueOnce(running as any);
+    const { result } = renderLoader({ conversationId: 'R' });
+
+    await waitFor(() => expect(result.current.activeWorkflow?.id).toBe('R'));
+    expect(result.current.isRunning).toBe(true);
+  });
+
+  it('isRunning is false for completed pipelines', async () => {
+    const wf = buildWorkflow('A', 'hello');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedGet.mockResolvedValueOnce(wf as any);
+    const { result } = renderLoader({ conversationId: 'A' });
+
+    await waitFor(() => expect(result.current.activeWorkflow?.id).toBe('A'));
+    expect(result.current.isRunning).toBe(false);
   });
 
   it('exposes mutable lastMessagesKeyRef + loadedIdRef so external callers can reset them', async () => {

@@ -9,12 +9,28 @@ import { workflowsApi } from '../../../services/api/workflows';
 import { conversationToChatMessages } from '../../../utils/conversationToChatMessages';
 
 /**
+ * Stages that mean "an agent is doing work" — gates the polling effect.
+ * Subset of pipeline stages where SSE wouldn't be enough (or might be down).
+ */
+const RUNNING_STAGES: PipelineStage[] = [
+  'scribe_clarifying',
+  'scribe_generating',
+  'proto_building',
+  'trace_testing',
+  'ci_running',
+];
+
+/**
  * Stages where the user is actively waiting for an AI reply — poll fast (5s).
  * Other running stages do heavy backend work, so 20s (SSE up) / 8s (SSE down)
  * is fine. Kept here (rather than in the parent ChatPage) so the polling cadence
  * lives next to the polling effect that consumes it.
  */
 const INTERACTIVE_STAGES: PipelineStage[] = ['scribe_clarifying'];
+
+function isRunningStage(stage?: PipelineStage): boolean {
+  return !!stage && RUNNING_STAGES.includes(stage);
+}
 
 function isInteractiveStage(stage?: PipelineStage): boolean {
   return !!stage && INTERACTIVE_STAGES.includes(stage);
@@ -23,8 +39,6 @@ function isInteractiveStage(stage?: PipelineStage): boolean {
 export interface UseConversationLoaderOptions {
   /** Splat-derived id from `/chat/:id`; `undefined` while the user is on `/chat`. */
   conversationId: string | undefined;
-  /** Whether the active workflow is in a running stage — gates the polling effect. */
-  isRunning: boolean;
   /** Whether the SSE pipeline-event stream is healthy. Controls poll cadence. */
   isConnected: boolean;
   /** From `useConversationState` — keeps UI state in lockstep with the workflow stage. */
@@ -51,6 +65,8 @@ export interface UseConversationLoaderReturn {
   lastMessagesKeyRef: React.MutableRefObject<string>;
   /** Re-fetch the current workflow + sync messages/sidebar/uiState. */
   refreshWorkflow: () => Promise<void>;
+  /** Derived from `activeWorkflow.currentStage` — true while an agent is doing work. */
+  isRunning: boolean;
 }
 
 /**
@@ -67,11 +83,13 @@ export interface UseConversationLoaderReturn {
 export function useConversationLoader(
   options: UseConversationLoaderOptions,
 ): UseConversationLoaderReturn {
-  const { conversationId, isRunning, isConnected, syncFromStage, onWorkflowSnapshot, navigate } =
-    options;
+  const { conversationId, isConnected, syncFromStage, onWorkflowSnapshot, navigate } = options;
 
   const [activeWorkflow, setActiveWorkflow] = useState<Workflow | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Derived from the active workflow's stage — the loader knows when polling
+  // is needed without the caller having to feed it back in.
+  const isRunning = isRunningStage(activeWorkflow?.currentStage);
 
   const loadedIdRef = useRef<string | undefined>(undefined);
   const lastMessagesKeyRef = useRef('');
@@ -232,5 +250,6 @@ export function useConversationLoader(
     loadedIdRef,
     lastMessagesKeyRef,
     refreshWorkflow,
+    isRunning,
   };
 }
