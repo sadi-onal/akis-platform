@@ -1,6 +1,38 @@
-// Explainability Service — template-based reasoning explainer (NO LLM calls)
+// Explainability Service — template-based reasoning explainer (NO LLM calls).
+//
+// PDP-2 Wave 2 (F-03 + F-11 / NFR-1): converted from a pure in-memory map to
+// a write-through cache backed by `pipeline_reasonings`. Surface (method
+// signatures) is unchanged so callers do not need to know about the DB.
+//
+// - addReasoning(...)  → cache update + DB upsert (sync API, fire-and-await DB)
+// - getExplanation(id) → cache hit returns immediately; cache miss reads DB,
+//                        populates cache, then assembles the explanation.
+//
+// See docs/product/03-architecture.md § 4.1, § 5.1, ADR-1.
 
-import type { AgentReasoning, AttentionPoint, PipelineExplanation, ExplainabilityConfig } from './ExplainabilityTypes.js';
+import { and, asc, eq, isNull } from 'drizzle-orm';
+
+import { db as defaultDb } from '../../../db/client.js';
+import { pipelineReasonings, pipelines } from '../../../db/schema.js';
+import type {
+  AgentReasoning,
+  AttentionPoint,
+  PipelineExplanation,
+  ExplainabilityConfig,
+} from './ExplainabilityTypes.js';
+
+/**
+ * Pipeline stages that mean "pipeline is done — no more reasoning will be
+ * written." Only completed pipelines with zero reasoning rows should trip the
+ * `persistencePreEpoch` flag; an actively-running pipeline that just hasn't
+ * emitted yet is NOT legacy.
+ */
+const TERMINAL_STAGES: ReadonlySet<string> = new Set([
+  'completed',
+  'completed_partial',
+  'failed',
+  'cancelled',
+]);
 
 const DEFAULT_CONFIG: ExplainabilityConfig = {
   verbosity: 'standard',
@@ -8,47 +40,205 @@ const DEFAULT_CONFIG: ExplainabilityConfig = {
   includeRisks: true,
 };
 
+/**
+ * Minimal Drizzle-shape interface — typed against the methods we actually
+ * call. Lets tests inject a fake without depending on the full
+ * NodePgDatabase generic.
+ */
+export interface ExplainabilityDb {
+  insert: (typeof defaultDb)['insert'];
+  select: (typeof defaultDb)['select'];
+}
+
+export interface ExplainabilityServiceOptions extends Partial<ExplainabilityConfig> {
+  /** Override the default Drizzle client. Pass `null` to disable persistence (cache-only). */
+  db?: ExplainabilityDb | null;
+}
+
 export class ExplainabilityService {
-  private readonly store = new Map<string, AgentReasoning[]>();
+  private readonly cache = new Map<string, AgentReasoning[]>();
+  /**
+   * Pipelines we have already attempted to read from DB. We use this to
+   * distinguish "cache miss because never seen" from "cache miss but
+   * persistence-pre-epoch (legacy empty)".
+   */
+  private readonly hydrated = new Set<string>();
   private readonly config: ExplainabilityConfig;
+  private readonly db: ExplainabilityDb | null;
 
-  constructor(config?: Partial<ExplainabilityConfig>) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+  constructor(options: ExplainabilityServiceOptions = {}) {
+    const { db, ...configPartial } = options;
+    this.config = { ...DEFAULT_CONFIG, ...configPartial };
+    // `db === null` → caller explicitly opted out of persistence. `db === undefined`
+    // → use the global default. `db === <instance>` → use the injected one.
+    this.db = db === null ? null : (db ?? defaultDb);
   }
 
-  addReasoning(pipelineId: string, reasoning: AgentReasoning): void {
-    const existing = this.store.get(pipelineId) ?? [];
-    existing.push(reasoning);
-    this.store.set(pipelineId, existing);
+  /**
+   * Record a new reasoning entry. Updates in-memory cache immediately and
+   * upserts the row in `pipeline_reasonings`. Returns once both succeed —
+   * callers can `await` to be sure the data survives a crash.
+   */
+  async addReasoning(pipelineId: string, reasoning: AgentReasoning): Promise<void> {
+    this.upsertCache(pipelineId, reasoning);
+    if (!this.db) return;
+    const stage = this.stageKey(reasoning);
+    await this.db
+      .insert(pipelineReasonings)
+      .values({
+        pipelineId,
+        stage,
+        agentReasoning: reasoning,
+      })
+      .onConflictDoUpdate({
+        target: [pipelineReasonings.pipelineId, pipelineReasonings.stage],
+        set: {
+          agentReasoning: reasoning,
+          // NOTE: `recordedAt` is intentionally NOT updated on conflict.
+          // `loadStages` orders by `recordedAt`, and re-adding a stage (e.g.
+          // Scribe regeneration after Proto already ran) must NOT move the
+          // row to the end of the chronological order. Cache and DB agree on
+          // first-write-wins ordering this way.
+          // Re-adding a stage clears any prior soft-delete.
+          archivedAt: null,
+        },
+      });
   }
 
-  getExplanation(pipelineId: string): PipelineExplanation {
-    const stages = this.store.get(pipelineId) ?? [];
+  /**
+   * Build the full PipelineExplanation. Cache-first; on miss, hydrate from DB
+   * (filtering out soft-deleted rows). The returned object includes a `meta`
+   * field that flags "persistencePreEpoch" — true when a *terminal* pipeline
+   * has no rows in `pipeline_reasonings`, which means it ran before this
+   * persistence layer existed. Active/in-flight pipelines with zero rows do
+   * NOT trip the flag — they just haven't emitted yet.
+   */
+  async getExplanation(pipelineId: string): Promise<PipelineExplanation> {
+    const stages = await this.loadStages(pipelineId);
+    const meta: PipelineExplanation['meta'] = {};
+    if (stages.length === 0 && (await this.isTerminalPipeline(pipelineId))) {
+      meta.persistencePreEpoch = true;
+    }
     return {
       pipelineId,
       stages,
-      overallNarrative: this.generateNarrative(pipelineId),
-      attentionPoints: this.getAttentionPoints(pipelineId),
+      overallNarrative: this.narrateStages(stages),
+      attentionPoints: this.collectAttentionPoints(stages),
+      meta,
     };
   }
 
-  generateNarrative(pipelineId: string): string {
-    const stages = this.store.get(pipelineId) ?? [];
+  /** Async sibling of generateNarrative kept for callers that only want the text. */
+  async generateNarrative(pipelineId: string): Promise<string> {
+    const stages = await this.loadStages(pipelineId);
+    return this.narrateStages(stages);
+  }
+
+  /** Async sibling of getAttentionPoints. */
+  async getAttentionPoints(pipelineId: string): Promise<AttentionPoint[]> {
+    const stages = await this.loadStages(pipelineId);
+    return this.collectAttentionPoints(stages);
+  }
+
+  /** Convenience for tests: clear the in-memory cache only. */
+  clearCache(pipelineId?: string): void {
+    if (pipelineId) {
+      this.cache.delete(pipelineId);
+      this.hydrated.delete(pipelineId);
+      return;
+    }
+    this.cache.clear();
+    this.hydrated.clear();
+  }
+
+  // --- private helpers ---------------------------------------------------
+
+  /**
+   * True iff the pipeline row exists AND its stage is one of the terminal
+   * states. Used to gate the `persistencePreEpoch` banner — only a finished
+   * pipeline with zero reasoning rows can be a "legacy pre-persistence" one.
+   * Cache-only mode (db === null) returns `false` so unit tests that do not
+   * set up a pipeline row don't get the banner accidentally.
+   */
+  private async isTerminalPipeline(pipelineId: string): Promise<boolean> {
+    if (!this.db) return false;
+    const rows = await this.db
+      .select({ stage: pipelines.stage })
+      .from(pipelines)
+      .where(eq(pipelines.id, pipelineId))
+      .limit(1);
+    const stage = rows[0]?.stage;
+    if (!stage) return false;
+    return TERMINAL_STAGES.has(stage);
+  }
+
+  private async loadStages(pipelineId: string): Promise<AgentReasoning[]> {
+    const cached = this.cache.get(pipelineId);
+    if (cached !== undefined) return cached;
+    if (!this.db) {
+      this.cache.set(pipelineId, []);
+      this.hydrated.add(pipelineId);
+      return [];
+    }
+    const rows = await this.db
+      .select({
+        agentReasoning: pipelineReasonings.agentReasoning,
+        recordedAt: pipelineReasonings.recordedAt,
+      })
+      .from(pipelineReasonings)
+      .where(
+        and(
+          eq(pipelineReasonings.pipelineId, pipelineId),
+          isNull(pipelineReasonings.archivedAt),
+        ),
+      )
+      .orderBy(asc(pipelineReasonings.recordedAt));
+    const stages = rows.map((r) => this.rehydrateReasoning(r.agentReasoning));
+    this.cache.set(pipelineId, stages);
+    this.hydrated.add(pipelineId);
+    return stages;
+  }
+
+  private upsertCache(pipelineId: string, reasoning: AgentReasoning): void {
+    const existing = this.cache.get(pipelineId);
+    const list = existing ? [...existing] : [];
+    const stage = this.stageKey(reasoning);
+    const idx = list.findIndex((r) => this.stageKey(r) === stage);
+    if (idx >= 0) {
+      list[idx] = reasoning;
+    } else {
+      list.push(reasoning);
+    }
+    this.cache.set(pipelineId, list);
+    this.hydrated.add(pipelineId);
+  }
+
+  /**
+   * jsonb round-trips dates as strings. Re-coerce so consumers keep working
+   * against the typed `Date` field (mostly the narrative templates).
+   */
+  private rehydrateReasoning(raw: AgentReasoning): AgentReasoning {
+    const ts = raw.timestamp;
+    return ts instanceof Date ? raw : { ...raw, timestamp: new Date(ts as unknown as string) };
+  }
+
+  /**
+   * DB stage key. Falls back to `agentName` when the builder did not set a
+   * more specific key. Critics in particular set `stageKey` to
+   * `'critic-spec' | 'critic-code'` so each review gets its own row.
+   */
+  private stageKey(reasoning: AgentReasoning): string {
+    return reasoning.stageKey ?? reasoning.agentName;
+  }
+
+  private narrateStages(stages: AgentReasoning[]): string {
     if (stages.length === 0) {
       return 'Bu pipeline icin henuz bir aciklama bulunmuyor.';
     }
-
-    const parts: string[] = [];
-
-    for (const stage of stages) {
-      parts.push(this.narrateStage(stage));
-    }
-
-    return parts.join(' ');
+    return stages.map((s) => this.narrateStage(s)).join(' ');
   }
 
-  getAttentionPoints(pipelineId: string): AttentionPoint[] {
-    const stages = this.store.get(pipelineId) ?? [];
+  private collectAttentionPoints(stages: AgentReasoning[]): AttentionPoint[] {
     const points: AttentionPoint[] = [];
 
     for (const stage of stages) {
@@ -81,10 +271,7 @@ export class ExplainabilityService {
       }
 
       // Trace with fix loop
-      if (
-        stage.agentName === 'trace' &&
-        stage.decision.toLowerCase().includes('fix')
-      ) {
+      if (stage.agentName === 'trace' && stage.decision.toLowerCase().includes('fix')) {
         points.push({
           stage: stage.agentName,
           issue: `Duzeltme dongusu tetiklendi: ${stage.decision}`,
@@ -104,8 +291,6 @@ export class ExplainabilityService {
 
     return points;
   }
-
-  // --- private helpers ---
 
   private narrateStage(stage: AgentReasoning): string {
     const name = this.formatAgentName(stage.agentName);
@@ -139,23 +324,19 @@ export class ExplainabilityService {
     return text;
   }
 
-  private narrateProto(
-    name: string,
-    confidence: number,
-    stage: AgentReasoning,
-  ): string {
+  private narrateProto(name: string, confidence: number, stage: AgentReasoning): string {
     let text = `${name}, onaylanan spesifikasyondan ${confidence}% guvenle MVP kodunu uretti.`;
-    if (this.config.verbosity === 'detailed' && stage.alternatives && stage.alternatives.length > 0) {
+    if (
+      this.config.verbosity === 'detailed' &&
+      stage.alternatives &&
+      stage.alternatives.length > 0
+    ) {
       text += ` Alternatifler degerlendirildi: ${stage.alternatives.join(', ')}.`;
     }
     return text;
   }
 
-  private narrateTrace(
-    name: string,
-    confidence: number,
-    stage: AgentReasoning,
-  ): string {
+  private narrateTrace(name: string, confidence: number, stage: AgentReasoning): string {
     let text = `${name}, uretilen kodu dogruladi ve ${confidence}% guvenle test senaryolari yazdi.`;
     if (stage.decision.toLowerCase().includes('fix')) {
       text += ' Duzeltme dongusu tetiklendi.';
@@ -163,11 +344,7 @@ export class ExplainabilityService {
     return text;
   }
 
-  private narrateCritic(
-    name: string,
-    confidence: number,
-    stage: AgentReasoning,
-  ): string {
+  private narrateCritic(name: string, confidence: number, stage: AgentReasoning): string {
     return `${name}, ciktiyi inceledi ve ${confidence}% guvenle degerlendirme tamamladi. Karar: ${stage.decision}.`;
   }
 

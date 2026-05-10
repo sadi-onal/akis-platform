@@ -48,6 +48,21 @@ describe('ExplanationPanel', () => {
     expect(screen.getByText(/Pipeline ilerledikçe/)).toBeInTheDocument();
   });
 
+  it('renders persistencePreEpoch banner for legacy completed pipelines (F-11)', () => {
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [], meta: { persistencePreEpoch: true } })}
+      />,
+    );
+    expect(
+      screen.getByText(/Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/İsterseniz yeniden çalıştırabilirsiniz/)).toBeInTheDocument();
+    // The generic empty state should NOT appear when the legacy banner does.
+    expect(screen.queryByText(/Henüz açıklama yok/)).toBeNull();
+  });
+
   it('renders attention banner when points exist', () => {
     render(
       <ExplanationPanel

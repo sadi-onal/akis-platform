@@ -1670,3 +1670,21 @@ export type DevMessage = typeof devMessages.$inferSelect;
 export { agentActivities } from '../pipeline/db/agent-activity-schema.js';
 export type { AgentActivityInsert, AgentActivitySelect } from '../pipeline/db/agent-activity-schema.js';
 export type NewDevMessage = typeof devMessages.$inferInsert;
+
+// ============================================================================
+// Pipeline persistence (PDP-2 Wave 2 — F-03 + F-11 / NFR-1)
+// Re-exported so Drizzle's generator includes the new tables in migrations.
+// See docs/product/03-architecture.md § 4.1, § 4.2.
+// ============================================================================
+export { pipelineReasonings } from './schema/pipeline-reasonings.js';
+export type {
+  PipelineReasoningRow,
+  PipelineReasoningInsert,
+} from './schema/pipeline-reasonings.js';
+
+export { pipelineActivities } from './schema/pipeline-activities.js';
+export type {
+  PipelineActivityRow,
+  PipelineActivityInsert,
+  ActivityReasoningSnippet,
+} from './schema/pipeline-activities.js';

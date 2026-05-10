@@ -197,6 +197,12 @@ export interface Pipeline {
 
 export interface AgentReasoning {
   agentName: string;
+  /**
+   * Persistence-layer stage key (`'critic-spec' | 'critic-code'` for the
+   * Critic agent so two reviews don't collapse onto the same row). Falls
+   * back to `agentName` when the backend did not set it.
+   */
+  stageKey?: string;
   timestamp: string; // ISO 8601 (backend Date → JSON string)
   decision: string;
   reasoning: string[];
@@ -231,11 +237,24 @@ export interface AttentionPoint {
   severity: 'high' | 'medium' | 'low';
 }
 
+export interface PipelineExplanationMeta {
+  /**
+   * `true` when the response is empty because the pipeline ran before
+   * persistence was added (PDP-2 Wave 2, F-03 + F-11). UI shows the
+   * "eski sürümde tamamlandı, açıklama kaydı yok" banner instead of
+   * the generic "henüz açıklama yok" hint.
+   * Backend gates the flag on terminal pipeline status — active pipelines
+   * never trip it (review-fix #1).
+   */
+  persistencePreEpoch?: boolean;
+}
+
 export interface PipelineExplanation {
   pipelineId: string;
   stages: AgentReasoning[];
   overallNarrative: string;
   attentionPoints: AttentionPoint[];
+  meta?: PipelineExplanationMeta;
 }
 
 // ─── Tier 1.A: Regression Confidence ─────────────────────────

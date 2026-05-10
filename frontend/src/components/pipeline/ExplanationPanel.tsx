@@ -328,6 +328,24 @@ export function ExplanationPanel({
     return null;
   }
   if (explanation.stages.length === 0) {
+    // F-11 backfill: pipeline finished before persistence existed → no rows in
+    // pipeline_reasonings. Show a distinct, honest message instead of the
+    // generic "henüz açıklama yok" so users don't think the agents broke.
+    if (explanation.meta?.persistencePreEpoch) {
+      return (
+        <div
+          role="status"
+          className="rounded-lg border border-dashed border-amber-400/40 bg-amber-500/5 px-4 py-6 text-center"
+        >
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-200">
+            Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok.
+          </p>
+          <p className="mt-1 text-xs text-ak-text-tertiary">
+            İsterseniz yeniden çalıştırabilirsiniz.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="rounded-lg border border-dashed border-ak-border bg-ak-surface-2 px-4 py-6 text-center">
         <p className="text-sm font-medium text-ak-text-secondary">Henüz açıklama yok</p>
