@@ -13,6 +13,19 @@ export interface PipelineDetailRailProps {
   uiState: ConversationUIState;
   activities: PipelineActivity[];
   currentStep: PipelineActivity | null;
+  /**
+   * F-04: when true, the rail stays mounted for completed pipelines even
+   * if the in-memory activity buffer was lost (e.g. backend restart).
+   * Without this, the user could no longer access the Akış / Açıklama /
+   * Regresyon tabs for finished work. Derived from the workflow's
+   * proto/trace output presence in the parent.
+   *
+   * TODO(F-03/NFR-1): remove `pipelineHasOutputs` prop after activity
+   * persistence lands — once activities are restored from DB on reload,
+   * the original `idle && activities.length === 0` short-circuit no
+   * longer triggers for finished work and this opt-in becomes dead weight.
+   */
+  pipelineHasOutputs?: boolean;
   /** DI for tests — falls back to workflowsApi.getExplanation */
   explanationFetcher?: (id: string) => Promise<PipelineExplanation>;
   /** DI for tests — falls back to workflowsApi.getRegression */
@@ -46,8 +59,15 @@ function isRunning(uiState: ConversationUIState): boolean {
 function isExplainable(uiState: ConversationUIState): boolean {
   return REASONING_VISIBLE_STATES.includes(uiState);
 }
-function isRegressionVisible(uiState: ConversationUIState, hasActivities: boolean): boolean {
-  return REGRESSION_VISIBLE_STATES.includes(uiState) && hasActivities;
+function isRegressionVisible(
+  uiState: ConversationUIState,
+  hasActivities: boolean,
+  pipelineHasOutputs: boolean
+): boolean {
+  // F-04: persisted outputs are also a valid trigger — RegressionPanel
+  // fetches its report straight from the workflow record, so it works
+  // fine even when the live activity buffer is empty (post-restart).
+  return REGRESSION_VISIBLE_STATES.includes(uiState) && (hasActivities || pipelineHasOutputs);
 }
 
 /**
@@ -62,6 +82,7 @@ export function PipelineDetailRail({
   uiState,
   activities,
   currentStep,
+  pipelineHasOutputs = false,
   explanationFetcher,
   regressionFetcher,
   className,
@@ -71,7 +92,7 @@ export function PipelineDetailRail({
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(null);
   const [explanationError, setExplanationError] = useState<string | null>(null);
 
-  const regressionVisible = isRegressionVisible(uiState, activities.length > 0);
+  const regressionVisible = isRegressionVisible(uiState, activities.length > 0, pipelineHasOutputs);
   // Keep the collapse contract from v0.7.0: collapse on idle. The
   // Regresyon tab is still clickable and renders content when the user
   // manually expands the rail; auto-expansion would clobber the chat
@@ -116,7 +137,12 @@ export function PipelineDetailRail({
   );
 
   if (!pipelineId || pipelineId === 'pending') return null;
-  if (uiState === 'idle' && activities.length === 0) return null;
+  // F-04: only fully hide the rail when the pipeline has *no* state to
+  // surface — neither live activity nor persisted outputs. This keeps
+  // the tabs reachable for completed pipelines whose activity buffer was
+  // lost (e.g. backend restart). Tabs render their own empty states
+  // gracefully when activities are absent.
+  if (uiState === 'idle' && activities.length === 0 && !pipelineHasOutputs) return null;
 
   // Q2 A/B-test escape hatch: ?baseline=1 hides the entire Level-4 rail
   // so the same pipeline can be screenshotted with and without the

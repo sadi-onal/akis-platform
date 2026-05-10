@@ -64,6 +64,13 @@ interface ChatPanelProps {
   pipelineError?: PipelineError;
   /** #490 BUG-N: retry POST is in flight; banner swaps to a disabled loader. */
   isRetrying?: boolean;
+  /**
+   * F-04: when true, keeps `PipelineDetailRail` mounted even at idle with
+   * an empty activity buffer (e.g. after backend restart drops the
+   * in-memory stream). Parent derives this from the workflow's
+   * proto/trace output presence.
+   */
+  pipelineHasOutputs?: boolean;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -105,6 +112,7 @@ export const ChatPanel = memo(function ChatPanel({
   modelLocked,
   pipelineError,
   isRetrying = false,
+  pipelineHasOutputs = false,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -206,6 +214,7 @@ export const ChatPanel = memo(function ChatPanel({
           uiState={uiState}
           activities={activities ?? []}
           currentStep={currentStep ?? null}
+          pipelineHasOutputs={pipelineHasOutputs}
         />
       )}
 
