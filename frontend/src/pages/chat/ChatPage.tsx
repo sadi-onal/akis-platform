@@ -1,7 +1,9 @@
 /**
  * ChatPage — orchestrator. Body split across ./hooks/* + ChatPageLayout +
- * chatPageHelpers as part of F-06. Phase 2 TODOs flag the next round of
- * extractions (useTraceToggle, useModelPicker).
+ * chatPageHelpers as part of F-06. Phase 2 finished extracting the trace
+ * toggle, model picker, split-pane preview, and proto-files data hook;
+ * remaining inline state is route-level (sidebar, conversation list,
+ * pipeline-control callbacks).
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -14,12 +16,11 @@ import { mapStageToMode } from '../../utils/mapPipelineEvent';
 import type { ConversationListItem, ChatMessage, ConversationStatus } from '../../types/chat';
 import { hasPipelineOutputs } from '../../types/workflow';
 import type { Workflow } from '../../types/workflow';
-import type { PipelineError } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
 import type { SelectedRepo } from '../../components/chat/RepoSelector';
 import { LOGO_MARK_SVG } from '../../theme/brand';
 
-import { localizeError, sanitizeRepoName, workflowToListItem } from './chatPageHelpers';
+import { workflowToListItem } from './chatPageHelpers';
 import { ChatPageLayout } from './ChatPageLayout';
 import { useConversationLoader } from './hooks/useConversationLoader';
 import { useIterationChildPoll } from './hooks/useIterationChildPoll';
@@ -27,7 +28,11 @@ import { useGithubOAuthRestore } from './hooks/useGithubOAuthRestore';
 import { useChatPageKeyboard } from './hooks/useChatPageKeyboard';
 import { useHandleSend } from './hooks/useHandleSend';
 import { useChatQaAsk } from './hooks/useChatQaAsk';
-import { useSplitResize } from './hooks/useSplitResize';
+import { useTraceToggle } from './hooks/useTraceToggle';
+import { useModelPicker } from './hooks/useModelPicker';
+import { useShowPreview } from './hooks/useShowPreview';
+import { useProtoFiles } from './hooks/useProtoFiles';
+import { usePipelineControls } from './hooks/usePipelineControls';
 
 /* ── component ────────────────────────────────────── */
 
@@ -47,14 +52,10 @@ export default function ChatPage() {
     return w >= 768 && w < 1024;
   });
   const [pendingConv, setPendingConv] = useState<{ displayName: string } | null>(null);
-  // TODO(F-06 Phase 2): useTraceToggle hook (consolidates traceEnabled + onChange).
-  const [traceEnabled, setTraceEnabled] = useState(true);
-  // TODO(F-06 Phase 2): useModelPicker hook (pendingModel + handleModelChange + locked flag).
-  const [pendingModel, setPendingModel] = useState<string>('claude-haiku-4-5-20251001');
+  const { traceEnabled, setTraceEnabled } = useTraceToggle();
   const [selectedRepo, setSelectedRepo] = useState<SelectedRepo | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState(50);
-  const { splitContainerRef, handleDragStart } = useSplitResize({ setPreviewWidth });
+  const { showPreview, setShowPreview, previewWidth, splitContainerRef, handleDragStart } =
+    useShowPreview();
   const { hasGitHub, loading: profileLoading } = useProfileCompleteness();
 
   // Close mobile sidebar overlay when navigating to a conversation
@@ -129,6 +130,16 @@ export default function ChatPage() {
   const pendingConvRef = useRef(pendingConv);
   pendingConvRef.current = pendingConv;
 
+  // ─── Model picker (F-06 Phase 2 hook) ─────────────
+  // Wired here because handleModelChange depends on `refreshWorkflow` from the
+  // conversation loader. The pre-pipeline path uses `setPendingModel` directly
+  // via the ChatPageLayout wiring (see `onModelChange={pendingConv ? setPendingModel : onModelChange}`).
+  const { pendingModel, setPendingModel, handleModelChange } = useModelPicker({
+    conversationId,
+    activeWorkflow,
+    refreshWorkflow,
+  });
+
   const {
     activities: pipelineActivities,
     currentStep,
@@ -157,38 +168,8 @@ export default function ChatPage() {
     return list;
   }, [conversations, pendingConv]);
 
-  // Proto files for Sandpack preview
-  const [protoFilesFromApi, setProtoFilesFromApi] = useState<Record<string, string> | null>(null);
-  const protoFiles = useMemo(() => {
-    if (activeWorkflow?.conversation) {
-      for (const m of activeWorkflow.conversation) {
-        if (m.type === 'proto_result' && m.protoResult?.files) {
-          const files: Record<string, string> = {};
-          for (const f of m.protoResult.files) {
-            const path = f.path ?? f.name;
-            if (path && f.content) files[path] = f.content;
-          }
-          if (Object.keys(files).length > 0) return files;
-        }
-      }
-    }
-    return protoFilesFromApi;
-  }, [activeWorkflow, protoFilesFromApi]);
-
-  useEffect(() => {
-    if (protoFiles || !conversationId) return;
-    const stage = activeWorkflow?.currentStage;
-    if (stage === 'completed' || stage === 'completed_partial' || stage === 'trace_testing') {
-      workflowsApi
-        .getProtoFiles(conversationId)
-        .then((res) => {
-          if (res && Object.keys(res).length > 0) setProtoFilesFromApi(res);
-        })
-        .catch(() => {
-          /* ignore */
-        });
-    }
-  }, [conversationId, activeWorkflow?.currentStage, protoFiles]);
+  // Proto files for Sandpack preview (extracted to ./hooks/useProtoFiles).
+  const protoFiles = useProtoFiles({ conversationId, activeWorkflow });
 
   const chatMode = useMemo(
     () => mapStageToMode(activeWorkflow?.currentStage),
@@ -235,7 +216,10 @@ export default function ChatPage() {
     navigate('/chat');
   }, [navigate, loadedIdRef, lastMessagesKeyRef, setMessages, setActiveWorkflow]);
 
-  const handleTogglePreview = useCallback(() => setShowPreview((p) => !p), []);
+  const handleTogglePreview = useCallback(
+    () => setShowPreview((p) => !p),
+    [setShowPreview],
+  );
   const handleBack = useCallback(() => {
     setPendingConv(null);
     lastMessagesKeyRef.current = '';
@@ -351,107 +335,17 @@ export default function ChatPage() {
       .filter((c) => c.length > 0);
   }, [messages]);
 
-  const approveInFlightRef = useRef(false);
-  const handleApprove = useCallback(async () => {
-    if (!conversationId || !activeWorkflow || approveInFlightRef.current) return;
-    approveInFlightRef.current = true;
-    try {
-      const cucumberEnabled = localStorage.getItem('akis_cucumber_enabled') === 'true';
-      await workflowsApi.approve(
-        conversationId,
-        sanitizeRepoName(activeWorkflow.title ?? 'project'),
-        'private',
-        { cucumberEnabled },
-      );
-      await refreshWorkflow();
-      toast('Spec onaylandi, Proto baslatiliyor...', 'success');
-    } catch (e) {
-      toast(localizeError(e), 'error');
-    } finally {
-      approveInFlightRef.current = false;
-    }
-  }, [conversationId, activeWorkflow, refreshWorkflow]);
-
-  const handleReject = useCallback(async () => {
-    if (!conversationId) return;
-    try {
-      await workflowsApi.reject(conversationId);
-      await refreshWorkflow();
-      toast('Spec reddedildi.', 'info');
-    } catch (e) {
-      toast(localizeError(e), 'error');
-    }
-  }, [conversationId, refreshWorkflow]);
-
-  const handleCancel = useCallback(async () => {
-    if (!conversationId) return;
-    try {
-      await workflowsApi.cancel(conversationId);
-      await refreshWorkflow();
-      toast('Pipeline iptal edildi.', 'info');
-    } catch (e) {
-      toast(localizeError(e), 'error');
-    }
-  }, [conversationId, refreshWorkflow]);
-
-  // BUG-N: capture pre-retry error so the banner stays visible during retry.
-  const [retryingError, setRetryingError] = useState<PipelineError | null>(null);
-  useEffect(() => {
-    if (!retryingError) return;
-    const stage = activeWorkflow?.currentStage;
-    const nextError = activeWorkflow?.error;
-    if (stage === 'completed' || stage === 'completed_partial') {
-      setRetryingError(null);
-      return;
-    }
-    if (stage === 'failed' && nextError) {
-      setRetryingError(null);
-    }
-  }, [activeWorkflow?.currentStage, activeWorkflow?.error, retryingError]);
-
-  const handleRetry = useCallback(async () => {
-    if (!conversationId) return;
-    const currentError = activeWorkflow?.error;
-    if (currentError) setRetryingError(currentError);
-    try {
-      await workflowsApi.retry(conversationId);
-      await refreshWorkflow();
-      toast('Yeniden deneniyor...', 'info');
-    } catch (e) {
-      setRetryingError(null);
-      toast(localizeError(e), 'error');
-    }
-  }, [conversationId, activeWorkflow?.error, refreshWorkflow]);
-
-  const handleSkip = useCallback(async () => {
-    if (!conversationId) return;
-    try {
-      await workflowsApi.skipTrace(conversationId);
-      await refreshWorkflow();
-      toast('Trace atlandi.', 'info');
-    } catch (e) {
-      toast(localizeError(e), 'error');
-    }
-  }, [conversationId, refreshWorkflow]);
-
-  // TODO(F-06 Phase 2): useModelPicker hook (consolidate with pendingModel state).
-  const handleModelChange = useCallback(
-    async (modelId: string) => {
-      if (!conversationId || conversationId === 'pending') return;
-      try {
-        await workflowsApi.updateModel(conversationId, modelId);
-        await refreshWorkflow();
-        toast(`Model güncellendi: ${modelId}`, 'info');
-      } catch (e) {
-        toast(localizeError(e), 'error');
-      }
-    },
-    [conversationId, refreshWorkflow],
-  );
-
-  const pipelineError =
-    retryingError ??
-    (activeWorkflow?.currentStage === 'failed' ? activeWorkflow?.error : undefined);
+  // ─── Pipeline control callbacks (F-06 Phase 2 hook) ─
+  // approve / reject / cancel / retry / skip + retryingError capture.
+  const {
+    handleApprove,
+    handleReject,
+    handleCancel,
+    handleRetry,
+    handleSkip,
+    pipelineError,
+    isRetrying,
+  } = usePipelineControls({ conversationId, activeWorkflow, refreshWorkflow });
 
   const layoutProps = {
     akisLogoUrl,
@@ -462,7 +356,7 @@ export default function ChatPage() {
     activeWorkflow, messages, uiState, isInputEnabled, showCancelButton, inputPlaceholder,
     creating, chatMode, recentTextMessages, currentStep, pipelineActivities, createdFiles,
     protoFiles, pipelineHasOutputs: hasPipelineOutputs(activeWorkflow), pipelineError,
-    isRetrying: retryingError !== null,
+    isRetrying,
     showPreview, previewWidth, onTogglePreview: handleTogglePreview, setShowPreview,
     splitContainerRef, handleDragStart,
     onSend: handleSend, onAsk: handleIntentAsk,
