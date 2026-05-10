@@ -37,6 +37,7 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
   const total = questions.length;
   const currentQ = questions[currentIdx];
   const answeredCount = Object.values(answers).filter((v) => v.trim().length > 0).length;
+  const isCurrentAnswered = !!currentQ && (answers[currentQ.id] ?? '').trim().length > 0;
 
   const goTo = useCallback(
     (next: number) => {
@@ -174,6 +175,23 @@ export function ClarificationCard({ questions, onSubmit, onDismiss }: Clarificat
             <span className="text-xs font-semibold uppercase tracking-wider text-ak-scribe">
               Soru {currentIdx + 1}/{total}
             </span>
+            {isCurrentAnswered && (
+              <span
+                aria-label="Bu soru cevaplandı"
+                title="Bu soru cevaplandı"
+                className="flex h-4 w-4 items-center justify-center rounded-full bg-ak-primary/15 text-ak-primary"
+              >
+                <svg
+                  className="h-2.5 w-2.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={3}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+            )}
             <span className="text-[11px] text-ak-text-tertiary">
               • {answeredCount}/{total} cevaplandı
             </span>
