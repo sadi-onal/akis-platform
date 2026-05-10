@@ -218,6 +218,84 @@ const mkRegression = (overrides: Partial<RegressionReport> = {}): RegressionRepo
   ...overrides,
 });
 
+describe('PipelineDetailRail — body scrollability (F-02)', () => {
+  // F-02: when ExplanationPanel renders many stage cards or AttentionBanner
+  // accumulates findings, the rail used to expand past the viewport with
+  // no scroll affordance. Body must cap height + allow vertical scroll.
+  it('body wrapper has overflow-y-auto and exact max-h tokens on the Akış tab', () => {
+    const { container } = render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+      />
+    );
+    const region = screen.getByLabelText('Pipeline detayı');
+    expect(region).toHaveAttribute('data-active-tab', 'flow');
+    const body = container.querySelector('#pipeline-rail-body');
+    expect(body).not.toBeNull();
+    const classes = body!.className;
+    expect(classes).toContain('overflow-y-auto');
+    // Lock the exact breakpoint tokens so silent drift (e.g. md:max-h-screen) fails the test.
+    expect(classes).toContain('max-h-[55vh]');
+    expect(classes).toContain('sm:max-h-[60vh]');
+    // Prevent scroll-chain into the parent chat container.
+    expect(classes).toContain('overscroll-contain');
+    // Keyboard-only users must be able to focus the scroll viewport (WCAG 2.1.1).
+    expect(body).toHaveAttribute('tabindex', '0');
+  });
+
+  it('body wrapper retains overflow + exact max-h tokens on the Açıklama tab with many attention points', async () => {
+    const longAttention = Array.from({ length: 12 }, (_, i) => ({
+      severity: (i % 3 === 0 ? 'high' : 'medium') as 'high' | 'medium',
+      stage: 'critic' as const,
+      issue: `Issue ${i + 1} — uzun bir açıklama metni içeren dikkat noktası örneği.`,
+    }));
+    const fetcher = vi.fn().mockResolvedValue(
+      mkExpl({
+        attentionPoints: longAttention,
+      })
+    );
+    const { container } = render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="awaiting_approval"
+        activities={[]}
+        currentStep={null}
+        explanationFetcher={fetcher}
+      />
+    );
+    // Wait for the badge so we know the explanation fetched and AttentionBanner mounted inside the body.
+    expect(await screen.findByText(/12 dikkat noktası/)).toBeInTheDocument();
+    const body = container.querySelector('#pipeline-rail-body');
+    expect(body).not.toBeNull();
+    const classes = body!.className;
+    expect(classes).toContain('overflow-y-auto');
+    expect(classes).toContain('max-h-[55vh]');
+    expect(classes).toContain('sm:max-h-[60vh]');
+  });
+
+  it('body wrapper remains scrollable on the Regresyon tab', () => {
+    const { container } = render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('proto')]}
+        currentStep={null}
+      />
+    );
+    fireEvent.click(screen.getByText(/Pipeline detayı/));
+    fireEvent.click(screen.getByRole('tab', { name: 'Regresyon' }));
+    const body = container.querySelector('#pipeline-rail-body');
+    expect(body).not.toBeNull();
+    const classes = body!.className;
+    expect(classes).toContain('overflow-y-auto');
+    expect(classes).toContain('max-h-[55vh]');
+    expect(classes).toContain('sm:max-h-[60vh]');
+  });
+});
+
 describe('PipelineDetailRail — Regresyon tab', () => {
   it('shows the Regresyon tab when the user opens an idle rail with activities', () => {
     render(
