@@ -17,6 +17,8 @@ import {
   emitActivity,
   getRecentActivities,
   getActivities,
+  resetActivityDb,
+  setActivityDb,
   __resetActivityBufferForTests,
   type PipelineActivity,
 } from '../../src/pipeline/core/activityEmitter.js';
@@ -40,6 +42,10 @@ describe('Activity persistence (F-03 + F-11 / NFR-1)', () => {
 
   before(async () => {
     if (SKIP) return;
+    // Integration tests opt back into the real Drizzle client. The module
+    // defaults to `_db = null` under NODE_ENV=test (review-fix #4) so unit
+    // tests don't accidentally hit Postgres.
+    resetActivityDb();
     userId = randomUUID();
     await db.insert(users).values({
       id: userId,
@@ -61,6 +67,8 @@ describe('Activity persistence (F-03 + F-11 / NFR-1)', () => {
     // Cascade from pipelines covers pipeline_activities rows.
     await db.delete(pipelines).where(eq(pipelines.id, pipelineId));
     await db.delete(users).where(eq(users.id, userId));
+    // Restore test-default to keep unit tests run after this isolated.
+    setActivityDb(null);
   });
 
   it('emit 10 activities → cache evicted → DB recovers all 10 in order', async (t) => {
@@ -134,7 +142,7 @@ describe('Activity persistence (F-03 + F-11 / NFR-1)', () => {
     }
   });
 
-  it('warm cache short-circuits the DB read', async (t) => {
+  it('warm cache short-circuits the DB read when cache satisfies the limit', async (t) => {
     if (SKIP) {
       t.skip('SKIP_DB_TESTS or DATABASE_URL not set');
       return;
@@ -158,8 +166,8 @@ describe('Activity persistence (F-03 + F-11 / NFR-1)', () => {
       emitActivity(activityFor(localPipelineId, 0));
       emitActivity(activityFor(localPipelineId, 1));
 
-      // Cache still holds both; no need to wait for DB write — return must be sync-fast.
-      const recovered = await getRecentActivities(localPipelineId);
+      // Limit = 2 ⇒ cache has enough → short-circuit returns immediately.
+      const recovered = await getRecentActivities(localPipelineId, 2);
       assert.equal(recovered.length, 2);
       assert.deepEqual(
         recovered.map((a) => a.step),
@@ -167,6 +175,53 @@ describe('Activity persistence (F-03 + F-11 / NFR-1)', () => {
       );
     } finally {
       await new Promise((r) => setTimeout(r, 100)); // let DB writes settle before delete
+      await db.delete(pipelines).where(eq(pipelines.id, localPipelineId));
+      await db.delete(users).where(eq(users.id, localUserId));
+    }
+  });
+
+  // Review-fix #2: cache-cap boundary — caller asks for more rows than the
+  // ring buffer can hold, so the cache MUST fall through to the DB.
+  it('falls through to DB when limit exceeds cache size (review #2)', async (t) => {
+    if (SKIP) {
+      t.skip('SKIP_DB_TESTS or DATABASE_URL not set');
+      return;
+    }
+    const localUserId = randomUUID();
+    const localPipelineId = randomUUID();
+    await db.insert(users).values({
+      id: localUserId,
+      name: 'fallthrough-test',
+      email: `fallthrough-test-${localUserId}@example.com`,
+      passwordHash: 'x',
+    });
+    await db.insert(pipelines).values({
+      id: localPipelineId,
+      userId: localUserId,
+      stage: 'completed',
+      title: 'cache fallthrough test',
+    });
+
+    try {
+      // Emit 200 activities → ring buffer caps at 50, DB persists all 200.
+      for (let i = 0; i < 200; i++) {
+        emitActivity(activityFor(localPipelineId, i));
+      }
+      await new Promise((r) => setTimeout(r, 400));
+
+      // Caller asks for 100. Cache only holds the most recent 50. Without
+      // the fallthrough fix the function would return cached.slice(-100) =
+      // the 50 cached items. With the fix it must hit the DB and return 100.
+      const recovered = await getRecentActivities(localPipelineId, 100);
+      assert.equal(
+        recovered.length,
+        100,
+        'caller asking for 100 must get 100 from DB even when cache is hot but smaller',
+      );
+      // Spot-check chronological order.
+      assert.equal(recovered[0]!.step, 'step-100');
+      assert.equal(recovered[recovered.length - 1]!.step, 'step-199');
+    } finally {
       await db.delete(pipelines).where(eq(pipelines.id, localPipelineId));
       await db.delete(users).where(eq(users.id, localUserId));
     }

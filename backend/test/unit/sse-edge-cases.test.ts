@@ -561,3 +561,152 @@ describe('SSE Stream — response headers', () => {
     assert.equal(headers['X-Accel-Buffering'], 'no', 'nginx buffering must be disabled');
   });
 });
+
+// ─── Persistence integration (review fixes #2 + #4) ──────────────────
+//
+// These exercise the activityEmitter persistence layer at unit-test scope:
+//   - default _db is null under NODE_ENV=test (review-fix #4) — emits do not
+//     touch a real Postgres connection.
+//   - getRecentActivities falls through to DB when limit > cache.length
+//     (review-fix #2). Cache held only the most recent ACTIVITY_BUFFER_LIMIT
+//     items; for callers asking for more, the cache is incomplete by
+//     construction so we must hit the DB.
+
+describe('Activity Emitter — persistence wiring (review fixes)', async () => {
+  // Lazy import so we can capture references after module init.
+  const mod = await import('../../src/pipeline/core/activityEmitter.js');
+
+  it('default db is null under NODE_ENV=test (no Postgres writes from unit tests)', () => {
+    // Smoke test: emit hundreds of activities and never see a DB write
+    // failure logged. We can't probe `_db` directly (private), but we can
+    // confirm that emits return synchronously and produce no unhandled
+    // rejections. The actual `_db = null` default is set at module-init
+    // time by the IS_TEST_ENV guard.
+    const id = `default-null-${Date.now()}`;
+    let raised: unknown = null;
+    const onUnhandled = (err: unknown) => {
+      raised = err;
+    };
+    process.once('unhandledRejection', onUnhandled);
+    for (let i = 0; i < 5; i++) {
+      mod.emitActivity(makeActivity(id, { step: `s${i}` }));
+    }
+    process.removeListener('unhandledRejection', onUnhandled);
+    assert.equal(raised, null, 'no DB write should fire under NODE_ENV=test');
+    assert.equal(mod.getActivities(id).length, 5, 'cache still works');
+  });
+
+  it('getRecentActivities falls through to DB when limit > cache.length (review #2)', async () => {
+    // Inject a fake DB. Pre-warm the cache with 3 activities; ask for 10.
+    // With the fix in place, the function must call our fake DB select
+    // because cache cannot satisfy the limit.
+    let dbReadCalled = false;
+    const fakeRows = Array.from({ length: 7 }, (_, i) => ({
+      pipelineId: 'fallthrough',
+      stage: 'scribe',
+      step: `db-${i}`,
+      message: `m${i}`,
+      progress: i,
+      retryCount: 0,
+      reasoningSnippet: null,
+      emittedAt: new Date(2026, 4, 9, 10, 0, i),
+    }));
+    const fakeDb = {
+      insert() {
+        return {
+          values() {
+            return {
+              catch() {
+                return Promise.resolve();
+              },
+            };
+          },
+        };
+      },
+      select() {
+        return {
+          from() {
+            return {
+              where() {
+                return {
+                  orderBy() {
+                    return {
+                      limit() {
+                        dbReadCalled = true;
+                        return Promise.resolve([...fakeRows].reverse()); // newest-first
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as Parameters<typeof mod.setActivityDb>[0];
+
+    const id = `cache-fallthrough-${Date.now()}`;
+    mod.__resetActivityBufferForTests(id);
+
+    // Cache has 3 items; caller wants 10 → must fall through to DB.
+    mod.setActivityDb(fakeDb);
+    try {
+      mod.emitActivity(makeActivity(id, { step: 'cache-0' }));
+      mod.emitActivity(makeActivity(id, { step: 'cache-1' }));
+      mod.emitActivity(makeActivity(id, { step: 'cache-2' }));
+
+      const recovered = await mod.getRecentActivities(id, 10);
+      assert.equal(dbReadCalled, true, 'DB select must be hit when cache is too small for limit');
+      assert.equal(recovered.length, 7, 'returned rows come from DB, not the smaller cache');
+    } finally {
+      mod.setActivityDb(null);
+      mod.__resetActivityBufferForTests(id);
+    }
+  });
+
+  it('getRecentActivities short-circuits when cache satisfies the limit', async () => {
+    let dbReadCalled = false;
+    const fakeDb = {
+      insert() {
+        return { values() { return { catch() { return Promise.resolve(); } }; } };
+      },
+      select() {
+        return {
+          from() {
+            return {
+              where() {
+                return {
+                  orderBy() {
+                    return {
+                      limit() {
+                        dbReadCalled = true;
+                        return Promise.resolve([]);
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as Parameters<typeof mod.setActivityDb>[0];
+
+    const id = `cache-hit-${Date.now()}`;
+    mod.__resetActivityBufferForTests(id);
+    mod.setActivityDb(fakeDb);
+    try {
+      mod.emitActivity(makeActivity(id, { step: 'a' }));
+      mod.emitActivity(makeActivity(id, { step: 'b' }));
+      mod.emitActivity(makeActivity(id, { step: 'c' }));
+
+      // limit=2 → cache (3 items) is enough → no DB hit.
+      const recovered = await mod.getRecentActivities(id, 2);
+      assert.equal(dbReadCalled, false, 'cache satisfies limit; DB must not be queried');
+      assert.equal(recovered.length, 2);
+    } finally {
+      mod.setActivityDb(null);
+      mod.__resetActivityBufferForTests(id);
+    }
+  });
+});

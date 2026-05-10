@@ -338,10 +338,10 @@ export function ExplanationPanel({
           className="rounded-lg border border-dashed border-amber-400/40 bg-amber-500/5 px-4 py-6 text-center"
         >
           <p className="text-sm font-medium text-amber-700 dark:text-amber-200">
-            Bu pipeline kalıcılık güncellenmesinden önce tamamlandı.
+            Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok.
           </p>
           <p className="mt-1 text-xs text-ak-text-tertiary">
-            Yeniden çalıştırarak güncel açıklamayı alabilirsiniz.
+            İsterseniz yeniden çalıştırabilirsiniz.
           </p>
         </div>
       );

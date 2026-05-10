@@ -241,8 +241,10 @@ export interface PipelineExplanationMeta {
   /**
    * `true` when the response is empty because the pipeline ran before
    * persistence was added (PDP-2 Wave 2, F-03 + F-11). UI shows the
-   * "kalıcılık güncellenmesinden önce tamamlandı" banner instead of
+   * "eski sürümde tamamlandı, açıklama kaydı yok" banner instead of
    * the generic "henüz açıklama yok" hint.
+   * Backend gates the flag on terminal pipeline status — active pipelines
+   * never trip it (review-fix #1).
    */
   persistencePreEpoch?: boolean;
 }

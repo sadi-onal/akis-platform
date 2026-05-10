@@ -56,9 +56,9 @@ describe('ExplanationPanel', () => {
       />,
     );
     expect(
-      screen.getByText(/Bu pipeline kalıcılık güncellenmesinden önce tamamlandı/),
+      screen.getByText(/Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Yeniden çalıştırarak güncel açıklamayı alabilirsiniz/)).toBeInTheDocument();
+    expect(screen.getByText(/İsterseniz yeniden çalıştırabilirsiniz/)).toBeInTheDocument();
     // The generic empty state should NOT appear when the legacy banner does.
     expect(screen.queryByText(/Henüz açıklama yok/)).toBeNull();
   });

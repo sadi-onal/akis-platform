@@ -192,4 +192,96 @@ describe('ExplainabilityService persistence (F-03 + F-11 / NFR-1)', () => {
       await db.delete(users).where(eq(users.id, localUserId));
     }
   });
+
+  // Review-fix #1: brand-new (non-terminal) pipeline with zero reasoning rows
+  // must NOT trip the legacy banner — it just hasn't emitted anything yet.
+  it('active pipeline with no reasoning does NOT get persistencePreEpoch flag (review #1)', async (t) => {
+    if (SKIP) {
+      t.skip('SKIP_DB_TESTS or DATABASE_URL not set');
+      return;
+    }
+    const localUserId = randomUUID();
+    const localPipelineId = randomUUID();
+    await db.insert(users).values({
+      id: localUserId,
+      name: 'active-test',
+      email: `active-test-${localUserId}@example.com`,
+      passwordHash: 'x',
+    });
+    await db.insert(pipelines).values({
+      id: localPipelineId,
+      userId: localUserId,
+      stage: 'scribe_clarifying', // not terminal
+      title: 'active pipeline',
+    });
+
+    try {
+      const reader = new ExplainabilityService();
+      const explanation = await reader.getExplanation(localPipelineId);
+      assert.equal(explanation.stages.length, 0);
+      assert.equal(
+        explanation.meta?.persistencePreEpoch,
+        undefined,
+        'active pipelines must not get the legacy banner',
+      );
+    } finally {
+      await db.delete(pipelines).where(eq(pipelines.id, localPipelineId));
+      await db.delete(users).where(eq(users.id, localUserId));
+    }
+  });
+
+  // Review-fix #3: stage order is stable across regeneration. Re-adding
+  // Scribe after Proto already wrote its row must NOT bump Scribe to the
+  // end of the chronological order on a fresh-process read.
+  it('stage order is stable when scribe is regenerated after proto (review #3)', async (t) => {
+    if (SKIP) {
+      t.skip('SKIP_DB_TESTS or DATABASE_URL not set');
+      return;
+    }
+    const localUserId = randomUUID();
+    const localPipelineId = randomUUID();
+    await db.insert(users).values({
+      id: localUserId,
+      name: 'reorder-test',
+      email: `reorder-test-${localUserId}@example.com`,
+      passwordHash: 'x',
+    });
+    await db.insert(pipelines).values({
+      id: localPipelineId,
+      userId: localUserId,
+      stage: 'completed',
+      title: 'reorder test',
+    });
+
+    try {
+      // Process #1: scribe → proto (in chronological order).
+      const writer = new ExplainabilityService();
+      await writer.addReasoning(localPipelineId, reasoningOf('scribe', 80));
+      // Small delay to ensure scribe row's recordedAt < proto's.
+      await new Promise((r) => setTimeout(r, 25));
+      await writer.addReasoning(localPipelineId, reasoningOf('proto', 85));
+      await new Promise((r) => setTimeout(r, 25));
+      // Re-add scribe (regeneration after proto already exists). With the
+      // fix in place, the upsert keeps the original `recordedAt`, so a
+      // fresh read still returns scribe → proto.
+      await writer.addReasoning(localPipelineId, reasoningOf('scribe', 90));
+
+      // Fresh-process read.
+      const reader = new ExplainabilityService();
+      const recovered = await reader.getExplanation(localPipelineId);
+      assert.equal(recovered.stages.length, 2);
+      const order = recovered.stages.map((s) => s.agentName);
+      assert.deepEqual(
+        order,
+        ['scribe', 'proto'],
+        'scribe must remain before proto even after regeneration',
+      );
+      // Confirm the upsert *did* update the payload (confidence bumped 80→90).
+      const scribe = recovered.stages.find((s) => s.agentName === 'scribe');
+      assert.equal(scribe!.confidence.score, 90);
+    } finally {
+      await db.delete(pipelines).where(eq(pipelines.id, localPipelineId));
+      await db.delete(users).where(eq(users.id, localUserId));
+    }
+  });
 });

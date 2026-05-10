@@ -60,16 +60,28 @@ const activityBuffers = new Map<string, PipelineActivity[]>();
 
 // ── Persistence wiring ────────────────────────────────────────────────────
 //
-// Default uses the global Drizzle client. Tests can swap it for a fake.
+// Default uses the global Drizzle client in normal operation, BUT defaults to
+// `null` under test environments. Without this guard, `emitActivity` callers
+// in unit tests fire fire-and-forget DB writes against the real default
+// client, which either fails noisy (FK violation when the pipeline row
+// doesn't exist) or piles connection attempts into the pg pool when
+// DATABASE_URL is unreachable. Integration tests opt back in by calling
+// `resetActivityDb()` (or by setActivityDb(realDb)).
 type ActivityDb = Pick<typeof defaultDb, 'insert' | 'select'>;
-let _db: ActivityDb | null = defaultDb;
+const IS_TEST_ENV =
+  process.env.NODE_ENV === 'test' || process.env.SKIP_DB_TESTS === 'true';
+let _db: ActivityDb | null = IS_TEST_ENV ? null : defaultDb;
 
 /** Override the DB used for activity persistence. `null` = cache-only (tests). */
 export function setActivityDb(db: ActivityDb | null): void {
   _db = db;
 }
 
-/** Reset to the global default Drizzle client (typically called from afterEach). */
+/**
+ * Reset to the global default Drizzle client. Integration tests that DO want
+ * to exercise the persistence path call this in `before(...)` to opt back in
+ * after the test-env auto-null default. Production code never needs this.
+ */
 export function resetActivityDb(): void {
   _db = defaultDb;
 }
@@ -125,10 +137,18 @@ export async function getRecentActivities(
   limit = DB_RECENT_LIMIT
 ): Promise<PipelineActivity[]> {
   const cached = activityBuffers.get(pipelineId);
-  if (cached !== undefined && cached.length > 0) {
+  // Short-circuit on cache only when the cache can actually satisfy the
+  // requested limit. The ring buffer is hard-capped at ACTIVITY_BUFFER_LIMIT
+  // (50) — for callers asking for more (e.g. fresh page reload wanting up to
+  // 100), the cache is necessarily incomplete on a long-running pipeline, so
+  // we must fall through to the DB read.
+  if (cached !== undefined && cached.length > 0 && cached.length >= limit) {
     return cached.slice(-limit);
   }
-  if (!_db) return [];
+  if (!_db) {
+    // No persistence configured — best-effort: return whatever cache holds.
+    return cached ? cached.slice(-limit) : [];
+  }
   const rows = await _db
     .select({
       pipelineId: pipelineActivities.pipelineId,

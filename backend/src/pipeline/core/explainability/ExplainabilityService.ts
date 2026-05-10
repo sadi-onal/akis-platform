@@ -13,13 +13,26 @@
 import { and, asc, eq, isNull } from 'drizzle-orm';
 
 import { db as defaultDb } from '../../../db/client.js';
-import { pipelineReasonings } from '../../../db/schema.js';
+import { pipelineReasonings, pipelines } from '../../../db/schema.js';
 import type {
   AgentReasoning,
   AttentionPoint,
   PipelineExplanation,
   ExplainabilityConfig,
 } from './ExplainabilityTypes.js';
+
+/**
+ * Pipeline stages that mean "pipeline is done — no more reasoning will be
+ * written." Only completed pipelines with zero reasoning rows should trip the
+ * `persistencePreEpoch` flag; an actively-running pipeline that just hasn't
+ * emitted yet is NOT legacy.
+ */
+const TERMINAL_STAGES: ReadonlySet<string> = new Set([
+  'completed',
+  'completed_partial',
+  'failed',
+  'cancelled',
+]);
 
 const DEFAULT_CONFIG: ExplainabilityConfig = {
   verbosity: 'standard',
@@ -81,7 +94,11 @@ export class ExplainabilityService {
         target: [pipelineReasonings.pipelineId, pipelineReasonings.stage],
         set: {
           agentReasoning: reasoning,
-          recordedAt: new Date(),
+          // NOTE: `recordedAt` is intentionally NOT updated on conflict.
+          // `loadStages` orders by `recordedAt`, and re-adding a stage (e.g.
+          // Scribe regeneration after Proto already ran) must NOT move the
+          // row to the end of the chronological order. Cache and DB agree on
+          // first-write-wins ordering this way.
           // Re-adding a stage clears any prior soft-delete.
           archivedAt: null,
         },
@@ -91,13 +108,15 @@ export class ExplainabilityService {
   /**
    * Build the full PipelineExplanation. Cache-first; on miss, hydrate from DB
    * (filtering out soft-deleted rows). The returned object includes a `meta`
-   * field that flags "persistencePreEpoch" — true when the DB has no rows for
-   * a known-completed pipeline so the frontend can show the legacy banner.
+   * field that flags "persistencePreEpoch" — true when a *terminal* pipeline
+   * has no rows in `pipeline_reasonings`, which means it ran before this
+   * persistence layer existed. Active/in-flight pipelines with zero rows do
+   * NOT trip the flag — they just haven't emitted yet.
    */
   async getExplanation(pipelineId: string): Promise<PipelineExplanation> {
     const stages = await this.loadStages(pipelineId);
     const meta: PipelineExplanation['meta'] = {};
-    if (stages.length === 0) {
+    if (stages.length === 0 && (await this.isTerminalPipeline(pipelineId))) {
       meta.persistencePreEpoch = true;
     }
     return {
@@ -133,6 +152,25 @@ export class ExplainabilityService {
   }
 
   // --- private helpers ---------------------------------------------------
+
+  /**
+   * True iff the pipeline row exists AND its stage is one of the terminal
+   * states. Used to gate the `persistencePreEpoch` banner — only a finished
+   * pipeline with zero reasoning rows can be a "legacy pre-persistence" one.
+   * Cache-only mode (db === null) returns `false` so unit tests that do not
+   * set up a pipeline row don't get the banner accidentally.
+   */
+  private async isTerminalPipeline(pipelineId: string): Promise<boolean> {
+    if (!this.db) return false;
+    const rows = await this.db
+      .select({ stage: pipelines.stage })
+      .from(pipelines)
+      .where(eq(pipelines.id, pipelineId))
+      .limit(1);
+    const stage = rows[0]?.stage;
+    if (!stage) return false;
+    return TERMINAL_STAGES.has(stage);
+  }
 
   private async loadStages(pipelineId: string): Promise<AgentReasoning[]> {
     const cached = this.cache.get(pipelineId);

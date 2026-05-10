@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { ExplainabilityService } from '../ExplainabilityService.js';
+import type { ExplainabilityDb } from '../ExplainabilityService.js';
 import type { AgentReasoning } from '../ExplainabilityTypes.js';
 
 function makeReasoning(overrides: Partial<AgentReasoning> = {}): AgentReasoning {
@@ -116,8 +117,83 @@ describe('ExplainabilityService', () => {
     assert.equal(explanation.stages.length, 0);
     assert.equal(explanation.attentionPoints.length, 0);
     assert.ok(explanation.overallNarrative.includes('henuz'));
-    // F-11 backfill flag — empty pipeline ⇒ persistencePreEpoch hint
-    assert.equal(explanation.meta?.persistencePreEpoch, true);
+    // Cache-only mode (db: null) cannot determine pipeline status, so the
+    // persistencePreEpoch flag stays unset. This is intentional —
+    // see review-fix #1: only terminal pipelines with zero rows trip it.
+    assert.equal(explanation.meta?.persistencePreEpoch, undefined);
+  });
+
+  // ─── 6b. persistencePreEpoch is gated on pipeline status (review #1) ──
+
+  /**
+   * Build a minimal Drizzle-shape stub that returns canned responses for
+   * `select(...).from(...).where(...)`. Inspects the `name` symbol on the
+   * table to decide which rows to return:
+   *   - reasonings table → reasoningRows
+   *   - pipelines table → pipelineRows
+   * Any insert is a no-op.
+   */
+  function dbStub({
+    pipelineRows,
+    reasoningRows,
+  }: {
+    pipelineRows: Array<{ stage: string }>;
+    reasoningRows: Array<unknown>;
+  }) {
+    return {
+      insert: () => ({
+        values: () => ({
+          onConflictDoUpdate: async () => undefined,
+        }),
+      }),
+      select: () => ({
+        from: (table: unknown) => {
+          // Distinguish the two real tables by a column unique to each:
+          //   - pipelines has `userId`
+          //   - pipeline_reasonings has `agentReasoning`
+          // Either is enough as a brand check.
+          const t = table as Record<string, unknown>;
+          const isPipelines = 'userId' in t;
+          const make = (rows: unknown[]) => ({
+            where: () => ({
+              limit: async () => rows,
+              orderBy: async () => rows,
+            }),
+          });
+          return isPipelines ? make(pipelineRows) : make(reasoningRows);
+        },
+      }),
+    } as unknown as ExplainabilityDb;
+  }
+
+  it('does NOT set persistencePreEpoch for an active pipeline with no stages yet', async () => {
+    const fakeDb = dbStub({
+      pipelineRows: [{ stage: 'scribe_clarifying' }],
+      reasoningRows: [],
+    });
+    const s = new ExplainabilityService({ db: fakeDb });
+    const explanation = await s.getExplanation('active-pipeline');
+    assert.equal(explanation.stages.length, 0);
+    assert.equal(
+      explanation.meta?.persistencePreEpoch,
+      undefined,
+      'active pipelines must NOT trip the legacy banner',
+    );
+  });
+
+  it('SETS persistencePreEpoch for a completed pipeline with no stages', async () => {
+    const fakeDb = dbStub({
+      pipelineRows: [{ stage: 'completed' }],
+      reasoningRows: [],
+    });
+    const s = new ExplainabilityService({ db: fakeDb });
+    const explanation = await s.getExplanation('legacy-pipeline');
+    assert.equal(explanation.stages.length, 0);
+    assert.equal(
+      explanation.meta?.persistencePreEpoch,
+      true,
+      'completed pipeline with zero stages → legacy banner',
+    );
   });
 
   // ─── 7. Multiple pipelines stored independently ──────────────

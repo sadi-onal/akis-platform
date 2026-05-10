@@ -91,14 +91,17 @@ describe('ExplainabilityService', () => {
     assert.equal(securityPoint.severity, 'high');
   });
 
-  it('returns empty stages for unknown pipeline + flags persistencePreEpoch', async () => {
+  it('returns empty stages for unknown pipeline (cache-only mode keeps preEpoch flag clear)', async () => {
     const s = svc();
     const explanation = await s.getExplanation('nonexistent');
     assert.equal(explanation.pipelineId, 'nonexistent');
     assert.equal(explanation.stages.length, 0);
     assert.equal(explanation.attentionPoints.length, 0);
     assert.ok(explanation.overallNarrative.includes('henuz'));
-    assert.equal(explanation.meta?.persistencePreEpoch, true);
+    // Review-fix #1: cache-only mode (db === null) cannot determine pipeline
+    // status, so persistencePreEpoch stays unset. Integration suite covers
+    // the actual terminal-pipeline gating with a real DB.
+    assert.equal(explanation.meta?.persistencePreEpoch, undefined);
   });
 
   it('keeps pipelines isolated from each other', async () => {
@@ -212,14 +215,94 @@ describe('ExplainabilityService', () => {
     await s.addReasoning('wt', makeReasoning({ agentName: 'proto' }));
     assert.equal(inserts, 2, 'each addReasoning should write through to the DB');
   });
+
+  // ─── persistencePreEpoch terminal-gate (review-fix #1) ─────────────────
+
+  it('persistencePreEpoch is NOT set for an active pipeline with no stages', async () => {
+    // Active stage like `scribe_clarifying` — the pipeline JUST started and
+    // hasn't emitted reasoning yet. Banner must NOT fire.
+    const fakeDb = makeFakeDb({
+      pipelineRows: [{ stage: 'scribe_clarifying' }],
+      reasoningRows: [],
+    });
+    const s = new ExplainabilityService({ db: fakeDb });
+    const explanation = await s.getExplanation('active');
+    assert.equal(explanation.stages.length, 0);
+    assert.equal(
+      explanation.meta?.persistencePreEpoch,
+      undefined,
+      'active pipelines must not get the legacy banner',
+    );
+  });
+
+  it('persistencePreEpoch IS set for a completed pipeline with no stages', async () => {
+    const fakeDb = makeFakeDb({
+      pipelineRows: [{ stage: 'completed' }],
+      reasoningRows: [],
+    });
+    const s = new ExplainabilityService({ db: fakeDb });
+    const explanation = await s.getExplanation('legacy');
+    assert.equal(explanation.stages.length, 0);
+    assert.equal(
+      explanation.meta?.persistencePreEpoch,
+      true,
+      'completed pipeline with zero stages → legacy banner',
+    );
+  });
+
+  it('persistencePreEpoch IS set for failed/cancelled/completed_partial terminal stages', async () => {
+    for (const stage of ['failed', 'cancelled', 'completed_partial']) {
+      const fakeDb = makeFakeDb({
+        pipelineRows: [{ stage }],
+        reasoningRows: [],
+      });
+      const s = new ExplainabilityService({ db: fakeDb });
+      const explanation = await s.getExplanation(`p-${stage}`);
+      assert.equal(
+        explanation.meta?.persistencePreEpoch,
+        true,
+        `stage ${stage} should be considered terminal`,
+      );
+    }
+  });
+
+  it('persistencePreEpoch is NOT set for proto_building / awaiting_approval', async () => {
+    for (const stage of ['proto_building', 'awaiting_approval', 'trace_testing']) {
+      const fakeDb = makeFakeDb({
+        pipelineRows: [{ stage }],
+        reasoningRows: [],
+      });
+      const s = new ExplainabilityService({ db: fakeDb });
+      const explanation = await s.getExplanation(`p-${stage}`);
+      assert.equal(
+        explanation.meta?.persistencePreEpoch,
+        undefined,
+        `stage ${stage} is non-terminal, banner must NOT fire`,
+      );
+    }
+  });
 });
 
 /**
- * Minimal Drizzle-shape stub. Mirrors `.insert(...).values(...).onConflictDoUpdate(...)`
- * and `.select(...).from(...).where(...).orderBy(...)` chains. Returns thenables so
- * the service can `await` the calls without a real connection.
+ * Minimal Drizzle-shape stub. Mirrors:
+ *   - `.insert(...).values(...).onConflictDoUpdate(...)`
+ *   - `.select(...).from(...).where(...).orderBy(...)` for reasoning load
+ *   - `.select(...).from(...).where(...).limit(...)` for the pipelines lookup
+ *     used by `isTerminalPipeline` (review-fix #1)
+ * Returns thenables so the service can `await` without a real connection.
+ *
+ * `pipelineRows` lets a test control what the pipelines lookup returns —
+ * use `[{ stage: 'completed' }]` for a terminal pipeline, `[]` for unknown,
+ * or `[{ stage: 'scribe_clarifying' }]` for an active one.
  */
-function makeFakeDb(opts: { onSelect?: () => void; onInsert?: () => void }) {
+function makeFakeDb(opts: {
+  onSelect?: () => void;
+  onInsert?: () => void;
+  pipelineRows?: Array<{ stage: string }>;
+  reasoningRows?: unknown[];
+}) {
+  const pipelineRows = opts.pipelineRows ?? [];
+  const reasoningRows = opts.reasoningRows ?? [];
   return {
     insert() {
       return {
@@ -240,13 +323,22 @@ function makeFakeDb(opts: { onSelect?: () => void; onInsert?: () => void }) {
     },
     select() {
       return {
-        from() {
+        from(table: unknown) {
+          // Distinguish the two real tables by a column unique to each:
+          //   - pipelines has `userId`
+          //   - pipeline_reasonings has `agentReasoning`
+          const t = table as Record<string, unknown>;
+          const isPipelines = 'userId' in t;
           return {
             where() {
               return {
                 orderBy() {
                   opts.onSelect?.();
-                  return Promise.resolve([]);
+                  return Promise.resolve(reasoningRows);
+                },
+                limit() {
+                  opts.onSelect?.();
+                  return Promise.resolve(isPipelines ? pipelineRows : reasoningRows);
                 },
               };
             },
