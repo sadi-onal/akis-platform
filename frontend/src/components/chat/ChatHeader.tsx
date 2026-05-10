@@ -1,4 +1,5 @@
 import { cn } from '../../utils/cn';
+import { useI18n } from '../../i18n/useI18n';
 import type { ChatMode } from '../../types/chat';
 import type { WorkflowTokenUsage } from '../../types/workflow';
 import { TokenGauge } from './TokenGauge';
@@ -11,12 +12,13 @@ const MODE_STYLES: Record<ChatMode, string> = {
 };
 
 // Bakkal-language one-liners — see docs/product/02-ux.md § 6 + 05-findings F-05.
-// Tooltip text is intentionally jargon-free (no "Scribe / Proto / Trace / spec").
-const MODE_DESCRIPTIONS: Record<ChatMode, string> = {
-  ask: 'Sorularını yanıtlıyoruz',
-  plan: 'Yapılacakları planlıyoruz',
-  act: 'Kodu yazıyoruz',
-  review: 'Sonucu birlikte gözden geçiriyoruz',
+// Tooltip text is intentionally jargon-free (no "Scribe / Proto / Trace / spec");
+// strings live in `frontend/src/i18n/locales/{tr,en}.json` under `chat.modeBadge.*`.
+const MODE_TOOLTIP_KEYS: Record<ChatMode, 'chat.modeBadge.ask' | 'chat.modeBadge.plan' | 'chat.modeBadge.act' | 'chat.modeBadge.review'> = {
+  ask: 'chat.modeBadge.ask',
+  plan: 'chat.modeBadge.plan',
+  act: 'chat.modeBadge.act',
+  review: 'chat.modeBadge.review',
 };
 
 interface ChatHeaderProps {
@@ -53,6 +55,8 @@ export function ChatHeader({
   showBackButton,
   tokenUsage,
 }: ChatHeaderProps) {
+  const { t } = useI18n();
+  const modeTooltip = mode ? t(MODE_TOOLTIP_KEYS[mode]) : '';
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-ak-border bg-ak-surface px-4 py-3 z-10">
       {showBackButton && (
@@ -81,8 +85,8 @@ export function ChatHeader({
           role="status"
           data-testid="chat-mode-badge"
           className="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400"
-          title="Bir sorun çıktı: detaylar için sohbeti inceleyin"
-          aria-label="Bir sorun çıktı"
+          title={t('chat.modeBadge.failed.title')}
+          aria-label={t('chat.modeBadge.failed.aria')}
         >
           HATA
         </span>
@@ -94,8 +98,8 @@ export function ChatHeader({
             'rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
             MODE_STYLES[mode]
           )}
-          title={MODE_DESCRIPTIONS[mode]}
-          aria-label={MODE_DESCRIPTIONS[mode]}
+          title={modeTooltip}
+          aria-label={modeTooltip}
         >
           {mode}
         </span>
