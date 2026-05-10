@@ -17,6 +17,7 @@ import { extractJsonSafe, sanitizeJsonControlChars, repairTruncatedJson } from '
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { PROTO_TOOLS, createProtoToolHandlers, type ProtoToolDeps } from './proto-tools.js';
+import { ScaffoldEnricher, type ScaffoldFile } from './ScaffoldEnricher.js';
 import type { SkillRegistry } from '../skills/index.js';
 import {
   buildSystemPromptWithSkills,
@@ -238,6 +239,13 @@ export class ProtoAgent {
   private github: ProtoGitHubDeps;
   private agenticDeps?: AgenticLoopDeps;
   private skillRegistry?: SkillRegistry;
+  /**
+   * F-08 / FR-6.5..6.8 — adds install.sh, Turkish README sections, optional
+   * Dockerfile and .env.example so the bakkal can run / deploy / share the
+   * project. Invoked at all push paths via {@link applyEnrichment} so the
+   * portability layer ships with every scaffold (legacy, iteration, agentic).
+   */
+  private enricher: ScaffoldEnricher = new ScaffoldEnricher();
 
   constructor(
     ai: ProtoAIDeps,
@@ -249,6 +257,25 @@ export class ProtoAgent {
     this.github = github;
     this.agenticDeps = agenticDeps;
     this.skillRegistry = skillRegistry;
+  }
+
+  /**
+   * Run scaffold enrichment on Proto-shape files (filePath/content) and
+   * return enriched Proto-shape files. Detects the stack, generates the
+   * portability layer (install.sh, README sections, optional Dockerfile,
+   * .env.example), and merges with what the AI produced.
+   */
+  private applyEnrichment(
+    files: ProtoOutput['files'],
+    spec: { title: string; description?: string },
+  ): ProtoOutput['files'] {
+    const scaffoldFiles: ScaffoldFile[] = files.map((f) => ({ path: f.filePath, content: f.content }));
+    const enriched = this.enricher.enrich(scaffoldFiles, spec);
+    return enriched.map((f) => ({
+      filePath: f.path,
+      content: f.content,
+      linesOfCode: f.content.split('\n').length,
+    }));
   }
 
   private enhance(basePrompt: string): string {
@@ -280,8 +307,25 @@ export class ProtoAgent {
       return scaffoldResult;
     }
 
-    const { files, setupCommands, metadata } = scaffoldResult.data;
-    emit?.('parsing', `AI yanıtından dosya yapısı çıkarıldı: ${files.length} dosya`, 55);
+    const { files: rawFiles, setupCommands, metadata } = scaffoldResult.data;
+    emit?.('parsing', `AI yanıtından dosya yapısı çıkarıldı: ${rawFiles.length} dosya`, 55);
+
+    // F-08: enrich AI output with portability layer (install.sh + Turkish
+    // README + optional Dockerfile + .env.example) — see ScaffoldEnricher.ts.
+    const files = this.applyEnrichment(rawFiles, {
+      title: input.spec.title,
+      description: input.spec.problemStatement,
+    });
+
+    // F-08 review fix: keep metadata counts in sync with the post-enrichment
+    // `files` array. The AI's metadata reports the pre-enrichment count, but
+    // `files` is the enriched superset that's actually pushed and surfaced to
+    // the user. The agentic path already does this (line 705); legacy did not.
+    const enrichedMetadata = {
+      ...metadata,
+      filesCreated: files.length,
+      totalLinesOfCode: files.reduce((sum, f) => sum + f.linesOfCode, 0),
+    };
 
     if (input.dryRun) {
       return {
@@ -293,7 +337,7 @@ export class ProtoAgent {
           repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
           files,
           setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
-          metadata: { ...metadata, committed: false },
+          metadata: { ...enrichedMetadata, committed: false },
         },
       };
     }
@@ -331,7 +375,7 @@ export class ProtoAgent {
         files,
         prUrl,
         setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
-        metadata: { ...metadata, committed: true },
+        metadata: { ...enrichedMetadata, committed: true },
       },
     };
   }
@@ -444,11 +488,19 @@ JSON format (respond with ONLY this, nothing else):
       };
     }
 
-    const files = parsedFiles.map((f) => ({
+    const rawIterFiles = parsedFiles.map((f) => ({
       filePath: f.filePath,
       content: f.content,
       linesOfCode: f.linesOfCode ?? f.content.split('\n').length,
     }));
+
+    // F-08: re-enrich on iteration so re-runs keep the portability layer.
+    // The enricher is idempotent — README sections won't double-append, and
+    // existing install.sh / Dockerfile / .env.example are preserved as-is.
+    const files = this.applyEnrichment(rawIterFiles, {
+      title: input.spec.title,
+      description: input.spec.problemStatement,
+    });
 
     // Push updated files to GitHub
     emit?.('github_push', `${files.length} dosya güncelleniyor...`, 75);
@@ -497,11 +549,34 @@ JSON format (respond with ONLY this, nothing else):
       return repoResult;
     }
 
+    // F-08: track the LLM's pre-enrichment file list so we report what was
+    // actually pushed (enriched superset) downstream. Closure-captured so the
+    // post-tool block below can prefer enriched files over the raw tool input.
+    let enrichedPushed: ProtoOutput['files'] | undefined;
+
     // Build tool handlers — create_repository is excluded from the tool list
     // passed to the loop (repo already exists), only push_files is needed.
+    // F-08: wrap pushFiles to enrich the AI's file array right before the
+    // GitHub commit. This is the single agentic-path interception point —
+    // the LLM still sees push_files succeed and reports its summary, but
+    // the bytes that land on GitHub include install.sh + Turkish README +
+    // Dockerfile + .env.example. See FR-6.5..6.8 / 03-architecture § 5.4.
     const toolDeps: ProtoToolDeps = {
       createRepository: (owner, name, isPrivate) => this.github.createRepository(owner, name, isPrivate),
-      pushFiles: (owner, repo, branch, files, message) => this.github.pushFiles!(owner, repo, branch, files, message),
+      pushFiles: async (owner, repo, branch, files, message) => {
+        const enriched = this.applyEnrichment(
+          files.map((f) => ({ filePath: f.path, content: f.content, linesOfCode: f.content.split('\n').length })),
+          { title: input.spec.title, description: input.spec.problemStatement },
+        );
+        enrichedPushed = enriched;
+        await this.github.pushFiles!(
+          owner,
+          repo,
+          branch,
+          enriched.map((f) => ({ path: f.filePath, content: f.content })),
+          message,
+        );
+      },
     };
     const handlers = createProtoToolHandlers(toolDeps);
 
@@ -601,11 +676,17 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
         };
       }
 
-      const files = (pushCall.input.files as Array<{ path: string; content: string }>).map((f) => ({
-        filePath: f.path,
-        content: f.content,
-        linesOfCode: f.content.split('\n').length,
-      }));
+      // F-08: if the wrapped pushFiles ran successfully it stored the enriched
+      // file array in `enrichedPushed`. Prefer that over `pushCall.input.files`
+      // so downstream metadata (filesCreated, totalLinesOfCode) reflects what
+      // actually landed on GitHub — including the bakkal portability layer.
+      const files: ProtoOutput['files'] =
+        enrichedPushed ??
+        (pushCall.input.files as Array<{ path: string; content: string }>).map((f) => ({
+          filePath: f.path,
+          content: f.content,
+          linesOfCode: f.content.split('\n').length,
+        }));
 
       const totalLOC = files.reduce((sum, f) => sum + f.linesOfCode, 0);
 
@@ -1019,11 +1100,20 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
         '[Proto] verifyRepoPushed: listFiles result',
       );
 
-      // If we know which paths were pushed, require at least one to be present.
-      // This catches the auto_init false-positive: repo has only README.md from
-      // GitHub init, but none of the scaffold files we tried to push.
+      // If we know which paths were pushed, require at least one *non-trivial*
+      // path to be present. This catches the auto_init false-positive: repo
+      // has only README.md from GitHub init, but none of the scaffold files
+      // we tried to push.
+      // F-08: ScaffoldEnricher now ALSO adds README.md to every scaffold, so a
+      // README.md match alone is no longer sufficient evidence of a real push
+      // — auto_init's README would still match. Exclude README.md (and the
+      // similarly-trivial root .gitignore) from the match set so the detector
+      // remains as strict as it was pre-F-08.
+      const TRIVIAL_AUTO_INIT_PATHS = new Set(['README.md', '.gitignore']);
       if (pushedPaths && pushedPaths.length > 0) {
-        const matchedCount = pushedPaths.filter((p) => repoFileSet.has(p)).length;
+        const matchedCount = pushedPaths
+          .filter((p) => !TRIVIAL_AUTO_INIT_PATHS.has(p))
+          .filter((p) => repoFileSet.has(p)).length;
         if (matchedCount === 0) {
           logger.error(
             { owner, repo, branch, expectedFileCount, actualFileCount: repoFiles.length, pushedPaths: pushedPaths.slice(0, 5) },
