@@ -30,6 +30,12 @@ export interface AskRequest {
   message: string;
   pipelineId?: string;
   history?: ChatHistoryEntry[];
+  /**
+   * Optional AbortSignal. When the signal aborts, the fetch is cancelled and
+   * the iterator throws a `DOMException('aborted', 'AbortError')` that the
+   * caller should swallow if expected (e.g. unmount, new send replacing old).
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -103,8 +109,15 @@ function parseSSEBlock(block: string): QAEvent | null {
 /**
  * Async iterator over the SSE stream. Splits the body buffer on the SSE block
  * delimiter (`\n\n`) and yields parsed QAEvents until the stream closes.
+ *
+ * Cancellation: when the optional `signal` aborts, the reader is cancelled and
+ * the iterator throws a `DOMException('aborted', 'AbortError')`. Callers that
+ * abort intentionally (unmount, superseded send) should catch and ignore it.
  */
-async function* readSSEStream(response: Response): AsyncGenerator<QAEvent> {
+async function* readSSEStream(
+  response: Response,
+  signal?: AbortSignal,
+): AsyncGenerator<QAEvent> {
   if (!response.body) {
     yield {
       type: 'error',
@@ -116,6 +129,18 @@ async function* readSSEStream(response: Response): AsyncGenerator<QAEvent> {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  // If the caller aborts, cancel the reader so the underlying fetch stops too.
+  const onAbort = () => {
+    try {
+      reader.cancel().catch(() => {});
+    } catch {
+      /* already cancelled */
+    }
+  };
+  if (signal) {
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  }
   try {
     while (true) {
       const { value, done } = await reader.read();
@@ -130,12 +155,18 @@ async function* readSSEStream(response: Response): AsyncGenerator<QAEvent> {
         if (ev) yield ev;
       }
     }
+    // If we exited the loop because of an abort, surface it as AbortError
+    // rather than a silent end-of-stream.
+    if (signal?.aborted) {
+      throw new DOMException('aborted', 'AbortError');
+    }
     // Flush any trailing block (rare — most servers terminate cleanly with \n\n).
     if (buffer.trim()) {
       const ev = parseSSEBlock(buffer);
       if (ev) yield ev;
     }
   } finally {
+    if (signal) signal.removeEventListener('abort', onAbort);
     try {
       reader.releaseLock();
     } catch {
@@ -151,11 +182,13 @@ export const chatQaApi = {
    * runtime failures inside the stream.
    */
   async *ask(req: AskRequest): AsyncGenerator<QAEvent> {
+    const { signal, ...payload } = req;
     const response = await fetch(`${baseUrl()}/api/chat-qa/ask`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify(req),
+      body: JSON.stringify(payload),
+      signal,
     });
     if (!response.ok) {
       let message = `İstek başarısız: ${response.status}`;
@@ -168,6 +201,6 @@ export const chatQaApi = {
       yield { type: 'error', code: `HTTP_${response.status}`, message };
       return;
     }
-    yield* readSSEStream(response);
+    yield* readSSEStream(response, signal);
   },
 };

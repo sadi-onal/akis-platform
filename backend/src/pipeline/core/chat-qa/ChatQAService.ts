@@ -56,9 +56,11 @@ export interface QAResponse {
 export interface ChatQADeps {
   aiService: AIServiceLike;
   /**
-   * Optional RAG service. The current MVP reads spec/proto from the pipelines
-   * row directly; a future iteration will plug in Piri RAG (`PiriRAGService`)
-   * for embedding-based retrieval. Kept on the Deps for forward compat.
+   * Optional RAG service slot. Accepted on Deps for forward compat but NOT
+   * stored or consumed yet — see TODO(F-09 follow-up) in `loadPipelineContext`.
+   * The MVP reads spec/proto from the pipelines row directly. Once Piri RAG
+   * lands, this slot will be stored on the service and queried for top-K
+   * embedding hits before the AI call.
    */
   ragService?: {
     query?: (question: string, topK?: number) => Promise<{ sources: Array<{ content: string; source: string; score: number }> }>;
@@ -124,6 +126,11 @@ interface PipelineContext {
  * Pull the pipeline blobs the assistant needs. Auth check is enforced upstream
  * (route-level requireAuth + ownership). On any error we return empty context;
  * the assistant degrades gracefully.
+ *
+ * TODO(F-09 follow-up): wire Piri RAG here. Today we read spec / proto / metrics
+ * directly from the pipelines row. Once `ChatQADeps.ragService` is consumed, we
+ * should query embeddings for the top-K most relevant chunks instead (or in
+ * addition to) raw blob reads, then merge the results into `PipelineContext`.
  */
 async function loadPipelineContext(
   db: NodePgDatabase<typeof schemaNs>,
@@ -280,16 +287,14 @@ export class ChatQAService {
   private readonly db: NodePgDatabase<typeof schemaNs>;
   private readonly logger: Logger;
   private readonly provider: string;
-  // RAG kept as an opt-in dep; used by `enrichContextWithRAG` once Piri RAG
-  // is wired here in a follow-up PR.
-  private readonly _ragService?: ChatQADeps['ragService'];
 
   constructor(deps: ChatQADeps) {
     this.aiService = deps.aiService;
     this.db = deps.db;
     this.logger = deps.logger;
     this.provider = deps.provider;
-    this._ragService = deps.ragService;
+    // NOTE: `deps.ragService` is intentionally accepted but not stored yet —
+    // see TODO(F-09 follow-up) below where spec/proto are read.
   }
 
   /**

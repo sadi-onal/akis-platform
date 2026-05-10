@@ -879,7 +879,23 @@ export default function ChatPage() {
   // updated in place as `chunk` events arrive. On `done` we flip
   // streaming=false and surface citations + the optional [BUILD] CTA.
   const messagesRef = useRef<ChatMessage[]>(messages);
-  messagesRef.current = messages;
+  // Sync the ref in a useEffect rather than during render — keeps render pure
+  // (the previous in-render assignment was a stale-on-bail correctness footgun).
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // One AbortController per in-flight chat-qa request. Aborting on (a) unmount,
+  // (b) a new send arriving while the previous one is still streaming.
+  // Without this, navigating away or re-asking would orphan the stream and
+  // double-bill the AI provider.
+  const askAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      askAbortRef.current?.abort();
+      askAbortRef.current = null;
+    };
+  }, []);
 
   const handleIntentAsk = useCallback(
     async (message: string) => {
@@ -895,6 +911,11 @@ export default function ChatPage() {
             return { role: 'assistant', content: m.content };
           return { role: 'assistant', content: (m as { content: string }).content };
         });
+
+      // Cancel any previous in-flight ask before starting a new one.
+      askAbortRef.current?.abort();
+      const controller = new AbortController();
+      askAbortRef.current = controller;
 
       setMessages((prev) => [
         ...prev,
@@ -930,8 +951,13 @@ export default function ChatPage() {
       try {
         for await (const ev of chatQaApi.ask({
           message,
+          // The `/chat/*` splat in App.tsx is the pipeline UUID — workflow IDs
+          // and pipeline IDs are 1:1 in this codebase (workflowsApi.get hits
+          // `/api/pipelines/${id}`), so `conversationId` is the pipelineId
+          // backend `eq(pipelines.id, pipelineId)` lookup expects.
           pipelineId: conversationId ?? undefined,
           history,
+          signal: controller.signal,
         })) {
           if (ev.type === 'chunk') {
             updateLast((m) => ({ ...m, content: m.content + ev.text }));
@@ -946,18 +972,30 @@ export default function ChatPage() {
               citations: ev.citations.length ? ev.citations : (m.citations ?? collectedCitations),
               needsBuild: ev.needsBuild,
             }));
+            if (askAbortRef.current === controller) askAbortRef.current = null;
             return;
           } else if (ev.type === 'error') {
             updateLast((m) => ({ ...m, streaming: false }));
             toast(`Soru cevaplanamadı: ${ev.message}`, 'error');
+            if (askAbortRef.current === controller) askAbortRef.current = null;
             return;
           }
         }
         // Stream ended without a `done` event — clean up the streaming flag.
         updateLast((m) => ({ ...m, streaming: false }));
       } catch (err) {
-        updateLast((m) => ({ ...m, streaming: false }));
-        toast(`Soru cevaplanamadı: ${localizeError(err)}`, 'error');
+        // Aborts (unmount or superseded send) are expected — swallow them so
+        // the user doesn't see a "Soru cevaplanamadı" toast for their own action.
+        const isAbort =
+          err instanceof DOMException && err.name === 'AbortError';
+        if (!isAbort) {
+          updateLast((m) => ({ ...m, streaming: false }));
+          toast(`Soru cevaplanamadı: ${localizeError(err)}`, 'error');
+        } else {
+          updateLast((m) => ({ ...m, streaming: false }));
+        }
+      } finally {
+        if (askAbortRef.current === controller) askAbortRef.current = null;
       }
     },
     [conversationId],

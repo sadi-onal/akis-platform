@@ -52,6 +52,34 @@ function writeEvent(res: ServerResponse, event: string, data: unknown): boolean 
   return res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
+/**
+ * Map a backend exception into a coarse client-safe category + a Bakkal-tone
+ * Turkish message. We never put the raw `err.message` on the wire — it can
+ * leak provider tokens, Postgres FATAL: lines, stack frame fragments, etc.
+ *
+ * The category lets the FE distinguish "we're rate-limited, try again soon"
+ * from "the AI provider is having a moment" without seeing the gory details.
+ */
+export function sanitizeChatQAError(err: unknown): { code: string; clientMessage: string } {
+  const raw = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
+  if (/\b401\b|unauthorized|forbidden|invalid api key|api key/.test(raw)) {
+    return {
+      code: 'CHAT_QA_AUTH',
+      clientMessage: 'Şu an cevap üretemiyoruz, biraz sonra tekrar deneyin.',
+    };
+  }
+  if (/\b429\b|rate ?limit|too many requests|quota/.test(raw)) {
+    return {
+      code: 'CHAT_QA_RATELIMIT',
+      clientMessage: 'Çok yoğunluk var, birkaç saniye sonra tekrar deneyin.',
+    };
+  }
+  return {
+    code: 'CHAT_QA_FAILED',
+    clientMessage: 'Şu an cevap üretemiyoruz, biraz sonra tekrar deneyin.',
+  };
+}
+
 // ─── Plugin ───────────────────────────────────────────────────────────────
 
 export async function chatQARoutes(
@@ -173,9 +201,14 @@ export async function chatQARoutes(
           needsBuild: !!result.needsBuild,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.warn({ err: msg }, '[chat-qa] answer failed');
-        safeWrite('error', { code: 'CHAT_QA_FAILED', message: msg });
+        // Log the full server-side detail (provider error, DB error, etc.) but
+        // never echo it to the client — it can leak provider tokens, Postgres
+        // FATAL: messages, etc. The FE renders this via toast, so we serve a
+        // single Bakkal-tone Turkish message with a coarse category code.
+        const rawMsg = err instanceof Error ? err.message : String(err);
+        logger.warn({ err: rawMsg }, '[chat-qa] answer failed');
+        const { code, clientMessage } = sanitizeChatQAError(err);
+        safeWrite('error', { code, message: clientMessage });
       } finally {
         if (!closed) {
           try {
