@@ -121,7 +121,7 @@ export function EmptyStateCard({ onDemoSelect, onManualStart }: EmptyStateCardPr
               key={demo.id}
               demo={demo}
               label={t(demo.labelKey)}
-              onClick={() => onDemoSelect(t(demo.ideaKey))}
+              onClick={() => onDemoSelect(demo.idea)}
             />
           ))}
         </div>

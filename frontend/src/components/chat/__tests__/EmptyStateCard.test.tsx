@@ -4,9 +4,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { EmptyStateCard } from '../EmptyStateCard';
 import { DEMO_PROJECTS } from '../demoProjects';
 
-// Identity-translator so we can assert on i18n keys directly. Demo idea text
-// comes through the same `t()`, so onDemoSelect receives the *ideaKey* (e.g.
-// "chat.empty.demo.todo.idea") — that's enough to verify the wiring.
+// Identity-translator so we can assert on i18n label keys directly. Idea text
+// is now a literal property on each DemoProject (`demo.idea`), so onDemoSelect
+// receives the raw Turkish prompt verbatim — see demoProjects.ts header.
 vi.mock('../../../i18n/useI18n', () => ({
   useI18n: () => ({
     t: (key: string) => key,
@@ -41,17 +41,20 @@ describe('EmptyStateCard', () => {
     expect(demoButtons).toHaveLength(4);
   });
 
-  it('fires onDemoSelect with the resolved idea text when a demo is clicked', () => {
-    const onDemoSelect = vi.fn();
-    render(<EmptyStateCard onDemoSelect={onDemoSelect} onManualStart={vi.fn()} />);
+  it.each(DEMO_PROJECTS.map((d) => [d.id, d.idea] as const))(
+    'fires onDemoSelect with the verbatim Turkish idea for demo %s',
+    (id, idea) => {
+      const onDemoSelect = vi.fn();
+      render(<EmptyStateCard onDemoSelect={onDemoSelect} onManualStart={vi.fn()} />);
 
-    fireEvent.click(screen.getByTestId('empty-state-demo-todo'));
-    expect(onDemoSelect).toHaveBeenCalledTimes(1);
-    expect(onDemoSelect).toHaveBeenCalledWith('chat.empty.demo.todo.idea');
-
-    fireEvent.click(screen.getByTestId('empty-state-demo-currency'));
-    expect(onDemoSelect).toHaveBeenLastCalledWith('chat.empty.demo.currency.idea');
-  });
+      fireEvent.click(screen.getByTestId(`empty-state-demo-${id}`));
+      expect(onDemoSelect).toHaveBeenCalledTimes(1);
+      expect(onDemoSelect).toHaveBeenCalledWith(idea);
+      // The idea must be substantial enough that useHandleSend won't reject it
+      // (its 10-char minimum is a structural contract here).
+      expect(idea.length).toBeGreaterThan(10);
+    },
+  );
 
   it('fires onManualStart when the manual-start button is clicked', () => {
     const onManualStart = vi.fn();
