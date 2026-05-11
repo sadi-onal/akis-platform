@@ -9,11 +9,20 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
+// PDP-3 B4: this integration suite predates the preview-confirm gate and
+// exercises the full "Proto → Trace → completed" legacy flow with real
+// ProtoAgent/TraceAgent instances. Opt back into auto-push so the
+// orchestrator does not halt at `awaiting_push_confirm`.
+process.env.AUTO_PUSH_AFTER_PROTO = 'true';
+
 import {
   PipelineOrchestrator,
   type PipelineStore,
   type PipelineStateUpdate,
 } from '../../src/pipeline/core/orchestrator/PipelineOrchestrator.js';
+import { __clearEnvCacheForTests } from '../../src/config/env.js';
+
+__clearEnvCacheForTests();
 import { ScribeAgent, type ScribeAIDeps } from '../../src/pipeline/agents/scribe/ScribeAgent.js';
 import { ProtoAgent, type ProtoAIDeps, type ProtoGitHubDeps } from '../../src/pipeline/agents/proto/ProtoAgent.js';
 import { TraceAgent, type TraceAIDeps, type TraceGitHubDeps } from '../../src/pipeline/agents/trace/TraceAgent.js';

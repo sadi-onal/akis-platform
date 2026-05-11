@@ -334,6 +334,24 @@ export async function pipelinePlugin(fastify: FastifyInstance, opts: PipelinePlu
     }
   );
 
+  // PDP-3 B4: POST /api/pipelines/:id/confirm-push — user confirms scaffold push
+  fastify.post(
+    '/:id/confirm-push',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.confirmPush(request);
+    }
+  );
+
+  // PDP-3 B4: POST /api/pipelines/:id/cancel-push — user declines scaffold push
+  fastify.post(
+    '/:id/cancel-push',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.cancelPush(request);
+    }
+  );
+
   // PATCH /api/pipelines/:id/title — rename pipeline
   fastify.route({
     method: 'PATCH',

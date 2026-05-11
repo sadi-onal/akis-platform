@@ -1272,6 +1272,14 @@ export class PipelineOrchestrator {
     // so downstream Proto + Trace calls can see the same screenshots Scribe saw.
     const pipelineImageBlocks = readPipelineImageBlocks(pipelineData.intermediateState);
 
+    // PDP-3 B4: when the preview-confirm gate is active, run Proto in dryRun
+    // mode so it generates the scaffold WITHOUT touching GitHub. The user
+    // inspects the in-memory `protoOutput.files` via Sandpack preview, then
+    // the orchestrator's `confirmPush` calls `proto.pushScaffoldFiles` to
+    // commit the same files — no LLM regeneration cost. The legacy auto-push
+    // behaviour stays available behind AUTO_PUSH_AFTER_PROTO=true.
+    const previewGateEnabled = !getEnv().AUTO_PUSH_AFTER_PROTO;
+
     await this.writeCheckpoint(pipelineId, 'proto', spec.title);
     const protoResult = await withRetry(
       (attempt) => {
@@ -1285,6 +1293,7 @@ export class PipelineOrchestrator {
             pipelineId,
             knowledgeContext: protoKnowledge,
             imageBlocks: pipelineImageBlocks,
+            dryRun: previewGateEnabled,
           }),
           STAGE_TIMEOUT,
           'Proto'
@@ -1518,6 +1527,26 @@ export class PipelineOrchestrator {
     // Level 4: Explainability — record Proto reasoning
     this.recordProtoReasoning(pipelineId, protoResult.data);
 
+    // PDP-3 B4: preview-confirm gate — Proto ran in dryRun, files are in
+    // protoOutput but nothing landed on GitHub yet. Persist the dryRun
+    // output (so the FE can render Sandpack from `protoOutput.files`) and
+    // halt at `awaiting_push_confirm`. Trace runs later from `confirmPush`,
+    // which calls `proto.pushScaffoldFiles` to actually commit the cached
+    // files and then transitions to `trace_testing`.
+    if (previewGateEnabled) {
+      await this.store.update(pipelineId, {
+        protoOutput: protoResult.data,
+        stage: 'awaiting_push_confirm',
+        metrics: protoCompletedMetrics,
+      });
+      this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
+      logger.info(
+        { pipelineId, fileCount: protoResult.data.files.length },
+        '[Pipeline] B4 gate — waiting for user push confirmation'
+      );
+      return;
+    }
+
     // Proto succeeded → transition to trace_testing
     await this.store.update(pipelineId, {
       protoOutput: protoResult.data,
@@ -1664,6 +1693,252 @@ export class PipelineOrchestrator {
       { expectedStageVersion: pipeline.stageVersion }
     );
     this.emitEvent(pipelineId, 'stage_change', 'cancelled');
+    return updated;
+  }
+
+  // ─── PDP-3 B4: Confirm / Cancel Push (preview gate) ────────
+
+  /**
+   * User confirmed they want to push the previewed scaffold to GitHub.
+   *
+   * Cached `protoOutput.files` (generated during the dryRun Proto run that
+   * preceded `awaiting_push_confirm`) are pushed via
+   * {@link ProtoAgent.pushScaffoldFiles} — no LLM regeneration. On success
+   * the pipeline transitions to `trace_testing` and Trace runs in the
+   * background, mirroring the legacy auto-push path. Idempotent: a second
+   * call while the push is in flight returns the current state.
+   */
+  async confirmPush(pipelineId: string): Promise<PipelineState> {
+    return this.withLock(pipelineId, () => this._confirmPush(pipelineId));
+  }
+
+  private async _confirmPush(pipelineId: string): Promise<PipelineState> {
+    const pipeline = await this.getPipeline(pipelineId);
+
+    // Idempotency: if the user double-clicks "Gönder", the second call sees
+    // the pipeline already advanced past the gate and just returns state.
+    const alreadyAdvanced: readonly PipelineStage[] = [
+      'trace_testing',
+      'completed',
+      'completed_partial',
+    ];
+    if (alreadyAdvanced.includes(pipeline.stage)) {
+      logger.info(
+        { pipelineId, stage: pipeline.stage },
+        '[Pipeline] confirmPush idempotent hit — pipeline already past gate'
+      );
+      return pipeline;
+    }
+
+    this.assertStage(pipeline, 'awaiting_push_confirm');
+
+    if (!pipeline.protoOutput || !pipeline.protoOutput.files?.length) {
+      throw new Error('Cannot confirm push: no scaffold files cached on pipeline');
+    }
+    if (!pipeline.approvedSpec) {
+      throw new Error('Cannot confirm push: approvedSpec is missing');
+    }
+    if (!pipeline.protoConfig) {
+      throw new Error('Cannot confirm push: protoConfig is missing');
+    }
+
+    // Resolve GitHub access (token + owner) the same way _approveSpec did.
+    let owner: string;
+    let userGitHubToken: string;
+    try {
+      const gh = await this.validateGitHubAccess(pipeline.userId);
+      userGitHubToken = gh.token;
+      // Pipeline-continuation case: existing owner takes precedence.
+      const existingRepo = pipeline.intermediateState?.existingRepo as
+        | { owner: string; repo: string; branch: string }
+        | undefined;
+      owner = existingRepo?.owner ?? gh.owner;
+    } catch (err) {
+      const error = createPipelineError(
+        PipelineErrorCode.GITHUB_NOT_CONNECTED,
+        `GitHub bağlantısı bulunamadı: ${err instanceof Error ? err.message : String(err)}`
+      );
+      const failed = await this.store.update(pipelineId, { stage: 'failed', error });
+      this.emitEvent(pipelineId, 'error', 'failed', error);
+      return failed;
+    }
+
+    // Push happens in the background; respond to the route immediately with
+    // an optimistic transition to `proto_building` (re-use of the existing
+    // FSM slot so the UI keeps showing Proto progress through the push).
+    // The previewed files stay in protoOutput throughout so the rail's
+    // Sandpack remains rendered until Trace finishes.
+    const updated = await this.store.update(
+      pipelineId,
+      { stage: 'proto_building' },
+      { expectedStageVersion: pipeline.stageVersion }
+    );
+    this.emitEvent(pipelineId, 'stage_change', 'proto_building');
+
+    const userGithubService = this.createGitHubService(userGitHubToken);
+    const agents =
+      this.createAgentsForModel?.(pipeline.model ?? '', userGithubService) ??
+      this.getAgents(pipeline.model, pipelineId);
+
+    this.runConfirmedPush(
+      pipelineId,
+      pipeline,
+      agents,
+      owner,
+      pipeline.protoConfig.repoName,
+      pipeline.protoConfig.repoVisibility
+    ).catch((err) => {
+      logger.error({ err, pipelineId }, '[Pipeline] confirmPush background flow failed');
+      this.failPipeline(pipelineId, 'Push', err).catch((e) =>
+        logger.error({ err: e }, '[Pipeline] failPipeline also failed')
+      );
+    });
+
+    return updated;
+  }
+
+  /**
+   * Background helper for {@link confirmPush}: takes the cached scaffold
+   * files, calls `proto.pushScaffoldFiles` (createRepo + pushFiles, no LLM),
+   * updates `protoOutput` with the real branch/url metadata, transitions to
+   * `trace_testing`, and kicks off Trace.
+   */
+  private async runConfirmedPush(
+    pipelineId: string,
+    pipeline: PipelineState,
+    agents: AgentSet,
+    owner: string,
+    repoName: string,
+    repoVisibility: 'public' | 'private'
+  ): Promise<void> {
+    if (!pipeline.protoOutput || !pipeline.approvedSpec) return;
+
+    const protoEmit = createActivityEmitter(pipelineId, 'proto');
+    protoEmit('start', 'Onaylanan kod GitHub\'a yükleniyor...', 10);
+
+    const pushResult = await agents.proto.pushScaffoldFiles(
+      owner,
+      repoName,
+      repoVisibility,
+      pipeline.protoOutput.files,
+      {
+        setupCommands: pipeline.protoOutput.setupCommands,
+        stackUsed: pipeline.protoOutput.metadata?.stackUsed,
+        summary: pipeline.protoOutput.summary,
+        pipelineId,
+      }
+    );
+
+    if (await this.isCancelled(pipelineId)) return;
+
+    if (pushResult.type === 'error') {
+      await this.store.update(pipelineId, {
+        stage: 'failed',
+        error: pushResult.error,
+      });
+      this.emitEvent(pipelineId, 'error', 'failed', pushResult.error);
+      return;
+    }
+
+    const updatedProtoOutput = pushResult.data;
+
+    // Mirror legacy runProtoAndTrace's transition to trace_testing.
+    const pipelineNow = await this.getPipeline(pipelineId);
+    await this.store.update(pipelineId, {
+      protoOutput: updatedProtoOutput,
+      stage: 'trace_testing',
+      metrics: {
+        ...pipelineNow.metrics,
+        protoCompletedAt: pipelineNow.metrics.protoCompletedAt ?? new Date(),
+      },
+    });
+    this.emitEvent(pipelineId, 'stage_change', 'trace_testing');
+
+    if (pipelineNow.jiraConfig?.epicKey) {
+      this.runJiraProtoComment(pipelineNow.userId, pipelineNow.jiraConfig.epicKey, {
+        branch: updatedProtoOutput.branch,
+        repo: updatedProtoOutput.repo,
+        prUrl: updatedProtoOutput.prUrl,
+        filesCreated: updatedProtoOutput.metadata.filesCreated,
+      }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking Jira task failed'));
+    }
+
+    if (await this.isCancelled(pipelineId)) return;
+
+    if (!pipelineNow.traceEnabled) {
+      // User opted out of Trace upstream — mark completed without testing.
+      await this.store.update(pipelineId, {
+        stage: 'completed',
+        metrics: {
+          ...pipelineNow.metrics,
+          protoCompletedAt: pipelineNow.metrics.protoCompletedAt ?? new Date(),
+          traceCompletedAt: new Date(),
+          totalDurationMs: Date.now() - toEpoch(pipelineNow.metrics.startedAt),
+        },
+      });
+      this.emitEvent(pipelineId, 'stage_change', 'completed');
+      return;
+    }
+
+    await this.runTrace(
+      pipelineId,
+      pipelineNow.metrics,
+      owner,
+      repoName,
+      updatedProtoOutput.branch,
+      pipelineNow.approvedSpec ?? pipeline.approvedSpec,
+      pipelineNow.model
+    );
+  }
+
+  /**
+   * User declined the preview — pipeline ends without a GitHub push.
+   *
+   * Per spec § 8 Q2 (subagent decision): we re-use the existing
+   * `completed_partial` terminal stage rather than minting a new
+   * `cancelled_at_review`. Rationale: from a metrics standpoint
+   * "user finished but skipped the push" is the same shape as
+   * "trace was skipped" — partial completion. The cached
+   * `protoOutput.files` stay on the pipeline so the user can still
+   * inspect / copy them from the preview pane.
+   */
+  async cancelPush(pipelineId: string): Promise<PipelineState> {
+    return this.withLock(pipelineId, () => this._cancelPush(pipelineId));
+  }
+
+  private async _cancelPush(pipelineId: string): Promise<PipelineState> {
+    const pipeline = await this.getPipeline(pipelineId);
+
+    // Idempotency: cancelling a pipeline that already settled into a
+    // terminal state is a no-op.
+    const terminal: readonly PipelineStage[] = [
+      'completed',
+      'completed_partial',
+      'cancelled',
+      'failed',
+    ];
+    if (terminal.includes(pipeline.stage)) {
+      return pipeline;
+    }
+
+    this.assertStage(pipeline, 'awaiting_push_confirm');
+
+    const updated = await this.store.update(
+      pipelineId,
+      {
+        stage: 'completed_partial',
+        metrics: {
+          ...pipeline.metrics,
+          totalDurationMs: Date.now() - toEpoch(pipeline.metrics.startedAt),
+        },
+      },
+      { expectedStageVersion: pipeline.stageVersion }
+    );
+    this.emitEvent(pipelineId, 'completed', 'completed_partial');
+    logger.info(
+      { pipelineId },
+      '[Pipeline] B4 gate — user cancelled push, pipeline terminated as completed_partial'
+    );
     return updated;
   }
 

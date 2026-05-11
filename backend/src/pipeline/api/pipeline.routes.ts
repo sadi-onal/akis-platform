@@ -11,6 +11,8 @@
  *   POST   /api/pipelines/:id/reject   → Reject spec with feedback
  *   POST   /api/pipelines/:id/retry    → Retry failed stage
  *   POST   /api/pipelines/:id/skip-trace → Skip Trace, mark completed_partial
+ *   POST   /api/pipelines/:id/confirm-push → PDP-3 B4: confirm scaffold push to GitHub
+ *   POST   /api/pipelines/:id/cancel-push  → PDP-3 B4: decline scaffold push, complete partial
  *   DELETE /api/pipelines/:id          → Cancel pipeline
  */
 
@@ -176,6 +178,30 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
       const pipeline = await orchestrator.skipTrace(id);
+      return { pipeline };
+    },
+
+    /**
+     * PDP-3 B4 — user reviewed the Sandpack preview and confirmed they want
+     * to push the scaffold to GitHub. Transitions out of
+     * `awaiting_push_confirm` into `proto_building → trace_testing`.
+     */
+    async confirmPush(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const pipeline = await orchestrator.confirmPush(id);
+      return { pipeline };
+    },
+
+    /**
+     * PDP-3 B4 — user reviewed the Sandpack preview and decided not to push.
+     * Pipeline terminates as `completed_partial`; the cached scaffold files
+     * stay on the pipeline so the user can still copy/inspect them.
+     */
+    async cancelPush(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const pipeline = await orchestrator.cancelPush(id);
       return { pipeline };
     },
 
