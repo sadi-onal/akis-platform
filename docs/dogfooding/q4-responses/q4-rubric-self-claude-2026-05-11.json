@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-05-11T13:00:00.000Z",
+  "rubricCriteria": [
+    { "id": "product_vision", "short": "Ürün vizyonu netliği" },
+    { "id": "user_benefit", "short": "Kullanıcı yararı belirginliği" },
+    { "id": "idea_faithfulness", "short": "Kullanıcı fikrine sadakat" },
+    { "id": "mvp_scope", "short": "MVP kapsamı uygunluğu" },
+    { "id": "non_dev_clarity", "short": "Yazılımcı olmayan anlaşılabilirliği" },
+    { "id": "practical_feasibility", "short": "Pratik fizibilite (1 hafta · 1 dev)" }
+  ],
+  "demographics": {
+    "experience": "Bias-free pilot rater. Critic skorları kasten görmeden, sadece specBodyMarkdown + idea üzerinden değerlendirme yapıldı.",
+    "productExp": "high",
+    "stakeholderExp": "low",
+    "raterId": "self-claude-pilot"
+  },
+  "comment": "N=1 (tek puanlayıcı) pilot örneği. Tezin § 3.7 kalibrasyon bölümünde 'illustrative baseline' olarak kullanılabilir; istatistiksel anlamlılık için N≥3 önerilir. Critic'in 68/82 ikili dağılımı vs benim 78-87% daralma şu temel soruyu açıyor: 'Critic'in 68 verdiği specler gerçekten kötü mü, yoksa Critic'in rubric'i farklı bir eksende mi hassas?'",
+  "notes": {
+    "todo-001": "MVP yerinde; out-of-scope listesi net (sunucu sync, kategori, düzenleme yok). Non-dev anlaşılabilirlik: 'nonFunctional' jargon + Stack: HTML+CSS+JS tipik kullanıcıyı zorlayabilir, ama spec gövdesi büyük ölçüde Türkçe ve somut.",
+    "calc-002": "10 AC bir hesap makinesi için biraz fazla; orijinal fikirde yer almayan 'geçersiz operatör sırası' eklendi (over-spec). Fidelity yüksek çünkü 4 işlem + klavye/buton + sıfıra bölme hatası birebir karşılanmış.",
+    "currency-003": "Sabit kur ile gerçek-kullanıcı faydası sınırlı (orijinal fikirde böyle istenmiş). Sadakat çok iyi: 'Gerçek API entegrasyonu' kapsam-dışı listesine açıkça yazılmış.",
+    "blog-004": "Yararı düşük çünkü 'kullanıcı = blog okuyucu' soyut, gerçek tüketici developer. Non-dev anlaşılabilirlik bu spec'in zayıf noktası: 'endpoint', 'JSON object', 'Content-Type', 'stateless' yoğun. Ama MVP disiplini örnek niteliğinde: 2 endpoint, 4 AC, çok temiz scope.",
+    "qr-005": "Pratik tool; spec içeriği güçlü. 'Yapay zeka API kullanılmayacak' non-functional kısıtı non-dev için kafa karıştırıcı (neden bahsediyor?). QR kütüphanesi ihtiyacı feasibility'yi 10'dan 9'a çekiyor."
+  },
+  "responses": [
+    { "problemId": "todo-001", "criterion": "product_vision", "score": 9 },
+    { "problemId": "todo-001", "criterion": "user_benefit", "score": 8 },
+    { "problemId": "todo-001", "criterion": "idea_faithfulness", "score": 9 },
+    { "problemId": "todo-001", "criterion": "mvp_scope", "score": 9 },
+    { "problemId": "todo-001", "criterion": "non_dev_clarity", "score": 7 },
+    { "problemId": "todo-001", "criterion": "practical_feasibility", "score": 10 },
+
+    { "problemId": "calc-002", "criterion": "product_vision", "score": 9 },
+    { "problemId": "calc-002", "criterion": "user_benefit", "score": 8 },
+    { "problemId": "calc-002", "criterion": "idea_faithfulness", "score": 10 },
+    { "problemId": "calc-002", "criterion": "mvp_scope", "score": 7 },
+    { "problemId": "calc-002", "criterion": "non_dev_clarity", "score": 7 },
+    { "problemId": "calc-002", "criterion": "practical_feasibility", "score": 10 },
+
+    { "problemId": "currency-003", "criterion": "product_vision", "score": 8 },
+    { "problemId": "currency-003", "criterion": "user_benefit", "score": 6 },
+    { "problemId": "currency-003", "criterion": "idea_faithfulness", "score": 10 },
+    { "problemId": "currency-003", "criterion": "mvp_scope", "score": 8 },
+    { "problemId": "currency-003", "criterion": "non_dev_clarity", "score": 7 },
+    { "problemId": "currency-003", "criterion": "practical_feasibility", "score": 10 },
+
+    { "problemId": "blog-004", "criterion": "product_vision", "score": 9 },
+    { "problemId": "blog-004", "criterion": "user_benefit", "score": 5 },
+    { "problemId": "blog-004", "criterion": "idea_faithfulness", "score": 10 },
+    { "problemId": "blog-004", "criterion": "mvp_scope", "score": 9 },
+    { "problemId": "blog-004", "criterion": "non_dev_clarity", "score": 4 },
+    { "problemId": "blog-004", "criterion": "practical_feasibility", "score": 10 },
+
+    { "problemId": "qr-005", "criterion": "product_vision", "score": 9 },
+    { "problemId": "qr-005", "criterion": "user_benefit", "score": 8 },
+    { "problemId": "qr-005", "criterion": "idea_faithfulness", "score": 10 },
+    { "problemId": "qr-005", "criterion": "mvp_scope", "score": 9 },
+    { "problemId": "qr-005", "criterion": "non_dev_clarity", "score": 6 },
+    { "problemId": "qr-005", "criterion": "practical_feasibility", "score": 9 }
+  ]
+}
