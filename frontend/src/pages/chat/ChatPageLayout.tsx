@@ -101,7 +101,7 @@ export interface ChatPageLayoutProps {
   repoSelectorSlot: ReactNode | undefined;
 }
 
-export function ChatPageLayout(props: ChatPageLayoutProps): JSX.Element {
+export function ChatPageLayout(props: ChatPageLayoutProps) {
   const {
     akisLogoUrl,
     sidebarOpen,
