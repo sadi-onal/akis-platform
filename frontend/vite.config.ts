@@ -20,9 +20,7 @@ const getGitSha = () => {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-  ],
+  plugins: [react()],
   resolve: {
     alias: {
       // Ensure pipeline/ files resolve react from frontend node_modules
@@ -42,11 +40,13 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           // React core
-          if (id.includes('node_modules/react-dom/') ||
-              id.includes('node_modules/react/') ||
-              id.includes('node_modules/react-router-dom/') ||
-              id.includes('node_modules/react-router/') ||
-              id.includes('node_modules/@remix-run/')) {
+          if (
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-router-dom/') ||
+            id.includes('node_modules/react-router/') ||
+            id.includes('node_modules/@remix-run/')
+          ) {
             return 'vendor-react';
           }
           // Sandpack (code preview) — lazy-loaded via PreviewPanel
@@ -54,13 +54,11 @@ export default defineConfig({
             return 'vendor-sandpack';
           }
           // Framer Motion — used by LandingPage + animations
-          if (id.includes('node_modules/framer-motion/') ||
-              id.includes('node_modules/motion/')) {
+          if (id.includes('node_modules/framer-motion/') || id.includes('node_modules/motion/')) {
             return 'vendor-ui';
           }
           // CodeMirror — used by CodeEditor (lazy)
-          if (id.includes('node_modules/@codemirror/') ||
-              id.includes('node_modules/@lezer/')) {
+          if (id.includes('node_modules/@codemirror/') || id.includes('node_modules/@lezer/')) {
             return 'vendor-codemirror';
           }
         },
@@ -106,6 +104,22 @@ export default defineConfig({
       VITE_API_URL: 'http://localhost:3000',
       VITE_DEFAULT_LOCALE: 'en',
       VITE_BRAND_NAME: 'AKIS',
+    },
+    // PDP-3 coverage scaffold — opt-in via `pnpm test:coverage`.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'json-summary'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'src/**/__tests__/**',
+        'src/**/*.d.ts',
+        'src/main.tsx',
+        'src/services/api/openapi-types.ts',
+      ],
+      // PDP-2 sonu gerçek baseline: lines 41.97%, statements 41.21%, functions 40.45%, branches 40.54%.
+      // Threshold "asla altına düşme" çizgisi olarak 35 — gerçek hedef NFR-3.5 = ≥ %70, PDP-3'te ayarlanır.
+      thresholds: { lines: 35, statements: 35, functions: 35, branches: 35 },
     },
   },
 });

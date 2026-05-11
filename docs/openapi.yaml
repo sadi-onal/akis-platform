@@ -497,6 +497,141 @@ paths:
                     additionalProperties: { type: string }
                   title: { type: string }
 
+  /api/pipelines/{id}/explanation:
+    get:
+      tags: [Pipeline]
+      summary: Per-stage agent reasoning + attention points (Level-4 surface)
+      description: |
+        Returns the reasoning records emitted by each agent in this pipeline,
+        plus aggregated attention points. Backed by `pipeline_reasonings`
+        table (DB-persisted; survives backend restart per NFR-1).
+        Includes `meta.persistencePreEpoch: true` when the pipeline
+        completed before the persistence migration landed.
+      parameters:
+        - $ref: "#/components/parameters/PipelineId"
+      responses:
+        "200":
+          description: PipelineExplanation
+        "404":
+          description: Not found
+        "401":
+          description: Unauthorized
+
+  /api/pipelines/{id}/regression:
+    get:
+      tags: [Pipeline]
+      summary: Iteration regression confidence report
+      description: |
+        Aggregates per-pipeline regression signals (baseline test summary,
+        files changed in iteration, FixLoop runs, status). Used by the
+        Regresyon tab in PipelineDetailRail.
+      parameters:
+        - $ref: "#/components/parameters/PipelineId"
+      responses:
+        "200":
+          description: RegressionReport
+
+  /api/chat/intent:
+    post:
+      tags: [Chat]
+      summary: Classify a chat message intent (BUILD / ASK / FEEDBACK / CHAT)
+      description: |
+        Stateless classifier. Returns `{ intent, confidence, reasoning,
+        alternates, classificationId }`. Persists a SHA-256 hash of the
+        message (raw text never stored — NFR-1.3 audit privacy).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  minLength: 1
+                pipelineId:
+                  type: string
+                  format: uuid
+                recentMessages:
+                  type: array
+                  maxItems: 20
+                  items: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: IntentClassification
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+
+  /api/chat/intent/{classificationId}:
+    patch:
+      tags: [Chat]
+      summary: Override the classified intent (user disambiguation)
+      description: |
+        After a low-confidence DisambiguationModal selection, the user's
+        choice is recorded as `override_intent`. Ownership-gated:
+        `WHERE id = ? AND user_id = currentUser` (IDOR-safe).
+      parameters:
+        - name: classificationId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [overrideIntent]
+              properties:
+                overrideIntent:
+                  type: string
+                  enum: [BUILD, ASK, FEEDBACK, CHAT]
+      responses:
+        "204":
+          description: Override applied
+        "404":
+          description: Not found (or not owned by current user)
+        "401":
+          description: Unauthorized
+
+  /api/chat-qa/ask:
+    post:
+      tags: [Chat]
+      summary: Pipeline-free Q&A with RAG citations (SSE streaming)
+      description: |
+        Streams `chunk | citation | done | error` SSE events. Loads
+        context from the user's `pipelines.approved_spec`, `proto_output`,
+        `metrics`, and reasoning records (ownership-gated). Error
+        messages sanitized to bakkal-Türkçesi (CHAT_QA_AUTH /
+        CHAT_QA_RATELIMIT / CHAT_QA_FAILED).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                pipelineId:
+                  type: string
+                  format: uuid
+                message:
+                  type: string
+                history:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
   # ─── SETTINGS ───────────────────────────────────
   /api/settings/ai-keys/status:
     get:

@@ -1,9 +1,11 @@
 # 06 — Uygulama Yol Haritası (Roadmap)
 
-**Status:** ✍️ Taslak — onay bekliyor
+**Status:** ✅ Uygulandı — 2026-05-10/11 (Wave 1-5 hepsi merged, PR'lar aşağıda işaretli)
 **Önceki bağlam:** [`00-README.md`](./00-README.md), [`01-requirements.md`](./01-requirements.md), [`02-ux.md`](./02-ux.md), [`03-architecture.md`](./03-architecture.md), [`04-quality.md`](./04-quality.md), [`05-findings.md`](./05-findings.md)
 
 > **Disiplin:** Sıralı uygulama planı. Her PR self-contained: kendi spec referansı + acceptance criteria + test'leri + DoD checklist. Paralel çalışma sadece gerçekten bağımsız PR'lar arasında.
+
+> **Durum legend (her item başında):** ✅ merged · 🟡 PR open · ⏳ todo · ⏭️ deferred to PDP-3.
 
 ---
 
@@ -26,7 +28,7 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 
 3 paralel subagent (worktree). Her biri tek dosyaya odaklanır, çakışma riski yok.
 
-### PR 1.1 — `fix/F-01-chat-reload`
+### ✅ PR 1.1 — `fix/F-01-chat-reload` · [#516](https://github.com/OmerYasirOnal/akis-platform/pull/516) merged 2026-05-10
 
 **Hedef:** F-01 — sohbetler arası geçiş sonrası eski içerik render edilmiyor.
 **Branch:** `fix/F-01-chat-reload` (worktree: `../akis-f01`)
@@ -39,7 +41,7 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 **Tahmini efor:** XS (≤ 30 dk).
 **Bağımlılık:** yok.
 
-### PR 1.2 — `fix/F-02-rail-scroll`
+### ✅ PR 1.2 — `fix/F-02-rail-scroll` · [#514](https://github.com/OmerYasirOnal/akis-platform/pull/514) merged 2026-05-10
 
 **Hedef:** F-02 — Açıklama tab içinde scroll edilemiyor.
 **Branch:** `fix/F-02-rail-scroll` (worktree: `../akis-f02`)
@@ -51,7 +53,7 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 **Tahmini efor:** XS.
 **Bağımlılık:** yok.
 
-### PR 1.3 — `fix/F-04-rail-completed`
+### ✅ PR 1.3 — `fix/F-04-rail-completed` · [#515](https://github.com/OmerYasirOnal/akis-platform/pull/515) merged 2026-05-10
 
 **Hedef:** F-04 — completed pipeline'da activities sıfırsa rail tamamen gizli.
 **Branch:** `fix/F-04-rail-completed` (worktree: `../akis-f04`)
@@ -76,7 +78,7 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 
 ## 3. Wave 2 — Persistence (F-11 + F-03 birleşik)
 
-### PR 2.1 — `feat/persist-reasoning-and-activities`
+### ✅ PR 2.1 — `feat/persist-reasoning-and-activities` · [#517](https://github.com/OmerYasirOnal/akis-platform/pull/517) merged 2026-05-10
 
 **Hedef:** NFR-1 + F-03 + F-11 — reasoning + activities DB-backed.
 **Branch:** `feat/persist-reasoning-and-activities` (ana repo, worktree gerekmez)
@@ -98,7 +100,7 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 
 ## 4. Wave 3 — Scaffold Enricher (F-08)
 
-### PR 3.1 — `feat/scaffold-enricher`
+### ✅ PR 3.1 — `feat/scaffold-enricher` · [#518](https://github.com/OmerYasirOnal/akis-platform/pull/518) merged 2026-05-10
 
 **Hedef:** F-08 — Proto çıktısı taşınabilir hale gelir (FR-6.5..6.8).
 **Branch:** `feat/scaffold-enricher`
@@ -118,7 +120,7 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 
 ## 5. Wave 4 — Intent + Chat Q&A (paralel)
 
-### PR 4.1 — `feat/intent-classifier`
+### ✅ PR 4.1 — `feat/intent-classifier` · [#519](https://github.com/OmerYasirOnal/akis-platform/pull/519) merged 2026-05-10
 
 **Hedef:** F-10 — IntentClassifier + frontend ChatRouter (FR-11).
 **Branch:** `feat/intent-classifier` (worktree: `../akis-intent`)
@@ -135,7 +137,7 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 **Tahmini efor:** M.
 **Bağımlılık:** Wave 1 (F-01 fix) iyi olur (ChatPage temiz state), ama zorunlu değil.
 
-### PR 4.2 — `feat/chat-qa`
+### ✅ PR 4.2 — `feat/chat-qa` · [#520](https://github.com/OmerYasirOnal/akis-platform/pull/520) merged 2026-05-10
 
 **Hedef:** F-09 — ChatQAService + SSE stream (FR-10).
 **Branch:** `feat/chat-qa` (worktree: `../akis-chatqa`)
@@ -165,19 +167,22 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 
 3 küçük PR. Paralel veya seri, fark etmez.
 
-### PR 5.1 — `fix/F-05-mode-badge`
+### ✅ PR 5.1 — `fix/F-05-mode-badge` · [#522](https://github.com/OmerYasirOnal/akis-platform/pull/522) merged 2026-05-10
 
 **Brief:** ChatHeader'da mode badge'i ya **tooltip + Türkçe açıklama** olarak iyileştir, ya **kaldır** (UX karar). Default: tooltip.
 **Acceptance:** 05-findings F-05.
 **Efor:** S.
 
-### PR 5.2 — `fix/F-07-clarify-counter`
+### ✅ PR 5.2 — `fix/F-07-clarify-counter` · [#521](https://github.com/OmerYasirOnal/akis-platform/pull/521) merged 2026-05-10
 
 **Brief:** ClarificationCard cevap sayacı seçim yapılınca anlık güncellensin (FR-3.2).
 **Acceptance:** 05-findings F-07.
 **Efor:** S.
 
-### PR 5.3 — `chore/bakkal-language-audit`
+### 🟡 PR 5.3 — `chore/bakkal-language-audit` (multi-phase)
+- ✅ Phase 1: [#523](https://github.com/OmerYasirOnal/akis-platform/pull/523) merged 2026-05-10 — audit script + glossary + top fixes
+- 🟡 Phase 2: [#524](https://github.com/OmerYasirOnal/akis-platform/pull/524) open — TR==EN detection + 20 jargon translations + 68-entry allowlist
+- 🟡 Phase 3: [#527](https://github.com/OmerYasirOnal/akis-platform/pull/527) open — backend prompts audit (20 user-facing fixed, 23 AI-facing kept)
 
 **Brief:** F-12 — `scripts/lint/bakkal-language.mjs` audit script + i18n catalogue diff + Proto README üretici prompt revizyonu.
 **Acceptance:** 05-findings F-12 + NFR-5.1 hedefi (≥ %95 tutarlılık).
@@ -185,13 +190,16 @@ Wave 5                                ████ F-05 / F-07 / F-12 cleanup
 
 ---
 
-## 7. Sonraki dalgaya devr
+## 7. Sonraki dalgaya devr (PDP-3 adayları)
 
-| ID | Başlık | Sebep |
-|---|---|---|
-| F-06 | ChatPage refactor (1100+ → ≤ 500 satır) | L efor; mevcut testler yeterli koruma; PDP-2 etkisi düşük |
-| Q4 manuel rubric scoring | tez veri toplama | tez aşamasına ait, ürün geliştirme dışında |
-| Q2 self-pilot v2 | bakkal kullanıcı testi | NFR-5.4 release gate'i; PDP-2 sonu otomatik tetiklenir |
+| ID | Başlık | Durum | Sebep / PR |
+|---|---|---|---|
+| F-06 | ChatPage refactor (1100+ → ≤ 500 satır) | 🟡 PR [#525](https://github.com/OmerYasirOnal/akis-platform/pull/525) open — Phase 1 + 2 (1409 → 372 satır, +76 yeni test) | Plan'da PDP-3'e ertelenmişti; tek gecede subagent ile bitirildi |
+| E2E intent + chat-qa | Playwright spec'leri | 🟡 PR [#526](https://github.com/OmerYasirOnal/akis-platform/pull/526) open | 04-quality § 2 deferred sırasını tamamlar |
+| Q4 manuel rubric scoring | tez veri toplama | ⏭️ deferred | kullanıcı manuel skor verince aggregator koşar |
+| Q2 self-pilot v2 | bakkal kullanıcı testi | ⏭️ deferred | NFR-5.4 release gate'i; PDP-3 başında |
+| F-09 RAG full integration | `RAGService` (Piri) ChatQAService'e wire | ⏭️ deferred | F-09 MVP'de direct spec/proto/findings reads; PDP-3'te full RAG |
+| Coverage tooling | `@vitest/coverage-v8` + `c8` + CI gate | ⏭️ deferred | wave3-prep PR'ında scaffold landed |
 
 ---
 

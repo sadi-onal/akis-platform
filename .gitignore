@@ -220,3 +220,8 @@ AKIS_*_PLAN.md
 
 # Worktrees (superpowers)
 .worktrees/
+
+# Coverage outputs (PDP-3 tooling)
+frontend/coverage/
+backend/coverage/
+coverage/

@@ -203,6 +203,57 @@ async function main() {
       await shot(page, '08-rail-why-tab');
     }
 
+    // 11. Regresyon tab (PDP-2 / F-04 + F-11) — visible when pipeline has outputs.
+    const regressionTab = page.getByRole('tab', { name: 'Regresyon' });
+    if (await regressionTab.count()) {
+      await regressionTab.first().click();
+      await page.waitForTimeout(800);
+      await shot(page, '09-rail-regression-tab');
+    } else {
+      log('regression tab not yet visible (pipeline not yet completed) — OK');
+    }
+
+    // 12. PDP-2 / F-10 intent disambiguation — type ambiguous word, expect modal.
+    log('=== PDP-2: intent disambiguation smoke ===');
+    try {
+      const newChatBtn = page.getByRole('button', { name: /Yeni Sohbet/i }).first();
+      if (await newChatBtn.count()) {
+        await newChatBtn.click();
+        await page.waitForTimeout(500);
+        const input2 = page.getByRole('textbox').last();
+        await input2.fill('rapor');
+        await input2.press('Enter');
+        await page.waitForTimeout(1500);
+        const modal = page.getByText(/Bunu nasıl yapayım/i);
+        if (await modal.count()) {
+          await shot(page, '10-intent-disambiguation-modal');
+          const cancel = page.getByRole('button', { name: /Vazgeç/i });
+          if (await cancel.count()) await cancel.first().click();
+        } else {
+          log('disambiguation modal did not surface — intent confidence too high for "rapor"');
+        }
+      }
+    } catch (err) {
+      log('disambiguation smoke step soft-failed: ' + err.message);
+    }
+
+    // 13. PDP-2 / F-09 chat-qa SSE — pipeline-free Q&A.
+    log('=== PDP-2: chat-qa SSE smoke ===');
+    try {
+      const sidebarFirst = page.getByRole('button').filter({ hasText: /Sohbet|Bakkal|Stok/i }).first();
+      if (await sidebarFirst.count()) {
+        await sidebarFirst.click();
+        await page.waitForTimeout(500);
+        const input3 = page.getByRole('textbox').last();
+        await input3.fill('Bu kod ne kadar büyük olacak?');
+        await input3.press('Enter');
+        await page.waitForTimeout(3000);
+        await shot(page, '11-chat-qa-response');
+      }
+    } catch (err) {
+      log('chat-qa smoke step soft-failed: ' + err.message);
+    }
+
     log('done');
   } finally {
     await browser.close();
