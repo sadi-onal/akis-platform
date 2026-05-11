@@ -49,7 +49,14 @@ export interface UseHandleSendOptions {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   loadedIdRef: React.MutableRefObject<string | undefined>;
   syncFromStage: (stage: PipelineStage) => void;
-  refreshWorkflow: () => Promise<void>;
+  /**
+   * Re-fetch the active workflow. Returns the fetched `Workflow` so we can
+   * read post-refresh fields (e.g. `currentStage`) without going through the
+   * ref — React state updates after an `await` boundary are not guaranteed to
+   * flush before the next microtask in concurrent mode, so `activeWorkflowRef`
+   * can be stale here.
+   */
+  refreshWorkflow: () => Promise<Workflow | null>;
   refreshList: () => void;
   startIterationChildPoll: (childId: string) => void;
   setPendingGithubIdea: React.Dispatch<React.SetStateAction<string | null>>;
@@ -243,9 +250,14 @@ export function useHandleSend(options: UseHandleSendOptions) {
 
       try {
         await workflowsApi.sendMessage(o.conversationId, content, attachments);
-        await o.refreshWorkflow();
+        // Read currentStage from the returned workflow rather than the ref —
+        // the ref is updated by the parent's render-time assignment, which is
+        // not guaranteed to have flushed by the time we resume here. The
+        // returned `Workflow` is the fresh value we just fetched. See S-2 in
+        // PR #525 review.
+        const refreshed = await o.refreshWorkflow();
         o.refreshList();
-        const stage = o.activeWorkflowRef.current?.currentStage;
+        const stage = refreshed?.currentStage ?? o.activeWorkflowRef.current?.currentStage;
         if (stage && stage !== 'scribe_clarifying' && stage !== 'awaiting_approval') {
           const stageMessages: Record<string, string> = {
             scribe_generating: 'Notunuz kaydedildi. Scribe spec oluşturma işlemi devam ediyor.',
@@ -271,5 +283,12 @@ export function useHandleSend(options: UseHandleSendOptions) {
     } finally {
       sendingRef.current = false;
     }
+    // Deliberately empty deps: every external value is read via
+    // `o = optsRef.current` above so the callback identity stays stable across
+    // parent re-renders. The `react-hooks/exhaustive-deps` rule doesn't flag
+    // this because the ref-indirection hides the closure variables, but if you
+    // add a direct (non-`o.*`) reference to a parent variable inside this body,
+    // ALSO add it to `optsRef` — otherwise it will silently capture a stale
+    // value. (Reads via optsRef.current so callback identity stays stable.)
   }, []);
 }
