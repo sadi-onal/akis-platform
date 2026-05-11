@@ -243,4 +243,39 @@ describe('useIterationChildPoll', () => {
       content: expect.stringMatching(/tamamlandı/i),
     });
   });
+
+  it('gives up after the 15-minute max-duration ceiling and clears the tracker', async () => {
+    // Exercise lines 135-137: when `elapsed >= POLL_MAX_DURATION_MS` (15 min)
+    // the poll loop nulls the tracker and stops scheduling further ticks.
+    const { hook, messages } = setup();
+    // Always returns running — the poll never finalises naturally.
+    mockedGet.mockResolvedValue(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      buildChild('runaway', 'proto_building') as any,
+    );
+
+    act(() => {
+      hook.result.current.startPolling('runaway');
+    });
+
+    // Advance ~16 minutes — well past the 15-min ceiling. The next tick
+    // after the elapsed >= MAX check should bail out without scheduling
+    // another setTimeout, so subsequent calls don't grow.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(16 * 60 * 1000);
+    });
+    const callsAtCeiling = mockedGet.mock.calls.length;
+
+    // Advance another minute — no further get() calls because the tracker
+    // was nulled on the previous tick.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(mockedGet.mock.calls.length).toBe(callsAtCeiling);
+    // No completion / failure message was appended (the timeout path doesn't
+    // emit a user-visible bubble — that's by design, the UI infers it from
+    // the stale "İterasyon başlatıldı…" line + the regular workflow refresh).
+    expect(messages.length).toBe(0);
+  });
 });
