@@ -5,10 +5,11 @@
 // against the bakkal-language glossary (docs/product/02-ux.md § 6).
 //
 // Usage:
-//   node scripts/lint/bakkal-language.mjs            # default scan (frontend only)
-//   node scripts/lint/bakkal-language.mjs --all      # include backend prompts
-//   node scripts/lint/bakkal-language.mjs --json     # machine-readable output
-//   node scripts/lint/bakkal-language.mjs --quiet    # only show summary
+//   node scripts/lint/bakkal-language.mjs              # default glossary scan (frontend only)
+//   node scripts/lint/bakkal-language.mjs --all        # include backend prompts AND i18n-sync
+//   node scripts/lint/bakkal-language.mjs --i18n-sync  # only TR==EN identical-value detection
+//   node scripts/lint/bakkal-language.mjs --json       # machine-readable output
+//   node scripts/lint/bakkal-language.mjs --quiet      # only show summary
 //
 // Exit code: 0 if findings are info-only (or none), 1 if any warn-or-higher hit.
 //
@@ -241,6 +242,174 @@ export function runAudit({ root = REPO_ROOT, all = false } = {}) {
   return { findings, files, glossary };
 }
 
+// ---------- i18n TR==EN identical-value detection ----------
+
+// Brand / proper-noun / technical-key allowlist. These keys legitimately
+// have the same value in tr.json and en.json (brand names, language codes,
+// universally-used technical abbreviations). Keys in this allowlist are
+// always reported with severity `info` (not `warn`), regardless of value.
+// (The "real-repo regression" test in scripts/lint/__tests__ asserts that
+// the literal values these keys carry have not drifted.)
+//
+// This list is the post-Phase-2 cleanup baseline (see
+// docs/product/wave3/i18n-audit-baseline.md § Phase 2). Add to it only when
+// a brand name, plan name, or universally-recognized technical abbreviation
+// is the correct value in TR as well.
+export const I18N_TR_EN_ALLOWLIST = new Set([
+  // AKIS product / brand
+  'about.lineup.proto.title',
+  'about.lineup.scribe.title',
+  'about.lineup.trace.title',
+  'agents.proto.heroTitle',
+  'agents.scribe.heroTitle',
+  'agents.trace.heroTitle',
+  'chat.emptyState.brandName',
+  'modules.proto.title',
+  'modules.scribe.title',
+  'modules.trace.title',
+  'products.proto.title',
+  'products.scribe.title',
+  'products.trace.title',
+  'tech.ecosystem.akis.title',
+  'tech.ecosystem.piri.title',
+  'tech.ecosystem.jarvis.title',
+  'marketplace.overview.kicker',
+  'marketplace.overview.meta.title',
+  'marketplace.overview.meta.twitterTitle',
+  'marketplace.app.kicker',
+  // Founder / team proper nouns
+  'about.team.founder.initials',
+  'about.team.founder.name',
+  // Third-party brand names
+  'dashboard.overview.integrations.github',
+  'dashboard.overview.integrations.atlassian',
+  'dashboard.overview.integrations.atlassianDesc',
+  'integrations.azure.title',
+  'integrations.confluence.title',
+  'integrations.github.title',
+  'integrations.gitlab.title',
+  'integrations.hub.github.title',
+  'integrations.hub.atlassian.title',
+  'integrations.jira.oauthLabel',
+  'integrations.slack.title',
+  'integrations.cucumber.title',
+  // Plan / pricing tier names (Turkish-tech convention keeps these English)
+  'pricing.pilot.name',
+  'pricing.pro.name',
+  'pricing.pro.feature5',
+  // Universal abbreviations / codes
+  'header.locale.en',
+  'header.locale.tr',
+  'integrations.hub.subtitleLink',
+  'landing.testimonials.t3.role',
+  'status.services.api',
+  // Testimonial company names
+  'landing.testimonials.t1.company',
+  'landing.testimonials.t2.company',
+  'landing.testimonials.t3.company',
+  // Technical/protocol names (kept English everywhere)
+  'docs.atlassian.apiToken',
+  'docs.auth.oauthGithub',
+  'docs.mcp.gateway',
+  'docs.mcp.title',
+  'docs.webhooks.title',
+  'integrations.jira.apiToken',
+  'tech.mlx.label',
+  'tech.mlx.quant.title',
+  'tech.mlx.benchmark.title',
+  'tech.mlx.benchmark.model',
+  'tech.stats.quant',
+  'tech.stats.locDetail',
+  'tech.stack.devops.title',
+  'rag.evaluation.metrics.provenance',
+  'rag.stats.model',
+  'rag.stats.backend',
+  'chat.tokens.tooltip.model',
+  'traceConsole.reliability.pfsLite',
+  // Plan / Model terms that match Turkish equivalents naturally
+  'agentsHub.planTitle',          // "Plan" — same in TR
+  'footer.brand',                 // "Platform" — used as-is in TR
+  // Template strings with emojis + placeholders (structure shared)
+  'agentCanvas.monologue.reasoning',
+  'agentCanvas.monologue.decision',
+  'agentCanvas.monologue.toolSuccess',
+]);
+
+/**
+ * Detect i18n catalogue entries where the TR value equals the EN value
+ * (and the value is non-empty). Severity:
+ *   - warn  → entry is NOT on the allowlist (likely missed translation)
+ *   - info  → entry IS on the allowlist (brand / proper-noun / standard term;
+ *             still surfaced for visibility but does not fail CI)
+ *
+ * The findings are emitted in the same shape as the glossary scanner so the
+ * formatter / summarizer code paths work unchanged.
+ */
+export function runI18nSync({ root = REPO_ROOT, allowlist = I18N_TR_EN_ALLOWLIST } = {}) {
+  const trPath = join(root, 'frontend', 'src', 'i18n', 'locales', 'tr.json');
+  const enPath = join(root, 'frontend', 'src', 'i18n', 'locales', 'en.json');
+  if (!existsSync(trPath) || !existsSync(enPath)) {
+    return { findings: [], files: [], scannedKeys: 0 };
+  }
+  const trRaw = readFileSync(trPath, 'utf8');
+  const enRaw = readFileSync(enPath, 'utf8');
+  const tr = JSON.parse(trRaw);
+  const en = JSON.parse(enRaw);
+
+  // Both catalogues are flat (dot-keys), but allow nested just in case.
+  function flatten(obj, prefix = '') {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const key = prefix ? `${prefix}.${k}` : k;
+      if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+        Object.assign(out, flatten(v, key));
+      } else {
+        out[key] = v;
+      }
+    }
+    return out;
+  }
+  const flatTr = flatten(tr);
+  const flatEn = flatten(en);
+
+  // To produce a stable line number we re-scan the raw tr.json for each key.
+  // The catalogue is small enough (~1.4k keys) that this is cheap.
+  const trLines = trRaw.split(/\r?\n/);
+
+  const findings = [];
+  let scannedKeys = 0;
+  for (const key of Object.keys(flatTr)) {
+    scannedKeys++;
+    const tv = flatTr[key];
+    const ev = flatEn[key];
+    if (typeof tv !== 'string' || typeof ev !== 'string') continue;
+    if (tv.length === 0 || tv !== ev) continue;
+
+    // Find the line in tr.json that holds this key (best-effort).
+    const needle = `"${key}"`;
+    let lineNo = 0;
+    for (let i = 0; i < trLines.length; i++) {
+      if (trLines[i].includes(needle)) { lineNo = i + 1; break; }
+    }
+    const allowlisted = allowlist.has(key);
+    findings.push({
+      file: trPath,
+      line: lineNo || 1,
+      column: 1,
+      term: key,
+      canonical: 'i18n.tr-eq-en',
+      severity: allowlisted ? 'info' : 'warn',
+      suggested: allowlisted
+        ? '(brand / proper-noun / standard technical term — kept as-is)'
+        : 'translate to bakkal-Türkçesi (see docs/product/02-ux.md § 6)',
+      note: `value: "${tv}"`,
+      snippet: `${key}: "${tv}"`,
+    });
+  }
+
+  return { findings, files: [trPath, enPath], scannedKeys };
+}
+
 export function summarize(findings) {
   const bySeverity = { info: 0, warn: 0, error: 0 };
   const byTerm = new Map();
@@ -281,8 +450,27 @@ if (isMain()) {
   const all = args.includes('--all');
   const asJson = args.includes('--json');
   const quiet = args.includes('--quiet');
+  const i18nSyncOnly = args.includes('--i18n-sync');
+  // --all implies i18n-sync as well
+  const runGlossary = !i18nSyncOnly;
+  const runSync = i18nSyncOnly || all;
 
-  const { findings, files } = runAudit({ all });
+  const findings = [];
+  let files = [];
+  let scannedKeys = 0;
+
+  if (runGlossary) {
+    const glossaryResult = runAudit({ all });
+    findings.push(...glossaryResult.findings);
+    files = files.concat(glossaryResult.files);
+  }
+  if (runSync) {
+    const syncResult = runI18nSync();
+    findings.push(...syncResult.findings);
+    files = files.concat(syncResult.files);
+    scannedKeys = syncResult.scannedKeys;
+  }
+
   const { bySeverity, topTerms } = summarize(findings);
   const exitCode = exitCodeFor(findings);
 
@@ -304,7 +492,9 @@ if (isMain()) {
       }
     }
 
-    process.stdout.write(`\nScanned ${files.length} files. Total findings: ${findings.length} `);
+    process.stdout.write(`\nScanned ${files.length} files`);
+    if (runSync) process.stdout.write(` (i18n keys: ${scannedKeys})`);
+    process.stdout.write(`. Total findings: ${findings.length} `);
     process.stdout.write(`(warn=${bySeverity.warn}, info=${bySeverity.info}, error=${bySeverity.error}).\n`);
     if (topTerms.length) {
       process.stdout.write('Top terms:\n');
@@ -314,7 +504,8 @@ if (isMain()) {
     }
     if (exitCode !== 0) {
       process.stdout.write(`\nFAIL — ${bySeverity.warn + bySeverity.error} warn-or-higher findings.\n`);
-      process.stdout.write('Add `// allow:term` on a line to opt out, or fix per the suggestion column.\n');
+      process.stdout.write('Add `// allow:term` on a line to opt out, fix per the suggestion column,\n');
+      process.stdout.write('or — for i18n-sync — translate the TR entry / add the key to I18N_TR_EN_ALLOWLIST.\n');
     } else {
       process.stdout.write('\nOK — no warn-or-higher findings.\n');
     }

@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### PDP-2 quality wave (2026-05-10) — 11 PRs
+
+**Bug fixes (F-01..F-07):**
+- **fix(F-01)** [#516] Reset `lastMessagesKeyRef` on Yeni Sohbet — chat content now reloads correctly when navigating back to a previous conversation. Five reset sites (handleNewConversation, handleBack, handleDelete, /chat empty path, fetch-error redirect).
+- **fix(F-02)** [#514] Make pipeline-detail rail body scrollable — `max-h-[55vh] sm:max-h-[60vh] overflow-y-auto`, plus `tabIndex={0}` + `role="region"` for keyboard a11y, `overscroll-contain` to prevent chat scroll-chain.
+- **fix(F-04)** [#515] Keep rail visible for completed pipelines that still have outputs — new `pipelineHasOutputs` prop derived in ChatPage from workflow stages; Regresyon tab also gated on `(activities OR outputs)` so it surfaces post-restart.
+- **fix(F-05)** [#522] Mode-badge tooltip in bakkal-Türkçesi via i18n catalogue (`chat.modeBadge.{ask,plan,act,review,failed}`); replaces "Pipeline ASK" jargon with "Sorularını yanıtlıyoruz" etc. HATA branch now tested.
+- **fix(F-07)** [#521] Live clarification counter — per-question ✓ marker added to header so users see selection feedback without pressing Next.
+
+**New features (F-08..F-11):**
+- **feat(F-08)** [#518] ScaffoldEnricher — Proto's output now includes `install.sh`/`setup.sh` (8 stack templates), Turkish README sections "Kendi bilgisayarında çalıştır" + "Sunucuya kur", optional Vite-aware Dockerfile + docker-compose, `.env.example` with Turkish comments. Wired into all three Proto push paths with integration tests.
+- **feat(F-11)** [#517] Reasoning + activities **persisted to PostgreSQL** (NFR-1 quality-trust permanence). New tables `pipeline_reasonings` (write-through cache, soft-delete) and `pipeline_activities` (append-only, DB falls through cache). Stable stage ordering. `persistencePreEpoch` flag gated on terminal pipeline status. `setActivityDb(null)` default under `NODE_ENV=test`.
+- **feat(F-10)** [#519] Intent classifier (BUILD / ASK / FEEDBACK / CHAT) + `ChatRouter` + `DisambiguationModal`. Turkish-aware regex boundaries. SHA-256 hash only — raw messages never persisted. IDOR-safe PATCH ownership; UUID format validation.
+- **feat(F-09)** [#520] Chat Q&A with SSE streaming — pipeline-free Q&A using spec/proto/findings as context. Sanitized error messages (CHAT_QA_AUTH/RATELIMIT/FAILED in bakkal-Türkçesi). Frontend AbortController per send. `needsBuild` heuristic surfaces "Bunu özellik olarak ekleyelim mi?" CTA.
+
+**Bakkal-language polish (F-12):**
+- **chore(F-12)** [#523] Bakkal-language audit script (`scripts/lint/bakkal-language.mjs`) — zero-dep Node, 24-term glossary (incl. `push → yükle/gönder`). 13 node:test cases. Top 7 i18n fixes landed. 33 warns + 102 infos remain for follow-up.
+
+**Tooling (Layer B):**
+- **chore(tooling)** [#512] `.claude/` developer tooling pack — 8 subagents, 5 skills, 6 slash commands, 3 hooks, JSON state schemas, README. Hooks opt-in via `settings.json` snippet.
+
+**Documentation (PDP-2):**
+- **docs(pdp)** [#513] Product Discovery & Design Pack: 7 documents under `docs/product/`. Target-first ordering (vision → requirements → ux → architecture → quality → gap → roadmap).
+
+**Test count delta:** Backend ~178 → ~3260 (+~80 new). Frontend 58 → 844 (+~30 new). 7 new backend integration tests for persistence + intent + chat-qa.
+
 ### Bakkal onboarding — JIT GitHub gate (no upfront modal, no PAT)
 - **feat(auth):** Replace the upfront `GithubConnectModal` with a **just-in-time** `GithubConnectGate` panel. The gate only appears the moment the user submits their first idea on `/chat` — at which point the value of GitHub is concrete (we need it to ship the user's app). The user's idea is persisted to `sessionStorage`; after the OAuth redirect returns to `/chat?github=connected`, the page surfaces a success toast and **auto-resumes** the pipeline send with the saved idea. No interruption on first-visit, no idea lost across the OAuth dance.
 - **feat(auth):** Settings → Integrations remains the canonical permanent home for the connect/disconnect button (`SettingsPage > GitHubSection`) — no changes there; the JIT gate is an additional contextual entry point, not a replacement.

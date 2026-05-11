@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,6 +15,8 @@ import {
   scanContent,
   exitCodeFor,
   summarize,
+  runI18nSync,
+  I18N_TR_EN_ALLOWLIST,
 } from '../bakkal-language.mjs';
 
 const glossary = loadGlossary();
@@ -126,6 +128,103 @@ test('summarize returns counts by severity and term', () => {
   assert.equal(topTerm, 'repo');
   assert.equal(topTerms[0][1], 2);
 });
+
+// ─────────────────────────────────────────────────────────
+// --i18n-sync — TR==EN identical-value detection
+// ─────────────────────────────────────────────────────────
+
+test('i18n-sync: allowlist contains brand entries (AKIS / proper-nouns / Atlassian etc.)', () => {
+  // Sanity — the post-Phase-2 cleanup baseline must allowlist the founder
+  // name and the three "AKIS Proto/Scribe/Trace" hero titles.
+  for (const k of [
+    'about.team.founder.name',
+    'about.lineup.proto.title',
+    'about.lineup.scribe.title',
+    'about.lineup.trace.title',
+    'integrations.github.title',
+    'integrations.slack.title',
+  ]) {
+    assert.ok(I18N_TR_EN_ALLOWLIST.has(k), `expected ${k} in allowlist`);
+  }
+});
+
+test('i18n-sync: runs against repo and produces zero warn findings (post-Phase-2)', () => {
+  // Phase 2 cleanup landed: every TR==EN entry should be either translated
+  // (so it no longer matches) or in the allowlist (so it is info, not warn).
+  // This is the regression assertion that protects the bakkal-Türkçesi pass.
+  const { findings, scannedKeys } = runI18nSync();
+  assert.ok(scannedKeys > 1000, `expected > 1000 keys scanned, got ${scannedKeys}`);
+  const warnFindings = findings.filter((f) => f.severity === 'warn');
+  assert.equal(
+    warnFindings.length,
+    0,
+    `expected 0 warn findings; got ${warnFindings.length}: ${warnFindings.map((f) => f.term).join(', ')}`,
+  );
+  // Info-severity findings (allowlisted brands) should still be present —
+  // the script must surface them for visibility.
+  const infoFindings = findings.filter((f) => f.severity === 'info');
+  assert.ok(infoFindings.length > 0, 'expected at least one info finding (allowlisted brand entries)');
+  // Exit code stays 0 when only info findings are present.
+  assert.equal(exitCodeFor(findings), 0);
+});
+
+test('i18n-sync: synthetic TR==EN entry not in allowlist is flagged as warn', () => {
+  const fakeTr = { 'fake.entry.title': 'Dashboard' };
+  const fakeEn = { 'fake.entry.title': 'Dashboard' };
+  const tmp = mkdtempSync(join(tmpdir(), 'bakkal-i18n-sync-'));
+  const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
+  mkdirSync(localesDir, { recursive: true });
+  writeFileSync(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
+  writeFileSync(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
+  const { findings } = runI18nSync({ root: tmp, allowlist: new Set() });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, 'warn');
+  assert.equal(findings[0].term, 'fake.entry.title');
+  assert.equal(exitCodeFor(findings), 1);
+});
+
+test('i18n-sync: allowlisted entry is info, not warn', () => {
+  const fakeTr = { 'fake.brand.title': 'AKIS Proto' };
+  const fakeEn = { 'fake.brand.title': 'AKIS Proto' };
+  const tmp = mkdtempSync(join(tmpdir(), 'bakkal-i18n-sync-'));
+  const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
+  mkdirSync(localesDir, { recursive: true });
+  writeFileSync(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
+  writeFileSync(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
+  const allow = new Set(['fake.brand.title']);
+  const { findings } = runI18nSync({ root: tmp, allowlist: allow });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, 'info');
+  assert.equal(exitCodeFor(findings), 0);
+});
+
+test('i18n-sync: TR != EN entry produces no finding', () => {
+  const fakeTr = { 'k': 'Panel' };
+  const fakeEn = { 'k': 'Dashboard' };
+  const tmp = mkdtempSync(join(tmpdir(), 'bakkal-i18n-sync-'));
+  const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
+  mkdirSync(localesDir, { recursive: true });
+  writeFileSync(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
+  writeFileSync(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
+  const { findings } = runI18nSync({ root: tmp });
+  assert.equal(findings.length, 0);
+});
+
+test('i18n-sync: empty TR value is not flagged (only structural completeness covers this)', () => {
+  const fakeTr = { 'k': '' };
+  const fakeEn = { 'k': '' };
+  const tmp = mkdtempSync(join(tmpdir(), 'bakkal-i18n-sync-'));
+  const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
+  mkdirSync(localesDir, { recursive: true });
+  writeFileSync(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
+  writeFileSync(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
+  const { findings } = runI18nSync({ root: tmp });
+  assert.equal(findings.length, 0);
+});
+
+// ─────────────────────────────────────────────────────────
+// Legacy: glossary-based scan (kept below)
+// ─────────────────────────────────────────────────────────
 
 test('end-to-end: temp file with mixed terms produces correct summary', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bakkal-lang-'));

@@ -286,3 +286,48 @@ node scripts/benchmark/run.mjs --label explainable
 > 3. Bu pipeline'ın benim için yararlı olacağını düşünüyorum.
 >
 > Açıklama (ops): ...
+
+---
+
+## Ek C — PDP-2 Dalga Notları (2026-05-10)
+
+PDP-2 dalgası, bir önceki dalgada (Q1+Q3 benchmark) tespit edilen ve smoke testlerde gözlenen 7 ürün gap'ine + 5 yokluk gap'ine yanıttır. Disiplinli ön-tasarım sürecinin tezdeki "kalite-güveni" ekseninde aşağıdaki katkıları yapar:
+
+### Temel öğrenmeler
+
+1. **Spec-first disiplin verimi 5×'lik sıkıştırdı.** PDP'nin 7 dokümanı (00-06) yazılırken her gereksinim FR/F-ID etiketleriyle açıklandı. Bu, implementation aşamasında subagent'lara verilebilen brief'leri tek bir referans noktasına bağladı (`docs/product/06-roadmap.md` Wave X PR Y). 11 PR ortalama 20-30 dakikada paralel subagent'larla tamamlandı.
+
+2. **In-memory volatility tezin core promise'ı için tehdit oluşturuyordu.** F-03 (backend restart sonrası reasoning + activities kaybı) tezdeki "verification chain"in görsel kanıtının uçucu olmasıydı. F-11 PR'ı `pipeline_reasonings` + `pipeline_activities` tablolarını ekleyerek %100 recovery hedefini karşılıyor (NFR-1.1). Bu, "AKIS sadece demo değil, bir kullanıcının uzun süreli güvenebileceği bir araç" iddiasını destekler.
+
+3. **Bakkal-language tutarsızlığı ölçülebilir hale geldi.** F-12 audit script'i baseline 31 warn → şu an 33 warn (push terimi yeni eklendi). 102 info-severity finding deferred. Future user-test (NFR-5.4) için iyi bir kalibrasyon temeli.
+
+4. **IDOR (PR #519) ve SSE error leak (PR #520)** — review-driven security fix'leri olmadan production-grade kalite mümkün değildi. Ultrareview yerine `code-review:review` skill'inin paralel subagent dispatch'iyle koşturulması, 26 should-fix bulgusunu pre-merge ele aldı.
+
+### Sayısal değişim (PDP-2 öncesi → sonrası)
+
+| Metrik | Önce | Sonra | Δ |
+|---|---:|---:|---:|
+| Backend test sayısı | ~3179 | ~3260 | +81 |
+| Frontend test sayısı | 813 | 860 | +47 |
+| Bakkal-language audit warn | (yoktu) | 33 | + |
+| Pipeline reasoning persist | 0% | 100% | NFR-1.1 ✅ |
+| Intent classification (BUILD/ASK/FEEDBACK/CHAT) | yoktu | 4-class + 0.7 threshold | FR-11 ✅ |
+| Chat Q&A (RAG citations + SSE) | yoktu | mevcut | FR-10 ✅ |
+| Scaffold portability (install.sh + README + Dockerfile) | yoktu | 8 stack | FR-6.5..6.8 ✅ |
+
+### Tez yazımı için ham veri
+
+- `docs/product/01-requirements.md` — FR/NFR ID'leri tezdeki "ürün tanımı" bölümü
+- `docs/product/03-architecture.md` — mermaid diagramlar + delta listesi tez ekleri
+- `docs/product/04-quality.md` — test piramidi + CI gate matrisi tez "kalite stratejisi" bölümü
+- `docs/product/06-roadmap.md` — sıralı uygulama planı tez "süreç yönetimi" bölümü
+- `.claude/state/implementation-log.jsonl` — 10 implementation entry, audit trail
+- 11 PR commit history — disiplinli geliştirme sürecinin kanıtı
+
+### Önümüzdeki dalga (PDP-3 adayları)
+
+- **F-06 ChatPage refactor** — 1100+ satırı hook'lara böl, ≤ 500 hedef
+- **F-09 RAG entegrasyonu** — chat Q&A'da `RAGService` (Piri) tam entegrasyonu
+- **Q4 manuel rubric scoring** — Critic skoru kalibrasyonu (tez § 3.7)
+- **Q2 self-pilot v2** — bakkal-personası kullanıcı testi (5-dakika think-aloud)
+- **F-06 sonrası dashboard / settings rework** — auxiliary ekranlar PDP'sine giriyorsa
