@@ -184,8 +184,13 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
     });
   }
 
-  // Proto result
-  if (pipeline.protoOutput?.ok) {
+  // Proto result — only surface the "scaffold pushed" card AFTER the user
+  // has confirmed the push. While at `awaiting_push_confirm`, protoOutput
+  // exists (dry-run files are cached for the preview), but `committed` is
+  // false and `branch` is the placeholder `'dry-run'` — surfacing a card
+  // with a GitHub link would 404 and the branch text would leak English
+  // jargon to a bakkal user (NFR-5.1).
+  if (pipeline.protoOutput?.ok && pipeline.protoOutput.metadata?.committed === true) {
     const po = pipeline.protoOutput;
     messages.push({
       type: 'pr_opened',

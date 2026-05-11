@@ -1661,8 +1661,20 @@ export class PipelineOrchestrator {
       metrics: { ...pipeline.metrics, retryCount: pipeline.metrics.retryCount + 1 },
     });
 
-    // Determine which stage failed based on existing data
+    // Determine which stage failed based on existing data.
+    // PDP-3 B4 guard: if Proto succeeded but the push never committed
+    // (dry-run cache only — `metadata.committed === false`), the failure
+    // was at the push step itself. Retrying Trace would run tests against
+    // `branch: 'dry-run'` on a non-existent repo. Instead, reset to the
+    // push-confirm gate so the user can retry the push (or cancel).
     if (pipeline.protoOutput && !pipeline.traceOutput) {
+      const committed = pipeline.protoOutput.metadata?.committed === true;
+      if (!committed) {
+        return this.store.update(pipelineId, {
+          stage: 'awaiting_push_confirm',
+          error: null,
+        });
+      }
       this.retryTrace(pipelineId, pipeline).catch((err) => {
         logger.error({ err, pipelineId }, '[Pipeline] Retry trace failed');
       });
@@ -1717,7 +1729,12 @@ export class PipelineOrchestrator {
 
     // Idempotency: if the user double-clicks "Gönder", the second call sees
     // the pipeline already advanced past the gate and just returns state.
+    // `proto_building` covers the mid-flight transient between the FE click
+    // and the background `runConfirmedPush` actually completing — without
+    // it, a fast double-click would throw `InvalidStageError` on the second
+    // request instead of returning the in-flight state.
     const alreadyAdvanced: readonly PipelineStage[] = [
+      'proto_building',
       'trace_testing',
       'completed',
       'completed_partial',

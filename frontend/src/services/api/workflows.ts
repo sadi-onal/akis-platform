@@ -28,7 +28,8 @@ const http = new HttpClient(getApiBaseUrl());
 
 function mapStageStatus(
   pipelineStage: PipelineStage,
-  traceEnabled?: boolean
+  traceEnabled?: boolean,
+  protoCommitted?: boolean
 ): { workflowStatus: WorkflowStatus; stages: WorkflowStages } {
   const idle: StageResult = { status: 'idle' };
 
@@ -85,8 +86,19 @@ function mapStageStatus(
     case 'completed_partial':
       stages.scribe.status = 'completed';
       stages.approve.status = 'completed';
-      stages.proto.status = 'completed';
-      stages.trace.status = 'failed';
+      // PDP-3 B4: completed_partial has two distinct causes — (a) the user
+      // cancelled at the push-confirm gate (protoOutput.metadata.committed
+      // === false: nothing was ever pushed) and (b) Trace failed after a
+      // successful push. The first case should NOT show Proto as completed
+      // or Trace as failed — the user deliberately stopped before either
+      // happened. The second case keeps the legacy "Trace: failed" look.
+      if (protoCommitted === false) {
+        stages.proto.status = 'idle';
+        stages.trace.status = 'idle';
+      } else {
+        stages.proto.status = 'completed';
+        stages.trace.status = 'failed';
+      }
       workflowStatus = 'completed_partial';
       break;
     case 'failed':
@@ -295,7 +307,12 @@ export function mapPipelineToWorkflow(
   pipeline: Pipeline,
   tokenUsage?: import('../../types/workflow').WorkflowTokenUsage
 ): Workflow {
-  const { workflowStatus, stages } = mapStageStatus(pipeline.stage, pipeline.traceEnabled);
+  const protoCommitted = pipeline.protoOutput?.metadata?.committed;
+  const { workflowStatus, stages } = mapStageStatus(
+    pipeline.stage,
+    pipeline.traceEnabled,
+    protoCommitted
+  );
 
   // Enrich stages with actual output data
   const scribeData = mapScribeOutput(pipeline.scribeOutput);
