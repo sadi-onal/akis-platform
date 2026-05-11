@@ -17,6 +17,8 @@ import {
   summarize,
   runI18nSync,
   I18N_TR_EN_ALLOWLIST,
+  GLOSSARY_PATH_ALLOWLIST,
+  isPathAllowlisted,
 } from '../bakkal-language.mjs';
 
 const glossary = loadGlossary();
@@ -258,4 +260,45 @@ export function S() {
     assert.ok(canon.includes('pull request'));
     assert.equal(exitCodeFor(all), 1);
   });
+});
+
+// ─── GLOSSARY_PATH_ALLOWLIST + isPathAllowlisted ─────────────────────────
+
+test('GLOSSARY_PATH_ALLOWLIST is an array of repo-suffix strings', () => {
+  assert.ok(Array.isArray(GLOSSARY_PATH_ALLOWLIST), 'allowlist must be an array');
+  assert.ok(GLOSSARY_PATH_ALLOWLIST.length >= 1, 'allowlist should not be empty');
+  for (const entry of GLOSSARY_PATH_ALLOWLIST) {
+    assert.equal(typeof entry, 'string');
+    assert.ok(entry.startsWith('frontend/'), `entry "${entry}" should be repo-relative`);
+    assert.ok(!entry.includes('\\'), `entry "${entry}" must use posix separators`);
+  }
+});
+
+test('isPathAllowlisted matches absolute paths by suffix', () => {
+  const entry = GLOSSARY_PATH_ALLOWLIST[0];
+  assert.ok(isPathAllowlisted(`/abs/path/to/${entry}`));
+  assert.ok(isPathAllowlisted(entry)); // relative also works
+});
+
+test('isPathAllowlisted does not match paths outside the allowlist', () => {
+  assert.equal(isPathAllowlisted('/abs/frontend/src/components/chat/ChatPage.tsx'), false);
+  assert.equal(isPathAllowlisted('/abs/backend/src/agents/proto/ProtoAgent.ts'), false);
+});
+
+test('isPathAllowlisted rejects partial suffix collisions', () => {
+  // A path that ENDS WITH the suffix is allowlisted; a path that CONTAINS it
+  // mid-string but isn't a true suffix should NOT match.
+  const entry = GLOSSARY_PATH_ALLOWLIST[0];
+  // Sanity: real suffix → match
+  assert.ok(isPathAllowlisted(`/repo/${entry}`));
+  // Mid-path occurrence with extra chars after → no match
+  assert.equal(isPathAllowlisted(`/repo/${entry}.backup`), false);
+});
+
+test('isPathAllowlisted accepts a custom allowlist argument', () => {
+  const custom = ['frontend/src/custom/Path.tsx'];
+  assert.ok(isPathAllowlisted('/abs/repo/frontend/src/custom/Path.tsx', custom));
+  assert.equal(isPathAllowlisted('/abs/repo/frontend/src/other/Path.tsx', custom), false);
+  // Default allowlist not used when custom is passed
+  assert.equal(isPathAllowlisted(`/abs/${GLOSSARY_PATH_ALLOWLIST[0]}`, custom), false);
 });

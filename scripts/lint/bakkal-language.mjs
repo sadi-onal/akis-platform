@@ -78,7 +78,7 @@ export const GLOSSARY_PATH_ALLOWLIST = [
   'frontend/src/components/landing/HowItWorksSection.tsx',
 ];
 
-function isPathAllowlisted(filePath, allowlist = GLOSSARY_PATH_ALLOWLIST) {
+export function isPathAllowlisted(filePath, allowlist = GLOSSARY_PATH_ALLOWLIST) {
   return allowlist.some((entry) => filePath.endsWith(entry));
 }
 
