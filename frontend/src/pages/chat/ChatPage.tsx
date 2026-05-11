@@ -382,6 +382,10 @@ export default function ChatPage() {
     onCancel: handleCancel, onApprove: handleApprove, onReject: handleReject,
     onRetry: handleRetry, onSkip: handleSkip, onBack: handleBack,
     onSuggestBuild: handleSuggestBuild,
+    // PDP-3 B4: after the user resolves the push gate, refresh the
+    // workflow so the new stage (proto_building → trace → completed, or
+    // completed_partial on cancel) reaches the chat surface.
+    onPushResolved: refreshWorkflow,
     traceEnabled, setTraceEnabled, pendingModel, setPendingModel,
     onModelChange: handleModelChange, repoSelectorSlot,
     isFirstTimeUser: conversations.length === 0,

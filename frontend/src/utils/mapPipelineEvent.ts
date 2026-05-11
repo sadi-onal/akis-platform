@@ -21,6 +21,8 @@ export function mapStageToUIState(stage: PipelineStage): ConversationUIState {
       return 'critic_running';
     case 'awaiting_approval':
       return 'awaiting_approval';
+    case 'awaiting_push_confirm':
+      return 'awaiting_push_confirm';
     case 'proto_building':
       return 'proto_running';
     case 'trace_testing':
@@ -48,6 +50,11 @@ export function mapStageToMode(stage?: PipelineStage): ChatMode {
     case 'critic_reviewing_spec':
     case 'awaiting_approval':
       return 'plan';
+    case 'awaiting_push_confirm':
+      // PDP-3 B4: gate sits between code generation and push — still in
+      // the "act" phase from the user's perspective ("we're acting on the
+      // approved plan; you decide whether to commit").
+      return 'act';
     case 'proto_building':
     case 'critic_reviewing_code':
     case 'trace_testing':
@@ -78,6 +85,9 @@ export function mapStageToConversationStatus(stage: PipelineStage): Conversation
     case 'ci_running':
       return 'running';
     case 'awaiting_approval':
+    case 'awaiting_push_confirm':
+      // PDP-3 B4: sidebar treats the new push gate the same as spec
+      // approval — both mean "needs your input next".
       return 'awaiting_approval';
     case 'failed':
       return 'error';
