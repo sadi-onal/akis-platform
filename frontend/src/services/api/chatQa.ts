@@ -136,6 +136,21 @@ async function* readSSEStream(
     } catch {
       /* already cancelled */
     }
+    // Test-mode probe: when a Playwright e2e spec seeds the abort counter
+    // before navigation (`window.__chatQaAbortCount = 0`), we bump it here
+    // so the test can prove the AbortController cleanup actually fired.
+    // No-op in normal usage (the counter is undefined).
+    try {
+      if (
+        typeof window !== 'undefined' &&
+        typeof (window as unknown as { __chatQaAbortCount?: number })
+          .__chatQaAbortCount === 'number'
+      ) {
+        (window as unknown as { __chatQaAbortCount: number }).__chatQaAbortCount += 1;
+      }
+    } catch {
+      /* ignore — never let the probe fail the stream */
+    }
   };
   if (signal) {
     if (signal.aborted) onAbort();

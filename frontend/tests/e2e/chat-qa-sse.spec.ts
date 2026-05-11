@@ -16,11 +16,13 @@
  * Run: pnpm -C frontend exec playwright test chat-qa-sse
  */
 import { test, expect, type Page, type Route } from '@playwright/test';
+import {
+  mockChatShellBase,
+  openChatInput,
+  type BasePipelineState,
+} from './helpers/mock-chat-shell';
 
-const TEST_USER_ID = 'e2e-chatqa-' + Date.now();
-const TEST_EMAIL = `chatqa+${Date.now()}@test.akis.dev`;
-
-interface ChatQaState {
+interface ChatQaState extends BasePipelineState {
   /** Drives the next /api/chat-qa/ask response payload. */
   next: {
     chunks: string[];
@@ -30,84 +32,16 @@ interface ChatQaState {
   };
   /** Capture for assertions. */
   askCalls: Array<{ message: string }>;
-  buildCreated: boolean;
 }
 
 async function mockChatShell(page: Page, state: ChatQaState) {
-  await page.route('**/auth/me', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        id: TEST_USER_ID,
-        name: 'ChatQA Tester',
-        email: TEST_EMAIL,
-        status: 'active',
-        emailVerified: true,
-      }),
-    }),
-  );
-
-  await page.route('**/api/integrations/github/status', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        connected: true,
-        login: 'chatqa-tester',
-        avatarUrl: null,
-        scope: 'read:user user:email repo',
-      }),
-    }),
-  );
-
-  await page.route('**/api/settings/ai-keys/status', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ activeProvider: 'mock' }),
-    }),
-  );
-
-  await page.route('**/api/conversations**', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ conversations: [], total: 0 }),
-    }),
-  );
-
-  await page.route('**/api/pipelines?**', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ pipelines: [], total: 0 }),
-    }),
-  );
-
-  // POST /api/pipelines — BUILD path indicator. We flag it but always succeed
-  // with a tiny workflow object so the page can transition without errors.
-  await page.route('**/api/pipelines', (route: Route) => {
-    if (route.request().method() !== 'POST') return route.continue();
-    state.buildCreated = true;
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        id: 'wf-' + Date.now(),
-        title: 'mocked',
-        currentStage: 'scribe_generating',
-        conversation: [],
-        stages: {},
-      }),
-    });
-  });
+  await mockChatShellBase(page, state, { userName: 'ChatQA Tester' });
 
   // Classifier — pin to high-confidence ASK so the router dispatches to the
   // chat-qa handler without surfacing the disambiguation modal.
-  await page.route('**/api/chat/intent', (route: Route) => {
-    if (route.request().method() !== 'POST') return route.continue();
-    route.fulfill({
+  await page.route('**/api/chat/intent', async (route: Route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
@@ -166,18 +100,6 @@ function freshState(overrides?: Partial<ChatQaState['next']>): ChatQaState {
     askCalls: [],
     buildCreated: false,
   };
-}
-
-async function openChatInput(page: Page) {
-  await page.goto('/chat');
-  await page.waitForLoadState('networkidle');
-  await page
-    .getByRole('button', { name: /Start New Chat|Yeni Sohbet Başlat|Yeni Sohbet/i })
-    .first()
-    .click();
-  const input = page.getByRole('textbox', { name: 'Mesaj yaz' });
-  await input.waitFor({ state: 'visible', timeout: 10_000 });
-  return input;
 }
 
 test.describe('Chat Q&A SSE flow (FR-10)', () => {
@@ -247,88 +169,133 @@ test.describe('Chat Q&A SSE flow (FR-10)', () => {
     await expect.poll(() => state.buildCreated, { timeout: 10_000 }).toBe(true);
   });
 
-  test('navigating away mid-stream aborts cleanly without orphan errors', async ({
+  test('navigating away mid-stream aborts the in-flight chat-qa request', async ({
     page,
   }) => {
-    // Slow stream: long pause before `done` so we can navigate during streaming.
-    // We hand-craft the SSE response with an artificial delay using Playwright's
-    // request fulfillment timing — chunks first, then a Promise that closes
-    // long after the navigation completes.
-    const askEvents: string[] = [];
-
-    // Wire a baseline shell so /chat works. We'll override /api/chat-qa/ask
-    // manually below to control timing.
-    const shellState = freshState();
-    await mockChatShell(page, shellState);
-
-    let aborted = false;
-    await page.route('**/api/chat-qa/ask', async (route: Route) => {
-      askEvents.push('start');
-      // Detect the AbortController-driven cancel by listening for the request's
-      // `failure` after the page navigates away.
-      const handleAbort = () => {
-        aborted = true;
+    // Strategy: prove ChatPage's `useEffect cleanup → askAbortRef.current.abort()`
+    // contract by holding a chat-qa SSE response open and then unmounting the
+    // ChatPage via React Router (NOT a hard `goto`, which would destroy the
+    // document before React cleanup runs). The probe in `chatQa.ts` bumps
+    // `window.__chatQaAbortCount` when its onAbort handler fires; we read it
+    // after the navigation lands.
+    //
+    // Mocking an infinite SSE stream is tricky: Playwright's `route.fulfill`
+    // delivers a finite body in one go, so the FE iterator naturally finishes
+    // before any abort can land. To get a genuine never-closing stream we
+    // patch `window.fetch` for the chat-qa endpoint and return a Response
+    // wrapping a `ReadableStream` we keep open until teardown. Everything
+    // else (auth, classifier, etc.) keeps the standard `page.route` shape.
+    await page.addInitScript(() => {
+      const w = window as unknown as {
+        __chatQaAbortCount: number;
+        __chatQaAskHits: number;
+        __chatQaReleaseFirst?: () => void;
       };
-      route.request().on('failed' as never, handleAbort);
+      w.__chatQaAbortCount = 0;
+      w.__chatQaAskHits = 0;
 
-      // Build a response that begins with an immediate chunk (so the FE shows
-      // the bubble) but never closes — simulates an in-flight stream.
-      const head =
-        'event: chunk\ndata: {"text":"yükleniyor "}\n\n' +
-        ': heartbeat\n\n';
-      try {
-        await route.fulfill({
-          status: 200,
-          headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-          // Returning a finite body is fine — Playwright closes the response
-          // after fulfill, but the FE's `for await` loop has already been
-          // unmounted by the time we navigate away, so no UI errors should
-          // surface either way. The orphan-stream contract is tested by
-          // observing the absence of console errors.
-          body: head,
+      const realFetch = window.fetch.bind(window);
+      window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        if (!url.includes('/api/chat-qa/ask')) {
+          return realFetch(input, init);
+        }
+        w.__chatQaAskHits += 1;
+        // Return a Response with a ReadableStream body. Emit a single chunk
+        // so the FE renders the bubble, then park — the only way to end is
+        // if reader.cancel() is called from chatQa.ts's onAbort handler.
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const enc = new TextEncoder();
+            controller.enqueue(
+              enc.encode(
+                'event: chunk\ndata: {"text":"yükleniyor "}\n\n: heartbeat\n\n',
+              ),
+            );
+            w.__chatQaReleaseFirst = () => {
+              try {
+                controller.close();
+              } catch {
+                /* already closed */
+              }
+            };
+          },
         });
-      } catch {
-        /* response may already be cancelled by the abort */
-      }
-    }, { times: 1 });
+        return Promise.resolve(
+          new Response(stream, {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+          }),
+        );
+      }) as typeof window.fetch;
+    });
 
-    // Track console errors. We tolerate aborts (DOMException AbortError) but
-    // any unrelated error indicates an orphan-stream regression.
     const consoleErrors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
+    // Baseline shell + classifier (page.route-based; chat-qa is replaced
+    // by our fetch override above so the shell's chat-qa route never
+    // matches — that's fine).
+    const shellState = freshState();
+    await mockChatShell(page, shellState);
+
     const input = await openChatInput(page);
     await input.fill('Stok eklemek istiyorum');
     await input.press('Enter');
 
-    // The response bubble appears as soon as the first chunk lands.
+    // The response bubble appears once the first chunk lands.
     await expect(page.getByTestId('chat-qa-response')).toBeVisible({ timeout: 10_000 });
 
-    // Navigate away while the stream is still in-flight. This unmounts the
-    // chat page → useEffect cleanup → askAbortRef.current.abort() fires.
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Confirm one ask fetch fired (sanity — our fetch override saw it).
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () => (window as unknown as { __chatQaAskHits?: number }).__chatQaAskHits ?? 0,
+          ),
+        { timeout: 5_000 },
+      )
+      .toBeGreaterThanOrEqual(1);
 
-    // Give the AbortController + cleanup a tick to land. We don't assert on
-    // the route's `aborted` flag (Playwright may already have closed the
-    // fulfill before the abort propagates) — what we care about is that no
-    // unexpected console errors surfaced.
-    await page.waitForTimeout(300);
+    // Navigate via React Router (history.pushState + popstate). This unmounts
+    // ChatPage → useEffect cleanup → `askAbortRef.current?.abort()` →
+    // chatQa.ts's `onAbort` runs → `window.__chatQaAbortCount` bumps. A hard
+    // `page.goto('/')` would tear the document down before React's cleanup
+    // runs, so we stay in-document.
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
 
-    // Filter out abort-flavoured noise — they're the legitimate FE cleanup.
-    // Anything else is a regression.
+    // Poll the probe — abort handler should have fired exactly once.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (window as unknown as { __chatQaAbortCount?: number }).__chatQaAbortCount ?? 0,
+          ),
+        { timeout: 5_000 },
+      )
+      .toBeGreaterThanOrEqual(1);
+
+    // Filter out abort-flavoured noise — those are the legitimate FE cleanup.
+    // Anything else indicates an orphan-stream / unhandled-rejection regression.
     const unexpected = consoleErrors.filter(
       (e) => !/abort/i.test(e) && !/AbortError/i.test(e),
     );
     expect(unexpected, `unexpected console errors:\n${unexpected.join('\n')}`).toEqual([]);
 
-    // Sanity: the chat-qa endpoint was hit at least once before navigation.
-    expect(askEvents).toContain('start');
-    // We don't strictly require `aborted=true` because Playwright's route
-    // hooks don't always fire on cancel; the meaningful signal is the lack
-    // of orphan-stream errors above.
-    void aborted;
+    // Release the held response so the test tears down cleanly.
+    await page.evaluate(() => {
+      (window as unknown as { __chatQaReleaseFirst?: () => void }).__chatQaReleaseFirst?.();
+    });
   });
 });

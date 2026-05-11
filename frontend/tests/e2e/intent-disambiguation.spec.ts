@@ -14,11 +14,13 @@
  * Run: pnpm -C frontend exec playwright test intent-disambiguation
  */
 import { test, expect, type Page, type Route } from '@playwright/test';
+import {
+  mockChatShellBase,
+  openChatInput,
+  type BasePipelineState,
+} from './helpers/mock-chat-shell';
 
-const TEST_USER_ID = 'e2e-intent-' + Date.now();
-const TEST_EMAIL = `intent+${Date.now()}@test.akis.dev`;
-
-interface IntentMockState {
+interface IntentMockState extends BasePipelineState {
   /** Drives the next /api/chat/intent response. */
   next: {
     intent: 'BUILD' | 'ASK' | 'FEEDBACK' | 'CHAT';
@@ -29,83 +31,13 @@ interface IntentMockState {
   classifyCalls: Array<{ message: string }>;
   /** Captured override calls (PATCH /api/chat/intent/:id). */
   overrideCalls: Array<{ id: string; intent: string }>;
-  /** Whether /api/pipelines POST has been hit (BUILD path indicator). */
-  buildCreated: boolean;
   /** Whether /api/chat-qa/ask has been hit (ASK path indicator). */
   askCalled: boolean;
 }
 
 /** Set up the auth + chat shell mocks shared by every test. */
 async function mockChatShell(page: Page, state: IntentMockState) {
-  await page.route('**/auth/me', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        id: TEST_USER_ID,
-        name: 'Intent Tester',
-        email: TEST_EMAIL,
-        status: 'active',
-        emailVerified: true,
-      }),
-    }),
-  );
-
-  // GitHub already connected — keeps the JIT gate out of the way so we can
-  // reach the classifier path without a connect-OAuth detour.
-  await page.route('**/api/integrations/github/status', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        connected: true,
-        login: 'intent-tester',
-        avatarUrl: null,
-        scope: 'read:user user:email repo',
-      }),
-    }),
-  );
-
-  await page.route('**/api/settings/ai-keys/status', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ activeProvider: 'mock' }),
-    }),
-  );
-
-  await page.route('**/api/conversations**', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ conversations: [], total: 0 }),
-    }),
-  );
-
-  await page.route('**/api/pipelines?**', (route: Route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ pipelines: [], total: 0 }),
-    }),
-  );
-
-  // POST /api/pipelines — BUILD path indicator. Returns a minimal workflow.
-  await page.route('**/api/pipelines', (route: Route) => {
-    if (route.request().method() !== 'POST') return route.continue();
-    state.buildCreated = true;
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        id: 'wf-' + Date.now(),
-        title: 'mocked',
-        currentStage: 'scribe_generating',
-        conversation: [],
-        stages: {},
-      }),
-    });
-  });
+  await mockChatShellBase(page, state, { userName: 'Intent Tester' });
 
   // The classifier endpoint — drives the modal vs direct-route decision.
   await page.route('**/api/chat/intent', async (route: Route) => {
@@ -133,12 +65,12 @@ async function mockChatShell(page: Page, state: IntentMockState) {
       });
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 
   // PATCH /api/chat/intent/:id — override telemetry. We capture but ignore.
   await page.route('**/api/chat/intent/*', async (route: Route) => {
-    if (route.request().method() !== 'PATCH') return route.continue();
+    if (route.request().method() !== 'PATCH') return route.fallback();
     const url = route.request().url();
     const id = decodeURIComponent(url.split('/').pop() ?? '');
     let intent = '';
@@ -184,22 +116,6 @@ function freshState(
     buildCreated: false,
     askCalled: false,
   };
-}
-
-/**
- * Reach /chat with a pending conversation so ChatInput is rendered. The
- * EmptyState's "Yeni Sohbet" CTA is the same affordance bakkal users see.
- */
-async function openChatInput(page: Page) {
-  await page.goto('/chat');
-  await page.waitForLoadState('networkidle');
-  await page
-    .getByRole('button', { name: /Start New Chat|Yeni Sohbet Başlat|Yeni Sohbet/i })
-    .first()
-    .click();
-  const input = page.getByRole('textbox', { name: 'Mesaj yaz' });
-  await input.waitFor({ state: 'visible', timeout: 10_000 });
-  return input;
 }
 
 test.describe('Intent disambiguation flow (FR-11)', () => {
