@@ -631,7 +631,7 @@ export class ScribeAgent {
     ];
 
     if (state.context) {
-      parts.push(`\nÖNCEKİ PROJE BAĞLAMI (kullanıcı daha önce tamamlanmış bir projeden devam ediyor):\n${state.context}\n\nKullanıcının yeni mesajını bu bağlam çerçevesinde değerlendir. Daha önce belirlenmiş kararları tekrar sormaktan kaçın.`);
+      parts.push(`\nÖNCEKİ PROJE BAĞLAMI (kullanıcı daha önce tamamlanmış bir projeden devam ediyor):\n${state.context}\n\nKullanıcının yeni mesajını bu bağlam çerçevesinde değerlendir. Daha önce belirlenmiş kararları tekrar sormaktan kaçın.`); // allow:push
     }
     if (state.targetStack) {
       parts.push(`Teknoloji tercihi: ${state.targetStack}`);
@@ -641,7 +641,7 @@ export class ScribeAgent {
 
     const previousQA = this.extractPreviousQA(state.conversation);
     if (previousQA.length > 0) {
-      parts.push(`\nÖnceki sorular ve cevaplar:\n${previousQA}`);
+      parts.push(`\nÖnceki sorular ve cevaplar:\n${previousQA}`); // allow:push
     }
 
     if (state.pendingQuestionIds.length > 0) {
@@ -661,7 +661,7 @@ export class ScribeAgent {
     ];
 
     if (state.context) {
-      parts.push(`\nÖNCEKİ PROJE BAĞLAMI (kullanıcı daha önce tamamlanmış bir projeden devam ediyor):\n${state.context}\n\nBu yeni spec'i oluştururken önceki projenin bağlamını göz önünde bulundur. Kullanıcı mevcut projeyi geliştirmek veya değiştirmek istiyor olabilir.`);
+      parts.push(`\nÖNCEKİ PROJE BAĞLAMI (kullanıcı daha önce tamamlanmış bir projeden devam ediyor):\n${state.context}\n\nBu yeni spec'i oluştururken önceki projenin bağlamını göz önünde bulundur. Kullanıcı mevcut projeyi geliştirmek veya değiştirmek istiyor olabilir.`); // allow:push,spec
     }
     if (state.targetStack) {
       parts.push(`Teknoloji tercihi: ${state.targetStack}`);
@@ -669,7 +669,7 @@ export class ScribeAgent {
 
     const previousQA = this.extractPreviousQA(state.conversation);
     if (previousQA.length > 0) {
-      parts.push(`\nTüm konuşma geçmişi:\n${previousQA}`);
+      parts.push(`\nTüm konuşma geçmişi:\n${previousQA}`); // allow:push
     }
 
     return parts.join('\n');
@@ -688,7 +688,7 @@ export class ScribeAgent {
         const feedback = typeof msg.content === 'object' && msg.content !== null
           ? (msg.content as Record<string, unknown>).feedback
           : msg.content;
-        lines.push(`[KULLANICI REDDETTİ — Geri bildirim: ${feedback}]`);
+        lines.push(`[KULLANICI REDDETTİ — Geri bildirim: ${feedback}]`); // allow:push
       }
     }
     return lines.join('\n');

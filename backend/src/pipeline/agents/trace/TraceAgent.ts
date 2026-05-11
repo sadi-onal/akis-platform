@@ -267,7 +267,7 @@ export class TraceAgent {
     }
 
     // Legacy path: Step 1: Read codebase from GitHub
-    emit?.('fetching', 'Scaffold branch\'inden kaynak dosyalar alınıyor...', 15, undefined, undefined, 'pipeline.activity.trace.reading_repo');
+    emit?.('fetching', 'İskelet dalından kaynak dosyalar alınıyor...', 15, undefined, undefined, 'pipeline.activity.trace.reading_repo');
     const codebaseResult = await this.readCodebase(input.repoOwner, input.repo, input.branch, emit);
     if (codebaseResult.type === 'error') {
       emit?.('error', 'Kod tabanı okunamadı', 0);
@@ -276,7 +276,7 @@ export class TraceAgent {
 
     const files = codebaseResult.data;
     if (files.length === 0) {
-      emit?.('error', 'Repoda kaynak dosya bulunamadı', 0);
+      emit?.('error', 'Depoda kaynak dosya bulunamadı', 0);
       return {
         type: 'error',
         error: createPipelineError(
@@ -337,7 +337,7 @@ export class TraceAgent {
       allFilesToPush
     );
     if (pushResult.type === 'error') {
-      emit?.('error', 'Test dosyaları push edilemedi', 0);
+      emit?.('error', 'Test dosyaları yüklenemedi', 0);
       return pushResult;
     }
 
@@ -485,7 +485,7 @@ After pushing, respond with a JSON summary:
         onToolCall: (name) => {
           if (name === 'list_files') emit?.('fetching', 'Dosya listesi okunuyor...', 20);
           if (name === 'read_file') emit?.('fetching', 'Kaynak dosya okunuyor...', 40);
-          if (name === 'push_files') emit?.('github_push', 'Test dosyaları push ediliyor...', 80, undefined, undefined, 'pipeline.activity.trace.pushing_tests');
+          if (name === 'push_files') emit?.('github_push', 'Test dosyaları yükleniyor...', 80, undefined, undefined, 'pipeline.activity.trace.pushing_tests');
         },
       },
     );
@@ -795,7 +795,7 @@ After pushing, respond with a JSON summary:
       lines.push(
         '### GitHub Actions',
         '',
-        `Bu repoya \`${AKIS_E2E_WORKFLOW_PATH}\` eklendi: push/PR sonrası Playwright E2E ve (varsa) Cucumber özellik dosyaları koşar.`,
+        `Bu depoya \`${AKIS_E2E_WORKFLOW_PATH}\` eklendi: yükleme veya değişiklik teklifi sonrası Playwright E2E ve (varsa) Cucumber özellik dosyaları koşar.`,
         'Sonuçlar **Actions** sekmesinde; başarısızlıkta `playwright-report` artifact yüklenir.',
         '',
       );
@@ -815,7 +815,7 @@ After pushing, respond with a JSON summary:
       lines.push('');
     }
 
-    lines.push('> Bu testler AKIS Trace agent tarafından otomatik oluşturuldu.');
+    lines.push('> Bu testler AKIS Trace agent tarafından otomatik oluşturuldu.'); // allow:push
     return lines.join('\n');
   }
 

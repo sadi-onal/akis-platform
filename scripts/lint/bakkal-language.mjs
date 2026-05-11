@@ -105,6 +105,11 @@ export function discoverFiles(root = REPO_ROOT, { all = false } = {}) {
       join(root, 'backend', 'src', 'pipeline', 'templates'),
       join(root, 'backend', 'src', 'pipeline', 'agents'),
       join(root, 'backend', 'src', 'agents'),
+      // F-12 Phase 3: cover system-prompt builders too. Most strings here
+      // are AI-facing English, but the heuristic Turkish-character filter
+      // skips them — only any user-facing copy that surfaces (e.g. a
+      // Turkish-tagged log line) will be flagged.
+      join(root, 'backend', 'src', 'services', 'ai'),
     ];
     for (const d of promptDirs) {
       if (existsSync(d)) {

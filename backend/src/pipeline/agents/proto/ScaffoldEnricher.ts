@@ -13,7 +13,8 @@
  * The bakkal's three destinations (PDP § 1, persona use case 4):
  *   1. **Bilgisayarımda çalıştır** — install.sh + 3-step copy-paste in README
  *   2. **Sunucuya kur** — Dockerfile + docker-compose.yml (when stack supports it)
- *   3. **GitHub'da gör** — repo URL placeholder filled by ProtoAgent at push time
+ *   3. **GitHub'da gör**
+ *      (depo URL placeholder filled by ProtoAgent at upload time)
  *
  * Wire-in: ProtoAgent calls `enricher.enrich(files, spec)` between the AI
  * generate step and the GitHub push step. See 03-architecture.md § 5.4.
