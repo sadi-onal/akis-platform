@@ -117,9 +117,11 @@ export default defineConfig({
         'src/main.tsx',
         'src/services/api/openapi-types.ts',
       ],
-      // PDP-2 sonu gerçek baseline: lines 41.97%, statements 41.21%, functions 40.45%, branches 40.54%.
-      // Threshold "asla altına düşme" çizgisi olarak 35 — gerçek hedef NFR-3.5 = ≥ %70, PDP-3'te ayarlanır.
-      thresholds: { lines: 35, statements: 35, functions: 35, branches: 35 },
+      // PDP-3 sonu gerçek baseline (2026-05-11, commit ~feat/pdp-3-coverage-push final):
+      //   lines 70.77%, statements 69.38%, functions 66.46%, branches 62.70%.
+      // NFR-3.5 = ≥ %70 lines hedefi karşılandı. Threshold "asla altına düşme" çizgisi
+      // olarak NFR-3.5'te lines: 70 (direct floor); diğerleri küçük tampon ile.
+      thresholds: { lines: 70, statements: 65, functions: 60, branches: 55 },
     },
   },
 });

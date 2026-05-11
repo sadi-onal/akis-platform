@@ -1,6 +1,6 @@
-# Coverage Tooling — Scaffold (PDP-3 hazırlığı)
+# Coverage Tooling — PDP-3 (NFR-3.5 hedefi karşılandı)
 
-**Status:** Scaffold landed 2026-05-11 (PR `chore/wave3-prep`); CI gate ⏭️ PDP-3'te.
+**Status:** Scaffold landed 2026-05-11 (PR `chore/wave3-prep`); **CI gate aktif PDP-3'te** (PR `feat/pdp-3-coverage-push`).
 
 ## Komutlar
 
@@ -16,15 +16,13 @@ pnpm -C backend test:coverage
 # Same reporters via c8. Excludes test files + __tests__.
 ```
 
-## Eşikler (warn-only)
+## Eşikler — aktif
 
 Frontend `vite.config.ts` `test.coverage.thresholds`:
-- lines / statements / functions / branches: **50%** (warn-only baseline)
+- **lines: 70** (NFR-3.5 direct floor — regresyon halinde CI fail)
+- statements: 65, functions: 60, branches: 55 (gerçek değerlere göre küçük tampon)
 
-Bu eşikler PDP-2 sonu baseline (manuel tahmin: FE ~65-70%, BE ~75-80%). 50% şu an "asla altına düşme" çizgisi. PDP-3'te:
-1. Gerçek coverage ölç → baseline'ı raporla
-2. Eşikleri **75% / 70%** olarak ayarla (04-quality.md NFR-3 hedefi)
-3. CI workflow'a ekle (`.github/workflows/coverage.yml` veya mevcut PR Gate)
+CI gate aktif: `.github/workflows/pr-gate.yml` `frontend-gate` job'una `Frontend Coverage Gate (NFR-3.5 ≥ 70% lines)` step eklendi. Threshold'un altına düşen PR otomatik fail eder.
 
 ## Çıktılar
 
@@ -66,14 +64,39 @@ jobs:
           "
 ```
 
-## Gerçek baseline (2026-05-11)
+## Gerçek baseline — PDP-2 sonu (2026-05-11, commit `057e164`)
 
-İlk `test:coverage` çalıştırması sonucu — bu sayılar PDP-3 hedef ayarlamasının temelidir.
+İlk `test:coverage` çalıştırması sonucu — bu sayılar PDP-3 hedef ayarlamasının başlangıç noktasıydı.
 
 | Paket | Lines | Statements | Functions | Branches | NFR-3 hedef | Durum |
 |---|---:|---:|---:|---:|---:|---|
 | Backend | **79.13%** | 79.13% | 79.86% | 81.84% | ≥ 75% | ✅ aşıldı |
-| Frontend | 41.97% | 41.21% | 40.45% | 40.54% | ≥ 70% | 🔴 hedef altında — PDP-3 ana iş |
+| Frontend | 41.97% | 41.21% | 40.45% | 40.54% | ≥ 70% | 🔴 PDP-2 sonu — PDP-3 ana iş |
+
+## Gerçek baseline — PDP-3 sonu (2026-05-11, PR [#532](https://github.com/OmerYasirOnal/akis-platform/pull/532))
+
+4 paralel worktree subagent (A: services/api, B: pages+theme, C: utils+chat hooks, D: pages/auth) toplam **+359 yeni test** ekleyerek frontend coverage'ı NFR-3.5 hedefine taşıdı.
+
+| Paket | Lines | Statements | Functions | Branches | NFR-3 hedef | Durum |
+|---|---:|---:|---:|---:|---:|---|
+| Backend | 79.13% | 79.13% | 78.45% | 81.02% | ≥ 75% | ✅ aşıldı |
+| Frontend | **70.77%** | 69.38% | 66.46% | 62.70% | ≥ 70% | ✅ **karşılandı** |
+
+**PDP-3 dalga sonuçları (PR `feat/pdp-3-coverage-push`):**
+
+| Grup | Kapsam | Δ lines |
+|---|---|---:|
+| A | `services/api/*` — 10 fetch wrapper | +4.77pp |
+| B | `pages/legal + settings + theme` — 4 file | +5.53pp |
+| C | `utils/conversationToChatMessages` + 4 F-06 hook | +1.80pp |
+| D | `pages/auth/*` — 8 file | +8.34pp |
+| **Toplam** | **27 source file, 359 yeni test** | **+20.44pp** |
+
+Threshold (`vite.config.ts` `test.coverage.thresholds`):
+- lines: **70** (NFR-3.5 direct floor)
+- statements: 65 (4pp tampon)
+- functions: 60 (6pp tampon)
+- branches: 55 (8pp tampon)
 
 **Tahmin (LOC oranı) vs gerçek:**
 - Backend tahmin ~75-80% → gerçek 79% ✓

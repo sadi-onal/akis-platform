@@ -100,9 +100,9 @@ jobs:
         working-directory: frontend
         run: pnpm run lint
 
-      - name: Frontend Tests
+      - name: Frontend Tests + Coverage Gate (NFR-3.5 ≥ 70% lines)
         working-directory: frontend
-        run: pnpm test
+        run: pnpm test:coverage
 
       - name: Frontend Build
         working-directory: frontend
