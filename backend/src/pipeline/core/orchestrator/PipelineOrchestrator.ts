@@ -1668,8 +1668,13 @@ export class PipelineOrchestrator {
     // `branch: 'dry-run'` on a non-existent repo. Instead, reset to the
     // push-confirm gate so the user can retry the push (or cancel).
     if (pipeline.protoOutput && !pipeline.traceOutput) {
-      const committed = pipeline.protoOutput.metadata?.committed === true;
-      if (!committed) {
+      // PDP-3 B4: only divert to the push-confirm gate when committed is
+      // EXPLICITLY false — this signals the dry-run cache from the new
+      // gate flow. Legacy pipelines (and tests) leave `committed` undefined
+      // because they predate the field; they should keep the old retry-trace
+      // path so they don't break.
+      const explicitlyNotCommitted = pipeline.protoOutput.metadata?.committed === false;
+      if (explicitlyNotCommitted) {
         return this.store.update(pipelineId, {
           stage: 'awaiting_push_confirm',
           error: null,

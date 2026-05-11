@@ -184,13 +184,13 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
     });
   }
 
-  // Proto result — only surface the "scaffold pushed" card AFTER the user
-  // has confirmed the push. While at `awaiting_push_confirm`, protoOutput
-  // exists (dry-run files are cached for the preview), but `committed` is
-  // false and `branch` is the placeholder `'dry-run'` — surfacing a card
-  // with a GitHub link would 404 and the branch text would leak English
-  // jargon to a bakkal user (NFR-5.1).
-  if (pipeline.protoOutput?.ok && pipeline.protoOutput.metadata?.committed === true) {
+  // Proto result — surface the "scaffold pushed" card whenever Proto
+  // succeeded, UNLESS this is the PDP-3 B4 dry-run cache from
+  // `awaiting_push_confirm` (where `committed` is *explicitly* false and
+  // `branch` is the placeholder `'dry-run'`). Legacy pipelines leave
+  // `committed` undefined; they should keep showing the card.
+  const dryRunCache = pipeline.protoOutput?.metadata?.committed === false;
+  if (pipeline.protoOutput?.ok && !dryRunCache) {
     const po = pipeline.protoOutput;
     messages.push({
       type: 'pr_opened',
