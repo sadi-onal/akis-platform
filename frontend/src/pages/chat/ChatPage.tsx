@@ -321,6 +321,24 @@ export default function ChatPage() {
     [handleSend],
   );
 
+  // B3 onboarding: demo template click → seed a pending conversation and fire
+  // the create call in the same tick. The pending state is mirrored onto the
+  // ref synchronously so `useHandleSend`'s "new conversation" branch (which
+  // reads `pendingConvRef.current` before the first await) sees it without
+  // waiting for React to commit.
+  const handleDemoSelect = useCallback(
+    (idea: string) => {
+      const seed = { displayName: '' };
+      pendingConvRef.current = seed;
+      setPendingConv(seed);
+      setMessages([]);
+      setActiveWorkflow(null);
+      loadedIdRef.current = undefined;
+      void handleSend(idea);
+    },
+    [handleSend, setActiveWorkflow, setMessages, loadedIdRef],
+  );
+
   const recentTextMessages = useMemo(() => {
     return messages
       .filter((m) => m.type === 'user' || m.type === 'agent')
@@ -366,6 +384,8 @@ export default function ChatPage() {
     onSuggestBuild: handleSuggestBuild,
     traceEnabled, setTraceEnabled, pendingModel, setPendingModel,
     onModelChange: handleModelChange, repoSelectorSlot,
+    isFirstTimeUser: conversations.length === 0,
+    onDemoSelect: handleDemoSelect,
   };
 
   return <ChatPageLayout {...layoutProps} />;
