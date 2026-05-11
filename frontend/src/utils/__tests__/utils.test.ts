@@ -987,9 +987,14 @@ describe('mapPipelineToChatMessages', () => {
     expect(err).toMatchObject({ retryable: false, retryCount: 0 });
   });
 
-  it('uses "pipeline" as agent fallback when stage is missing', () => {
+  it('uses "pipeline" as agent fallback when stage is missing (defensive ?. in mapPipelineEvent)', () => {
+    // Pipeline.stage is typed non-optional, but mapPipelineEvent.ts:250 uses
+    // `pipeline.stage?.split('_')[0] ?? 'pipeline'` — explicit defensive code
+    // for hydration races where the runtime payload arrives before the stage
+    // field is populated. The cast exercises that guard; @ts-expect-error
+    // documents the type/runtime gap rather than hiding it.
     const p = makePipeline({
-      // @ts-expect-error — exercise the fallback when stage split is empty
+      // @ts-expect-error — type says stage is non-optional, but source intentionally guards against runtime undefined
       stage: undefined,
       error: { code: 'X', message: 'm', retryable: false },
     });

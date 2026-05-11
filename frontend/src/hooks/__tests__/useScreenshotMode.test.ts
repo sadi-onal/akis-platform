@@ -67,11 +67,16 @@ describe('useScreenshotMode', () => {
     expect(result.current).toBe(true);
   });
 
-  it('returns the same value across re-renders (memoized)', () => {
+  it('freezes the mount-time value across re-renders (useMemo([]) memoization)', () => {
+    // Without `useMemo(_, [])`, re-running on rerender would read the current
+    // URL and flip from true → false. The test proves the value is frozen at
+    // mount, which is the actual behavioural contract of the hook.
     setSearch('?shot=1');
     const { result, rerender } = renderHook(() => useScreenshotMode());
-    const first = result.current;
+    expect(result.current).toBe(true);
+
+    setSearch('?shot=0');
     rerender();
-    expect(result.current).toBe(first);
+    expect(result.current).toBe(true);
   });
 });
