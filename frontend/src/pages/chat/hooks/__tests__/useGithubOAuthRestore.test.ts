@@ -65,6 +65,19 @@ describe('useGithubOAuthRestore', () => {
     expect(sessionStorage.getItem(OAUTH_JUST_COMPLETED_KEY)).toBeNull();
   });
 
+  it('phase 1: scrubs the URL but does NOT stash the flag when user already has GitHub (S-3)', () => {
+    // Stale back-nav case: a user with GitHub already linked lands on
+    // `?github=connected` (e.g. browser back). Phase 2 should not fire — we
+    // do still scrub the URL, but the flag must stay absent so the saved-idea
+    // replay doesn't trigger on the next render where hasGitHub flips true.
+    setUrl('/chat', 'github=connected&foo=bar');
+    renderHook(() =>
+      useGithubOAuthRestore({ hasGitHub: true, handleSend: vi.fn() }),
+    );
+    expect(window.location.search).toBe('?foo=bar');
+    expect(sessionStorage.getItem(OAUTH_JUST_COMPLETED_KEY)).toBeNull();
+  });
+
   // ── Phase 2 ──────────────────────────────────────
 
   it('phase 2: when hasGitHub flips true with the flag set, toasts + replays the saved idea', async () => {

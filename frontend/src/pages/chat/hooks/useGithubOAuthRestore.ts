@@ -53,16 +53,28 @@ export function useGithubOAuthRestore(
   handleSendRef.current = handleSend;
 
   // Phase 1 — runs once on mount. Detect ?github=connected, stash the flag,
-  // scrub the URL. We don't read hasGitHub here because the profile fetch may
-  // not have resolved yet.
+  // scrub the URL. We don't read hasGitHub from props inside the effect body
+  // because the profile fetch may not have resolved yet on first mount —
+  // instead we capture the latest value through a ref and only stash the flag
+  // when the user does NOT already have GitHub linked. This prevents stale
+  // OAuth flags (from browser back-navigation to a `?github=connected` URL)
+  // from firing the phase-2 toast + replaying old ideas. (S-3 in PR #525.)
+  const hasGitHubRef = useRef(hasGitHub);
+  hasGitHubRef.current = hasGitHub;
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('github') !== 'connected') return;
-    sessionStorage.setItem(OAUTH_FLAG_KEY, '1');
+    // URL scrub always runs — we don't want `?github=connected` sticking
+    // around in the address bar even if we skip the flag stash.
     params.delete('github');
     const qs = params.toString();
     window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    // Skip the flag stash when the user already has GitHub linked: this
+    // means the OAuth callback was stale (e.g. browser back), not a fresh
+    // completion that phase 2 should react to.
+    if (hasGitHubRef.current) return;
+    sessionStorage.setItem(OAUTH_FLAG_KEY, '1');
   }, []);
 
   // Phase 2 — once hasGitHub flips true, if we just completed the OAuth dance,
