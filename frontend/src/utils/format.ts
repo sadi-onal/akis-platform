@@ -12,7 +12,7 @@ export function formatConfidence(raw: number | string | undefined | null): strin
   if (num > 0 && num <= 1) return `${Math.round(num * 100)}%`;
   // 1-100 -> already percentage
   if (num > 1 && num <= 100) return `${Math.round(num)}%`;
-  // 0 -> 0%
+  // 0 (and -0, since -0 === 0 in JS) -> 0%
   if (num === 0) return '0%';
   // fallback
   return `${Math.round(num)}%`;
