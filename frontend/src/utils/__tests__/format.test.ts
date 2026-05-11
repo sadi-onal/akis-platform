@@ -50,6 +50,12 @@ describe('formatConfidence', () => {
     expect(formatConfidence(0)).toBe('0%');
   });
 
+  it('formats -0 as 0%', () => {
+    // `-0 === 0` in JS, so the `num === 0` branch handles it before any
+    // fallback `Math.round` could produce a misleading "-0%".
+    expect(formatConfidence(-0)).toBe('0%');
+  });
+
   it('rounds 0-1 floats to nearest percent', () => {
     expect(formatConfidence(0.876)).toBe('88%');
     expect(formatConfidence(0.124)).toBe('12%');

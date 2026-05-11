@@ -38,6 +38,16 @@ describe('sanitizeReturnTo', () => {
     expect(sanitizeReturnTo('//evil.com/path')).toBeNull();
   });
 
+  it('rejects backslash-prefix open-redirect attempts', () => {
+    // Browser URL parsers can normalize `\` → `/` in some contexts, so any
+    // leading-slash-or-backslash run that ends in a backslash before the
+    // first non-slash char must be rejected.
+    expect(sanitizeReturnTo('\\\\evil.com')).toBeNull(); // \\evil.com
+    expect(sanitizeReturnTo('\\evil.com')).toBeNull(); // \evil.com
+    expect(sanitizeReturnTo('/\\evil.com')).toBeNull(); // /\evil.com
+    expect(sanitizeReturnTo('//\\evil.com')).toBeNull(); // //\evil.com
+  });
+
   it('rejects absolute external URLs', () => {
     expect(sanitizeReturnTo('https://evil.com')).toBeNull();
     expect(sanitizeReturnTo('http://attacker.example')).toBeNull();
@@ -104,6 +114,15 @@ describe('returnTo sessionStorage helpers', () => {
       setReturnTo('/first');
       setReturnTo('/second');
       expect(sessionStorage.getItem('akis_returnTo')).toBe('/second');
+    });
+
+    it('swallows sessionStorage write quota errors silently', () => {
+      // Safari private mode raises QuotaExceededError on setItem. Setter must
+      // not propagate that to callers (mirror getReturnTo's tolerance).
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('quota', 'QuotaExceededError');
+      });
+      expect(() => setReturnTo('/dashboard')).not.toThrow();
     });
   });
 

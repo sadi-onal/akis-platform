@@ -499,6 +499,37 @@ describe('mapPipelineToConversationItem', () => {
     expect(item.repoFullName).toBe('my-app');
   });
 
+  it('mapPipelineToConversationItem: protoOutput.repo without slash falls back to empty owner segment', () => {
+    // TODO(follow-up): malformed `repo` (no slash) currently produces a
+    // structurally wrong `repoFullName` like `just-owner/my-app` because
+    // `split('/')[0]` returns the whole string when there is no `/`.
+    // This test locks in the current behaviour so a future source fix has a
+    // failing canary to flip. Prefer fixing `mapPipelineToConversationItem`
+    // in a follow-up to make `repoFullName` equal to `repoShortName` (or null)
+    // when `protoOutput.repo` lacks a `/`.
+    const p = makePipeline({
+      protoConfig: { repoName: 'my-app', repoVisibility: 'public' },
+      protoOutput: {
+        ok: true,
+        branch: 'main',
+        repo: 'just-owner', // malformed — no slash
+        repoUrl: 'https://github.com/just-owner',
+        files: [],
+        setupCommands: [],
+        metadata: {
+          filesCreated: 0,
+          totalLinesOfCode: 0,
+          stackUsed: 'next',
+          committed: true,
+        },
+      },
+    });
+    const item = mapPipelineToConversationItem(p);
+    // Documents current (buggy) behaviour: the whole `repo` string becomes the
+    // owner segment because split('/')[0] returns it unchanged.
+    expect(item.repoFullName).toBe('just-owner/my-app');
+  });
+
   it('reports running status for in-progress stages', () => {
     const item = mapPipelineToConversationItem(makePipeline({ stage: 'proto_building' }));
     expect(item.status).toBe('running');

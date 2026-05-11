@@ -123,6 +123,17 @@ describe('useReducedMotion', () => {
     expect(result.current).toBe(false);
   });
 
+  it('returns false and does not throw when window.matchMedia is undefined', () => {
+    // Older browsers / minimal test stubs lack matchMedia. The hook must
+    // degrade to a safe `false` instead of throwing.
+    // matchMedia is already set to `undefined` by beforeEach.
+    expect(window.matchMedia).toBeUndefined();
+    const { result, unmount } = renderHook(() => useReducedMotion());
+    expect(result.current).toBe(false);
+    // And cleanup must be a no-op (not throw on unmount either).
+    expect(() => unmount()).not.toThrow();
+  });
+
   it('removes the event listener on unmount', () => {
     const removeSpy = vi.fn();
     const addSpy = vi.fn();
