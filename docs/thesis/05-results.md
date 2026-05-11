@@ -79,9 +79,16 @@ Bu birinci koşumda Proto/Trace kademeleri yok — pipeline `awaiting_approval` 
 ### 5.2.3 Qualitative gözlemler
 
 [Q2-DATA] — katılımcı yorumlarından kısa alıntılar:
-- *"Açıklama tab'ı olmadan ne onayladığımı bilmiyordum."* (rater-X, blog-004)
-- *"Cinema 4-kolon ile aşamaları takip etmek kolaydı."* (rater-Y, qr-005)
-- *"Baseline'da Critic ne dedi anlayamadım."* (rater-Z, todo-001)
+
+> **⚠️ ÖRNEK ŞABLON — gerçek Q2 verisi DEĞİL.** Aşağıdaki üç alıntı tezin
+> nihai metninde nasıl görüneceğini *biçim olarak* göstermek için
+> üretilmiş **sentetik şablon**dır. Q2 anketi tamamlandığında
+> `docs/dogfooding/q2-responses/` altındaki gerçek yanıtlarla
+> değiştirilecektir. Hiçbiri gerçek bir katılımcının ifadesi değildir.
+
+- *"Açıklama tab'ı olmadan ne onayladığımı bilmiyordum."* (rater-X şablon, blog-004)
+- *"Cinema 4-kolon ile aşamaları takip etmek kolaydı."* (rater-Y şablon, qr-005)
+- *"Baseline'da Critic ne dedi anlayamadım."* (rater-Z şablon, todo-001)
 
 ### 5.2.4 Sınırlılıklar (Q2'ye özel)
 
@@ -171,6 +178,8 @@ Bu birinci koşumda Proto/Trace kademeleri yok — pipeline `awaiting_approval` 
 > **Yazım hedefi (2 sayfa):** Süreç + kod kalitesi metrikleri. Bölüm 4.5 ölçüm tablosunu burada raporla.
 
 ### 5.5.1 Sayısal değişim (PDP-2 öncesi → sonrası)
+
+**Ölçüm tarihi:** 2026-05-11 — **commit:** `084f867` (main HEAD). 4.5.3 ile aynı snapshot — tutarlı kalması için tek tabloya bağlı.
 
 [TBL-5.5]:
 

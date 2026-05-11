@@ -201,7 +201,7 @@ sequenceDiagram
 
 ### 3.4.2 Çözüm (PDP-2 wave 2 — PR #517)
 
-- `pipeline_reasonings` tablosu (Drizzle migration 0047) — pipelineId + stage + AgentReasoning blob + archived_at
+- `pipeline_reasonings` tablosu (Drizzle migration `0047_pipeline_reasonings_and_activities.sql`) — pipelineId + stage + AgentReasoning blob + archived_at
 - `pipeline_activities` tablosu — append-only event log
 - Write-through cache: in-memory + DB synchronization
 - **Backfill stratejisi:** eski completed pipeline'lar boş — UI'da "Bu pipeline persistence öncesi tamamlandı" bayrağı
@@ -229,7 +229,7 @@ sequenceDiagram
 
 - **4 sınıf:** BUILD (yeni özellik) / ASK (soru) / FEEDBACK (geribildirim) / CHAT (genel sohbet)
 - **Threshold:** confidence ≥ 0.7 → handler tetiklenir; < 0.7 → DisambiguationModal (4 buton — FR-11.3)
-- **Audit:** `intent_classifications` tablosu (Drizzle migration 0048) — SHA-256 hash only (NFR-1.3 privacy)
+- **Audit:** `intent_classifications` tablosu (Drizzle migration `0048_add_intent_classifications.sql`) — SHA-256 hash only (NFR-1.3 privacy)
 - **Endpoint:** `POST /api/chat/intent` + `PATCH /api/chat/intent/:classificationId` (kullanıcı override)
 
 ### 3.5.3 ChatQAService (FR-10)

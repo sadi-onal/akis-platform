@@ -6,6 +6,12 @@
 
 > **Bölümün amacı:** Okuyucuyu AKIS'in çözmeye çalıştığı problemle tanıştırmak, tezin amacını ve katkılarını net cümleyle koymak, Q1-Q4 araştırma sorularını duyurmak, tez yapısını özetlemek.
 
+> **⚠️ Kaynak doğrulama notu:** Bu bölümdeki `[CITE-X]` etiketleriyle birlikte
+> geçen sayısal iddialar (%19, %43, %92, %96, 3.5×, vb.) **provisional**
+> statüsündedir. Prose draftı yazılmadan önce her sayı kendi kaynak makalesine
+> gidilerek teyit edilmelidir. arXiv ID'leri https://arxiv.org/abs/<id> üzerinden
+> birebir doğrulanmalıdır. Doğrulanmayan iddialar tezde yer almamalıdır.
+
 ---
 
 ## 1.1 Problem tanımı

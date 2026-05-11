@@ -4,6 +4,16 @@
 **Bağımlılık:** [`01-introduction.md`](./01-introduction.md)
 **Tahmini sayfa:** 10-15
 
+> **⚠️ Kaynak doğrulama notu (provisional iddialar):** Bu bölüm ve
+> [`01-introduction.md`](./01-introduction.md) içindeki `[CITE-X]` yer
+> tutucuları yalnızca "bibliography'ye eklenmesi gereken referans" anlamı
+> taşır. Etiketin yanındaki **somut sayısal iddialar (örn. yüzde, arXiv
+> kimliği, yıl) henüz birebir kaynak doğrulamasından geçmemiş** ve
+> *provisional* statüsündedir. Her sayısal iddia tezin prose draftına
+> dönüşmeden önce orijinal makaleye gidilip teyit edilmelidir; aksi hâlde
+> savunmada akademik bütünlük riski doğar. arXiv kimliklerini özellikle
+> https://arxiv.org/abs/<id> üzerinden doğrulayın.
+
 > **Bölümün amacı:** AKIS'in oturduğu üç literatür ekseni (AI ajan orkestrasyonu, yazılım kalitesi/test üretimi, non-developer AI tools) etrafında ilgili çalışmaları sentezlemek; **gap analizi** ile AKIS'in lane'ini somutlamak.
 
 ---

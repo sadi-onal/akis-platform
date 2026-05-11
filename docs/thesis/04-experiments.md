@@ -202,6 +202,8 @@ Rubric Critic'in kendi kategorilerinden **kasıtlı olarak ayrık** seçildi —
 
 ### 4.5.3 Ölçülen metrikler
 
+**Ölçüm tarihi:** 2026-05-11 — **commit:** `084f867` (main HEAD, PR #525 squash sonrası). Rakamlar bu snapshot içindir; yeni PR'lar ile değişebilir.
+
 | Metrik | Önce | Sonra | Δ |
 |---|---:|---:|---:|
 | Backend test sayısı | ~3179 | ~3260 | +81 |

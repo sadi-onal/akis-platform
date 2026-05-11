@@ -2,7 +2,7 @@
 
 **Status:** ✍️ Skeleton — fill with data when available
 **Owner:** Ömer Yasir Önal (FSMVÜ Yazılım Mühendisliği, Lisans)
-**Advisor:** Dr. Öğr. Üyesi Nazlı Doğan
+**Advisor:** [Advisor — danışman adı, LaTeX export adımında advisor onayıyla eklenir]
 **Hedef savunma:** 2026 Mayıs sonu
 **Locale:** Türkçe (akademik metin) + İngilizce kod/teknik terimler
 
