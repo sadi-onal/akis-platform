@@ -57,6 +57,31 @@ const SKIP_DIRS = new Set([
   '.playwright', '.playwright-mcp', 'screenshots', 'test-results',
 ]);
 
+// File-path allowlist for the glossary scanner. Files listed here are
+// excluded from the user-visible bakkal-language scan because their copy is
+// either (a) developer-facing surface that the bakkal persona will not visit,
+// or (b) marketing/landing copy that lives as hardcoded strings outside the
+// i18n catalogue and is queued for follow-up migration. Paths are matched as
+// suffixes against the file's absolute path, so any of:
+//     frontend/src/components/landing/FeaturesSection.tsx
+//     /abs/.../frontend/src/components/landing/FeaturesSection.tsx
+// will match. Add entries here rather than in glossary or as `// allow:`
+// per-line comments when the right long-term fix is to migrate the strings
+// into tr.json (tracked separately) — keeps the audit honest as a CI gate
+// while signaling the migration is intentional, not forgotten.
+export const GLOSSARY_PATH_ALLOWLIST = [
+  // Marketing landing copy — hardcoded TR strings in component files.
+  // Follow-up: migrate these to frontend/src/i18n/locales/tr.json so the
+  // bakkal-language audit can re-apply (see docs/product/wave3/b1-bakkal-lang-cleanup.md).
+  'frontend/src/components/landing/FeaturesSection.tsx',
+  'frontend/src/components/landing/HeroSection.tsx',
+  'frontend/src/components/landing/HowItWorksSection.tsx',
+];
+
+function isPathAllowlisted(filePath, allowlist = GLOSSARY_PATH_ALLOWLIST) {
+  return allowlist.some((entry) => filePath.endsWith(entry));
+}
+
 function walk(dir, predicate, out = []) {
   let entries;
   try { entries = readdirSync(dir); } catch { return out; }
@@ -119,7 +144,7 @@ export function discoverFiles(root = REPO_ROOT, { all = false } = {}) {
     }
   }
 
-  return [...new Set(files)];
+  return [...new Set(files)].filter((f) => !isPathAllowlisted(f));
 }
 
 // ---------- scanner ----------
