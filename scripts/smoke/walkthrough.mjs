@@ -87,6 +87,18 @@ async function main() {
     );
     log('user force-activated');
 
+    // Stub a github_integrations row so the JIT GitHub gate (ChatPageLayout
+    // line ~222) doesn't intercept idea submission. Without this, every
+    // new-conversation send routes through GithubConnectGate (correct prod
+    // behaviour: kullanıcı GitHub'a bağlı değilse Proto push'a hazır değil)
+    // and the smoke can't reach the Scribe / Critic / Açıklama / Akış flows.
+    // The stub token is not a real OAuth token — pipeline mock providers
+    // never actually call GitHub.
+    execSync(
+      `PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d akis_v2 -c "INSERT INTO github_integrations (user_id, provider_account_id, login, scope, access_token) SELECT id, 'smoke-stub', 'smoke-tester', 'repo,read:user,user:email', 'STUB_TOKEN_NOT_REAL' FROM users WHERE email = '${EMAIL}' ON CONFLICT DO NOTHING;" >/dev/null`
+    );
+    log('github_integrations stubbed');
+
     // Re-login to get a fresh cookie tied to the activated user.
     const login = await fetch('http://localhost:3000/auth/login', {
       method: 'POST',
