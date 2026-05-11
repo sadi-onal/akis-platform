@@ -13,6 +13,7 @@ import { ChatRouter } from '../../components/chat/ChatRouter';
 import { ChatSkeleton } from '../../components/chat/ChatSkeleton';
 import { ConversationSidebar } from '../../components/chat/ConversationSidebar';
 import { EmptyState } from '../../components/chat/EmptyState';
+import { EmptyStateCard } from '../../components/chat/EmptyStateCard';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { GithubConnectGate } from '../../components/onboarding/GithubConnectGate';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
@@ -99,6 +100,18 @@ export interface ChatPageLayoutProps {
   setPendingModel: (model: string) => void;
   onModelChange: (modelId: string) => Promise<void> | void;
   repoSelectorSlot: ReactNode | undefined;
+
+  // ── B3 onboarding empty state ───────────────────
+  /**
+   * True when the user has no real conversations yet (pendingConv excluded).
+   * Used to swap the legacy 3-agent hero for the demo-template card.
+   */
+  isFirstTimeUser: boolean;
+  /**
+   * Fire a brand-new pipeline from a pre-filled idea. Skips the composer
+   * and goes straight to `useHandleSend`'s new-conversation branch.
+   */
+  onDemoSelect: (idea: string) => void;
 }
 
 export function ChatPageLayout(props: ChatPageLayoutProps) {
@@ -155,6 +168,8 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
     setPendingModel,
     onModelChange,
     repoSelectorSlot,
+    isFirstTimeUser,
+    onDemoSelect,
   } = props;
 
   return (
@@ -345,6 +360,8 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
               </>
             )}
           </div>
+        ) : isFirstTimeUser ? (
+          <EmptyStateCard onDemoSelect={onDemoSelect} onManualStart={onNewConversation} />
         ) : (
           <EmptyState variant="no-conversation" onNewConversation={onNewConversation} />
         )}

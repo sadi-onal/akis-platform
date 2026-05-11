@@ -137,17 +137,20 @@ describe('ChatPage — mount', () => {
     expect(akisLogos.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows EmptyState when no conversation is selected', () => {
+  it('shows the onboarding EmptyStateCard when the user has zero conversations', () => {
+    // B3 onboarding: when conversations.length === 0, the legacy 3-agent hero
+    // is replaced with the demo-template card so first-time visitors have a
+    // concrete starting point instead of an animated agent line-up.
     renderChatPage('/chat');
-    // EmptyState no-conversation variant renders agent feature cards
-    expect(screen.getByTestId('agent-Scribe')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-Proto')).toBeInTheDocument();
-    expect(screen.getByTestId('agent-Trace')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state-demo-todo')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state-demo-currency')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state-demo-qr')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state-demo-markdown')).toBeInTheDocument();
   });
 
-  it('shows new chat CTA button when no conversation selected', () => {
+  it('shows the manual-start CTA on the empty state card', () => {
     renderChatPage('/chat');
-    expect(screen.getByRole('button', { name: /chat\.emptyState\.newChat/i })).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state-manual-start')).toBeInTheDocument();
   });
 
   it('memoized subtree mounts without runtime errors or warnings', () => {
