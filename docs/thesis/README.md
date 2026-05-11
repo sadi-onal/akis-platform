@@ -59,7 +59,7 @@ Aşağıdaki etiketler `grep` ile bulunup veri geldiğinde doldurulur:
 
 **Defense öncesi son hafta:** LaTeX'e dönüşüm. FSMVÜ tez şablonu (resmî) zorunlu; pandoc ile Markdown → LaTeX otomatik geçiş + manuel düzeltme. Tek dosyada birleşim:
 ```bash
-pandoc docs/thesis/{00..07}-*.md -o thesis-draft.tex --template=fsmvu-template.tex
+pandoc docs/thesis/00-outline.md docs/thesis/01-introduction.md docs/thesis/02-literature.md docs/thesis/03-architecture.md docs/thesis/04-experiments.md docs/thesis/05-results.md docs/thesis/06-discussion.md docs/thesis/07-conclusion.md -o thesis-draft.tex --template=fsmvu-template.tex
 ```
 
 **Şekiller:** Markdown'da mermaid → defense'te PNG'ye çevrilir, LaTeX'te `\includegraphics`.

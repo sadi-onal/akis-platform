@@ -164,6 +164,7 @@ sequenceDiagram
   participant U as User
   participant S as Scribe
   participant C as Critic
+  participant H as İnsan Onay Kapısı
   participant P as Proto
   participant T as Trace
   U->>S: idea
@@ -171,8 +172,10 @@ sequenceDiagram
   U->>S: answers
   S->>S: generate spec
   S->>C: review spec
-  C-->>U: findings + score
-  U->>P: approve
+  C-->>H: findings + score
+  H-->>U: spec + findings (onay iste)
+  U->>H: approve
+  H->>P: spec onaylı
   P->>P: scaffold + push
   P->>C: review code
   alt findings exist

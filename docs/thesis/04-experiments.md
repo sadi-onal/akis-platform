@@ -17,6 +17,8 @@
 
 **Soru:** AKIS'in doğrulama zinciri ardışıklığı küçük gerçek problem seti üzerinde uçtan uca tamamlanabilir mi?
 
+**Tasarım:** N_problem = 5, N_run/problem = 1, N_total = 5 (single-run baseline; test-retest variance ölçülmedi — bkz. § 6.2 sınırlılıklar).
+
 **Ölçüm:** Her problem için pipeline `final stage`, `duration`, `confidenceByStage`, `attentionPoints`, `coverage` (Trace aktifse), `testCount`, `filesCreated`.
 
 ### 4.1.2 Problem seti (`docs/dogfooding/benchmark-set.yaml`)
