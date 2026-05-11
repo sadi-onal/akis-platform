@@ -259,4 +259,223 @@ describe('usePipelineControls', () => {
     expect(refreshWorkflow).not.toHaveBeenCalled();
     expect(mockedToast).toHaveBeenCalledWith(expect.any(String), 'error');
   });
+
+  // ── error paths for approve / cancel / skip (lines 87 / 111 / 136) ──
+
+  it('approve errors localize and toast as error', async () => {
+    api.approve.mockRejectedValue(new Error('500'));
+    const refreshWorkflow = vi.fn();
+    const { result } = renderHook(() =>
+      usePipelineControls({
+        conversationId: 'wf-1',
+        activeWorkflow: makeWorkflow(),
+        refreshWorkflow,
+      }),
+    );
+    await act(async () => {
+      await result.current.handleApprove();
+    });
+    expect(refreshWorkflow).not.toHaveBeenCalled();
+    expect(mockedToast).toHaveBeenCalledWith(expect.any(String), 'error');
+  });
+
+  it('cancel errors localize and toast as error', async () => {
+    api.cancel.mockRejectedValue(new Error('500'));
+    const refreshWorkflow = vi.fn();
+    const { result } = renderHook(() =>
+      usePipelineControls({
+        conversationId: 'wf-1',
+        activeWorkflow: makeWorkflow(),
+        refreshWorkflow,
+      }),
+    );
+    await act(async () => {
+      await result.current.handleCancel();
+    });
+    expect(refreshWorkflow).not.toHaveBeenCalled();
+    expect(mockedToast).toHaveBeenCalledWith(expect.any(String), 'error');
+  });
+
+  it('skip errors localize and toast as error', async () => {
+    api.skipTrace.mockRejectedValue(new Error('500'));
+    const refreshWorkflow = vi.fn();
+    const { result } = renderHook(() =>
+      usePipelineControls({
+        conversationId: 'wf-1',
+        activeWorkflow: makeWorkflow(),
+        refreshWorkflow,
+      }),
+    );
+    await act(async () => {
+      await result.current.handleSkip();
+    });
+    expect(refreshWorkflow).not.toHaveBeenCalled();
+    expect(mockedToast).toHaveBeenCalledWith(expect.any(String), 'error');
+  });
+
+  it('reject no-ops without conversationId', async () => {
+    const refreshWorkflow = vi.fn();
+    const { result } = renderHook(() =>
+      usePipelineControls({
+        conversationId: undefined,
+        activeWorkflow: null,
+        refreshWorkflow,
+      }),
+    );
+    await act(async () => {
+      await result.current.handleReject();
+    });
+    expect(api.reject).not.toHaveBeenCalled();
+  });
+
+  it('cancel no-ops without conversationId', async () => {
+    const refreshWorkflow = vi.fn();
+    const { result } = renderHook(() =>
+      usePipelineControls({
+        conversationId: undefined,
+        activeWorkflow: null,
+        refreshWorkflow,
+      }),
+    );
+    await act(async () => {
+      await result.current.handleCancel();
+    });
+    expect(api.cancel).not.toHaveBeenCalled();
+  });
+
+  it('skip no-ops without conversationId', async () => {
+    const refreshWorkflow = vi.fn();
+    const { result } = renderHook(() =>
+      usePipelineControls({
+        conversationId: undefined,
+        activeWorkflow: null,
+        refreshWorkflow,
+      }),
+    );
+    await act(async () => {
+      await result.current.handleSkip();
+    });
+    expect(api.skipTrace).not.toHaveBeenCalled();
+  });
+
+  // ── BUG-N retry capture clear branches (lines 63-64) ──
+  //
+  // Lifecycle: handleRetry latches `retryingError` from the workflow's then-
+  // current `error`. The next render the backend has moved the stage off
+  // `failed` (the retry started), so the cleanup effect sees stage !== failed
+  // && stage !== completed → leaves the capture in place. Then on completion
+  // the effect fires the `setRetryingError(null)` branch on lines 63-64.
+
+  it('clears the captured retry error when the pipeline reaches completed', async () => {
+    api.retry.mockResolvedValue(undefined as never);
+    const refreshWorkflow = vi.fn().mockResolvedValue(undefined);
+    const error: PipelineError = {
+      code: 'X',
+      message: 'boom',
+    } as unknown as PipelineError;
+    // Production pattern: by the time `handleRetry` fires the user is looking
+    // at a workflow that has rolled past `failed` to a transitional running
+    // stage with the error still attached as last-known-failure metadata.
+    // Modelling that here so the effect doesn't clear immediately.
+    const wf = makeWorkflow({
+      currentStage: 'proto_building',
+      error,
+    });
+
+    const { result, rerender } = renderHook(
+      (props: { wf: Workflow }) =>
+        usePipelineControls({
+          conversationId: 'wf-1',
+          activeWorkflow: props.wf,
+          refreshWorkflow,
+        }),
+      { initialProps: { wf } },
+    );
+
+    // Retry latches the captured error. Stage is not `failed` and not
+    // `completed`, so the cleanup effect leaves it in place.
+    await act(async () => {
+      await result.current.handleRetry();
+    });
+    expect(result.current.isRetrying).toBe(true);
+
+    // Then the pipeline reaches `completed` — cleanup effect line 63-64 clears
+    // `retryingError` so the banner goes away.
+    rerender({
+      wf: makeWorkflow({ currentStage: 'completed' }) as unknown as Workflow,
+    });
+    expect(result.current.isRetrying).toBe(false);
+    expect(result.current.pipelineError).toBeUndefined();
+  });
+
+  it('clears the captured retry error on completed_partial too', async () => {
+    api.retry.mockResolvedValue(undefined as never);
+    const refreshWorkflow = vi.fn().mockResolvedValue(undefined);
+    const error: PipelineError = {
+      code: 'X',
+      message: 'boom',
+    } as unknown as PipelineError;
+    const wf = makeWorkflow({ currentStage: 'proto_building', error });
+
+    const { result, rerender } = renderHook(
+      (props: { wf: Workflow }) =>
+        usePipelineControls({
+          conversationId: 'wf-1',
+          activeWorkflow: props.wf,
+          refreshWorkflow,
+        }),
+      { initialProps: { wf } },
+    );
+
+    await act(async () => {
+      await result.current.handleRetry();
+    });
+    expect(result.current.isRetrying).toBe(true);
+
+    rerender({
+      wf: makeWorkflow({ currentStage: 'completed_partial' }) as unknown as Workflow,
+    });
+    expect(result.current.isRetrying).toBe(false);
+  });
+
+  it('replaces the captured retry error when the retry produces a NEW failure', async () => {
+    api.retry.mockResolvedValue(undefined as never);
+    const refreshWorkflow = vi.fn().mockResolvedValue(undefined);
+    const error1: PipelineError = {
+      code: 'X',
+      message: 'first',
+    } as unknown as PipelineError;
+    const wf = makeWorkflow({ currentStage: 'proto_building', error: error1 });
+
+    const { result, rerender } = renderHook(
+      (props: { wf: Workflow }) =>
+        usePipelineControls({
+          conversationId: 'wf-1',
+          activeWorkflow: props.wf,
+          refreshWorkflow,
+        }),
+      { initialProps: { wf } },
+    );
+
+    await act(async () => {
+      await result.current.handleRetry();
+    });
+    expect(result.current.isRetrying).toBe(true);
+
+    // A new failure error arrives — the captured retryingError should be
+    // released (set null on line 67) so the banner re-binds to the
+    // workflow's fresh error.
+    const error2: PipelineError = {
+      code: 'Y',
+      message: 'second',
+    } as unknown as PipelineError;
+    rerender({
+      wf: makeWorkflow({
+        currentStage: 'failed',
+        error: error2,
+      }) as unknown as Workflow,
+    });
+    expect(result.current.isRetrying).toBe(false);
+    expect(result.current.pipelineError).toBe(error2);
+  });
 });

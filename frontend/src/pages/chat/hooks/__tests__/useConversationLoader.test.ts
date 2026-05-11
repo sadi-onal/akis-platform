@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { useConversationLoader } from '../useConversationLoader';
@@ -259,5 +259,283 @@ describe('useConversationLoader', () => {
     result.current.loadedIdRef.current = undefined;
     expect(result.current.lastMessagesKeyRef.current).toBe('');
     expect(result.current.loadedIdRef.current).toBeUndefined();
+  });
+});
+
+// ── Polling tests (the heavy effect on lines 186–230) ─────────────────────────
+// These use fake timers so we can advance through the Fibonacci backoff schedule
+// without waiting in real time. The poll effect only runs while the workflow is
+// in a RUNNING_STAGES stage, so we seed the loader with one and then advance.
+
+describe('useConversationLoader — polling', () => {
+  beforeEach(() => {
+    // `mockReset` clears persistent .mockResolvedValue / .mockRejectedValue
+    // implementations queued from a prior test as well as call history. Using
+    // `clearAllMocks` here leaks the previous fallback into the next test's
+    // initial-load fetch.
+    mockedGet.mockReset();
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function buildRunningWorkflow(
+    id: string,
+    convLen = 1,
+    ts = '2026-05-09T12:00:00.000Z',
+    stage: 'scribe_clarifying' | 'proto_building' | 'trace_testing' = 'proto_building',
+  ) {
+    return {
+      id,
+      title: 'Running workflow',
+      status: 'running' as const,
+      currentStage: stage,
+      traceEnabled: false,
+      createdAt: '2026-05-09T11:50:00.000Z',
+      updatedAt: ts,
+      stages: {
+        scribe: { status: 'completed' as const },
+        approve: { status: 'completed' as const },
+        proto: { status: 'running' as const },
+        trace: { status: 'idle' as const },
+      },
+      conversation: Array.from({ length: convLen }, (_, i) => ({
+        role: 'user' as const,
+        type: 'message' as const,
+        content: `msg-${i}`,
+        timestamp: ts,
+      })),
+    };
+  }
+
+  /**
+   * Flush all pending microtasks under fake timers — needed after the initial
+   * load promise resolves but before the rendered state is observable.
+   */
+  async function flushMicrotasks() {
+    // advanceTimersByTimeAsync(0) drains the microtask queue alongside timers.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+
+  it('polls workflow on schedule while the pipeline is running (SSE up → 20s)', async () => {
+    // Two snapshots back-to-back so we can verify the poll picked up the
+    // conversation-length change and called setMessages + syncFromStage.
+    const first = buildRunningWorkflow('P-1', 1, '2026-05-09T12:00:00.000Z');
+    const second = buildRunningWorkflow('P-1', 2, '2026-05-09T12:00:01.000Z');
+
+    mockedGet
+      // initial load
+      .mockResolvedValueOnce(first as unknown as ReturnType<typeof buildRunningWorkflow>)
+      // first poll tick
+      .mockResolvedValueOnce(second as unknown as ReturnType<typeof buildRunningWorkflow>);
+
+    const onWorkflowSnapshot = vi.fn();
+    const { result, syncFromStage } = renderLoader(
+      { conversationId: 'P-1', isConnected: true },
+      { onWorkflowSnapshot },
+    );
+
+    // Initial-load promise resolves on next microtask.
+    await flushMicrotasks();
+    expect(result.current.activeWorkflow?.id).toBe('P-1');
+    expect(result.current.isRunning).toBe(true);
+
+    // Advance past the 20s SSE-up interval → first poll tick fires.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_500);
+    });
+
+    expect(mockedGet).toHaveBeenCalledTimes(2);
+    // The sidebar updater fires on a successful poll snapshot whenever
+    // convLen changes or stage advances.
+    expect(onWorkflowSnapshot).toHaveBeenCalled();
+    expect(onWorkflowSnapshot.mock.calls.at(-1)?.[0]).toMatchObject({ id: 'P-1' });
+    // syncFromStage from the polling snapshot (still proto_building).
+    expect(syncFromStage).toHaveBeenLastCalledWith('proto_building');
+  });
+
+  it('polls every 5s for interactive (scribe_clarifying) stages', async () => {
+    const first = buildRunningWorkflow('P-2', 1, '2026-05-09T12:00:00.000Z', 'scribe_clarifying');
+    const second = buildRunningWorkflow('P-2', 2, '2026-05-09T12:00:01.000Z', 'scribe_clarifying');
+
+    mockedGet
+      .mockResolvedValueOnce(first as unknown as ReturnType<typeof buildRunningWorkflow>)
+      .mockResolvedValueOnce(second as unknown as ReturnType<typeof buildRunningWorkflow>);
+
+    const { result } = renderLoader({ conversationId: 'P-2', isConnected: true });
+
+    await flushMicrotasks();
+    expect(result.current.activeWorkflow?.id).toBe('P-2');
+    expect(result.current.activeWorkflow?.currentStage).toBe('scribe_clarifying');
+
+    // 5s interactive cadence — advancing 5.5s should be enough for one tick.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_500);
+    });
+
+    expect(mockedGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips setMessages when the polled snapshot has identical convLen + lastTs', async () => {
+    // The poll tick fires setActiveWorkflow + onWorkflowSnapshot the first time
+    // (because prevConvLenRef starts at 0 while convLen=1), but the inner
+    // `key !== lastMessagesKeyRef.current` guard short-circuits setMessages.
+    // We assert on message-list reference equality only.
+    const same = buildRunningWorkflow('P-3', 1, '2026-05-09T12:00:00.000Z');
+    mockedGet
+      .mockResolvedValueOnce(same as unknown as ReturnType<typeof buildRunningWorkflow>)
+      // Polling tick — same convLen + lastTs.
+      .mockResolvedValueOnce(same as unknown as ReturnType<typeof buildRunningWorkflow>);
+
+    const { result } = renderLoader({ conversationId: 'P-3', isConnected: true });
+
+    await flushMicrotasks();
+    expect(result.current.activeWorkflow?.id).toBe('P-3');
+    const firstMessages = result.current.messages;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_500);
+    });
+
+    expect(mockedGet).toHaveBeenCalledTimes(2);
+    // Reference equality — the inner cache hit short-circuited setMessages.
+    expect(result.current.messages).toBe(firstMessages);
+  });
+
+  it('skips setActiveWorkflow + onWorkflowSnapshot when convLen AND stage are unchanged', async () => {
+    // After the first poll tick has cached convLen=1, a SECOND tick with the
+    // same payload should hit the outer `convLen !== prev || stageChanged`
+    // false-branch and not call the sidebar updater again.
+    const same = buildRunningWorkflow('P-3b', 1, '2026-05-09T12:00:00.000Z');
+    mockedGet.mockResolvedValue(same as unknown as ReturnType<typeof buildRunningWorkflow>);
+
+    const onWorkflowSnapshot = vi.fn();
+    const { result } = renderLoader(
+      { conversationId: 'P-3b', isConnected: true },
+      { onWorkflowSnapshot },
+    );
+
+    await flushMicrotasks();
+    expect(result.current.activeWorkflow?.id).toBe('P-3b');
+
+    // First poll tick — prevConvLenRef=0, convLen=1 → triggers updates.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_500);
+    });
+    expect(onWorkflowSnapshot).toHaveBeenCalledTimes(1);
+
+    // Second poll tick — prevConvLenRef=1, convLen=1, stage unchanged →
+    // outer guard short-circuits, no further onWorkflowSnapshot call.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_500);
+    });
+    expect(onWorkflowSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps polling and surfaces the lost-connection warning toast after 5 consecutive errors', async () => {
+    const first = buildRunningWorkflow('P-4', 1, '2026-05-09T12:00:00.000Z');
+    mockedGet.mockResolvedValueOnce(first as unknown as ReturnType<typeof buildRunningWorkflow>);
+    // All subsequent ticks fail.
+    mockedGet.mockRejectedValue(new Error('flaky'));
+
+    const { result } = renderLoader({ conversationId: 'P-4', isConnected: true });
+
+    await flushMicrotasks();
+    expect(result.current.activeWorkflow?.id).toBe('P-4');
+
+    // Drain enough virtual time for 5+ backed-off retries.
+    // Sequence: 20s, 40s (capped at 30s after this), 30s, 30s, 30s, 30s.
+    for (let i = 0; i < 8; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+    }
+
+    expect(mockedGet.mock.calls.length).toBeGreaterThanOrEqual(5);
+    const { toast } = await import('../../../../components/ui/Toast');
+    const mockedToast = vi.mocked(toast);
+    const warnCalls = mockedToast.mock.calls.filter((c) => c[1] === 'warning');
+    expect(warnCalls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('toasts "Bağlantı yeniden kuruldu" once polling recovers after the lost-connection latch', async () => {
+    // 5 errors → latch flips → next success → "reconnected" toast fires once.
+    const first = buildRunningWorkflow('P-5', 1, '2026-05-09T12:00:00.000Z');
+    const recovered = buildRunningWorkflow('P-5', 2, '2026-05-09T12:00:01.000Z');
+    mockedGet.mockResolvedValueOnce(first as unknown as ReturnType<typeof buildRunningWorkflow>);
+    mockedGet.mockRejectedValueOnce(new Error('flaky-1'));
+    mockedGet.mockRejectedValueOnce(new Error('flaky-2'));
+    mockedGet.mockRejectedValueOnce(new Error('flaky-3'));
+    mockedGet.mockRejectedValueOnce(new Error('flaky-4'));
+    mockedGet.mockRejectedValueOnce(new Error('flaky-5'));
+    mockedGet.mockResolvedValueOnce(
+      recovered as unknown as ReturnType<typeof buildRunningWorkflow>,
+    );
+
+    const { result } = renderLoader({ conversationId: 'P-5', isConnected: true });
+    await flushMicrotasks();
+    expect(result.current.activeWorkflow?.id).toBe('P-5');
+
+    // Drain enough virtual time to step through 5 error ticks + 1 success.
+    for (let i = 0; i < 10; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+    }
+
+    const { toast } = await import('../../../../components/ui/Toast');
+    const mockedToast = vi.mocked(toast);
+    const successCalls = mockedToast.mock.calls.filter((c) => c[1] === 'success');
+    expect(successCalls.length).toBeGreaterThanOrEqual(1);
+    // The success toast string contains 'yeniden kuruldu' Turkish for "re-established".
+    expect(successCalls.some((c) => String(c[0]).includes('yeniden kuruldu'))).toBe(true);
+  });
+
+  it('stops polling on unmount (no further fetches after teardown)', async () => {
+    const first = buildRunningWorkflow('P-6', 1, '2026-05-09T12:00:00.000Z');
+    mockedGet.mockResolvedValue(first as unknown as ReturnType<typeof buildRunningWorkflow>);
+
+    const { result, unmount } = renderLoader({
+      conversationId: 'P-6',
+      isConnected: true,
+    });
+
+    await flushMicrotasks();
+    expect(result.current.activeWorkflow?.id).toBe('P-6');
+    const callsBefore = mockedGet.mock.calls.length;
+
+    unmount();
+
+    // Advance well past several poll intervals — controller.abort + clearTimeout
+    // should prevent any more get() calls.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+
+    expect(mockedGet.mock.calls.length).toBeLessThanOrEqual(callsBefore + 1);
+  });
+
+  it('uses 8s polling interval when SSE is down (isConnected=false)', async () => {
+    const first = buildRunningWorkflow('P-7', 1, '2026-05-09T12:00:00.000Z');
+    const second = buildRunningWorkflow('P-7', 2, '2026-05-09T12:00:01.000Z');
+    mockedGet
+      .mockResolvedValueOnce(first as unknown as ReturnType<typeof buildRunningWorkflow>)
+      .mockResolvedValueOnce(second as unknown as ReturnType<typeof buildRunningWorkflow>);
+
+    const { result } = renderLoader({ conversationId: 'P-7', isConnected: false });
+
+    await flushMicrotasks();
+    expect(result.current.activeWorkflow?.id).toBe('P-7');
+
+    // 8s tick — advancing 8.5s should be enough.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8_500);
+    });
+
+    expect(mockedGet).toHaveBeenCalledTimes(2);
   });
 });
