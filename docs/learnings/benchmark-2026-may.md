@@ -308,7 +308,7 @@ PDP-2 dalgası, bir önceki dalgada (Q1+Q3 benchmark) tespit edilen ve smoke tes
 | Metrik | Önce | Sonra | Δ |
 |---|---:|---:|---:|
 | Backend test sayısı | ~3179 | ~3260 | +81 |
-| Frontend test sayısı | 797 | 844 | +47 |
+| Frontend test sayısı | 813 | 860 | +47 |
 | Bakkal-language audit warn | (yoktu) | 33 | + |
 | Pipeline reasoning persist | 0% | 100% | NFR-1.1 ✅ |
 | Intent classification (BUILD/ASK/FEEDBACK/CHAT) | yoktu | 4-class + 0.7 threshold | FR-11 ✅ |

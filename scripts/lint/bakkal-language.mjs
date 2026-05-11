@@ -241,10 +241,10 @@ export function runAudit({ root = REPO_ROOT, all = false } = {}) {
 
 // Brand / proper-noun / technical-key allowlist. These keys legitimately
 // have the same value in tr.json and en.json (brand names, language codes,
-// universally-used technical abbreviations). When the value at the key
-// equals the listed value the entry is suppressed from findings; when it
-// differs the entry is still flagged because the key has drifted from its
-// allowlisted form.
+// universally-used technical abbreviations). Keys in this allowlist are
+// always reported with severity `info` (not `warn`), regardless of value.
+// (The "real-repo regression" test in scripts/lint/__tests__ asserts that
+// the literal values these keys carry have not drifted.)
 //
 // This list is the post-Phase-2 cleanup baseline (see
 // docs/product/wave3/i18n-audit-baseline.md § Phase 2). Add to it only when

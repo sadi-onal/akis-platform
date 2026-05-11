@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -171,76 +171,55 @@ test('i18n-sync: runs against repo and produces zero warn findings (post-Phase-2
 test('i18n-sync: synthetic TR==EN entry not in allowlist is flagged as warn', () => {
   const fakeTr = { 'fake.entry.title': 'Dashboard' };
   const fakeEn = { 'fake.entry.title': 'Dashboard' };
-  // Write to a temp dir matching the expected layout.
   const tmp = mkdtempSync(join(tmpdir(), 'bakkal-i18n-sync-'));
   const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
-  // Build nested dirs.
-  for (const dir of [
-    join(tmp, 'frontend'),
-    join(tmp, 'frontend', 'src'),
-    join(tmp, 'frontend', 'src', 'i18n'),
-    localesDir,
-  ]) {
-    try { writeFileSync(join(dir, '.keep'), ''); } catch (e) {
-      // mkdtempSync created tmp; nested dirs need creation via mkdir(recursive)
-      // — we just need fs.mkdirSync recursive instead.
-    }
-  }
-  return import('node:fs').then(({ mkdirSync, writeFileSync: wf }) => {
-    mkdirSync(localesDir, { recursive: true });
-    wf(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
-    wf(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
-    const { findings } = runI18nSync({ root: tmp, allowlist: new Set() });
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0].severity, 'warn');
-    assert.equal(findings[0].term, 'fake.entry.title');
-    assert.equal(exitCodeFor(findings), 1);
-  });
+  mkdirSync(localesDir, { recursive: true });
+  writeFileSync(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
+  writeFileSync(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
+  const { findings } = runI18nSync({ root: tmp, allowlist: new Set() });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, 'warn');
+  assert.equal(findings[0].term, 'fake.entry.title');
+  assert.equal(exitCodeFor(findings), 1);
 });
 
 test('i18n-sync: allowlisted entry is info, not warn', () => {
   const fakeTr = { 'fake.brand.title': 'AKIS Proto' };
   const fakeEn = { 'fake.brand.title': 'AKIS Proto' };
   const tmp = mkdtempSync(join(tmpdir(), 'bakkal-i18n-sync-'));
-  return import('node:fs').then(({ mkdirSync, writeFileSync: wf }) => {
-    const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
-    mkdirSync(localesDir, { recursive: true });
-    wf(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
-    wf(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
-    const allow = new Set(['fake.brand.title']);
-    const { findings } = runI18nSync({ root: tmp, allowlist: allow });
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0].severity, 'info');
-    assert.equal(exitCodeFor(findings), 0);
-  });
+  const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
+  mkdirSync(localesDir, { recursive: true });
+  writeFileSync(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
+  writeFileSync(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
+  const allow = new Set(['fake.brand.title']);
+  const { findings } = runI18nSync({ root: tmp, allowlist: allow });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, 'info');
+  assert.equal(exitCodeFor(findings), 0);
 });
 
 test('i18n-sync: TR != EN entry produces no finding', () => {
   const fakeTr = { 'k': 'Panel' };
   const fakeEn = { 'k': 'Dashboard' };
   const tmp = mkdtempSync(join(tmpdir(), 'bakkal-i18n-sync-'));
-  return import('node:fs').then(({ mkdirSync, writeFileSync: wf }) => {
-    const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
-    mkdirSync(localesDir, { recursive: true });
-    wf(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
-    wf(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
-    const { findings } = runI18nSync({ root: tmp });
-    assert.equal(findings.length, 0);
-  });
+  const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
+  mkdirSync(localesDir, { recursive: true });
+  writeFileSync(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
+  writeFileSync(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
+  const { findings } = runI18nSync({ root: tmp });
+  assert.equal(findings.length, 0);
 });
 
 test('i18n-sync: empty TR value is not flagged (only structural completeness covers this)', () => {
   const fakeTr = { 'k': '' };
   const fakeEn = { 'k': '' };
   const tmp = mkdtempSync(join(tmpdir(), 'bakkal-i18n-sync-'));
-  return import('node:fs').then(({ mkdirSync, writeFileSync: wf }) => {
-    const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
-    mkdirSync(localesDir, { recursive: true });
-    wf(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
-    wf(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
-    const { findings } = runI18nSync({ root: tmp });
-    assert.equal(findings.length, 0);
-  });
+  const localesDir = join(tmp, 'frontend', 'src', 'i18n', 'locales');
+  mkdirSync(localesDir, { recursive: true });
+  writeFileSync(join(localesDir, 'tr.json'), JSON.stringify(fakeTr, null, 2));
+  writeFileSync(join(localesDir, 'en.json'), JSON.stringify(fakeEn, null, 2));
+  const { findings } = runI18nSync({ root: tmp });
+  assert.equal(findings.length, 0);
 });
 
 // ─────────────────────────────────────────────────────────
