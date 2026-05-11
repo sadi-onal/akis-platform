@@ -60,6 +60,10 @@ jobs:
           NODE_ENV: test
           SKIP_DB_TESTS: 'true'
           SKIP_MCP_TESTS: 'true'
+          # PDP-3 B4: legacy pipeline-orchestrator/edge-cases/integration tests
+          # predate the push-confirm gate; force auto-push at the yaml env
+          # level so the legacy path stays green.
+          AUTO_PUSH_AFTER_PROTO: 'true'
         run: pnpm run test:unit
 
   frontend:
