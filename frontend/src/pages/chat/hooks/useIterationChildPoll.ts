@@ -17,8 +17,13 @@ function fibStep(n: number): number {
 }
 
 export interface UseIterationChildPollOptions {
-  /** Re-fetch the root workflow so iteration progress shows up on the timeline. */
-  refreshWorkflow: () => Promise<void>;
+  /**
+   * Re-fetch the root workflow so iteration progress shows up on the timeline.
+   * Return value is unused here — the callsite ignores whatever it resolves to —
+   * so we accept any-shaped promise to stay forward-compatible with the
+   * `Workflow | null` return added in `useConversationLoader`.
+   */
+  refreshWorkflow: () => Promise<unknown>;
   /** Refresh the sidebar (mirror status/file count of the child). */
   refreshList: () => void;
   /** Append the completion / failure info message when the child terminates. */

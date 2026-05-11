@@ -197,9 +197,30 @@ describe('useConversationLoader', () => {
   it('refreshWorkflow no-ops when there is no conversationId', async () => {
     const { result } = renderLoader({ conversationId: undefined });
     await act(async () => {
-      await result.current.refreshWorkflow();
+      const r = await result.current.refreshWorkflow();
+      expect(r).toBeNull();
     });
     expect(mockedGet).not.toHaveBeenCalled();
+  });
+
+  it('refreshWorkflow returns the fetched Workflow (S-2: callers read fresh fields)', async () => {
+    const wf = buildWorkflow('A', 'hello A');
+    const wf2 = buildWorkflow('A', 'hello A v2', '2026-05-09T13:00:00.000Z');
+    wf2.currentStage = 'proto_building' as typeof wf2.currentStage;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedGet.mockResolvedValueOnce(wf as any).mockResolvedValueOnce(wf2 as any);
+    const { result } = renderLoader({ conversationId: 'A' });
+
+    await waitFor(() => expect(result.current.activeWorkflow?.id).toBe('A'));
+
+    // Force-read the returned value — callers that need post-await fields
+    // (e.g. useHandleSend reading currentStage after refresh) rely on this
+    // instead of the activeWorkflowRef.
+    await act(async () => {
+      const r = await result.current.refreshWorkflow();
+      expect(r).not.toBeNull();
+      expect(r?.currentStage).toBe('proto_building');
+    });
   });
 
   it('exposes a derived isRunning flag based on the workflow stage', async () => {

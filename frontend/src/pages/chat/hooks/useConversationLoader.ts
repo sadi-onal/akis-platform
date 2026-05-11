@@ -63,8 +63,16 @@ export interface UseConversationLoaderReturn {
    * a matching key and skip the setMessages call (F-01 regression).
    */
   lastMessagesKeyRef: React.MutableRefObject<string>;
-  /** Re-fetch the current workflow + sync messages/sidebar/uiState. */
-  refreshWorkflow: () => Promise<void>;
+  /**
+   * Re-fetch the current workflow + sync messages/sidebar/uiState.
+   *
+   * Returns the freshly-fetched `Workflow` so callers can read post-refresh
+   * fields (e.g. `currentStage`) without round-tripping through React state,
+   * which is not guaranteed to flush across an `await` boundary under
+   * concurrent rendering. Returns `null` when there is no `conversationId` to
+   * fetch.
+   */
+  refreshWorkflow: () => Promise<Workflow | null>;
   /** Derived from `activeWorkflow.currentStage` — true while an agent is doing work. */
   isRunning: boolean;
 }
@@ -226,8 +234,8 @@ export function useConversationLoader(
     };
   }, [conversationId, isRunning, isConnected, currentStageForPolling]);
 
-  const refreshWorkflow = useCallback(async () => {
-    if (!conversationId) return;
+  const refreshWorkflow = useCallback(async (): Promise<Workflow | null> => {
+    if (!conversationId) return null;
     const w = await workflowsApi.get(conversationId);
     loadedIdRef.current = conversationId;
     setActiveWorkflow(w);
@@ -240,6 +248,9 @@ export function useConversationLoader(
     }
     syncFromStageRef.current(w.currentStage ?? 'completed');
     onWorkflowSnapshotRef.current?.(w);
+    // Return the fetched workflow so callers can read fresh fields (e.g.
+    // currentStage) without waiting for React state to flush across `await`.
+    return w;
   }, [conversationId]);
 
   return {
