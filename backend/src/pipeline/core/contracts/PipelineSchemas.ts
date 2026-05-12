@@ -3,7 +3,10 @@ import { z } from 'zod';
 // ─── SCRIBE SCHEMAS ───────────────────────────────
 
 export const ScribeInputSchema = z.object({
-  idea: z.string().min(10, 'Fikir en az 10 karakter olmalı').max(10000, 'Fikir en fazla 10.000 karakter olabilir'),
+  idea: z
+    .string()
+    .min(10, 'Fikir en az 10 karakter olmalı')
+    .max(10000, 'Fikir en fazla 10.000 karakter olabilir'),
   context: z.string().max(5000).optional(),
   targetStack: z.string().max(200).optional(),
   existingRepo: z
@@ -59,22 +62,28 @@ export const StructuredSpecSchema = z.object({
   outOfScope: z.array(z.string()),
 });
 
-export const ReviewNotesSchema = z.union([
-  z.string(),
-  z.object({
-    selfReviewPassed: z.boolean().optional(),
-    revisionsApplied: z.array(z.string()).optional(),
-    assumptionsMade: z.array(z.string()).optional(),
-  }),
-]).optional();
+export const ReviewNotesSchema = z
+  .union([
+    z.string(),
+    z.object({
+      selfReviewPassed: z.boolean().optional(),
+      revisionsApplied: z.array(z.string()).optional(),
+      assumptionsMade: z.array(z.string()).optional(),
+    }),
+  ])
+  .optional();
 
 export const UserFriendlyPlanSchema = z.object({
   projectName: z.string().min(1),
   summary: z.string().min(1),
-  features: z.array(z.object({
-    name: z.string().min(1),
-    description: z.string().min(1),
-  })).min(1),
+  features: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        description: z.string().min(1),
+      })
+    )
+    .min(1),
   techChoices: z.array(z.string()),
   estimatedFiles: z.number().int().min(1),
   requiresTests: z.boolean(),
@@ -101,6 +110,15 @@ export const ScribeMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('spec_rejected'),
     content: z.object({ feedback: z.string().min(1) }),
   }),
+  // Free-form note from the user — saved in non-Scribe stages where no
+  // structured intent is implied (e.g., user types "looks good" while the
+  // pipeline is in `proto_building`). Persisted but does NOT trigger any
+  // state change.
+  z.object({ type: z.literal('user_note'), content: z.string().min(1) }),
+  // B5 — user requested a change to the generated code while the pipeline
+  // was at `awaiting_push_confirm`. This triggers `iterateProtoFromFeedback`
+  // which re-runs Proto in dryRun mode with the feedback in its prompt.
+  z.object({ type: z.literal('user_feedback'), content: z.string().min(1) }),
 ]);
 
 // ─── PROTO SCHEMAS ────────────────────────────────
@@ -194,7 +212,9 @@ export const PipelineErrorSchema = z.object({
   message: z.string().min(1),
   technicalDetail: z.string().optional(),
   retryable: z.boolean(),
-  recoveryAction: z.enum(['retry', 'edit_spec', 'reconnect_github', 'start_over', 'configure_ai_key']).optional(),
+  recoveryAction: z
+    .enum(['retry', 'edit_spec', 'reconnect_github', 'start_over', 'configure_ai_key'])
+    .optional(),
 });
 
 export const PipelineMetricsSchema = z.object({
@@ -212,11 +232,17 @@ export const PipelineMetricsSchema = z.object({
   totalTokens: z.number().int().min(0).optional(),
 });
 
-export const JiraConfigSchema = z.object({
-  projectKey: z.string().min(1).max(20).regex(/^[A-Z][A-Z0-9_]*$/, 'Jira proje anahtarı geçersiz'),
-  enabled: z.boolean(),
-  epicKey: z.string().optional(),
-}).optional();
+export const JiraConfigSchema = z
+  .object({
+    projectKey: z
+      .string()
+      .min(1)
+      .max(20)
+      .regex(/^[A-Z][A-Z0-9_]*$/, 'Jira proje anahtarı geçersiz'),
+    enabled: z.boolean(),
+    epicKey: z.string().optional(),
+  })
+  .optional();
 
 export const PipelineStateSchema = z.object({
   id: z.string().uuid(),
@@ -229,10 +255,12 @@ export const PipelineStateSchema = z.object({
   approvedSpec: StructuredSpecSchema.optional(),
   protoOutput: ProtoOutputSchema.optional(),
   traceOutput: TraceOutputSchema.optional(),
-  protoConfig: z.object({
-    repoName: z.string().min(1),
-    repoVisibility: z.enum(['public', 'private']),
-  }).optional(),
+  protoConfig: z
+    .object({
+      repoName: z.string().min(1),
+      repoVisibility: z.enum(['public', 'private']),
+    })
+    .optional(),
   jiraConfig: JiraConfigSchema,
 
   metrics: PipelineMetricsSchema,
@@ -245,7 +273,10 @@ export const PipelineStateSchema = z.object({
 // ─── PIPELINE API REQUEST SCHEMAS ─────────────────
 
 export const StartPipelineRequestSchema = z.object({
-  idea: z.string().min(10, 'Fikir en az 10 karakter olmalı').max(10000, 'Fikir en fazla 10.000 karakter olabilir'),
+  idea: z
+    .string()
+    .min(10, 'Fikir en az 10 karakter olmalı')
+    .max(10000, 'Fikir en fazla 10.000 karakter olabilir'),
   context: z.string().max(5000).optional(),
   targetStack: z.string().max(200).optional(),
   existingRepo: z
@@ -271,6 +302,16 @@ export const StartPipelineRequestSchema = z.object({
 
 export const SendMessageRequestSchema = z.object({
   message: z.string().min(1, 'Mesaj boş olamaz').max(5000),
+});
+
+// B5 — body schema for POST /api/pipelines/:id/iterate-with-feedback.
+// Min 3 chars so a stray empty-textarea submit doesn't burn AI cost on a
+// vacuous re-iteration. Max 2000 keeps the prompt-injection surface bounded.
+export const IterateFeedbackRequestSchema = z.object({
+  feedback: z
+    .string()
+    .min(3, 'Düzeltme isteği en az 3 karakter olmalı')
+    .max(2000, 'Düzeltme isteği 2000 karakteri geçemez'),
 });
 
 export const ApproveSpecRequestSchema = z.object({

@@ -92,7 +92,10 @@ export type ScribeMessageType =
   | { type: 'spec_draft'; content: ScribeOutput }
   | { type: 'spec_approved'; content: StructuredSpec }
   | { type: 'spec_rejected'; content: { feedback: string } }
-  | { type: 'user_note'; content: string };
+  | { type: 'user_note'; content: string }
+  // B5 — user correction request from the push-confirm gate. Triggers
+  // `iterateProtoFromFeedback` which re-runs Proto in dryRun mode.
+  | { type: 'user_feedback'; content: string };
 
 // ─── PROTO ────────────────────────────────────────
 
@@ -204,13 +207,13 @@ export interface TraceOutput {
 export type PipelineStage =
   | 'scribe_clarifying'
   | 'scribe_generating'
-  | 'critic_reviewing_spec'   // Level 3: CriticAgent reviews Scribe's spec
+  | 'critic_reviewing_spec' // Level 3: CriticAgent reviews Scribe's spec
   | 'awaiting_approval'
   | 'proto_building'
-  | 'critic_reviewing_code'   // Level 3: CriticAgent reviews Proto's code
-  | 'awaiting_push_confirm'   // PDP-3 B4: user previews scaffold and confirms before GitHub push
+  | 'critic_reviewing_code' // Level 3: CriticAgent reviews Proto's code
+  | 'awaiting_push_confirm' // PDP-3 B4: user previews scaffold and confirms before GitHub push
   | 'trace_testing'
-  | 'fix_loop_iteration'      // Level 3: FixLoop retrying Proto+Trace
+  | 'fix_loop_iteration' // Level 3: FixLoop retrying Proto+Trace
   | 'ci_running' // reserved — future CI/CD integration
   | 'completed'
   | 'completed_partial'
@@ -260,7 +263,13 @@ export interface PipelineState {
   protoOutput?: ProtoOutput;
   traceOutput?: TraceOutput;
   /** Reserved for future CI/CD integration (GitHub Actions run result) */
-  ciResult?: { ok: boolean; runId: number; status: string; conclusion: string | null; htmlUrl: string };
+  ciResult?: {
+    ok: boolean;
+    runId: number;
+    status: string;
+    conclusion: string | null;
+    htmlUrl: string;
+  };
   traceEnabled: boolean;
   protoConfig?: { repoName: string; repoVisibility: 'public' | 'private' };
   jiraConfig?: {

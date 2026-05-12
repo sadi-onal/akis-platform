@@ -1078,6 +1078,12 @@ export const MESSAGE_KEYS = [
   'chat.pushGate.cancelling',
   'chat.pushGate.errorConfirm',
   'chat.pushGate.errorCancel',
+  'chat.pushGate.errorIterate',
+  'chat.pushGate.feedback.title',
+  'chat.pushGate.feedback.hint',
+  'chat.pushGate.feedback.placeholder',
+  'chat.pushGate.feedback.submit',
+  'chat.pushGate.feedback.iterating',
 
   // Pipeline Stages
   'pipeline.stage.awaitingApproval',

@@ -6,7 +6,11 @@
  * Bounded by character budget with **smart truncation** (preserves head + tail of transcript when needed).
  */
 import type { RepoContext } from '../agents/repo-context/RepoContextTypes.js';
-import type { PipelineState, ScribeMessageType, StructuredSpec } from './contracts/PipelineTypes.js';
+import type {
+  PipelineState,
+  ScribeMessageType,
+  StructuredSpec,
+} from './contracts/PipelineTypes.js';
 
 const DEFAULT_MAX_CHARS = 32_000;
 const MAX_FILE_TREE_CHARS = 12_000;
@@ -77,7 +81,9 @@ export function buildSessionBrief(pipeline: PipelineState): string {
 
   if (pipeline.approvedSpec) {
     bullets.push(`- **Approved product:** ${pipeline.approvedSpec.title}`);
-    bullets.push(`- **Problem (excerpt):** ${truncate(pipeline.approvedSpec.problemStatement, 500)}`);
+    bullets.push(
+      `- **Problem (excerpt):** ${truncate(pipeline.approvedSpec.problemStatement, 500)}`
+    );
   } else if (pipeline.scribeOutput?.spec?.title) {
     bullets.push(`- **Latest spec draft title:** ${pipeline.scribeOutput.spec.title}`);
   }
@@ -85,8 +91,9 @@ export function buildSessionBrief(pipeline: PipelineState): string {
   const conv = pipeline.scribeConversation ?? [];
   const recentUser = [...conv]
     .reverse()
-    .filter((m): m is Extract<ScribeMessageType, { type: 'user_note' | 'user_answer' }> =>
-      m.type === 'user_note' || m.type === 'user_answer',
+    .filter(
+      (m): m is Extract<ScribeMessageType, { type: 'user_note' | 'user_answer' }> =>
+        m.type === 'user_note' || m.type === 'user_answer'
     )
     .slice(0, 2);
   if (recentUser.length > 0) {
@@ -172,7 +179,7 @@ export function formatScribeConversationTranscript(messages: ScribeMessageType[]
         break;
       case 'user_note':
         lines.push(
-          `### [${idx}] User — note (post–Scribe phase; still binding intent)\n${m.content.trim()}`,
+          `### [${idx}] User — note (post–Scribe phase; still binding intent)\n${m.content.trim()}`
         );
         break;
       case 'clarification': {
@@ -184,18 +191,25 @@ export function formatScribeConversationTranscript(messages: ScribeMessageType[]
         const spec = m.content.spec;
         const raw = m.content.rawMarkdown?.trim() ?? '';
         lines.push(
-          `### [${idx}] Assistant — spec draft\n**Title:** ${spec.title}\n\n**Problem:** ${truncate(spec.problemStatement, SPEC_SNIPPET_CHARS)}`,
+          `### [${idx}] Assistant — spec draft\n**Title:** ${spec.title}\n\n**Problem:** ${truncate(spec.problemStatement, SPEC_SNIPPET_CHARS)}`
         );
         if (raw) lines.push(`\n**Raw excerpt:** ${truncate(raw, SPEC_SNIPPET_CHARS)}`);
         break;
       }
       case 'spec_approved':
         lines.push(
-          `### [${idx}] Spec approved in UI\nTitle: ${m.content.title}; AC count: ${m.content.acceptanceCriteria?.length ?? 0}`,
+          `### [${idx}] Spec approved in UI\nTitle: ${m.content.title}; AC count: ${m.content.acceptanceCriteria?.length ?? 0}`
         );
         break;
       case 'spec_rejected':
         lines.push(`### [${idx}] User rejected spec\n${m.content.feedback.trim()}`);
+        break;
+      case 'user_feedback':
+        // B5 — correction request issued at the push-confirm gate. Surface
+        // it like a note so downstream agents see the intent.
+        lines.push(
+          `### [${idx}] User — correction request (push-confirm gate)\n${m.content.trim()}`
+        );
         break;
       default: {
         const _exhaustive: never = m;
@@ -239,7 +253,9 @@ function formatProtoAndLinks(pipeline: PipelineState): string {
     | { owner: string; repo: string; branch: string }
     | undefined;
   if (existing) {
-    lines.push(`- **Linked repo (start):** \`${existing.owner}/${existing.repo}\` @ \`${existing.branch}\``);
+    lines.push(
+      `- **Linked repo (start):** \`${existing.owner}/${existing.repo}\` @ \`${existing.branch}\``
+    );
   }
   const po = pipeline.protoOutput;
   if (po) {
@@ -281,7 +297,7 @@ function applyBudget(raw: string, maxChars: number): string {
  */
 export function buildUnifiedAgentKnowledgeContext(
   pipeline: PipelineState,
-  options?: BuildUnifiedContextOptions,
+  options?: BuildUnifiedContextOptions
 ): string {
   const maxChars = options?.maxChars ?? DEFAULT_MAX_CHARS;
   const role = options?.role ?? 'generic';
@@ -303,7 +319,9 @@ export function buildUnifiedAgentKnowledgeContext(
 
   const att = pipeline.intermediateState?.attachmentContext as string | undefined;
   if (att?.trim()) {
-    mainParts.push(`## USER ATTACHMENTS / UPLOADED TEXT\n\n${att.trim()}\n\n--- END ATTACHMENTS ---\n`);
+    mainParts.push(
+      `## USER ATTACHMENTS / UPLOADED TEXT\n\n${att.trim()}\n\n--- END ATTACHMENTS ---\n`
+    );
   }
 
   if (pipeline.repoContext) {

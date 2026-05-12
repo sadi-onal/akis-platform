@@ -1237,7 +1237,14 @@ export class PipelineOrchestrator {
     repoVisibility: 'public' | 'private',
     owner: string,
     model?: string,
-    userGithubService?: import('../pipeline-factory.js').GitHubServiceLike
+    userGithubService?: import('../pipeline-factory.js').GitHubServiceLike,
+    /**
+     * B5 — user-supplied correction text from the push-confirm gate
+     * (`POST /api/pipelines/:id/iterate-with-feedback`). When set, it is
+     * prepended to Proto's knowledge context so the agent generates a
+     * revised scaffold matching the request.
+     */
+    feedbackContext?: string
   ): Promise<void> {
     const protoEmit = createActivityEmitter(pipelineId, 'proto');
     protoEmit('start', 'Onaylanan spec okunuyor...', 5);
@@ -1262,12 +1269,22 @@ export class PipelineOrchestrator {
     // Issue #462 — prepend chat-level conversation memory for the Proto
     // turn. Uses the approved spec title as the retrieval query (best
     // signal for "what is this chat about?" at the Proto phase).
-    const protoKnowledge = await this.applyChatMemory(
-      pipelineData,
-      protoKnowledgeBase,
-      spec.title,
-      { messageIndex: (pipelineData.scribeConversation?.length ?? 0) + 1 }
-    );
+    let protoKnowledge = await this.applyChatMemory(pipelineData, protoKnowledgeBase, spec.title, {
+      messageIndex: (pipelineData.scribeConversation?.length ?? 0) + 1,
+    });
+    // B5 — prepend user's correction request from the push-confirm gate so
+    // Proto regenerates the scaffold honoring it. Block is intentionally
+    // first + visually distinct so the AI gives it primary weight.
+    if (feedbackContext && feedbackContext.trim().length > 0) {
+      const feedbackBlock = [
+        '## KULLANICI DÜZELTME İSTEĞİ',
+        'Aşağıdaki düzeltme isteğini kodu üretirken **birinci öncelik** olarak dikkate al:',
+        '',
+        feedbackContext.trim(),
+        '',
+      ].join('\n');
+      protoKnowledge = protoKnowledge ? `${feedbackBlock}\n\n${protoKnowledge}` : feedbackBlock;
+    }
     // Issue #464 BUG-C — pull persisted imageBlocks from intermediateState
     // so downstream Proto + Trace calls can see the same screenshots Scribe saw.
     const pipelineImageBlocks = readPipelineImageBlocks(pipelineData.intermediateState);
@@ -1379,9 +1396,17 @@ export class PipelineOrchestrator {
       // only know typescript/javascript/json/html/css; sending unrelated files
       // through the JS brace-balance check produces false-positive errors.
       // Only forward files whose extension maps to a real source language.
-      const isValidatableLang = (path: string): 'typescript' | 'javascript' | 'json' | 'html' | 'css' | null => {
+      const isValidatableLang = (
+        path: string
+      ): 'typescript' | 'javascript' | 'json' | 'html' | 'css' | null => {
         if (path.endsWith('.ts') || path.endsWith('.tsx')) return 'typescript';
-        if (path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.mjs') || path.endsWith('.cjs')) return 'javascript';
+        if (
+          path.endsWith('.js') ||
+          path.endsWith('.jsx') ||
+          path.endsWith('.mjs') ||
+          path.endsWith('.cjs')
+        )
+          return 'javascript';
         if (path.endsWith('.json')) return 'json';
         if (path.endsWith('.html') || path.endsWith('.htm')) return 'html';
         if (path.endsWith('.css')) return 'css';
@@ -1393,7 +1418,15 @@ export class PipelineOrchestrator {
             const lang = isValidatableLang(f.filePath);
             return lang ? { path: f.filePath, content: f.content, language: lang } : null;
           })
-          .filter((f): f is { path: string; content: string; language: 'typescript' | 'javascript' | 'json' | 'html' | 'css' } => f !== null),
+          .filter(
+            (
+              f
+            ): f is {
+              path: string;
+              content: string;
+              language: 'typescript' | 'javascript' | 'json' | 'html' | 'css';
+            } => f !== null
+          ),
         spec,
       };
 
@@ -1843,7 +1876,7 @@ export class PipelineOrchestrator {
     if (!pipeline.protoOutput || !pipeline.approvedSpec) return;
 
     const protoEmit = createActivityEmitter(pipelineId, 'proto');
-    protoEmit('start', 'Onaylanan kod GitHub\'a yükleniyor...', 10);
+    protoEmit('start', "Onaylanan kod GitHub'a yükleniyor...", 10);
 
     const pushResult = await agents.proto.pushScaffoldFiles(
       owner,
@@ -1996,6 +2029,91 @@ export class PipelineOrchestrator {
       { expectedStageVersion: pipeline.stageVersion }
     );
     this.emitEvent(pipelineId, 'completed', 'completed_partial');
+    return updated;
+  }
+
+  // ─── B5 — Iterate Proto from feedback ─────────
+
+  /**
+   * Re-run Proto in dryRun mode with the user's correction request as
+   * primary context. Only valid at `awaiting_push_confirm`. Spec stays the
+   * same; only `protoOutput.files` are regenerated (overwrite — no version
+   * history in this MVP). On success the pipeline transitions back to
+   * `awaiting_push_confirm` with fresh files for the user to inspect again.
+   *
+   * Anchors: docs/product/wave3/b5-feedback-iteration.md
+   */
+  async iterateProtoFromFeedback(pipelineId: string, feedback: string): Promise<PipelineState> {
+    return this.withLock(pipelineId, () => this._iterateProtoFromFeedback(pipelineId, feedback));
+  }
+
+  private async _iterateProtoFromFeedback(
+    pipelineId: string,
+    feedback: string
+  ): Promise<PipelineState> {
+    const pipeline = await this.getPipeline(pipelineId);
+    this.assertStage(pipeline, 'awaiting_push_confirm');
+
+    if (!pipeline.approvedSpec) {
+      throw new Error('Cannot iterate from feedback: pipeline has no approvedSpec on record');
+    }
+    if (!pipeline.protoConfig) {
+      throw new Error('Cannot iterate from feedback: pipeline has no protoConfig on record');
+    }
+
+    // Append feedback to conversation so the audit trail captures intent.
+    const conversation: ScribeMessageType[] = [
+      ...pipeline.scribeConversation,
+      { type: 'user_feedback', content: feedback },
+    ];
+
+    // Transition back to proto_building (orchestrator state machine
+    // accepts this as a valid origin for runProtoAndTrace).
+    const updated = await this.store.update(pipelineId, {
+      stage: 'proto_building',
+      scribeConversation: conversation,
+      error: null,
+    });
+    this.emitEvent(pipelineId, 'stage_change', 'proto_building');
+
+    // Resolve GitHub access (stub under DOGFOOD_MODE) — same path the
+    // initial approveSpec → runProtoAndTrace took.
+    let owner: string;
+    try {
+      const gh = await this.validateGitHubAccess(pipeline.userId);
+      owner = gh.owner;
+    } catch (err) {
+      const error = createPipelineError(
+        PipelineErrorCode.GITHUB_NOT_CONNECTED,
+        `GitHub owner çözümlenemedi: ${err instanceof Error ? err.message : String(err)}`
+      );
+      const failed = await this.store.update(pipelineId, { stage: 'failed', error });
+      this.emitEvent(pipelineId, 'error', 'failed', error);
+      return failed;
+    }
+
+    // Fire-and-forget: re-run Proto + Critic + Trace pipeline. dryRun is
+    // enforced by AUTO_PUSH_AFTER_PROTO=false (the default), so the new
+    // files land in `protoOutput.files` and the pipeline returns to
+    // `awaiting_push_confirm`. Feedback is plumbed through the new
+    // `feedbackContext` parameter.
+    this.runProtoAndTrace(
+      pipelineId,
+      pipeline.metrics,
+      pipeline.approvedSpec,
+      pipeline.protoConfig.repoName,
+      pipeline.protoConfig.repoVisibility,
+      owner,
+      pipeline.model,
+      undefined,
+      feedback
+    ).catch((err) => {
+      logger.error(
+        { err, pipelineId },
+        '[Pipeline] iterateProtoFromFeedback runProtoAndTrace failed'
+      );
+    });
+
     return updated;
   }
 

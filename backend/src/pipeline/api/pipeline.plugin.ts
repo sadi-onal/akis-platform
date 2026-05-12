@@ -352,6 +352,16 @@ export async function pipelinePlugin(fastify: FastifyInstance, opts: PipelinePlu
     }
   );
 
+  // PDP-3 B5: POST /api/pipelines/:id/iterate-with-feedback —
+  // re-run Proto with user feedback while still at the push-confirm gate.
+  fastify.post(
+    '/:id/iterate-with-feedback',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.iterateWithFeedback(request);
+    }
+  );
+
   // PATCH /api/pipelines/:id/title — rename pipeline
   fastify.route({
     method: 'PATCH',
