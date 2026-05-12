@@ -175,9 +175,13 @@ export const TraceOutputSchema = z.object({
 export const PipelineStageSchema = z.enum([
   'scribe_clarifying',
   'scribe_generating',
+  'critic_reviewing_spec',
   'awaiting_approval',
   'proto_building',
+  'critic_reviewing_code',
+  'awaiting_push_confirm',
   'trace_testing',
+  'fix_loop_iteration',
   'ci_running',
   'completed',
   'completed_partial',

@@ -28,7 +28,8 @@ const http = new HttpClient(getApiBaseUrl());
 
 function mapStageStatus(
   pipelineStage: PipelineStage,
-  traceEnabled?: boolean
+  traceEnabled?: boolean,
+  protoCommitted?: boolean
 ): { workflowStatus: WorkflowStatus; stages: WorkflowStages } {
   const idle: StageResult = { status: 'idle' };
 
@@ -58,6 +59,16 @@ function mapStageStatus(
       stages.proto.status = 'running';
       workflowStatus = 'running';
       break;
+    case 'awaiting_push_confirm':
+      // PDP-3 B4: Proto generated the scaffold but is awaiting the user's
+      // explicit "push to GitHub" confirmation. Treat the workflow status
+      // as `awaiting_approval` so the UI uses the same "needs your input"
+      // visual treatment as the spec-approval moment.
+      stages.scribe.status = 'completed';
+      stages.approve.status = 'completed';
+      stages.proto.status = 'completed';
+      workflowStatus = 'awaiting_approval';
+      break;
     case 'trace_testing':
       stages.scribe.status = 'completed';
       stages.approve.status = 'completed';
@@ -75,8 +86,19 @@ function mapStageStatus(
     case 'completed_partial':
       stages.scribe.status = 'completed';
       stages.approve.status = 'completed';
-      stages.proto.status = 'completed';
-      stages.trace.status = 'failed';
+      // PDP-3 B4: completed_partial has two distinct causes — (a) the user
+      // cancelled at the push-confirm gate (protoOutput.metadata.committed
+      // === false: nothing was ever pushed) and (b) Trace failed after a
+      // successful push. The first case should NOT show Proto as completed
+      // or Trace as failed — the user deliberately stopped before either
+      // happened. The second case keeps the legacy "Trace: failed" look.
+      if (protoCommitted === false) {
+        stages.proto.status = 'idle';
+        stages.trace.status = 'idle';
+      } else {
+        stages.proto.status = 'completed';
+        stages.trace.status = 'failed';
+      }
       workflowStatus = 'completed_partial';
       break;
     case 'failed':
@@ -285,7 +307,12 @@ export function mapPipelineToWorkflow(
   pipeline: Pipeline,
   tokenUsage?: import('../../types/workflow').WorkflowTokenUsage
 ): Workflow {
-  const { workflowStatus, stages } = mapStageStatus(pipeline.stage, pipeline.traceEnabled);
+  const protoCommitted = pipeline.protoOutput?.metadata?.committed;
+  const { workflowStatus, stages } = mapStageStatus(
+    pipeline.stage,
+    pipeline.traceEnabled,
+    protoCommitted
+  );
 
   // Enrich stages with actual output data
   const scribeData = mapScribeOutput(pipeline.scribeOutput);
@@ -455,6 +482,26 @@ export const workflowsApi = {
 
   skipTrace: async (id: string): Promise<Workflow> => {
     const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/skip-trace`);
+    return mapPipelineToWorkflow(res.pipeline);
+  },
+
+  /**
+   * PDP-3 B4: confirm the previewed scaffold should be pushed to GitHub.
+   * Transitions the pipeline out of `awaiting_push_confirm` into the push
+   * + Trace flow.
+   */
+  confirmPush: async (id: string): Promise<Workflow> => {
+    const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/confirm-push`);
+    return mapPipelineToWorkflow(res.pipeline);
+  },
+
+  /**
+   * PDP-3 B4: decline the push — the pipeline ends as `completed_partial`,
+   * the cached scaffold files remain on the pipeline so the user can still
+   * inspect / copy them.
+   */
+  cancelPush: async (id: string): Promise<Workflow> => {
+    const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/cancel-push`);
     return mapPipelineToWorkflow(res.pipeline);
   },
 

@@ -2,12 +2,21 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
+// PDP-3 B4: these tests predate the preview-confirm gate and assert the
+// "Proto → Trace → completed" legacy flow. Opt back into auto-push so the
+// orchestrator does not halt at `awaiting_push_confirm`. Must run BEFORE
+// config/env.ts is imported (transitively via orchestrator).
+process.env.AUTO_PUSH_AFTER_PROTO = 'true';
+
 import {
   PipelineOrchestrator,
   type PipelineStore,
   type PipelineStateUpdate,
   type PipelineEvent,
 } from '../../src/pipeline/core/orchestrator/PipelineOrchestrator.js';
+import { __clearEnvCacheForTests } from '../../src/config/env.js';
+
+__clearEnvCacheForTests();
 import type {
   PipelineState,
   PipelineStage,

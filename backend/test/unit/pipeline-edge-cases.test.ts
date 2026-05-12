@@ -2,12 +2,21 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
+// PDP-3 B4: this suite predates the preview-confirm gate and exercises the
+// "Proto → Trace → completed" legacy flow. Opt back into auto-push so the
+// orchestrator does not halt at `awaiting_push_confirm`. Set BEFORE the
+// orchestrator module is imported so config/env's cache sees it.
+process.env.AUTO_PUSH_AFTER_PROTO = 'true';
+
 import {
   PipelineOrchestrator,
   type PipelineStore,
   type PipelineStateUpdate,
   type PipelineEvent,
 } from '../../src/pipeline/core/orchestrator/PipelineOrchestrator.js';
+import { __clearEnvCacheForTests } from '../../src/config/env.js';
+
+__clearEnvCacheForTests();
 import type {
   PipelineState,
   PipelineStage,
@@ -142,7 +151,22 @@ async function waitForStage(
     await new Promise((r) => setTimeout(r, 10));
   }
   const p = await store.getById(id);
-  throw new Error(`Timeout: expected ${targetStages.join('|')}, got ${p?.stage}`);
+  // PDP-3 B4 debug: surface the actual orchestrator error in CI logs so we
+  // can tell *why* the pipeline failed (instead of just timing out blind).
+  // Safe to keep: when the test passes the early return fires; only timeouts
+  // execute this enrichment.
+  const env = {
+    AUTO_PUSH_AFTER_PROTO: process.env.AUTO_PUSH_AFTER_PROTO,
+    AI_PROVIDER: process.env.AI_PROVIDER,
+    NODE_ENV: process.env.NODE_ENV,
+    NODE_VERSION: process.version,
+  };
+  throw new Error(
+    `Timeout: expected ${targetStages.join('|')}, got ${p?.stage}. ` +
+      `Pipeline error: ${JSON.stringify(p?.error)}. ` +
+      `Stage details: ${JSON.stringify({ approvedSpec: !!p?.approvedSpec, protoOutput: !!p?.protoOutput, traceOutput: !!p?.traceOutput, metricsRetry: p?.metrics?.retryCount })}. ` +
+      `Env: ${JSON.stringify(env)}`,
+  );
 }
 
 // ─── Mock Factories ─────────────────────────────

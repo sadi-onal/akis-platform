@@ -63,6 +63,11 @@ jobs:
           NODE_ENV: test
           SKIP_DB_TESTS: 'true'
           SKIP_MCP_TESTS: 'true'
+          # PDP-3 B4: legacy pipeline-orchestrator/edge-cases/integration tests
+          # predate the new push-confirm gate and assert "Proto → Trace → completed".
+          # Force auto-push so they hit the legacy path; preview-gate tests
+          # opt back to the gate at file-top with __clearEnvCacheForTests.
+          AUTO_PUSH_AFTER_PROTO: 'true'
         run: pnpm run test:unit
 
   frontend-gate:

@@ -49,7 +49,16 @@ export function useProtoFiles(
   useEffect(() => {
     if (protoFiles || !conversationId) return;
     const stage = activeWorkflow?.currentStage;
-    if (stage === 'completed' || stage === 'completed_partial' || stage === 'trace_testing') {
+    // PDP-3 B4: `awaiting_push_confirm` is the new pre-push gate. The
+    // scaffold lives in protoOutput.files at this point, so the FE must
+    // be able to render Sandpack for the user to inspect before they
+    // press "GitHub'a gönder".
+    if (
+      stage === 'completed' ||
+      stage === 'completed_partial' ||
+      stage === 'trace_testing' ||
+      stage === 'awaiting_push_confirm'
+    ) {
       workflowsApi
         .getProtoFiles(conversationId)
         .then((res) => {

@@ -7,12 +7,25 @@ import { PipelineCinema } from './PipelineCinema';
 import { ExplanationPanel } from './ExplanationPanel';
 import { AttentionBanner } from './AttentionBanner';
 import { RegressionPanel } from './RegressionPanel';
+import { PushConfirmGate } from './PushConfirmGate';
 
 export interface PipelineDetailRailProps {
   pipelineId: string | undefined;
   uiState: ConversationUIState;
   activities: PipelineActivity[];
   currentStep: PipelineActivity | null;
+  /**
+   * PDP-3 B4: cached scaffold files used by the inline preview when the
+   * pipeline halts at `awaiting_push_confirm`. Resolved by the parent via
+   * `useProtoFiles`. When the gate isn't active this prop is ignored.
+   */
+  protoFiles?: Record<string, string> | null;
+  /**
+   * PDP-3 B4: invoked after confirm-push / cancel-push so the parent can
+   * trigger a workflow refetch (the orchestrator transitions stages
+   * asynchronously so polling needs a nudge).
+   */
+  onPushResolved?: () => void;
   /**
    * F-04: when true, the rail stays mounted for completed pipelines even
    * if the in-memory activity buffer was lost (e.g. backend restart).
@@ -53,11 +66,18 @@ const RUNNING_STATES: ConversationUIState[] = [
 
 const REASONING_VISIBLE_STATES: ConversationUIState[] = ['awaiting_approval'];
 
+// PDP-3 B4: the push gate is just as "needs your input now" as
+// `awaiting_approval` — auto-expand the rail and surface its UI inline.
+const PUSH_GATE_STATES: ConversationUIState[] = ['awaiting_push_confirm'];
+
 function isRunning(uiState: ConversationUIState): boolean {
   return RUNNING_STATES.includes(uiState);
 }
 function isExplainable(uiState: ConversationUIState): boolean {
   return REASONING_VISIBLE_STATES.includes(uiState);
+}
+function isPushGate(uiState: ConversationUIState): boolean {
+  return PUSH_GATE_STATES.includes(uiState);
 }
 function isRegressionVisible(
   uiState: ConversationUIState,
@@ -85,6 +105,8 @@ export function PipelineDetailRail({
   pipelineHasOutputs = false,
   explanationFetcher,
   regressionFetcher,
+  protoFiles,
+  onPushResolved,
   className,
 }: PipelineDetailRailProps) {
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
@@ -93,11 +115,13 @@ export function PipelineDetailRail({
   const [explanationError, setExplanationError] = useState<string | null>(null);
 
   const regressionVisible = isRegressionVisible(uiState, activities.length > 0, pipelineHasOutputs);
+  const pushGateActive = isPushGate(uiState);
   // Keep the collapse contract from v0.7.0: collapse on idle. The
   // Regresyon tab is still clickable and renders content when the user
   // manually expands the rail; auto-expansion would clobber the chat
-  // viewport every time a pipeline finishes.
-  const autoCollapsed = !isRunning(uiState) && !isExplainable(uiState);
+  // viewport every time a pipeline finishes. PDP-3 B4 adds the push gate
+  // to the auto-expand set so the user can't miss the inline preview.
+  const autoCollapsed = !isRunning(uiState) && !isExplainable(uiState) && !pushGateActive;
   const autoTab: Tab = isRunning(uiState) ? 'flow' : 'why';
   const effectiveCollapsed = collapsed ?? autoCollapsed;
   const effectiveTab = tab ?? autoTab;
@@ -335,6 +359,15 @@ export function PipelineDetailRail({
           {attentionPoints.length > 0 && (
             <div className="mb-3">
               <AttentionBanner points={attentionPoints} limit={2} />
+            </div>
+          )}
+          {pushGateActive && pipelineId && (
+            <div className="mb-3">
+              <PushConfirmGate
+                pipelineId={pipelineId}
+                files={protoFiles ?? null}
+                onResolved={onPushResolved}
+              />
             </div>
           )}
           {effectiveTab === 'flow' && (

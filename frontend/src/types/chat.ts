@@ -9,6 +9,7 @@ export type ConversationUIState =
   | 'scribe_running'
   | 'critic_running'
   | 'awaiting_approval'
+  | 'awaiting_push_confirm'
   | 'scribe_revise'
   | 'proto_running'
   | 'trace_running'

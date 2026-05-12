@@ -208,6 +208,7 @@ export type PipelineStage =
   | 'awaiting_approval'
   | 'proto_building'
   | 'critic_reviewing_code'   // Level 3: CriticAgent reviews Proto's code
+  | 'awaiting_push_confirm'   // PDP-3 B4: user previews scaffold and confirms before GitHub push
   | 'trace_testing'
   | 'fix_loop_iteration'      // Level 3: FixLoop retrying Proto+Trace
   | 'ci_running' // reserved — future CI/CD integration

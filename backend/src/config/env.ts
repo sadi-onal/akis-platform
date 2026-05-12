@@ -180,6 +180,17 @@ const envSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((value) => value === 'true'),
+
+    // PDP-3 B4: when true, Proto pushes to GitHub immediately after generation
+    // (legacy behaviour). When false (default), the pipeline halts at the new
+    // `awaiting_push_confirm` stage so the user can inspect the scaffold via
+    // the inline Sandpack preview and explicitly confirm before any GitHub
+    // commit happens. Defaults to OFF so the bakkal-trust gate is the default
+    // experience; CI / smoke tests can opt back in by setting it to true.
+    AUTO_PUSH_AFTER_PROTO: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
     AGENT_CONTRACT_ENFORCEMENT_MODE: z
       .enum(['observe', 'enforce'])
       .default('observe'),

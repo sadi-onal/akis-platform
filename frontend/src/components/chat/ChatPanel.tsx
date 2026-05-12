@@ -73,6 +73,16 @@ interface ChatPanelProps {
    * proto/trace output presence.
    */
   pipelineHasOutputs?: boolean;
+  /**
+   * PDP-3 B4: cached scaffold files forwarded to the rail's PushConfirmGate
+   * inline preview when the pipeline halts at `awaiting_push_confirm`.
+   */
+  protoFiles?: Record<string, string> | null;
+  /**
+   * PDP-3 B4: called after the user resolves the push gate so the parent
+   * can refetch / refresh workflow state.
+   */
+  onPushResolved?: () => void;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -116,6 +126,8 @@ export const ChatPanel = memo(function ChatPanel({
   pipelineError,
   isRetrying = false,
   pipelineHasOutputs = false,
+  protoFiles,
+  onPushResolved,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -218,6 +230,8 @@ export const ChatPanel = memo(function ChatPanel({
           activities={activities ?? []}
           currentStep={currentStep ?? null}
           pipelineHasOutputs={pipelineHasOutputs}
+          protoFiles={protoFiles}
+          onPushResolved={onPushResolved}
         />
       )}
 

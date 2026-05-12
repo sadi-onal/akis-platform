@@ -1062,6 +1062,88 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     };
   }
 
+  // ─── PDP-3 B4: Preview Push Gate ─────────────────
+
+  /**
+   * Push already-generated scaffold files to GitHub (createRepo + pushFiles)
+   * WITHOUT regenerating via the LLM.
+   *
+   * Used by the new `awaiting_push_confirm` flow: Proto runs once with
+   * `dryRun: true` to produce files for the inline preview, the user then
+   * confirms, and the orchestrator calls this method to commit the cached
+   * files. Avoids re-paying for LLM generation on confirm.
+   *
+   * Mirrors the success path of {@link executeWithTools} so the returned
+   * `ProtoOutput` is shape-compatible with what runProtoAndTrace expects
+   * before transitioning to `trace_testing`.
+   */
+  async pushScaffoldFiles(
+    owner: string,
+    repoName: string,
+    repoVisibility: 'public' | 'private',
+    files: ProtoOutput['files'],
+    options: {
+      setupCommands?: string[];
+      stackUsed?: string;
+      summary?: string;
+      pipelineId?: string;
+    } = {},
+  ): Promise<ProtoResult> {
+    const emit = options.pipelineId
+      ? createActivityEmitter(options.pipelineId, 'proto')
+      : undefined;
+    emit?.('github_push', 'GitHub deposu oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_repo');
+    // createRepo only reads owner / repoName / repoVisibility off ProtoInput.
+    // The rest of the fields are unused on this code path, so the partial
+    // cast keeps the call site honest without fabricating a full spec.
+    const repoResult = await this.createRepo({
+      owner,
+      repoName,
+      repoVisibility,
+    } as ProtoInput);
+    if (repoResult.type === 'error') {
+      emit?.('error', 'GitHub deposu oluşturulamadı', 0);
+      return repoResult;
+    }
+
+    const branchName = 'main';
+    emit?.('github_push', `${files.length} dosya GitHub'a yükleniyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
+    const pushResult = await this.pushFiles(owner, repoName, branchName, files, emit);
+    if (pushResult.type === 'error') {
+      emit?.('error', 'Dosyalar yüklenemedi', 0);
+      return pushResult;
+    }
+
+    emit?.('verification', 'GitHub deposu içeriği doğrulanıyor...', 92);
+    const pushedPaths = files.map((f) => f.filePath);
+    const verifyResult = await this.verifyRepoPushed(owner, repoName, branchName, files.length, pushedPaths);
+    if (verifyResult.type === 'error') {
+      emit?.('error', 'GitHub doğrulaması başarısız', 0);
+      return verifyResult;
+    }
+
+    emit?.('complete', `İskelet hazır: ${files.length} dosya yüklendi`, 100);
+    const totalLOC = files.reduce((sum, f) => sum + (f.linesOfCode ?? 0), 0);
+    return {
+      type: 'output',
+      data: {
+        ok: true,
+        branch: branchName,
+        repo: `${owner}/${repoName}`,
+        repoUrl: `https://github.com/${owner}/${repoName}`,
+        files,
+        setupCommands: this.buildSetupCommands(owner, repoName, options.setupCommands ?? ['npm install', 'npm run dev']),
+        ...(options.summary ? { summary: options.summary } : {}),
+        metadata: {
+          filesCreated: files.length,
+          totalLinesOfCode: totalLOC,
+          stackUsed: options.stackUsed ?? 'React + Vite',
+          committed: true,
+        },
+      },
+    };
+  }
+
   // ─── Post-push GitHub Verification ──────────────
 
   /**

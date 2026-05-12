@@ -92,6 +92,12 @@ export interface ChatPageLayoutProps {
   onSkip: () => Promise<void> | void;
   onBack: () => void;
   onSuggestBuild: (sourceMessage: string) => void;
+  /**
+   * PDP-3 B4: called after the user resolves the push-confirm gate so the
+   * workflow can refetch and reflect the new stage (proto_building → trace
+   * → completed, or completed_partial on cancel).
+   */
+  onPushResolved?: () => Promise<unknown> | unknown;
 
   // ── trace toggle + model picker ─────────────────
   traceEnabled: boolean;
@@ -162,6 +168,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
     onSkip,
     onBack,
     onSuggestBuild,
+    onPushResolved,
     traceEnabled,
     setTraceEnabled,
     pendingModel,
@@ -299,6 +306,8 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       pipelineError={pipelineError}
                       isRetrying={isRetrying}
                       pipelineHasOutputs={pipelineHasOutputs}
+                      protoFiles={protoFiles}
+                      onPushResolved={onPushResolved}
                     />
                   )}
                 </ChatRouter>

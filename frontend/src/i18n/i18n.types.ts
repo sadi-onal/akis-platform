@@ -1066,6 +1066,19 @@ export const MESSAGE_KEYS = [
   'chat.modeBadge.failed.title',
   'chat.modeBadge.failed.aria',
 
+  // PDP-3 B4: Preview-confirm gate (Proto → push)
+  'chat.pushGate.ariaLabel',
+  'chat.pushGate.title',
+  'chat.pushGate.description',
+  'chat.pushGate.fileCountSuffix',
+  'chat.pushGate.previewLoading',
+  'chat.pushGate.confirm',
+  'chat.pushGate.confirming',
+  'chat.pushGate.cancel',
+  'chat.pushGate.cancelling',
+  'chat.pushGate.errorConfirm',
+  'chat.pushGate.errorCancel',
+
   // Pipeline Stages
   'pipeline.stage.awaitingApproval',
   'pipeline.stage.cancelled',
@@ -1077,6 +1090,7 @@ export const MESSAGE_KEYS = [
   'pipeline.stage.scribeClarifying',
   'pipeline.stage.scribeGenerating',
   'pipeline.stage.traceTesting',
+  'pipeline.stage.awaitingPushConfirm',
 
   // Pipeline activity sub-stage keys (PR-A: emitted by agents, rendered as live status)
   'pipeline.activity.scribe.analyzing_questions',
