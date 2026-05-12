@@ -34,6 +34,7 @@ export {
   SendMessageRequestSchema,
   ApproveSpecRequestSchema,
   RejectSpecRequestSchema,
+  IterateFeedbackRequestSchema,
 } from './PipelineSchemas.js';
 
 export {

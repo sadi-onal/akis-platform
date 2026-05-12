@@ -21,6 +21,7 @@ import {
   SendMessageRequestSchema,
   ApproveSpecRequestSchema,
   RejectSpecRequestSchema,
+  IterateFeedbackRequestSchema,
 } from '../core/contracts/PipelineSchemas.js';
 import type { PipelineOrchestrator } from '../core/orchestrator/PipelineOrchestrator.js';
 import type { PipelineState } from '../core/contracts/PipelineTypes.js';
@@ -202,6 +203,20 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
       const pipeline = await orchestrator.cancelPush(id);
+      return { pipeline };
+    },
+
+    /**
+     * PDP-3 B5: user-driven Proto re-iteration at the push-confirm gate.
+     * Body: `{ feedback: string }` (3-2000 chars). Only valid while the
+     * pipeline is at `awaiting_push_confirm`; orchestrator enforces the
+     * stage rejection. Spec: docs/product/wave3/b5-feedback-iteration.md
+     */
+    async iterateWithFeedback(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const body = IterateFeedbackRequestSchema.parse((request as { body: unknown }).body);
+      const pipeline = await orchestrator.iterateProtoFromFeedback(id, body.feedback);
       return { pipeline };
     },
 

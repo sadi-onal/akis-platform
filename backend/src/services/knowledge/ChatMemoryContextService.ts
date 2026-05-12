@@ -91,7 +91,7 @@ export interface ChatMemoryPipelineInput extends PipelineChatIdentity {
 export class ChatMemoryContextService {
   constructor(
     private readonly retrieval: KnowledgeRetrievalService = knowledgeRetrievalService,
-    private readonly anchors: ChatRetrievalAnchorService = chatRetrievalAnchorService,
+    private readonly anchors: ChatRetrievalAnchorService = chatRetrievalAnchorService
   ) {}
 
   /**
@@ -99,7 +99,10 @@ export class ChatMemoryContextService {
    * soft — errors are logged and an empty block is returned rather than
    * letting a secondary service kill the agent call.
    */
-  async build(pipeline: ChatMemoryPipelineInput, options: ChatMemoryBuildOptions): Promise<ChatMemoryResult> {
+  async build(
+    pipeline: ChatMemoryPipelineInput,
+    options: ChatMemoryBuildOptions
+  ): Promise<ChatMemoryResult> {
     if (!options.enabled) {
       return { block: '', retrievedChunks: [], chatId: '', charCount: 0 };
     }
@@ -115,7 +118,10 @@ export class ChatMemoryContextService {
     const historyBudget = Math.floor(maxChars * 0.7);
     const retrievalBudget = Math.max(0, maxChars - historyBudget);
 
-    const historyBlock = this.formatConversationHistory(pipeline.scribeConversation ?? [], historyBudget);
+    const historyBlock = this.formatConversationHistory(
+      pipeline.scribeConversation ?? [],
+      historyBudget
+    );
 
     let retrieved: RetrievalResult[] = [];
     try {
@@ -163,9 +169,8 @@ export class ChatMemoryContextService {
     for (let i = conversation.length - 1; i >= 0; i--) {
       const turn = this.renderTurn(conversation[i], i + 1);
       if (!turn) continue;
-      const trimmed = turn.length > MAX_TURN_CHARS
-        ? `${turn.slice(0, MAX_TURN_CHARS)}\n… [truncated]`
-        : turn;
+      const trimmed =
+        turn.length > MAX_TURN_CHARS ? `${turn.slice(0, MAX_TURN_CHARS)}\n… [truncated]` : turn;
       const cost = trimmed.length + 2; // '\n\n' separator
 
       // Stop if this turn would blow the budget. LIFO means older turns drop first.
@@ -204,6 +209,9 @@ export class ChatMemoryContextService {
         return `### [${idx}] Spec approved\nTitle: ${m.content.title}`;
       case 'spec_rejected':
         return `### [${idx}] User rejected spec\n${m.content.feedback.trim()}`;
+      case 'user_feedback':
+        // B5 — push-confirm gate correction request
+        return `### [${idx}] User — correction request\n${m.content.trim()}`;
       default: {
         // Exhaustiveness check — compile-time guarantee of full coverage.
         const _never: never = m;
@@ -262,7 +270,7 @@ export async function withChatMemoryContext(
   pipeline: ChatMemoryPipelineInput,
   existingKnowledgeContext: string | undefined,
   options: ChatMemoryBuildOptions,
-  service: ChatMemoryContextService = chatMemoryContextService,
+  service: ChatMemoryContextService = chatMemoryContextService
 ): Promise<string | undefined> {
   const { block } = await service.build(pipeline, options);
   if (!block) return existingKnowledgeContext?.trim() ? existingKnowledgeContext : undefined;

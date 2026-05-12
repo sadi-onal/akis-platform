@@ -5,7 +5,7 @@ import { workflowsApi } from '../../services/api/workflows';
 // Lazy-load PreviewPanel — same chunking as ChatPageLayout. Keeps the rail's
 // initial bundle slim for users who never hit `awaiting_push_confirm`.
 const PreviewPanel = lazy(() =>
-  import('../workflow/PreviewPanel').then((m) => ({ default: m.PreviewPanel })),
+  import('../workflow/PreviewPanel').then((m) => ({ default: m.PreviewPanel }))
 );
 
 export interface PushConfirmGateProps {
@@ -21,7 +21,10 @@ export interface PushConfirmGateProps {
   onResolved?: () => void;
 }
 
-type BusyMode = 'confirm' | 'cancel' | null;
+type BusyMode = 'confirm' | 'cancel' | 'iterate' | null;
+
+const FEEDBACK_MIN_CHARS = 3;
+const FEEDBACK_MAX_CHARS = 2000;
 
 /**
  * PDP-3 B4 — Preview-confirm gate.
@@ -39,6 +42,7 @@ export function PushConfirmGate({ pipelineId, files, onResolved }: PushConfirmGa
   const { t } = useI18n();
   const [busy, setBusy] = useState<BusyMode>(null);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState('');
 
   const handleConfirm = async () => {
     if (busy) return;
@@ -66,6 +70,25 @@ export function PushConfirmGate({ pipelineId, files, onResolved }: PushConfirmGa
     }
   };
 
+  const handleIterate = async () => {
+    if (busy) return;
+    const trimmed = feedback.trim();
+    if (trimmed.length < FEEDBACK_MIN_CHARS) return;
+    setBusy('iterate');
+    setError(null);
+    try {
+      await workflowsApi.iterateWithFeedback(pipelineId, trimmed);
+      // Clear textarea; pipeline transitions to proto_building. The parent
+      // rail's `useProtoFiles` polling will pick up new files and re-render
+      // this gate once the new dryRun lands.
+      setFeedback('');
+      onResolved?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('chat.pushGate.errorIterate'));
+      setBusy(null);
+    }
+  };
+
   const fileCount = files ? Object.keys(files).length : 0;
 
   return (
@@ -75,9 +98,7 @@ export function PushConfirmGate({ pipelineId, files, onResolved }: PushConfirmGa
       className="rounded-lg border border-ak-primary/30 bg-ak-primary/5 p-3"
     >
       <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-ak-text-primary">
-          {t('chat.pushGate.title')}
-        </h3>
+        <h3 className="text-sm font-semibold text-ak-text-primary">{t('chat.pushGate.title')}</h3>
         {fileCount > 0 && (
           <span className="text-xs text-ak-text-secondary">
             {`${fileCount} ${t('chat.pushGate.fileCountSuffix')}`}
@@ -134,6 +155,45 @@ export function PushConfirmGate({ pipelineId, files, onResolved }: PushConfirmGa
           className="rounded-md border border-ak-border bg-ak-surface px-3 py-1.5 text-xs font-medium text-ak-text-primary hover:bg-ak-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy === 'cancel' ? t('chat.pushGate.cancelling') : t('chat.pushGate.cancel')}
+        </button>
+      </div>
+
+      {/*
+        B5 — feedback-driven Proto re-iteration. The user types what they
+        want changed; the orchestrator re-runs Proto in dryRun mode with
+        the feedback injected into the prompt. New `protoOutput.files`
+        replace the current ones; the rail's polling refreshes the preview.
+      */}
+      <div className="mt-4 border-t border-ak-border pt-3">
+        <label
+          htmlFor="push-gate-feedback"
+          className="mb-1 block text-xs font-medium text-ak-text-primary"
+        >
+          {t('chat.pushGate.feedback.title')}
+        </label>
+        <p className="mb-2 text-[11px] leading-relaxed text-ak-text-tertiary">
+          {t('chat.pushGate.feedback.hint')}
+        </p>
+        <textarea
+          id="push-gate-feedback"
+          data-testid="push-confirm-gate-feedback-input"
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value.slice(0, FEEDBACK_MAX_CHARS))}
+          disabled={busy !== null}
+          placeholder={t('chat.pushGate.feedback.placeholder')}
+          rows={3}
+          className="mb-2 w-full resize-y rounded-md border border-ak-border bg-ak-surface px-2.5 py-1.5 text-xs text-ak-text-primary placeholder:text-ak-text-tertiary focus:border-ak-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={handleIterate}
+          disabled={busy !== null || feedback.trim().length < FEEDBACK_MIN_CHARS}
+          data-testid="push-confirm-gate-iterate"
+          className="rounded-md border border-ak-primary/50 bg-ak-surface px-3 py-1.5 text-xs font-medium text-ak-primary hover:bg-ak-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy === 'iterate'
+            ? t('chat.pushGate.feedback.iterating')
+            : t('chat.pushGate.feedback.submit')}
         </button>
       </div>
     </section>

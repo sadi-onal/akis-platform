@@ -505,6 +505,20 @@ export const workflowsApi = {
     return mapPipelineToWorkflow(res.pipeline);
   },
 
+  /**
+   * PDP-3 B5: re-run Proto with the user's correction request while the
+   * pipeline is still at the push-confirm gate. Backend overwrites
+   * `protoOutput.files`; the pipeline transitions
+   * `awaiting_push_confirm → proto_building → … → awaiting_push_confirm`.
+   * Spec: docs/product/wave3/b5-feedback-iteration.md
+   */
+  iterateWithFeedback: async (id: string, feedback: string): Promise<Workflow> => {
+    const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/iterate-with-feedback`, {
+      feedback,
+    });
+    return mapPipelineToWorkflow(res.pipeline);
+  },
+
   toggleTrace: async (id: string, enabled: boolean): Promise<Workflow> => {
     const res = await http.patch<PipelineResponse>(`/api/pipelines/${id}/trace-toggle`, {
       enabled,
