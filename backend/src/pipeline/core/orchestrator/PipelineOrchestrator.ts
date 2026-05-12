@@ -1278,7 +1278,14 @@ export class PipelineOrchestrator {
     // the orchestrator's `confirmPush` calls `proto.pushScaffoldFiles` to
     // commit the same files — no LLM regeneration cost. The legacy auto-push
     // behaviour stays available behind AUTO_PUSH_AFTER_PROTO=true.
-    const previewGateEnabled = !getEnv().AUTO_PUSH_AFTER_PROTO;
+    //
+    // NOTE: Read `process.env` directly here rather than going through
+    // `getEnv()`. The orchestrator is invoked from unit tests that don't
+    // boot the full app and therefore haven't set every required env var
+    // (notably DATABASE_URL). `getEnv()` would lazy-parse the full zod
+    // schema here and throw; for a single-flag boolean, `process.env`
+    // is sufficient and avoids the validation side effect.
+    const previewGateEnabled = process.env.AUTO_PUSH_AFTER_PROTO !== 'true';
 
     await this.writeCheckpoint(pipelineId, 'proto', spec.title);
     const protoResult = await withRetry(
