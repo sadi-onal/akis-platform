@@ -5,11 +5,27 @@
 # - Runs DB migrations
 # - Starts backend (:3000) and frontend (:5173) in background
 #
-# Usage: ./scripts/dev-up.sh
+# Usage:
+#   ./scripts/dev-up.sh          # normal dev — uses .env as-is
+#   ./scripts/dev-up.sh --mock   # DOGFOOD_MODE=true: real AI, GitHub stubbed
+#                                # → no GitHub OAuth setup needed (validateGitHubAccess
+#                                #   + /api/integrations/github/status return stubs)
+#                                # → Anthropic key from .env still used (real spec/code)
+#                                # → .env stays untouched; flag is shell-only
 # Stop:  ./scripts/dev-down.sh
 # Logs:  tail -f backend.log frontend.log
 
 set -euo pipefail
+
+# Parse --mock flag
+DOGFOOD_MODE_FLAG=""
+for arg in "$@"; do
+  case "$arg" in
+    --mock|--dogfood)
+      DOGFOOD_MODE_FLAG="1"
+      ;;
+  esac
+done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -71,8 +87,14 @@ pnpm -C backend db:migrate >/tmp/akis-dev-migrate.log 2>&1 \
   || fail "Migration failed (see /tmp/akis-dev-migrate.log)"
 
 # 5. Backend
-log "Starting backend on :3000"
-nohup pnpm -C backend dev > backend.log 2>&1 &
+if [ -n "$DOGFOOD_MODE_FLAG" ]; then
+  log "Starting backend on :3000 (DOGFOOD_MODE: real AI, GitHub stubbed)"
+  nohup env DOGFOOD_MODE=true \
+    pnpm -C backend dev > backend.log 2>&1 &
+else
+  log "Starting backend on :3000"
+  nohup pnpm -C backend dev > backend.log 2>&1 &
+fi
 echo $! > .backend.pid
 ok "Backend PID $(cat .backend.pid) — log: backend.log"
 
@@ -87,5 +109,8 @@ ok "AKIS local environment is running:"
 echo "   Frontend: http://localhost:5173"
 echo "   Backend:  http://localhost:3000/health"
 echo "   Adminer:  http://localhost:8080  (server=db, user=postgres, pass=postgres, db=akis_v2)"
+if [ -n "$DOGFOOD_MODE_FLAG" ]; then
+  echo "   Mode:     DOGFOOD (real AI from .env, GitHub stubbed — no OAuth setup needed)"
+fi
 echo ""
 echo "   Stop with: ./scripts/dev-down.sh"

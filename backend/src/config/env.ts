@@ -66,7 +66,10 @@ const envSchema = z
       .default('false')
       .transform((value) => value === 'true'),
     AUTH_COOKIE_DOMAIN: z.string().optional(),
-    AUTH_JWT_SECRET: z.string().min(32, 'AUTH_JWT_SECRET must be at least 32 characters long').optional(),
+    AUTH_JWT_SECRET: z
+      .string()
+      .min(32, 'AUTH_JWT_SECRET must be at least 32 characters long')
+      .optional(),
     // Email configuration
     EMAIL_PROVIDER: z.enum(['mock', 'resend', 'smtp']).default('mock'),
     RESEND_API_KEY: z.string().optional(),
@@ -99,7 +102,11 @@ const envSchema = z
     // For Jira + Confluence integration via OAuth
     ATLASSIAN_OAUTH_CLIENT_ID: z.string().optional(),
     ATLASSIAN_OAUTH_CLIENT_SECRET: z.string().optional(),
-    ATLASSIAN_OAUTH_CALLBACK_URL: z.string().url().optional().default('http://localhost:3000/api/integrations/atlassian/oauth/callback'),
+    ATLASSIAN_OAUTH_CALLBACK_URL: z
+      .string()
+      .url()
+      .optional()
+      .default('http://localhost:3000/api/integrations/atlassian/oauth/callback'),
     // GitHub App Configuration (MCP Integration)
     // These are for GitHub App installation, NOT for OAuth user login
     // Preprocess empty strings to undefined to handle test environments
@@ -124,6 +131,16 @@ const envSchema = z
     // AI Provider configuration. PR-A removed 'openrouter'; PR-B B5 lights up
     // 'openai' at runtime — for now the AIService factory rejects it.
     AI_PROVIDER: z.enum(['openai', 'anthropic', 'mock']).default('mock'),
+    // DOGFOOD_MODE: token-free + GitHub-free local exercise. When `true`,
+    // PipelineOrchestrator.validateGitHubAccess returns a stub
+    // `{ token: 'ghp_mock_dogfood', owner: 'dogfood-owner' }` and
+    // GET /api/integrations/github/status returns `connected: true` without
+    // touching the user's encrypted token. Strictly a dev/demo flag —
+    // forbidden in production (see superRefine below). Default `false`.
+    DOGFOOD_MODE: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
     AI_KEY_ENCRYPTION_KEY: z.string().optional(),
     AI_KEY_ENCRYPTION_KEY_VERSION: z.string().default('v1'),
     AI_DETERMINISTIC_MODE: z.enum(['true', 'false']).default('true'),
@@ -165,8 +182,8 @@ const envSchema = z
     ),
 
     // Slack Integration (Smart Automations)
-    SLACK_BOT_TOKEN: z.string().optional(),         // xoxb-xxx Bot token
-    SLACK_DEFAULT_CHANNEL: z.string().optional(),   // C0123456789 or #channel-name
+    SLACK_BOT_TOKEN: z.string().optional(), // xoxb-xxx Bot token
+    SLACK_DEFAULT_CHANNEL: z.string().optional(), // C0123456789 or #channel-name
 
     // Reverse proxy
     TRUST_PROXY: z
@@ -191,12 +208,8 @@ const envSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((value) => value === 'true'),
-    AGENT_CONTRACT_ENFORCEMENT_MODE: z
-      .enum(['observe', 'enforce'])
-      .default('observe'),
-    AGENT_CONTRACT_RETRY_POLICY: z
-      .enum(['abort', 'retry_once'])
-      .default('abort'),
+    AGENT_CONTRACT_ENFORCEMENT_MODE: z.enum(['observe', 'enforce']).default('observe'),
+    AGENT_CONTRACT_RETRY_POLICY: z.enum(['abort', 'retry_once']).default('abort'),
     RELIABILITY_CANARY_ENABLED: z
       .enum(['true', 'false'])
       .default('false')
@@ -273,11 +286,23 @@ const envSchema = z
       });
     }
 
+    // DOGFOOD_MODE stubs out GitHub auth + status — never legal in production.
+    if (isProduction && data.DOGFOOD_MODE) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'DOGFOOD_MODE=true is forbidden when NODE_ENV=production — it disables GitHub token validation and returns a fake "connected" status to every authenticated user',
+        path: ['DOGFOOD_MODE'],
+      });
+    }
+
     // AI_KEY_ENCRYPTION_KEY is strongly recommended but not strictly required
     // This allows staging deployments without user AI key encryption feature
     // A warning will be logged at startup if not configured
     if (!isTestMode && !data.AI_KEY_ENCRYPTION_KEY && isProduction) {
-      logger.warn('[env] WARNING: AI_KEY_ENCRYPTION_KEY is not set. User AI key encryption will be disabled.');
+      logger.warn(
+        '[env] WARNING: AI_KEY_ENCRYPTION_KEY is not set. User AI key encryption will be disabled.'
+      );
     }
 
     // Email provider validation
@@ -384,14 +409,16 @@ const envSchema = z
     if (data.ATLASSIAN_OAUTH_CLIENT_ID && !data.ATLASSIAN_OAUTH_CLIENT_SECRET) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'ATLASSIAN_OAUTH_CLIENT_SECRET is required when ATLASSIAN_OAUTH_CLIENT_ID is provided',
+        message:
+          'ATLASSIAN_OAUTH_CLIENT_SECRET is required when ATLASSIAN_OAUTH_CLIENT_ID is provided',
         path: ['ATLASSIAN_OAUTH_CLIENT_SECRET'],
       });
     }
     if (!data.ATLASSIAN_OAUTH_CLIENT_ID && data.ATLASSIAN_OAUTH_CLIENT_SECRET) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'ATLASSIAN_OAUTH_CLIENT_ID is required when ATLASSIAN_OAUTH_CLIENT_SECRET is provided',
+        message:
+          'ATLASSIAN_OAUTH_CLIENT_ID is required when ATLASSIAN_OAUTH_CLIENT_SECRET is provided',
         path: ['ATLASSIAN_OAUTH_CLIENT_ID'],
       });
     }
@@ -456,9 +483,13 @@ export interface AIConfig {
  * Anthropic: starts with 'claude-'
  */
 function detectProviderFromModel(model: string): 'openai' | 'anthropic' | null {
-  if (model.startsWith('gpt-') || model.startsWith('o1') ||
-      model.startsWith('o3') || model.startsWith('text-') ||
-      model.startsWith('davinci')) {
+  if (
+    model.startsWith('gpt-') ||
+    model.startsWith('o1') ||
+    model.startsWith('o3') ||
+    model.startsWith('text-') ||
+    model.startsWith('davinci')
+  ) {
     return 'openai';
   }
   if (model.startsWith('claude-')) {
@@ -479,13 +510,13 @@ function detectProviderFromKey(key: string): 'openai' | 'anthropic' | null {
 
 /**
  * Get resolved AI configuration with strict provider consistency.
- * 
+ *
  * CRITICAL: The provider value is AUTHORITATIVE. Base URL and models
  * are determined by provider, not by env overrides that might conflict.
- * 
+ *
  * Provider value is authoritative — base URL and models come from provider,
  * not from env overrides that might point at a different host.
- * 
+ *
  * Priority for provider detection:
  * 1. AI_PROVIDER env var (if set and not 'mock')
  * 2. Auto-detect from API key prefix
@@ -523,7 +554,9 @@ export function getAIConfig(env: Env): AIConfig {
   if (apiKey && provider !== 'mock') {
     const keyProvider = detectProviderFromKey(apiKey);
     if (keyProvider && keyProvider !== provider) {
-      logger.warn(`[getAIConfig] WARNING: AI_PROVIDER=${provider} but API key looks like ${keyProvider} key. Using ${provider} anyway.`);
+      logger.warn(
+        `[getAIConfig] WARNING: AI_PROVIDER=${provider} but API key looks like ${keyProvider} key. Using ${provider} anyway.`
+      );
     }
   }
 
@@ -534,7 +567,7 @@ export function getAIConfig(env: Env): AIConfig {
     baseUrl = envUrl ?? OPENAI_DEFAULTS.baseUrl;
   } else if (provider === 'anthropic') {
     const envUrl = env.AI_BASE_URL;
-    baseUrl = (envUrl && envUrl.includes('anthropic.com')) ? envUrl : ANTHROPIC_DEFAULTS.baseUrl;
+    baseUrl = envUrl && envUrl.includes('anthropic.com') ? envUrl : ANTHROPIC_DEFAULTS.baseUrl;
   } else {
     baseUrl = 'mock://localhost';
   }
@@ -547,16 +580,21 @@ export function getAIConfig(env: Env): AIConfig {
 
     // If model clearly belongs to wrong provider, use default
     if (modelProvider && modelProvider !== provider) {
-      logger.warn(`[getAIConfig] Model "${envModel}" is for ${modelProvider}, but provider is ${provider}. Using default: ${defaultModel}`);
+      logger.warn(
+        `[getAIConfig] Model "${envModel}" is for ${modelProvider}, but provider is ${provider}. Using default: ${defaultModel}`
+      );
       return defaultModel;
     }
 
     return envModel;
   };
 
-  const providerDefault = provider === 'openai' ? OPENAI_DEFAULTS.model :
-                          provider === 'anthropic' ? ANTHROPIC_DEFAULTS.model :
-                          'mock-model';
+  const providerDefault =
+    provider === 'openai'
+      ? OPENAI_DEFAULTS.model
+      : provider === 'anthropic'
+        ? ANTHROPIC_DEFAULTS.model
+        : 'mock-model';
 
   const modelDefault = getValidatedModel(
     env.AI_MODEL_DEFAULT || env.AI_MODEL || env.OPENAI_MODEL,
@@ -601,7 +639,9 @@ export function getEnv(): Env {
   const envWithFallbacks = {
     ...process.env,
     // Provide test fallback for AUTH_JWT_SECRET in CI/test mode
-    AUTH_JWT_SECRET: process.env.AUTH_JWT_SECRET || (isTestMode ? 'test-jwt-secret-at-least-32-chars-long' : undefined),
+    AUTH_JWT_SECRET:
+      process.env.AUTH_JWT_SECRET ||
+      (isTestMode ? 'test-jwt-secret-at-least-32-chars-long' : undefined),
   };
 
   try {

@@ -1,6 +1,6 @@
 /**
  * Integrations API - OAuth-based GitHub + Atlassian integration + Jira/Confluence
- * 
+ *
  * GitHub:
  *   GET /api/integrations/github/oauth/start
  *   GET /api/integrations/github/oauth/callback
@@ -9,13 +9,13 @@
  *   GET /api/integrations/github/owners
  *   GET /api/integrations/github/repos
  *   GET /api/integrations/github/branches
- * 
+ *
  * Atlassian OAuth 2.0 (3LO) - Single OAuth for Jira + Confluence:
  *   GET /api/integrations/atlassian/oauth/start
  *   GET /api/integrations/atlassian/oauth/callback (CANONICAL)
  *   GET /api/integrations/atlassian/status
  *   POST /api/integrations/atlassian/disconnect
- * 
+ *
  * Jira/Confluence (legacy API token - soft deprecated):
  *   GET /api/integrations - List all integration statuses
  *   POST /api/integrations/jira - Connect Jira (API token)
@@ -37,14 +37,9 @@ import { eq, and } from 'drizzle-orm';
 import { encryptSecret, decryptSecret } from '../utils/crypto.js';
 import { atlassianOAuthService } from '../services/atlassian/index.js';
 import { McpGateway } from '../services/mcp/McpGateway.js';
-import {
-  oauthTokenCrypto,
-  OAuthTokenCryptoError,
-} from '../services/auth/OAuthTokenCrypto.js';
+import { oauthTokenCrypto, OAuthTokenCryptoError } from '../services/auth/OAuthTokenCrypto.js';
 import { getGitHubToken } from '../services/auth/githubToken.js';
-import {
-  evaluateGithubOAuthDevBypass,
-} from '../services/auth/githubOauthDevBypass.js';
+import { evaluateGithubOAuthDevBypass } from '../services/auth/githubOauthDevBypass.js';
 import { logger } from '../lib/logger.js';
 
 // GitHub API helper
@@ -152,7 +147,8 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
           return reply.code(501).send({
             error: {
               code: 'GITHUB_OAUTH_NOT_CONFIGURED',
-              message: 'GitHub OAuth is not configured. Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET env vars.',
+              message:
+                'GitHub OAuth is not configured. Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET env vars.',
             },
           });
         }
@@ -189,7 +185,10 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
           // User not logged in - redirect to login with returnTo
           const _config = getEnv();
           const returnTo = encodeURIComponent('/dashboard/settings?tab=github');
-          return reply.code(302).header('Location', `${appPublicUrl}/login?returnTo=${returnTo}`).send();
+          return reply
+            .code(302)
+            .header('Location', `${appPublicUrl}/login?returnTo=${returnTo}`)
+            .send();
         }
         throw err;
       }
@@ -226,21 +225,23 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         // Exchange code for access token (via gateway boundary)
         // redirect_uri must match what was sent in the authorization request
         const tokenExchangeRedirectUri = `${config.FRONTEND_URL}/auth/oauth/github/callback`;
-        const tokenData = await mcpGateway.exchangeGitHubOAuthCode(
-          {
-            code,
-            clientId: config.GITHUB_OAUTH_CLIENT_ID!,
-            clientSecret: config.GITHUB_OAUTH_CLIENT_SECRET!,
-            redirectUri: tokenExchangeRedirectUri,
-          },
-          request.id
-        ).catch(() => null);
+        const tokenData = await mcpGateway
+          .exchangeGitHubOAuthCode(
+            {
+              code,
+              clientId: config.GITHUB_OAUTH_CLIENT_ID!,
+              clientSecret: config.GITHUB_OAUTH_CLIENT_SECRET!,
+              redirectUri: tokenExchangeRedirectUri,
+            },
+            request.id
+          )
+          .catch(() => null);
 
         if (!tokenData) {
           const errorUrl = `${appPublicUrl}/dashboard/settings?tab=github&github=error&reason=token_exchange_failed`;
           return reply.code(302).header('Location', errorUrl).send();
         }
-        
+
         if (tokenData.error || !tokenData.access_token) {
           const errorUrl = `${appPublicUrl}/dashboard/settings?tab=github&github=error&reason=token_missing`;
           return reply.code(302).header('Location', errorUrl).send();
@@ -272,7 +273,9 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         }
 
         // Fetch GitHub user info (via gateway boundary)
-        const githubUser = await mcpGateway.fetchGitHubUser(accessToken, request.id).catch(() => null);
+        const githubUser = await mcpGateway
+          .fetchGitHubUser(accessToken, request.id)
+          .catch(() => null);
         if (!githubUser) {
           const errorUrl = `${appPublicUrl}/dashboard/settings?tab=github&github=error&reason=user_fetch_failed`;
           return reply.code(302).header('Location', errorUrl).send();
@@ -313,9 +316,12 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {
           // Session lost during callback - redirect to login
           const returnTo = encodeURIComponent('/dashboard/settings?tab=github');
-          return reply.code(302).header('Location', `${appPublicUrl}/login?returnTo=${returnTo}`).send();
+          return reply
+            .code(302)
+            .header('Location', `${appPublicUrl}/login?returnTo=${returnTo}`)
+            .send();
         }
-        
+
         // Unexpected error
         const errorUrl = `${appPublicUrl}/dashboard/settings?tab=github&github=error&reason=internal_error`;
         return reply.code(302).header('Location', errorUrl).send();
@@ -329,6 +335,21 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const user = await requireAuth(request);
+
+        // DOGFOOD_MODE: pretend the user is connected so the frontend JIT
+        // gate (ChatPageLayout / useHandleSend) doesn't intercept on every
+        // new conversation. No real `github_integrations` row required.
+        // Defense in depth: env.ts superRefine rejects DOGFOOD_MODE=true at
+        // boot in production; this runtime check belt-and-braces the same
+        // production guard at the call site.
+        if (process.env.DOGFOOD_MODE === 'true' && process.env.NODE_ENV !== 'production') {
+          return reply.code(200).send({
+            connected: true,
+            login: 'dogfood-tester',
+            avatarUrl: null,
+            scope: 'repo,read:user,user:email',
+          });
+        }
 
         const integration = await db.query.githubIntegrations.findFirst({
           where: eq(githubIntegrations.userId, user.id),
@@ -369,9 +390,7 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
       try {
         const user = await requireAuth(request);
 
-        await db
-          .delete(githubIntegrations)
-          .where(eq(githubIntegrations.userId, user.id));
+        await db.delete(githubIntegrations).where(eq(githubIntegrations.userId, user.id));
 
         return reply.code(200).send({
           ok: true,
@@ -478,7 +497,11 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
 
         if (owner === githubUser.login) {
           // User's own repos
-          rawRepos = await fetchFromGitHub('/user/repos?per_page=100&sort=updated', token, request.id);
+          rawRepos = await fetchFromGitHub(
+            '/user/repos?per_page=100&sort=updated',
+            token,
+            request.id
+          );
         } else {
           // Organization repos
           rawRepos = await fetchFromGitHub(
@@ -588,7 +611,8 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
           return reply.code(501).send({
             error: {
               code: 'ATLASSIAN_OAUTH_NOT_CONFIGURED',
-              message: 'Atlassian OAuth is not configured. Set ATLASSIAN_OAUTH_CLIENT_ID and ATLASSIAN_OAUTH_CLIENT_SECRET env vars.',
+              message:
+                'Atlassian OAuth is not configured. Set ATLASSIAN_OAUTH_CLIENT_ID and ATLASSIAN_OAUTH_CLIENT_SECRET env vars.',
             },
           });
         }
@@ -615,7 +639,10 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
           // User not logged in - redirect to login with returnTo
           const _config = getEnv();
           const returnTo = encodeURIComponent('/dashboard/settings?tab=github');
-          return reply.code(302).header('Location', `${appPublicUrl}/login?returnTo=${returnTo}`).send();
+          return reply
+            .code(302)
+            .header('Location', `${appPublicUrl}/login?returnTo=${returnTo}`)
+            .send();
         }
         throw err;
       }
@@ -626,7 +653,11 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/integrations/atlassian/oauth/callback',
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { code, state: receivedState, error: oauthError } = request.query as {
+      const {
+        code,
+        state: receivedState,
+        error: oauthError,
+      } = request.query as {
         code?: string;
         state?: string;
         error?: string;
@@ -682,11 +713,14 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         return reply.code(302).header('Location', successUrl).send();
       } catch (err: unknown) {
         logger.error(`[integrations] Atlassian OAuth callback error: ${err}`);
-        
+
         if (err instanceof Error && err.message === 'UNAUTHORIZED') {
           // Session lost during callback - redirect to login
           const returnTo = encodeURIComponent('/dashboard/settings?tab=github');
-          return reply.code(302).header('Location', `${frontendUrl}/login?returnTo=${returnTo}`).send();
+          return reply
+            .code(302)
+            .header('Location', `${frontendUrl}/login?returnTo=${returnTo}`)
+            .send();
         }
 
         // Unexpected error
@@ -768,152 +802,188 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
   // ===========================================================================
 
   // GET /api/integrations - List all integration statuses
-  fastify.get(
-    '/api/integrations',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/integrations', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = await requireAuth(request);
+
+      // Get GitHub status - isolated error handling
+      let githubStatus: {
+        connected: boolean;
+        login?: string;
+        error?: { code: string; message: string };
+      } = { connected: false };
       try {
-        const user = await requireAuth(request);
-
-        // Get GitHub status - isolated error handling
-        let githubStatus: { connected: boolean; login?: string; error?: { code: string; message: string } } = { connected: false };
-        try {
-          const token = await getGitHubToken(user.id);
-          if (token) {
-            try {
-              const githubUser = await fetchFromGitHub<{ login: string }>('/user', token, request.id);
-              githubStatus = { connected: true, login: githubUser.login };
-            } catch {
-              githubStatus = { connected: false };
-            }
+        const token = await getGitHubToken(user.id);
+        if (token) {
+          try {
+            const githubUser = await fetchFromGitHub<{ login: string }>('/user', token, request.id);
+            githubStatus = { connected: true, login: githubUser.login };
+          } catch {
+            githubStatus = { connected: false };
           }
-        } catch (ghErr) {
-          logger.error(`[integrations] GitHub status check failed: ${ghErr}`);
-          githubStatus = { 
-            connected: false, 
-            error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check GitHub status' }
-          };
         }
-
-        // Get Atlassian OAuth status - isolated error handling
-        let atlassianStatus: { connected: boolean; siteUrl?: string; cloudId?: string; jiraAvailable: boolean; confluenceAvailable: boolean; error?: { code: string; message: string } } = { 
-          connected: false, 
-          jiraAvailable: false, 
-          confluenceAvailable: false 
+      } catch (ghErr) {
+        logger.error(`[integrations] GitHub status check failed: ${ghErr}`);
+        githubStatus = {
+          connected: false,
+          error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check GitHub status' },
         };
-        try {
-          const atlassianOAuthStatus = await atlassianOAuthService.getStatus(user.id);
-          atlassianStatus = {
-            connected: atlassianOAuthStatus.connected,
-            siteUrl: atlassianOAuthStatus.siteUrl,
-            cloudId: atlassianOAuthStatus.cloudId,
-            jiraAvailable: atlassianOAuthStatus.jiraAvailable,
-            confluenceAvailable: atlassianOAuthStatus.confluenceAvailable,
-          };
-        } catch (atlErr) {
-          logger.error(`[integrations] Atlassian status check failed: ${atlErr}`);
-          atlassianStatus = {
-            connected: false,
-            jiraAvailable: false,
-            confluenceAvailable: false,
-            error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check Atlassian status' }
-          };
-        }
+      }
 
-        // Get Jira status - OAuth first, then legacy API token
-        let jiraStatus: { connected: boolean; siteUrl?: string; userEmail?: string; lastValidatedAt?: Date | null; viaOAuth?: boolean; error?: { code: string; message: string } } = { connected: false };
-        try {
-          // Check OAuth first
-          if (atlassianStatus.connected && atlassianStatus.jiraAvailable) {
-            jiraStatus = {
-              connected: true,
-              siteUrl: atlassianStatus.siteUrl,
-              viaOAuth: true,
-            };
-          } else {
-            // Fall back to legacy API token
-            const jiraCred = await db.query.integrationCredentials.findFirst({
-              where: and(
-                eq(integrationCredentials.userId, user.id),
-                eq(integrationCredentials.provider, 'jira')
-              ),
-            });
-            if (jiraCred) {
-              jiraStatus = {
-                connected: jiraCred.isValid,
-                siteUrl: jiraCred.siteUrl,
-                userEmail: jiraCred.userEmail,
-                lastValidatedAt: jiraCred.lastValidatedAt,
-                viaOAuth: false,
-              };
-            }
-          }
-        } catch (jiraErr) {
-          logger.error(`[integrations] Jira status check failed: ${jiraErr}`);
-          jiraStatus = { 
-            connected: false, 
-            error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check Jira status' }
-          };
-        }
+      // Get Atlassian OAuth status - isolated error handling
+      let atlassianStatus: {
+        connected: boolean;
+        siteUrl?: string;
+        cloudId?: string;
+        jiraAvailable: boolean;
+        confluenceAvailable: boolean;
+        error?: { code: string; message: string };
+      } = {
+        connected: false,
+        jiraAvailable: false,
+        confluenceAvailable: false,
+      };
+      try {
+        const atlassianOAuthStatus = await atlassianOAuthService.getStatus(user.id);
+        atlassianStatus = {
+          connected: atlassianOAuthStatus.connected,
+          siteUrl: atlassianOAuthStatus.siteUrl,
+          cloudId: atlassianOAuthStatus.cloudId,
+          jiraAvailable: atlassianOAuthStatus.jiraAvailable,
+          confluenceAvailable: atlassianOAuthStatus.confluenceAvailable,
+        };
+      } catch (atlErr) {
+        logger.error(`[integrations] Atlassian status check failed: ${atlErr}`);
+        atlassianStatus = {
+          connected: false,
+          jiraAvailable: false,
+          confluenceAvailable: false,
+          error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check Atlassian status' },
+        };
+      }
 
-        // Get Confluence status - OAuth first, then legacy API token
-        let confluenceStatus: { connected: boolean; siteUrl?: string; userEmail?: string; lastValidatedAt?: Date | null; viaOAuth?: boolean; error?: { code: string; message: string } } = { connected: false };
-        try {
-          // Check OAuth first
-          if (atlassianStatus.connected && atlassianStatus.confluenceAvailable) {
-            confluenceStatus = {
-              connected: true,
-              siteUrl: atlassianStatus.siteUrl,
-              viaOAuth: true,
-            };
-          } else {
-            // Fall back to legacy API token
-            const confluenceCred = await db.query.integrationCredentials.findFirst({
-              where: and(
-                eq(integrationCredentials.userId, user.id),
-                eq(integrationCredentials.provider, 'confluence')
-              ),
-            });
-            if (confluenceCred) {
-              confluenceStatus = {
-                connected: confluenceCred.isValid,
-                siteUrl: confluenceCred.siteUrl,
-                userEmail: confluenceCred.userEmail,
-                lastValidatedAt: confluenceCred.lastValidatedAt,
-                viaOAuth: false,
-              };
-            }
-          }
-        } catch (confErr) {
-          logger.error(`[integrations] Confluence status check failed: ${confErr}`);
-          confluenceStatus = { 
-            connected: false, 
-            error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check Confluence status' }
+      // Get Jira status - OAuth first, then legacy API token
+      let jiraStatus: {
+        connected: boolean;
+        siteUrl?: string;
+        userEmail?: string;
+        lastValidatedAt?: Date | null;
+        viaOAuth?: boolean;
+        error?: { code: string; message: string };
+      } = { connected: false };
+      try {
+        // Check OAuth first
+        if (atlassianStatus.connected && atlassianStatus.jiraAvailable) {
+          jiraStatus = {
+            connected: true,
+            siteUrl: atlassianStatus.siteUrl,
+            viaOAuth: true,
           };
-        }
-
-        return reply.code(200).send({
-          github: githubStatus,
-          atlassian: atlassianStatus,
-          jira: jiraStatus,
-          confluence: confluenceStatus,
-        });
-      } catch (err: unknown) {
-        if (err instanceof Error && err.message === 'UNAUTHORIZED') {
-          return reply.code(401).send({
-            error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        } else {
+          // Fall back to legacy API token
+          const jiraCred = await db.query.integrationCredentials.findFirst({
+            where: and(
+              eq(integrationCredentials.userId, user.id),
+              eq(integrationCredentials.provider, 'jira')
+            ),
           });
+          if (jiraCred) {
+            jiraStatus = {
+              connected: jiraCred.isValid,
+              siteUrl: jiraCred.siteUrl,
+              userEmail: jiraCred.userEmail,
+              lastValidatedAt: jiraCred.lastValidatedAt,
+              viaOAuth: false,
+            };
+          }
         }
-        // Even if something catastrophic happens, return a degraded response
-        logger.error(`[integrations] All status check failed: ${err}`);
-        return reply.code(200).send({
-          github: { connected: false, error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' } },
-          atlassian: { connected: false, jiraAvailable: false, confluenceAvailable: false, error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' } },
-          jira: { connected: false, error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' } },
-          confluence: { connected: false, error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' } },
+      } catch (jiraErr) {
+        logger.error(`[integrations] Jira status check failed: ${jiraErr}`);
+        jiraStatus = {
+          connected: false,
+          error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check Jira status' },
+        };
+      }
+
+      // Get Confluence status - OAuth first, then legacy API token
+      let confluenceStatus: {
+        connected: boolean;
+        siteUrl?: string;
+        userEmail?: string;
+        lastValidatedAt?: Date | null;
+        viaOAuth?: boolean;
+        error?: { code: string; message: string };
+      } = { connected: false };
+      try {
+        // Check OAuth first
+        if (atlassianStatus.connected && atlassianStatus.confluenceAvailable) {
+          confluenceStatus = {
+            connected: true,
+            siteUrl: atlassianStatus.siteUrl,
+            viaOAuth: true,
+          };
+        } else {
+          // Fall back to legacy API token
+          const confluenceCred = await db.query.integrationCredentials.findFirst({
+            where: and(
+              eq(integrationCredentials.userId, user.id),
+              eq(integrationCredentials.provider, 'confluence')
+            ),
+          });
+          if (confluenceCred) {
+            confluenceStatus = {
+              connected: confluenceCred.isValid,
+              siteUrl: confluenceCred.siteUrl,
+              userEmail: confluenceCred.userEmail,
+              lastValidatedAt: confluenceCred.lastValidatedAt,
+              viaOAuth: false,
+            };
+          }
+        }
+      } catch (confErr) {
+        logger.error(`[integrations] Confluence status check failed: ${confErr}`);
+        confluenceStatus = {
+          connected: false,
+          error: { code: 'STATUS_CHECK_FAILED', message: 'Unable to check Confluence status' },
+        };
+      }
+
+      return reply.code(200).send({
+        github: githubStatus,
+        atlassian: atlassianStatus,
+        jira: jiraStatus,
+        confluence: confluenceStatus,
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'UNAUTHORIZED') {
+        return reply.code(401).send({
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
         });
       }
+      // Even if something catastrophic happens, return a degraded response
+      logger.error(`[integrations] All status check failed: ${err}`);
+      return reply.code(200).send({
+        github: {
+          connected: false,
+          error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' },
+        },
+        atlassian: {
+          connected: false,
+          jiraAvailable: false,
+          confluenceAvailable: false,
+          error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' },
+        },
+        jira: {
+          connected: false,
+          error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' },
+        },
+        confluence: {
+          connected: false,
+          error: { code: 'STATUS_CHECK_FAILED', message: 'Service unavailable' },
+        },
+      });
     }
-  );
+  });
 
   // Helper: Test Atlassian API connection
   async function testAtlassianConnection(
@@ -927,69 +997,54 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
   }
 
   // POST /api/integrations/jira - Connect Jira
-  fastify.post(
-    '/api/integrations/jira',
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const user = await requireAuth(request);
-        const body = request.body as { siteUrl?: string; email?: string; apiToken?: string };
+  fastify.post('/api/integrations/jira', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const user = await requireAuth(request);
+      const body = request.body as { siteUrl?: string; email?: string; apiToken?: string };
 
-        // Validate input
-        if (!body.siteUrl || !body.email || !body.apiToken) {
-          return reply.code(400).send({
-            error: { code: 'MISSING_FIELDS', message: 'siteUrl, email, and apiToken are required' },
-          });
-        }
-
-        // Normalize site URL (remove trailing slash)
-        const siteUrl = body.siteUrl.replace(/\/+$/, '');
-
-        // Test connection first
-        const testResult = await testAtlassianConnection(
-          siteUrl,
-          body.email,
-          body.apiToken,
-          'jira',
-          request.id
-        );
-        if (!testResult.success) {
-          return reply.code(400).send({
-            error: { code: 'CONNECTION_FAILED', message: testResult.error || 'Failed to connect to Jira' },
-          });
-        }
-
-        // Encrypt the API token
-        const encrypted = encryptSecret(body.apiToken, `jira:${user.id}`);
-        const tokenLast4 = body.apiToken.slice(-4);
-
-        // Check if exists, update or insert
-        const existing = await db.query.integrationCredentials.findFirst({
-          where: and(
-            eq(integrationCredentials.userId, user.id),
-            eq(integrationCredentials.provider, 'jira')
-          ),
+      // Validate input
+      if (!body.siteUrl || !body.email || !body.apiToken) {
+        return reply.code(400).send({
+          error: { code: 'MISSING_FIELDS', message: 'siteUrl, email, and apiToken are required' },
         });
+      }
 
-        if (existing) {
-          await db
-            .update(integrationCredentials)
-            .set({
-              siteUrl,
-              userEmail: body.email,
-              encryptedToken: encrypted.cipherText,
-              tokenIv: encrypted.iv,
-              tokenTag: encrypted.authTag,
-              keyVersion: encrypted.keyVersion,
-              tokenLast4,
-              lastValidatedAt: new Date(),
-              isValid: true,
-              updatedAt: new Date(),
-            })
-            .where(eq(integrationCredentials.id, existing.id));
-        } else {
-          await db.insert(integrationCredentials).values({
-            userId: user.id,
-            provider: 'jira',
+      // Normalize site URL (remove trailing slash)
+      const siteUrl = body.siteUrl.replace(/\/+$/, '');
+
+      // Test connection first
+      const testResult = await testAtlassianConnection(
+        siteUrl,
+        body.email,
+        body.apiToken,
+        'jira',
+        request.id
+      );
+      if (!testResult.success) {
+        return reply.code(400).send({
+          error: {
+            code: 'CONNECTION_FAILED',
+            message: testResult.error || 'Failed to connect to Jira',
+          },
+        });
+      }
+
+      // Encrypt the API token
+      const encrypted = encryptSecret(body.apiToken, `jira:${user.id}`);
+      const tokenLast4 = body.apiToken.slice(-4);
+
+      // Check if exists, update or insert
+      const existing = await db.query.integrationCredentials.findFirst({
+        where: and(
+          eq(integrationCredentials.userId, user.id),
+          eq(integrationCredentials.provider, 'jira')
+        ),
+      });
+
+      if (existing) {
+        await db
+          .update(integrationCredentials)
+          .set({
             siteUrl,
             userEmail: body.email,
             encryptedToken: encrypted.cipherText,
@@ -999,24 +1054,39 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
             tokenLast4,
             lastValidatedAt: new Date(),
             isValid: true,
-          });
-        }
-
-        return reply.code(200).send({
-          success: true,
-          message: 'Jira connected successfully',
-          displayName: testResult.displayName,
+            updatedAt: new Date(),
+          })
+          .where(eq(integrationCredentials.id, existing.id));
+      } else {
+        await db.insert(integrationCredentials).values({
+          userId: user.id,
+          provider: 'jira',
+          siteUrl,
+          userEmail: body.email,
+          encryptedToken: encrypted.cipherText,
+          tokenIv: encrypted.iv,
+          tokenTag: encrypted.authTag,
+          keyVersion: encrypted.keyVersion,
+          tokenLast4,
+          lastValidatedAt: new Date(),
+          isValid: true,
         });
-      } catch (err: unknown) {
-        if (err instanceof Error && err.message === 'UNAUTHORIZED') {
-          return reply.code(401).send({
-            error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-          });
-        }
-        throw err;
       }
+
+      return reply.code(200).send({
+        success: true,
+        message: 'Jira connected successfully',
+        displayName: testResult.displayName,
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'UNAUTHORIZED') {
+        return reply.code(401).send({
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        });
+      }
+      throw err;
     }
-  );
+  });
 
   // GET /api/integrations/jira/status
   // Checks OAuth first, falls back to legacy API token
@@ -1098,12 +1168,15 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         }
 
         // Decrypt token
-        const apiToken = decryptSecret({
-          cipherText: cred.encryptedToken,
-          iv: cred.tokenIv,
-          authTag: cred.tokenTag,
-          keyVersion: cred.keyVersion,
-        }, `jira:${user.id}`);
+        const apiToken = decryptSecret(
+          {
+            cipherText: cred.encryptedToken,
+            iv: cred.tokenIv,
+            authTag: cred.tokenTag,
+            keyVersion: cred.keyVersion,
+          },
+          `jira:${user.id}`
+        );
 
         // Test connection
         const testResult = await testAtlassianConnection(
@@ -1202,7 +1275,10 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         );
         if (!testResult.success) {
           return reply.code(400).send({
-            error: { code: 'CONNECTION_FAILED', message: testResult.error || 'Failed to connect to Confluence' },
+            error: {
+              code: 'CONNECTION_FAILED',
+              message: testResult.error || 'Failed to connect to Confluence',
+            },
           });
         }
 
@@ -1346,12 +1422,15 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         }
 
         // Decrypt token
-        const apiToken = decryptSecret({
-          cipherText: cred.encryptedToken,
-          iv: cred.tokenIv,
-          authTag: cred.tokenTag,
-          keyVersion: cred.keyVersion,
-        }, `confluence:${user.id}`);
+        const apiToken = decryptSecret(
+          {
+            cipherText: cred.encryptedToken,
+            iv: cred.tokenIv,
+            authTag: cred.tokenTag,
+            keyVersion: cred.keyVersion,
+          },
+          `confluence:${user.id}`
+        );
 
         // Test connection
         const testResult = await testAtlassianConnection(

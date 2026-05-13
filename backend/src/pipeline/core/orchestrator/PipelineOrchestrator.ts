@@ -2878,6 +2878,22 @@ export class PipelineOrchestrator {
 
   /** Validate GitHub token + resolve owner. Reusable by approveSpec and retry methods. */
   private async validateGitHubAccess(userId: string): Promise<{ token: string; owner: string }> {
+    // DOGFOOD_MODE: token-free + GitHub-free local exercise. Skip every real
+    // GitHub touch — token decrypt, /user pre-validation, owner resolution —
+    // and return deterministic stubs so the pipeline can advance to the
+    // push-confirm gate without an OAuth setup. The `ghp_mock` prefix is
+    // load-bearing: the pre-validation block below short-circuits on it.
+    //
+    // Two layers of safety:
+    //   1. env.ts superRefine rejects DOGFOOD_MODE=true when
+    //      NODE_ENV=production at boot — the server will not start.
+    //   2. This runtime guard belt-and-braces the same check at the call
+    //      site so a misconfigured deploy still cannot disable GitHub
+    //      validation. Reads `process.env` directly so this hot path is
+    //      not bottlenecked by the env-schema cache.
+    if (process.env.DOGFOOD_MODE === 'true' && process.env.NODE_ENV !== 'production') {
+      return { token: 'ghp_mock_dogfood', owner: 'dogfood-owner' };
+    }
     const token = await this.getGitHubToken(userId);
     if (!token) {
       throw new Error(
