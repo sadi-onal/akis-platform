@@ -329,6 +329,8 @@
   "chat.pushGate.feedback.placeholder": "Type your correction here...",
   "chat.pushGate.feedback.submit": "Revise",
   "chat.pushGate.feedback.iterating": "Updating the code...",
+  "chat.agentLine.started": "Agent started",
+  "chat.agentLine.finished": "Agent finished",
   "chat.emptyState.greeting": "Hello! I am",
   "chat.emptyState.brandName": "AKIS",
   "chat.emptyState.subtitle": "Describe your software idea, let's build it together.",

@@ -9,7 +9,7 @@ function makeReasoning(overrides: Partial<AgentReasoning> = {}): AgentReasoning 
   return {
     agentName: 'scribe',
     timestamp: new Date('2026-04-15T10:00:00Z'),
-    decision: 'Spec uretildi',
+    decision: 'Spec üretildi',
     reasoning: ['Kullanici fikri analiz edildi'],
     assumptions: ['React kullanilacak'],
     confidence: { score: 90, factors: ['Net gereksinimler'] },
@@ -42,7 +42,7 @@ describe('ExplainabilityService', () => {
     const s = svc();
     await s.addReasoning('p2', makeReasoning({ agentName: 'scribe' }));
     await s.addReasoning('p2', makeReasoning({ agentName: 'proto', decision: 'MVP uretildi' }));
-    await s.addReasoning('p2', makeReasoning({ agentName: 'trace', decision: 'Testler yazildi' }));
+    await s.addReasoning('p2', makeReasoning({ agentName: 'trace', decision: 'Testler yazıldı' }));
 
     const explanation = await s.getExplanation('p2');
     assert.equal(explanation.stages.length, 3);
@@ -62,12 +62,12 @@ describe('ExplainabilityService', () => {
         agentName: 'scribe',
         confidence: { score: 85, factors: ['Acik fikir'] },
         assumptions: ['SPA olacak', 'Tailwind kullanilacak'],
-      }),
+      })
     );
 
     const narrative = await s.generateNarrative('p3');
     assert.ok(narrative.includes('85%'));
-    assert.ok(narrative.includes('2 varsayim'));
+    assert.ok(narrative.includes('2 varsayım'));
     assert.ok(narrative.includes('Scribe'));
   });
 
@@ -77,7 +77,7 @@ describe('ExplainabilityService', () => {
     const s = svc();
     await s.addReasoning(
       'p4',
-      makeReasoning({ confidence: { score: 55, factors: ['Belirsiz gereksinimler'] } }),
+      makeReasoning({ confidence: { score: 55, factors: ['Belirsiz gereksinimler'] } })
     );
 
     const points = await s.getAttentionPoints('p4');
@@ -98,11 +98,11 @@ describe('ExplainabilityService', () => {
         decision: 'Guvenlik acigi tespit edildi',
         reasoning: ['SQL injection security riski bulundu'],
         confidence: { score: 92, factors: ['Kod incelendi'] },
-      }),
+      })
     );
 
     const points = await s.getAttentionPoints('p5');
-    const securityPoint = points.find((p) => p.issue.includes('Guvenlik'));
+    const securityPoint = points.find((p) => p.issue.includes('Güvenlik'));
     assert.ok(securityPoint);
     assert.equal(securityPoint.severity, 'high');
   });
@@ -116,7 +116,7 @@ describe('ExplainabilityService', () => {
     assert.equal(explanation.pipelineId, 'nonexistent');
     assert.equal(explanation.stages.length, 0);
     assert.equal(explanation.attentionPoints.length, 0);
-    assert.ok(explanation.overallNarrative.includes('henuz'));
+    assert.ok(explanation.overallNarrative.includes('henüz'));
     // Cache-only mode (db: null) cannot determine pipeline status, so the
     // persistencePreEpoch flag stays unset. This is intentional —
     // see review-fix #1: only terminal pipelines with zero rows trip it.
@@ -177,7 +177,7 @@ describe('ExplainabilityService', () => {
     assert.equal(
       explanation.meta?.persistencePreEpoch,
       undefined,
-      'active pipelines must NOT trip the legacy banner',
+      'active pipelines must NOT trip the legacy banner'
     );
   });
 
@@ -192,7 +192,7 @@ describe('ExplainabilityService', () => {
     assert.equal(
       explanation.meta?.persistencePreEpoch,
       true,
-      'completed pipeline with zero stages → legacy banner',
+      'completed pipeline with zero stages → legacy banner'
     );
   });
 
@@ -223,12 +223,12 @@ describe('ExplainabilityService', () => {
         agentName: 'scribe',
         confidence: { score: 78, factors: ['Orta netlik'] },
         assumptions: ['A1', 'A2', 'A3'],
-      }),
+      })
     );
 
     const narrative = await s.generateNarrative('p8');
     assert.ok(narrative.includes('78%'), 'Should include confidence percentage');
-    assert.ok(narrative.includes('3 varsayim'), 'Should include assumption count');
+    assert.ok(narrative.includes('3 varsayım'), 'Should include assumption count');
   });
 
   // ─── 9. Trace fix loop triggers attention point ──────────────
@@ -241,7 +241,7 @@ describe('ExplainabilityService', () => {
         agentName: 'trace',
         decision: 'fix loop triggered for failing tests',
         confidence: { score: 88, factors: ['Test basarisiz'] },
-      }),
+      })
     );
 
     const points = await s.getAttentionPoints('p9');
@@ -256,7 +256,7 @@ describe('ExplainabilityService', () => {
     const s = svc();
     await s.addReasoning(
       'p10',
-      makeReasoning({ confidence: { score: 75, factors: ['Kismi bilgi'] } }),
+      makeReasoning({ confidence: { score: 75, factors: ['Kismi bilgi'] } })
     );
 
     const points = await s.getAttentionPoints('p10');
@@ -274,7 +274,7 @@ describe('ExplainabilityService', () => {
       makeReasoning({
         confidence: { score: 95, factors: ['Cok net'] },
         risks: ['Performans riski'],
-      }),
+      })
     );
 
     const points = await s.getAttentionPoints('p11');
@@ -292,7 +292,7 @@ describe('ExplainabilityService', () => {
       makeReasoning({
         confidence: { score: 95, factors: ['Net'] },
         risks: ['Performans riski'],
-      }),
+      })
     );
 
     const points = await s.getAttentionPoints('p12');

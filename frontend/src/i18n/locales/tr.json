@@ -329,6 +329,8 @@
   "chat.pushGate.feedback.placeholder": "Düzeltme isteğini buraya yaz...",
   "chat.pushGate.feedback.submit": "Düzelt",
   "chat.pushGate.feedback.iterating": "Kodu güncelliyorum...",
+  "chat.agentLine.started": "Ajan başlatıldı",
+  "chat.agentLine.finished": "Ajan tamamlandı",
   "chat.emptyState.greeting": "Merhaba! Ben",
   "chat.emptyState.brandName": "AKIS",
   "chat.emptyState.subtitle": "Yazılım fikrinizi anlatın, birlikte hayata geçirelim.",

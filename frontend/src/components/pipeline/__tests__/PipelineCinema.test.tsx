@@ -100,6 +100,46 @@ describe('reduceStageViews (pure)', () => {
     // unknown stage doesn't crash and doesn't pollute any column
     expect(views[0]!.state).toBe('complete');
   });
+
+  it('Bulgu D: settles Critic to complete at awaiting_approval even when current is a stale critic activity', () => {
+    // Reproduces the bug: SSE buffer keeps the last critic activity as
+    // `current` while the pipeline is parked at awaiting_approval. Without
+    // a uiState hint the column would stay pulsing forever.
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'critic', progress: 80, message: 'Spesifikasyon inceleniyor…' }),
+    ];
+    const current = acts[acts.length - 1]!;
+    const views = reduceStageViews(acts, current, 'awaiting_approval');
+    expect(views[1]!.state).toBe('complete');
+  });
+
+  it('uses uiState to drive activeIdx instead of latest activity stage', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'critic', progress: 100 }),
+      mk({ stage: 'proto', progress: 30 }),
+    ];
+    // Latest activity is proto, uiState says proto_running → proto is active
+    const views = reduceStageViews(acts, acts[2]!, 'proto_running');
+    expect(views[0]!.state).toBe('complete'); // scribe
+    expect(views[1]!.state).toBe('complete'); // critic
+    expect(views[2]!.state).toBe('active'); // proto
+    expect(views[3]!.state).toBe('pending'); // trace
+  });
+
+  it('settles every touched stage to complete at awaiting_push_confirm', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'critic', progress: 100 }),
+      mk({ stage: 'proto', progress: 100 }),
+    ];
+    const views = reduceStageViews(acts, acts[2]!, 'awaiting_push_confirm');
+    expect(views[0]!.state).toBe('complete');
+    expect(views[1]!.state).toBe('complete');
+    expect(views[2]!.state).toBe('complete');
+    expect(views[3]!.state).toBe('pending');
+  });
 });
 
 describe('PipelineCinema component', () => {

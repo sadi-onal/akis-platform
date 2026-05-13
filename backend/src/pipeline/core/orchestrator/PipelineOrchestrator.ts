@@ -1459,10 +1459,10 @@ export class PipelineOrchestrator {
       this.persistReasoning(pipelineId, {
         agentName: 'validator',
         timestamp: new Date(),
-        decision: validationResult.passed ? 'Kod dogrulama basarili' : 'Kod dogrulama basarisiz',
+        decision: validationResult.passed ? 'Kod doğrulama başarılı' : 'Kod doğrulama başarısız',
         reasoning: [
           `Skor: ${validationResult.score}/100`,
-          `${validationResult.summary.errors} hata, ${validationResult.summary.warnings} uyari`,
+          `${validationResult.summary.errors} hata, ${validationResult.summary.warnings} uyarı`,
         ],
         assumptions: ['Deterministic kontroller yeterli'],
         confidence: { score: validationResult.score, factors: validationResult.summary.checksRun },

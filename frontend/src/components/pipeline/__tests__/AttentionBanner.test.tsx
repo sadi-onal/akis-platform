@@ -3,7 +3,11 @@ import { render, screen } from '@testing-library/react';
 import { AttentionBanner } from '../AttentionBanner';
 import type { AttentionPoint } from '../../../types/pipeline';
 
-const mk = (severity: AttentionPoint['severity'], stage: string, issue: string): AttentionPoint => ({
+const mk = (
+  severity: AttentionPoint['severity'],
+  stage: string,
+  issue: string
+): AttentionPoint => ({
   severity,
   stage,
   issue,
@@ -23,7 +27,7 @@ describe('AttentionBanner', () => {
           mk('high', 'critic', 'Critical issue'),
           mk('medium', 'scribe', 'Medium issue'),
         ]}
-      />,
+      />
     );
     const items = screen.getAllByRole('status');
     expect(items[0]).toHaveAttribute('data-severity', 'high');
@@ -32,9 +36,7 @@ describe('AttentionBanner', () => {
   });
 
   it('caps at limit and shows overflow note', () => {
-    const points = Array.from({ length: 6 }, (_, i) =>
-      mk('medium', 'scribe', `Issue ${i}`),
-    );
+    const points = Array.from({ length: 6 }, (_, i) => mk('medium', 'scribe', `Issue ${i}`));
     render(<AttentionBanner points={points} limit={3} />);
     const items = screen.getAllByRole('status');
     expect(items.length).toBe(3);
@@ -50,7 +52,7 @@ describe('AttentionBanner', () => {
     render(
       <AttentionBanner
         points={[mk('high', 'a', 'x'), mk('medium', 'b', 'y'), mk('low', 'c', 'z')]}
-      />,
+      />
     );
     expect(screen.getByText('Önemli')).toBeInTheDocument();
     expect(screen.getByText('Dikkat')).toBeInTheDocument();
@@ -60,6 +62,19 @@ describe('AttentionBanner', () => {
   it('renders the issue text and stage', () => {
     render(<AttentionBanner points={[mk('high', 'critic', 'XSS açığı')]} />);
     expect(screen.getByText('XSS açığı')).toBeInTheDocument();
-    expect(screen.getByText('critic')).toBeInTheDocument();
+    expect(screen.getByText('Critic')).toBeInTheDocument();
+  });
+
+  it('renders the granular critic stage label (spec vs kod)', () => {
+    render(
+      <AttentionBanner
+        points={[
+          mk('high', 'critic-spec', 'Spec netleştirilmeli'),
+          mk('medium', 'critic-code', 'Kod kapsama düşük'),
+        ]}
+      />
+    );
+    expect(screen.getByText('Critic · spec')).toBeInTheDocument();
+    expect(screen.getByText('Critic · kod')).toBeInTheDocument();
   });
 });

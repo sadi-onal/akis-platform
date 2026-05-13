@@ -61,7 +61,7 @@ export function AgentStartedLine({
         agent === 'scribe' && 'border-blue-400/60',
         agent === 'proto' && 'border-orange-400/60',
         agent === 'trace' && 'border-purple-400/60',
-        className,
+        className
       )}
       role="status"
       aria-live={isActive ? 'polite' : 'off'}
@@ -70,12 +70,12 @@ export function AgentStartedLine({
         className={cn(
           'h-1.5 w-1.5 rounded-full flex-shrink-0',
           AGENT_DOT[agent],
-          isActive && 'animate-pulse',
+          isActive && 'animate-pulse'
         )}
         aria-hidden
       />
       <span className="text-ak-text-tertiary">
-        {state === 'completed' ? 'Background agent finished' : 'Background agent started'}
+        {state === 'completed' ? t('chat.agentLine.finished') : t('chat.agentLine.started')}
       </span>
       <span className="font-medium text-ak-text-primary">{AGENT_LABEL[agent]}</span>
       {taskLabel && (

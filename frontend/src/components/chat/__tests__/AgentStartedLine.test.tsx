@@ -19,15 +19,16 @@ vi.mock('../../../i18n/useI18n', () => ({
 }));
 
 describe('AgentStartedLine', () => {
-  it('renders "Background agent started" + agent name by default', () => {
+  it('renders the agent-started label + agent name by default', () => {
     render(<AgentStartedLine agent="scribe" />);
-    expect(screen.getByText('Background agent started')).toBeInTheDocument();
+    // i18n-stubbed: t() returns the key verbatim
+    expect(screen.getByText('chat.agentLine.started')).toBeInTheDocument();
     expect(screen.getByText('Scribe')).toBeInTheDocument();
   });
 
-  it('renders "Background agent finished" when state is completed', () => {
+  it('renders the agent-finished label when state is completed', () => {
     render(<AgentStartedLine agent="proto" state="completed" />);
-    expect(screen.getByText('Background agent finished')).toBeInTheDocument();
+    expect(screen.getByText('chat.agentLine.finished')).toBeInTheDocument();
     expect(screen.getByText('Proto')).toBeInTheDocument();
   });
 

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
+import type { ConversationUIState } from '../../types/chat';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { reduceStageViews, type CinemaStage, type StageView } from './PipelineCinema.utils';
@@ -7,6 +8,13 @@ import { reduceStageViews, type CinemaStage, type StageView } from './PipelineCi
 export interface PipelineCinemaProps {
   activities: PipelineActivity[];
   currentStep: PipelineActivity | null;
+  /**
+   * Orchestrator-level state — drives which column is "live". Without it
+   * we fall back to the latest activity's stage, which leaves a column
+   * pulsing forever at approval/push gates because the SSE buffer never
+   * emits a "stage finished" marker.
+   */
+  uiState?: ConversationUIState;
   /** Compact mode hides the full-screen takeover; the row stays visible. */
   compact?: boolean;
   /** Callback when user toggles compact mode */
@@ -136,13 +144,17 @@ function StageColumn({ view, reducedMotion }: { view: StageView; reducedMotion: 
 export function PipelineCinema({
   activities,
   currentStep,
+  uiState,
   compact = false,
   onToggleCompact,
   approvalSlot,
   className,
 }: PipelineCinemaProps) {
   const reducedMotion = useReducedMotion();
-  const views = useMemo(() => reduceStageViews(activities, currentStep), [activities, currentStep]);
+  const views = useMemo(
+    () => reduceStageViews(activities, currentStep, uiState),
+    [activities, currentStep, uiState]
+  );
 
   return (
     <section

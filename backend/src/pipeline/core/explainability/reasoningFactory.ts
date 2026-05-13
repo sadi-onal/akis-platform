@@ -17,22 +17,22 @@ export function buildScribeReasoning(
   return {
     agentName: 'scribe',
     timestamp: opts.now ?? new Date(),
-    decision: opts.regenerated ? `Spec yeniden uretildi: "${title}"` : `Spec uretildi: "${title}"`,
+    decision: opts.regenerated ? `Spec yeniden üretildi: "${title}"` : `Spec üretildi: "${title}"`,
     reasoning: [
-      `${output.clarificationsAsked ?? 0} aciklayici soru soruldu`,
-      `${usCount} kullanici hikayesi tanimlandi`,
-      `${acCount} kabul kriteri yazildi`,
+      `${output.clarificationsAsked ?? 0} açıklayıcı soru soruldu`,
+      `${usCount} kullanıcı hikâyesi tanımlandı`,
+      `${acCount} kabul kriteri yazıldı`,
     ],
     assumptions: output.assumptions ?? [],
     confidence: {
       score: confidencePercent,
       factors: [
-        `Aciklayici sorulara cevap: ${output.clarificationsAsked ?? 0}`,
-        `Kabul kriteri sayisi: ${acCount}`,
-        `Kullanici hikayesi sayisi: ${usCount}`,
+        `Açıklayıcı sorulara cevap: ${output.clarificationsAsked ?? 0}`,
+        `Kabul kriteri sayısı: ${acCount}`,
+        `Kullanıcı hikâyesi sayısı: ${usCount}`,
       ],
     },
-    ...(opts.regenerated ? { risks: ['Spec kullanici geri bildirimiyle yeniden uretildi'] } : {}),
+    ...(opts.regenerated ? { risks: ['Spec kullanıcı geri bildirimiyle yeniden üretildi'] } : {}),
   };
 }
 
@@ -51,24 +51,24 @@ export function buildProtoReasoning(
   return {
     agentName: 'proto',
     timestamp: opts.now ?? new Date(),
-    decision: `Scaffold uretildi: ${filesCreated} dosya, ${totalLoc} satir kod`,
+    decision: `İskelet üretildi: ${filesCreated} dosya, ${totalLoc} satır kod`,
     reasoning: [
-      `Stack: ${stack}`,
-      `Branch: ${output.branch ?? 'bilinmeyen'}`,
-      committed ? 'GitHub repo guncellendi' : 'Commit dogrulanmadi',
+      `Teknoloji seti: ${stack}`,
+      `Dal: ${output.branch ?? 'bilinmeyen'}`,
+      committed ? 'GitHub deposu güncellendi' : "Henüz GitHub'a gönderilmedi",
       ...(output.summary ? [output.summary] : []),
     ],
-    assumptions: ['Spec onaylandi ve scaffold icin yeterli ayrintidaydi'],
+    assumptions: ['Spec onaylandı ve iskelet için yeterli ayrıntıdaydı'],
     confidence: {
       score: confidence,
       factors: [
-        `Dosya sayisi: ${filesCreated}`,
-        `Toplam LOC: ${totalLoc}`,
-        `Commit dogrulandi: ${committed}`,
+        `Dosya sayısı: ${filesCreated}`,
+        `Toplam satır: ${totalLoc}`,
+        `GitHub'a gönderildi: ${committed ? 'evet' : 'hayır'}`,
       ],
     },
     ...(output.metadata?.committed === false
-      ? { risks: ['Scaffold commit edilemedi — manuel inceleme gerekebilir'] }
+      ? { risks: ["İskelet henüz GitHub'a gönderilmedi — kullanıcı onayı bekleniyor"] }
       : {}),
   };
 }
@@ -85,27 +85,23 @@ export function buildTraceReasoning(
   return {
     agentName: 'trace',
     timestamp: opts.now ?? new Date(),
-    decision: `${totalTests} test uretildi, %${coverage} kabul kriteri kapsami`,
+    decision: `${totalTests} test üretildi, %${coverage} kabul kriteri kapsamı`,
     reasoning: [
-      `${fileCount} test dosyasi yazildi`,
-      `Karsilanmayan kriter sayisi: ${uncovered.length}`,
+      `${fileCount} test dosyası yazıldı`,
+      `Karşılanmayan kriter sayısı: ${uncovered.length}`,
       ...(output.gherkinFeatures && output.gherkinFeatures.length > 0
-        ? [`${output.gherkinFeatures.length} Gherkin feature uretildi`]
+        ? [`${output.gherkinFeatures.length} Gherkin senaryosu üretildi`]
         : []),
     ],
-    assumptions: ['Proto kodu test yazimi icin GitHub uzerinden okunabilir durumdaydi'],
+    assumptions: ['Proto kodu test yazımı için GitHub üzerinden okunabilir durumdaydı'],
     confidence: {
       score: coverage,
-      factors: [
-        `Toplam test: ${totalTests}`,
-        `Coverage: %${coverage}`,
-        `Test dosyasi: ${fileCount}`,
-      ],
+      factors: [`Toplam test: ${totalTests}`, `Kapsam: %${coverage}`, `Test dosyası: ${fileCount}`],
     },
     ...(uncovered.length > 0
       ? {
           risks: [
-            `Karsilanmayan AC: ${uncovered.slice(0, 5).join(', ')}${uncovered.length > 5 ? '...' : ''}`,
+            `Karşılanmayan kabul kriteri: ${uncovered.slice(0, 5).join(', ')}${uncovered.length > 5 ? '...' : ''}`,
           ],
         }
       : {}),
@@ -120,10 +116,10 @@ export function buildCriticReasoning(
   const decisionLabel =
     opts.reviewType === 'spec'
       ? result.approved
-        ? 'Spec onaylandi'
+        ? 'Spec onaylandı'
         : 'Spec reddedildi'
       : result.approved
-        ? 'Kod onaylandi'
+        ? 'Kod onaylandı'
         : 'Kod reddedildi';
   const criticalAndMajor =
     result.findings
@@ -139,13 +135,13 @@ export function buildCriticReasoning(
     reasoning: result.findings?.map((f) => f.description) ?? [],
     assumptions:
       opts.reviewType === 'spec'
-        ? ['Spec yapısal kontrolleri tamamlandi']
-        : ['Spec uyumu ve temel guvenlik bulgulari otomatik kontrol edildi'],
+        ? ['Spec yapısal kontrolleri tamamlandı']
+        : ['Spec uyumu ve temel güvenlik bulguları otomatik kontrol edildi'],
     confidence: {
       score: result.overallScore ?? 0,
       factors: [
-        `${findingsCount} bulgu raporlandi`,
-        `Inceleme: ${opts.reviewType === 'spec' ? 'spec' : 'kod'}`,
+        `${findingsCount} bulgu raporlandı`,
+        `İnceleme: ${opts.reviewType === 'spec' ? 'spec' : 'kod'}`,
       ],
     },
     ...(criticalAndMajor.length > 0 ? { risks: criticalAndMajor } : {}),

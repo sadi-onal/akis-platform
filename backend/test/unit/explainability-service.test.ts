@@ -53,11 +53,11 @@ describe('ExplainabilityService', () => {
         agentName: 'scribe',
         confidence: { score: 85, factors: ['Acik fikir'] },
         assumptions: ['SPA olacak', 'Tailwind kullanilacak'],
-      }),
+      })
     );
     const narrative = await s.generateNarrative('p3');
-    assert.ok(narrative.includes('85%'));
-    assert.ok(narrative.includes('2 varsayim'));
+    assert.ok(narrative.includes('%85'));
+    assert.ok(narrative.includes('2 varsayım'));
     assert.ok(narrative.includes('Scribe'));
   });
 
@@ -65,7 +65,7 @@ describe('ExplainabilityService', () => {
     const s = svc();
     await s.addReasoning(
       'p4',
-      makeReasoning({ confidence: { score: 55, factors: ['Belirsiz gereksinimler'] } }),
+      makeReasoning({ confidence: { score: 55, factors: ['Belirsiz gereksinimler'] } })
     );
     const points = await s.getAttentionPoints('p4');
     assert.ok(points.length >= 1);
@@ -83,7 +83,7 @@ describe('ExplainabilityService', () => {
         decision: 'Guvenlik acigi tespit edildi',
         reasoning: ['SQL injection security riski bulundu'],
         confidence: { score: 92, factors: ['Kod incelendi'] },
-      }),
+      })
     );
     const points = await s.getAttentionPoints('p5');
     const securityPoint = points.find((p) => p.issue.includes('Guvenlik'));
@@ -97,7 +97,7 @@ describe('ExplainabilityService', () => {
     assert.equal(explanation.pipelineId, 'nonexistent');
     assert.equal(explanation.stages.length, 0);
     assert.equal(explanation.attentionPoints.length, 0);
-    assert.ok(explanation.overallNarrative.includes('henuz'));
+    assert.ok(explanation.overallNarrative.includes('henüz'));
     // Review-fix #1: cache-only mode (db === null) cannot determine pipeline
     // status, so persistencePreEpoch stays unset. Integration suite covers
     // the actual terminal-pipeline gating with a real DB.
@@ -123,11 +123,11 @@ describe('ExplainabilityService', () => {
         agentName: 'scribe',
         confidence: { score: 78, factors: ['Orta netlik'] },
         assumptions: ['A1', 'A2', 'A3'],
-      }),
+      })
     );
     const narrative = await s.generateNarrative('p8');
-    assert.ok(narrative.includes('78%'));
-    assert.ok(narrative.includes('3 varsayim'));
+    assert.ok(narrative.includes('%78'));
+    assert.ok(narrative.includes('3 varsayım'));
   });
 
   it('flags attention when trace fix loop triggered', async () => {
@@ -138,10 +138,10 @@ describe('ExplainabilityService', () => {
         agentName: 'trace',
         decision: 'fix loop triggered for failing tests',
         confidence: { score: 88, factors: ['Test basarisiz'] },
-      }),
+      })
     );
     const points = await s.getAttentionPoints('p9');
-    const fixPoint = points.find((p) => p.issue.includes('Duzeltme dongusu'));
+    const fixPoint = points.find((p) => p.issue.includes('Düzeltme döngüsü'));
     assert.ok(fixPoint);
     assert.equal(fixPoint.severity, 'medium');
   });
@@ -150,7 +150,7 @@ describe('ExplainabilityService', () => {
     const s = svc();
     await s.addReasoning(
       'p10',
-      makeReasoning({ confidence: { score: 75, factors: ['Kismi bilgi'] } }),
+      makeReasoning({ confidence: { score: 75, factors: ['Kismi bilgi'] } })
     );
     const points = await s.getAttentionPoints('p10');
     const medium = points.find((p) => p.severity === 'medium');
@@ -165,7 +165,7 @@ describe('ExplainabilityService', () => {
       makeReasoning({
         confidence: { score: 95, factors: ['Cok net'] },
         risks: ['Performans riski'],
-      }),
+      })
     );
     const points = await s.getAttentionPoints('p11');
     const riskPoint = points.find((p) => p.issue.includes('risk'));
@@ -180,11 +180,61 @@ describe('ExplainabilityService', () => {
       makeReasoning({
         confidence: { score: 95, factors: ['Net'] },
         risks: ['Performans riski'],
-      }),
+      })
     );
     const points = await s.getAttentionPoints('p12');
     const riskPoint = points.find((p) => p.issue.includes('risk'));
     assert.equal(riskPoint, undefined);
+  });
+
+  // ─── Bulgu E — banner dedup contract ─────────────────────────────────
+
+  it('collapses identical (stage, severity, issue) tuples emitted by two reasonings', async () => {
+    const s = svc();
+    // Same agent + same low-confidence reasoning twice should not produce
+    // two visually-identical banner rows.
+    await s.addReasoning(
+      'p13',
+      makeReasoning({
+        agentName: 'scribe',
+        confidence: { score: 55, factors: ['Belirsiz gereksinimler'] },
+      })
+    );
+    await s.addReasoning(
+      'p13',
+      makeReasoning({
+        agentName: 'scribe',
+        confidence: { score: 55, factors: ['Belirsiz gereksinimler'] },
+      })
+    );
+    const points = await s.getAttentionPoints('p13');
+    const lowPoints = points.filter((p) => p.severity === 'high' && p.issue.includes('55'));
+    assert.equal(lowPoints.length, 1, 'duplicate tuple should be collapsed');
+  });
+
+  it('keeps critic-spec and critic-code points distinct even when issue text matches', async () => {
+    const s = svc();
+    await s.addReasoning(
+      'p14',
+      makeReasoning({
+        agentName: 'critic',
+        stageKey: 'critic-spec',
+        confidence: { score: 60, factors: ['Aynı faktör listesi'] },
+      })
+    );
+    await s.addReasoning(
+      'p14',
+      makeReasoning({
+        agentName: 'critic',
+        stageKey: 'critic-code',
+        confidence: { score: 60, factors: ['Aynı faktör listesi'] },
+      })
+    );
+    const points = await s.getAttentionPoints('p14');
+    const stages = points.filter((p) => p.severity === 'high').map((p) => p.stage);
+    assert.ok(stages.includes('critic-spec'), 'critic-spec point should be present');
+    assert.ok(stages.includes('critic-code'), 'critic-code point should be present');
+    assert.equal(stages.length, 2, 'distinct stageKeys must not collapse');
   });
 
   // ─── Cache-hit & write-through unit assertions ─────────────────────────
@@ -231,7 +281,7 @@ describe('ExplainabilityService', () => {
     assert.equal(
       explanation.meta?.persistencePreEpoch,
       undefined,
-      'active pipelines must not get the legacy banner',
+      'active pipelines must not get the legacy banner'
     );
   });
 
@@ -246,7 +296,7 @@ describe('ExplainabilityService', () => {
     assert.equal(
       explanation.meta?.persistencePreEpoch,
       true,
-      'completed pipeline with zero stages → legacy banner',
+      'completed pipeline with zero stages → legacy banner'
     );
   });
 
@@ -261,7 +311,7 @@ describe('ExplainabilityService', () => {
       assert.equal(
         explanation.meta?.persistencePreEpoch,
         true,
-        `stage ${stage} should be considered terminal`,
+        `stage ${stage} should be considered terminal`
       );
     }
   });
@@ -277,7 +327,7 @@ describe('ExplainabilityService', () => {
       assert.equal(
         explanation.meta?.persistencePreEpoch,
         undefined,
-        `stage ${stage} is non-terminal, banner must NOT fire`,
+        `stage ${stage} is non-terminal, banner must NOT fire`
       );
     }
   });

@@ -115,14 +115,14 @@ describe('buildScribeReasoning', () => {
     const r = buildScribeReasoning(makeScribeOutput(), { regenerated: false, now: FIXED_NOW });
     assert.equal(r.agentName, 'scribe');
     assert.equal(r.timestamp, FIXED_NOW);
-    assert.match(r.decision, /Spec uretildi/);
+    assert.match(r.decision, /Spec üretildi/);
     assert.match(r.decision, /Hesap Makinesi/);
     assert.equal(r.confidence.score, 92);
     assert.deepEqual(r.assumptions, ['React kullanilacak', 'Local-only uygulama']);
     assert.equal(r.risks, undefined, 'first-time should have no risks');
     // factors must enumerate counts
     assert.ok(r.confidence.factors.some((f) => f.includes('Kabul kriteri sayisi: 3')));
-    assert.ok(r.confidence.factors.some((f) => f.includes('Kullanici hikayesi sayisi: 2')));
+    assert.ok(r.confidence.factors.some((f) => f.includes('Kullanıcı hikâyesi sayısı: 2')));
   });
 
   it('marks regenerated specs with risk note', () => {
@@ -148,7 +148,7 @@ describe('buildScribeReasoning', () => {
       { regenerated: false }
     );
     assert.deepEqual(r.assumptions, []);
-    assert.ok(r.reasoning.some((s) => s.includes('0 aciklayici')));
+    assert.ok(r.reasoning.some((s) => s.includes('0 açıklayıcı')));
   });
 });
 
@@ -281,7 +281,7 @@ describe('buildTraceReasoning', () => {
 describe('buildCriticReasoning', () => {
   it('uses spec-specific decision label for spec review', () => {
     const r = buildCriticReasoning(makeCriticResult({ approved: true }), { reviewType: 'spec' });
-    assert.equal(r.decision, 'Spec onaylandi');
+    assert.equal(r.decision, 'Spec onaylandı');
   });
 
   it('uses code-specific decision label for code review', () => {

@@ -187,10 +187,7 @@ export class ExplainabilityService {
       })
       .from(pipelineReasonings)
       .where(
-        and(
-          eq(pipelineReasonings.pipelineId, pipelineId),
-          isNull(pipelineReasonings.archivedAt),
-        ),
+        and(eq(pipelineReasonings.pipelineId, pipelineId), isNull(pipelineReasonings.archivedAt))
       )
       .orderBy(asc(pipelineReasonings.recordedAt));
     const stages = rows.map((r) => this.rehydrateReasoning(r.agentReasoning));
@@ -233,27 +230,33 @@ export class ExplainabilityService {
 
   private narrateStages(stages: AgentReasoning[]): string {
     if (stages.length === 0) {
-      return 'Bu pipeline icin henuz bir aciklama bulunmuyor.';
+      return 'Bu pipeline için henüz bir açıklama bulunmuyor.';
     }
     return stages.map((s) => this.narrateStage(s)).join(' ');
   }
 
   private collectAttentionPoints(stages: AgentReasoning[]): AttentionPoint[] {
     const points: AttentionPoint[] = [];
+    // Prefer the granular stageKey when present so the banner can tell
+    // critic-spec from critic-code (Bulgu E — two near-identical Critic
+    // rows used to confuse users). Falls back to agentName for callers
+    // that haven't been migrated to stageKey yet.
+    const stageLabelFor = (stage: AgentReasoning) => stage.stageKey ?? stage.agentName;
 
     for (const stage of stages) {
+      const stageLabel = stageLabelFor(stage);
       // Low confidence → high severity
       if (stage.confidence.score < 70) {
         points.push({
-          stage: stage.agentName,
-          issue: `Dusuk guven skoru: ${stage.confidence.score}%. Faktörler: ${stage.confidence.factors.join(', ')}`,
+          stage: stageLabel,
+          issue: `Düşük güven skoru: %${stage.confidence.score}. Faktörler: ${stage.confidence.factors.join(', ')}`,
           severity: 'high',
         });
       } else if (stage.confidence.score < 85) {
         // Medium confidence → medium severity
         points.push({
-          stage: stage.agentName,
-          issue: `Orta guven skoru: ${stage.confidence.score}%. Faktörler: ${stage.confidence.factors.join(', ')}`,
+          stage: stageLabel,
+          issue: `Orta güven skoru: %${stage.confidence.score}. Faktörler: ${stage.confidence.factors.join(', ')}`,
           severity: 'medium',
         });
       }
@@ -264,8 +267,8 @@ export class ExplainabilityService {
         stage.reasoning.some((r) => r.toLowerCase().includes('security'))
       ) {
         points.push({
-          stage: stage.agentName,
-          issue: `Guvenlik ile ilgili bulgular tespit edildi: ${stage.decision}`,
+          stage: stageLabel,
+          issue: `Güvenlik ile ilgili bulgular tespit edildi: ${stage.decision}`,
           severity: 'high',
         });
       }
@@ -273,8 +276,8 @@ export class ExplainabilityService {
       // Trace with fix loop
       if (stage.agentName === 'trace' && stage.decision.toLowerCase().includes('fix')) {
         points.push({
-          stage: stage.agentName,
-          issue: `Duzeltme dongusu tetiklendi: ${stage.decision}`,
+          stage: stageLabel,
+          issue: `Düzeltme döngüsü tetiklendi: ${stage.decision}`,
           severity: 'medium',
         });
       }
@@ -282,14 +285,24 @@ export class ExplainabilityService {
       // Risks surfaced
       if (this.config.includeRisks && stage.risks && stage.risks.length > 0) {
         points.push({
-          stage: stage.agentName,
-          issue: `Tanimlanan riskler: ${stage.risks.join('; ')}`,
+          stage: stageLabel,
+          issue: `Tanımlanan riskler: ${stage.risks.join('; ')}`,
           severity: 'low',
         });
       }
     }
 
-    return points;
+    // De-dupe identical (stage, issue, severity) tuples. Multiple stages
+    // can independently bubble the same risk text (e.g. critic-spec and
+    // critic-code both flagging the same low-confidence factor list).
+    // Without this the banner showed two visually-identical rows.
+    const seen = new Set<string>();
+    return points.filter((p) => {
+      const key = `${p.stage}|${p.severity}|${p.issue}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   private narrateStage(stage: AgentReasoning): string {
@@ -315,46 +328,46 @@ export class ExplainabilityService {
     name: string,
     confidence: number,
     assumptionCount: number,
-    stage: AgentReasoning,
+    stage: AgentReasoning
   ): string {
-    let text = `${name}, kullanicinin fikrini analiz etti ve ${confidence}% guvenle bir spesifikasyon uretti. ${assumptionCount} varsayim yapildi.`;
+    let text = `${name}, kullanıcının fikrini analiz etti ve %${confidence} güvenle bir spec üretti. ${assumptionCount} varsayım yapıldı.`;
     if (this.config.verbosity === 'detailed' && stage.assumptions.length > 0) {
-      text += ` Varsayimlar: ${stage.assumptions.join(', ')}.`;
+      text += ` Varsayımlar: ${stage.assumptions.join(', ')}.`;
     }
     return text;
   }
 
   private narrateProto(name: string, confidence: number, stage: AgentReasoning): string {
-    let text = `${name}, onaylanan spesifikasyondan ${confidence}% guvenle MVP kodunu uretti.`;
+    let text = `${name}, onaylanan spec'ten %${confidence} güvenle MVP kodunu üretti.`;
     if (
       this.config.verbosity === 'detailed' &&
       stage.alternatives &&
       stage.alternatives.length > 0
     ) {
-      text += ` Alternatifler degerlendirildi: ${stage.alternatives.join(', ')}.`;
+      text += ` Alternatifler değerlendirildi: ${stage.alternatives.join(', ')}.`;
     }
     return text;
   }
 
   private narrateTrace(name: string, confidence: number, stage: AgentReasoning): string {
-    let text = `${name}, uretilen kodu dogruladi ve ${confidence}% guvenle test senaryolari yazdi.`;
+    let text = `${name}, üretilen kodu doğruladı ve %${confidence} güvenle test senaryoları yazdı.`;
     if (stage.decision.toLowerCase().includes('fix')) {
-      text += ' Duzeltme dongusu tetiklendi.';
+      text += ' Düzeltme döngüsü tetiklendi.';
     }
     return text;
   }
 
   private narrateCritic(name: string, confidence: number, stage: AgentReasoning): string {
-    return `${name}, ciktiyi inceledi ve ${confidence}% guvenle degerlendirme tamamladi. Karar: ${stage.decision}.`;
+    return `${name}, çıktıyı inceledi ve %${confidence} güvenle değerlendirme tamamladı. Karar: ${stage.decision}.`;
   }
 
   private narrateGeneric(
     name: string,
     confidence: number,
     assumptionCount: number,
-    stage: AgentReasoning,
+    stage: AgentReasoning
   ): string {
-    return `${name}, islemini ${confidence}% guvenle tamamladi. ${assumptionCount} varsayim yapildi. Karar: ${stage.decision}.`;
+    return `${name}, işlemini %${confidence} güvenle tamamladı. ${assumptionCount} varsayım yapıldı. Karar: ${stage.decision}.`;
   }
 
   private formatAgentName(agentName: string): string {

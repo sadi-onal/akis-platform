@@ -73,8 +73,13 @@ export function conversationToChatMessages(
     timestamp: string,
     taskKey?: string
   ) => {
-    if (state === 'running' && agentMarked.has(agent)) return;
-    if (state === 'running') agentMarked.add(agent);
+    // De-dup across BOTH `started` and `running` — earlier the set only
+    // tracked `running`, so a `started` marker (emitted on a spec-approved
+    // system message) plus the live-stage `running` marker rendered TWO
+    // identical "Ajan başlatıldı  Proto — İskelet üretiliyor" rows in the
+    // chat thread. Treat the first emission for an agent as canonical.
+    if (state !== 'completed' && agentMarked.has(agent)) return;
+    if (state !== 'completed') agentMarked.add(agent);
     msgs.push({
       type: 'agent_started',
       agent,

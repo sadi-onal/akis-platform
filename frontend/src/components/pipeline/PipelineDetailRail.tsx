@@ -371,7 +371,12 @@ export function PipelineDetailRail({
             </div>
           )}
           {effectiveTab === 'flow' && (
-            <PipelineCinema activities={activities} currentStep={currentStep} compact />
+            <PipelineCinema
+              activities={activities}
+              currentStep={currentStep}
+              uiState={uiState}
+              compact
+            />
           )}
           {effectiveTab === 'why' && (
             <>

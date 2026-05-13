@@ -328,7 +328,7 @@ describe('conversationToChatMessages — message-type coverage', () => {
     const msgs = conversationToChatMessages([specMsg(), reject]);
     // Order is: plan card, agent_started (started), info bubble.
     const started = msgs.find(
-      (m) => m.type === 'agent_started' && (m as unknown as { agent: string }).agent === 'proto',
+      (m) => m.type === 'agent_started' && (m as unknown as { agent: string }).agent === 'proto'
     );
     expect(started).toBeDefined();
     expect((started as unknown as { state: string }).state).toBe('started');
@@ -401,21 +401,13 @@ describe('conversationToChatMessages — live narrator marker', () => {
     // Need a prior spec so the 'onaylandı' branch fires.
     const msgs = conversationToChatMessages([specMsg(), approved], 'proto_building');
     const protoMarkers = msgs.filter(
-      (m) =>
-        m.type === 'agent_started' && (m as unknown as { agent: string }).agent === 'proto',
+      (m) => m.type === 'agent_started' && (m as unknown as { agent: string }).agent === 'proto'
     );
-    // The 'started' marker fired from the system message AND the live 'running'
-    // narrator marker both pass the agentMarked check — the latter only writes
-    // to agentMarked when state==='running'. So we should see exactly one
-    // 'started' AND one 'running' marker for proto.
-    expect(protoMarkers.length).toBeGreaterThanOrEqual(1);
-    // But a second call with the same stage shouldn't dedupe across renders —
-    // dedup is *intra*-render. Smoke check: at least one running marker exists.
-    expect(
-      protoMarkers.some(
-        (m) => (m as unknown as { state: string }).state === 'running',
-      ),
-    ).toBe(true);
+    // Wave-1 dedup fix: the `started` marker from the system message marks
+    // the agent as seen, so the live-stage `running` marker is dropped to
+    // avoid rendering two identical "Ajan başlatıldı  Proto — …" rows.
+    expect(protoMarkers.length).toBe(1);
+    expect((protoMarkers[0] as unknown as { state: string }).state).toBe('started');
   });
 });
 

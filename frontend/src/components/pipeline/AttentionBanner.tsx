@@ -22,6 +22,23 @@ const SEVERITY_LABEL = {
 
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2 } as const;
 
+// Human-readable stage names. Backend now emits granular keys
+// (critic-spec, critic-code) so the banner can disambiguate the two
+// Critic rounds; older payloads still send bare agent names so we
+// gracefully fall back to a Title-cased version.
+const STAGE_LABEL: Record<string, string> = {
+  scribe: 'Scribe',
+  proto: 'Proto',
+  trace: 'Trace',
+  critic: 'Critic',
+  'critic-spec': 'Critic · spec',
+  'critic-code': 'Critic · kod',
+};
+
+function labelForStage(stage: string): string {
+  return STAGE_LABEL[stage] ?? stage.charAt(0).toUpperCase() + stage.slice(1);
+}
+
 /**
  * AttentionBanner — surfaces ExplainabilityService attention points.
  * Sorts by severity, caps at `limit`, and renders nothing when empty.
@@ -48,7 +65,7 @@ export function AttentionBanner({ points, limit = 3, className }: AttentionBanne
             {SEVERITY_LABEL[p.severity]}
           </span>
           <span className="text-xs opacity-60">·</span>
-          <span className="text-xs font-medium opacity-75">{p.stage}</span>
+          <span className="text-xs font-medium opacity-75">{labelForStage(p.stage)}</span>
           <span className="text-xs opacity-60">·</span>
           <span className="flex-1">{p.issue}</span>
         </div>
