@@ -1,4 +1,6 @@
 import { useState, useId, useRef, useEffect } from 'react';
+import { useI18n } from '../../i18n/useI18n';
+import type { MessageKey } from '../../i18n/i18n.types';
 
 export interface ConfidenceBadgeProps {
   /** 0-100 confidence score */
@@ -19,10 +21,16 @@ function tierFor(score: number): Tier {
   return 'low';
 }
 
-const TIER_LABEL: Record<Tier, string> = {
-  high: 'Yüksek güven',
-  medium: 'Orta güven',
-  low: 'Düşük güven',
+const TIER_LABEL_KEY: Record<Tier, MessageKey> = {
+  high: 'confidence.tier.high',
+  medium: 'confidence.tier.medium',
+  low: 'confidence.tier.low',
+};
+
+const TIER_EXPLANATION_KEY: Record<Tier, MessageKey> = {
+  high: 'confidence.explanation.high',
+  medium: 'confidence.explanation.medium',
+  low: 'confidence.explanation.low',
 };
 
 // Tier styling uses AKIS-aligned semantic colors with explicit light/dark
@@ -37,9 +45,10 @@ const TIER_CLASS: Record<Tier, string> = {
 
 /**
  * ConfidenceBadge — color-coded confidence indicator.
- * Hover/focus reveals the factor list backing the score.
+ * Hover/focus reveals a per-tier explanation plus optional factor list.
  */
 export function ConfidenceBadge({ score, factors, compact, className }: ConfidenceBadgeProps) {
+  const { t } = useI18n();
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
   const tier = tierFor(clamped);
   const id = useId();
@@ -48,46 +57,67 @@ export function ConfidenceBadge({ score, factors, compact, className }: Confiden
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [open]);
 
   const hasFactors = !!factors && factors.length > 0;
+  const tierLabel = t(TIER_LABEL_KEY[tier]);
+  const explanation = t(TIER_EXPLANATION_KEY[tier]);
 
   return (
     <span ref={ref} className={`relative inline-flex ${className ?? ''}`}>
       <button
         type="button"
-        onClick={() => hasFactors && setOpen((v) => !v)}
-        onMouseEnter={() => hasFactors && setOpen(true)}
+        onClick={() => setOpen((v) => !v)}
+        onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
-        onFocus={() => hasFactors && setOpen(true)}
+        onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         aria-describedby={open ? id : undefined}
-        aria-label={`${TIER_LABEL[tier]}: ${clamped}%`}
+        aria-label={`${tierLabel}: ${clamped}%`}
         data-tier={tier}
-        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold leading-none transition ${TIER_CLASS[tier]} ${
-          hasFactors ? 'cursor-help' : 'cursor-default'
-        }`}
+        className={`inline-flex cursor-help items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold leading-none transition ${TIER_CLASS[tier]}`}
       >
         <span aria-hidden="true">●</span>
-        <span>{compact ? `${clamped}%` : `${TIER_LABEL[tier]} · ${clamped}%`}</span>
+        <span>{compact ? `${clamped}%` : `${tierLabel} · ${clamped}%`}</span>
       </button>
-      {open && hasFactors && (
+      {open && (
+        // Anchor the popover to the badge's RIGHT edge (extending leftward)
+        // so it cannot overflow the right edge of a cinema column. `max-w-xs`
+        // + viewport-bounded `min()` keep it readable on narrow screens.
         <span
           id={id}
           role="tooltip"
-          className="absolute left-0 top-full z-50 mt-1 w-64 max-w-xs rounded-lg border border-ak-border bg-ak-surface p-2 text-xs text-ak-text-primary shadow-lg"
+          style={{ maxWidth: 'min(16rem, 90vw)' }}
+          className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-ak-border bg-ak-surface p-2 text-xs text-ak-text-primary shadow-lg"
         >
-          <span className="mb-1 block font-semibold">Güven faktörleri</span>
-          <ul className="list-disc space-y-0.5 pl-4 text-ak-text-secondary">
-            {factors!.map((f, i) => (
-              <li key={i}>{f}</li>
-            ))}
-          </ul>
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-ak-text-tertiary">
+            {t('confidence.tooltip.scoreCaption')}
+          </span>
+          <span className="mb-2 block leading-relaxed text-ak-text-secondary">{explanation}</span>
+          {hasFactors && (
+            <>
+              <span className="mb-1 block font-semibold">
+                {t('confidence.tooltip.factorsHeader')}
+              </span>
+              <ul className="list-disc space-y-0.5 pl-4 text-ak-text-secondary">
+                {factors!.map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </>
+          )}
         </span>
       )}
     </span>

@@ -39,9 +39,9 @@ describe('useProtoFiles', () => {
   });
 
   it('returns null when no conversation and no API fallback (non-terminal stage)', () => {
-    const wf = makeWorkflow({ currentStage: 'scribe_planning', conversation: [] });
+    const wf = makeWorkflow({ currentStage: 'scribe_clarifying', conversation: [] });
     const { result } = renderHook(() =>
-      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf }),
+      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf })
     );
     expect(result.current).toBeNull();
     expect(mockedGetProtoFiles).not.toHaveBeenCalled();
@@ -59,7 +59,7 @@ describe('useProtoFiles', () => {
       ] as unknown as Workflow['conversation'],
     });
     const { result } = renderHook(() =>
-      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf }),
+      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf })
     );
     expect(result.current).toEqual({ 'src/index.ts': 'export const x = 1;' });
     expect(mockedGetProtoFiles).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ describe('useProtoFiles', () => {
     mockedGetProtoFiles.mockResolvedValue({ 'a.ts': 'a' });
     const wf = makeWorkflow({ currentStage: 'completed', conversation: [] });
     const { result } = renderHook(() =>
-      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf }),
+      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf })
     );
 
     await waitFor(() => expect(result.current).toEqual({ 'a.ts': 'a' }));
@@ -77,7 +77,7 @@ describe('useProtoFiles', () => {
   });
 
   it('does not call the API for non-terminal stages', () => {
-    const wf = makeWorkflow({ currentStage: 'scribe_planning', conversation: [] });
+    const wf = makeWorkflow({ currentStage: 'scribe_clarifying', conversation: [] });
     renderHook(() => useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf }));
     expect(mockedGetProtoFiles).not.toHaveBeenCalled();
   });
@@ -100,7 +100,7 @@ describe('useProtoFiles', () => {
     mockedGetProtoFiles.mockResolvedValue({});
     const wf = makeWorkflow({ currentStage: 'completed', conversation: [] });
     const { result } = renderHook(() =>
-      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf }),
+      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf })
     );
     await waitFor(() => expect(mockedGetProtoFiles).toHaveBeenCalled());
     // Empty object is treated as "no fallback" — protoFiles stays null.
@@ -111,7 +111,7 @@ describe('useProtoFiles', () => {
     mockedGetProtoFiles.mockRejectedValue(new Error('500'));
     const wf = makeWorkflow({ currentStage: 'completed', conversation: [] });
     const { result } = renderHook(() =>
-      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf }),
+      useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf })
     );
     await waitFor(() => expect(mockedGetProtoFiles).toHaveBeenCalled());
     expect(result.current).toBeNull();
@@ -121,5 +121,49 @@ describe('useProtoFiles', () => {
     const wf = makeWorkflow({ currentStage: 'completed', conversation: [] });
     renderHook(() => useProtoFiles({ conversationId: undefined, activeWorkflow: wf }));
     expect(mockedGetProtoFiles).not.toHaveBeenCalled();
+  });
+
+  // Bulgu F — stale preview drawer.
+  it('clears API cache when conversationId changes (no stale files from prior pipeline)', async () => {
+    mockedGetProtoFiles.mockResolvedValueOnce({ 'old.ts': 'old' });
+    const wfOld = makeWorkflow({ currentStage: 'completed', conversation: [] });
+    const wfNew = makeWorkflow({
+      id: 'wf-2',
+      currentStage: 'scribe_clarifying',
+      conversation: [],
+    });
+
+    const { result, rerender } = renderHook(
+      ({ id, wf }: { id: string; wf: Workflow }) =>
+        useProtoFiles({ conversationId: id, activeWorkflow: wf }),
+      { initialProps: { id: 'wf-1', wf: wfOld } }
+    );
+
+    await waitFor(() => expect(result.current).toEqual({ 'old.ts': 'old' }));
+
+    rerender({ id: 'wf-2', wf: wfNew });
+    expect(result.current).toBeNull();
+  });
+
+  it('clears API cache when pipeline re-enters a build stage (iterate scenario)', async () => {
+    mockedGetProtoFiles.mockResolvedValueOnce({ 'old.ts': 'old' });
+    const wfReady = makeWorkflow({
+      currentStage: 'awaiting_push_confirm',
+      conversation: [],
+    });
+    const wfIterating = makeWorkflow({
+      currentStage: 'proto_building',
+      conversation: [],
+    });
+
+    const { result, rerender } = renderHook(
+      ({ wf }: { wf: Workflow }) => useProtoFiles({ conversationId: 'wf-1', activeWorkflow: wf }),
+      { initialProps: { wf: wfReady } }
+    );
+
+    await waitFor(() => expect(result.current).toEqual({ 'old.ts': 'old' }));
+
+    rerender({ wf: wfIterating });
+    expect(result.current).toBeNull();
   });
 });

@@ -1,12 +1,24 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { PipelineDetailRail } from '../PipelineDetailRail';
-import type { PipelineActivity } from '../../../hooks/usePipelineStream';
-import type { PipelineExplanation, RegressionReport } from '../../../types/pipeline';
 
 vi.mock('../../../hooks/useReducedMotion', () => ({
   useReducedMotion: () => true,
 }));
+
+// ConfidenceBadge (transitively rendered) requires I18nProvider; stub here.
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
+
+import { PipelineDetailRail } from '../PipelineDetailRail';
+import type { PipelineActivity } from '../../../hooks/usePipelineStream';
+import type { PipelineExplanation, RegressionReport } from '../../../types/pipeline';
 
 const mkExpl = (overrides: Partial<PipelineExplanation> = {}): PipelineExplanation => ({
   pipelineId: 'p-1',

@@ -244,49 +244,50 @@ export class ExplainabilityService {
     const stageLabelFor = (stage: AgentReasoning) => stage.stageKey ?? stage.agentName;
 
     for (const stage of stages) {
+      // Bulgu E + H — `stageLabel` uses the granular stageKey when present
+      // (so critic-spec/critic-code stay distinct) while the wrapper text
+      // is the bakkal-Türkçesi version that frames *why* the user should
+      // look. Raw factor / decision / risk payloads still come straight
+      // from the agent and may be technical; the wrapper only sets context.
       const stageLabel = stageLabelFor(stage);
-      // Low confidence → high severity
+      const factors = stage.confidence.factors.join(', ');
       if (stage.confidence.score < 70) {
         points.push({
           stage: stageLabel,
-          issue: `Düşük güven skoru: %${stage.confidence.score}. Faktörler: ${stage.confidence.factors.join(', ')}`,
+          issue: `Bu adımdan emin değiliz (%${stage.confidence.score}). Yayınlamadan önce dikkatlice incele. Etkileyen noktalar: ${factors}`,
           severity: 'high',
         });
       } else if (stage.confidence.score < 85) {
-        // Medium confidence → medium severity
         points.push({
           stage: stageLabel,
-          issue: `Orta güven skoru: %${stage.confidence.score}. Faktörler: ${stage.confidence.factors.join(', ')}`,
+          issue: `Bu adımdan kısmen eminiz (%${stage.confidence.score}). Önemli yerleri gözden geçirmen iyi olur. Etkileyen noktalar: ${factors}`,
           severity: 'medium',
         });
       }
 
-      // Critic with security reasoning
       if (
         stage.agentName.includes('critic') &&
         stage.reasoning.some((r) => r.toLowerCase().includes('security'))
       ) {
         points.push({
           stage: stageLabel,
-          issue: `Güvenlik ile ilgili bulgular tespit edildi: ${stage.decision}`,
+          issue: `Bir güvenlik konusu tespit ettik — gözden geçirmeni öneririz. Karar: ${stage.decision}`,
           severity: 'high',
         });
       }
 
-      // Trace with fix loop
       if (stage.agentName === 'trace' && stage.decision.toLowerCase().includes('fix')) {
         points.push({
           stage: stageLabel,
-          issue: `Düzeltme döngüsü tetiklendi: ${stage.decision}`,
+          issue: `Testler ilk seferde geçmedi, AKIS otomatik düzeltme denedi. Karar: ${stage.decision}`,
           severity: 'medium',
         });
       }
 
-      // Risks surfaced
       if (this.config.includeRisks && stage.risks && stage.risks.length > 0) {
         points.push({
           stage: stageLabel,
-          issue: `Tanımlanan riskler: ${stage.risks.join('; ')}`,
+          issue: `Bilmen gereken riskler: ${stage.risks.join('; ')}`,
           severity: 'low',
         });
       }

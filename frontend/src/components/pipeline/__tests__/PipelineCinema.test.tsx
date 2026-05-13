@@ -1,13 +1,25 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { PipelineCinema } from '../PipelineCinema';
-import { reduceStageViews } from '../PipelineCinema.utils';
-import type { PipelineActivity } from '../../../hooks/usePipelineStream';
 
 // Stub useReducedMotion so animations are deterministic in tests
 vi.mock('../../../hooks/useReducedMotion', () => ({
   useReducedMotion: () => true,
 }));
+
+// ConfidenceBadge requires I18nProvider; stub here so the tree renders.
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
+
+import { PipelineCinema } from '../PipelineCinema';
+import { reduceStageViews } from '../PipelineCinema.utils';
+import type { PipelineActivity } from '../../../hooks/usePipelineStream';
 
 const mk = (overrides: Partial<PipelineActivity>): PipelineActivity => ({
   pipelineId: 'p',

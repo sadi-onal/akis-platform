@@ -1066,6 +1066,16 @@ export const MESSAGE_KEYS = [
   'chat.modeBadge.failed.title',
   'chat.modeBadge.failed.aria',
 
+  // Wave 2 — ConfidenceBadge tooltip + tier strings
+  'confidence.tier.high',
+  'confidence.tier.medium',
+  'confidence.tier.low',
+  'confidence.explanation.high',
+  'confidence.explanation.medium',
+  'confidence.explanation.low',
+  'confidence.tooltip.scoreCaption',
+  'confidence.tooltip.factorsHeader',
+
   // PDP-3 B4: Preview-confirm gate (Proto → push)
   'chat.pushGate.ariaLabel',
   'chat.pushGate.title',

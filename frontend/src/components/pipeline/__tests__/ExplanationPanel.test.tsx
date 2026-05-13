@@ -1,5 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+
+// ConfidenceBadge (transitively rendered) requires I18nProvider; stub here.
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
+
 import { ExplanationPanel } from '../ExplanationPanel';
 import type { PipelineExplanation, AgentReasoning } from '../../../types/pipeline';
 
@@ -53,10 +65,10 @@ describe('ExplanationPanel', () => {
       <ExplanationPanel
         pipelineId="p-1"
         explanation={mkExplanation({ stages: [], meta: { persistencePreEpoch: true } })}
-      />,
+      />
     );
     expect(
-      screen.getByText(/Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok/),
+      screen.getByText(/Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok/)
     ).toBeInTheDocument();
     expect(screen.getByText(/İsterseniz yeniden çalıştırabilirsiniz/)).toBeInTheDocument();
     // The generic empty state should NOT appear when the legacy banner does.

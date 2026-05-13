@@ -141,7 +141,7 @@ describe('ExplainabilityService', () => {
       })
     );
     const points = await s.getAttentionPoints('p9');
-    const fixPoint = points.find((p) => p.issue.includes('Düzeltme döngüsü'));
+    const fixPoint = points.find((p) => p.issue.includes('otomatik düzeltme denedi'));
     assert.ok(fixPoint);
     assert.equal(fixPoint.severity, 'medium');
   });

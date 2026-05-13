@@ -12,9 +12,10 @@
  * either source resolves. Extracted from ChatPage.tsx as part of F-06 Phase 2
  * to keep the orchestrator focused on routing/state rather than data fetching.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { workflowsApi } from '../../../services/api/workflows';
+import type { PipelineStage } from '../../../types/pipeline';
 import type { Workflow } from '../../../types/workflow';
 
 export interface UseProtoFilesOptions {
@@ -22,13 +23,37 @@ export interface UseProtoFilesOptions {
   activeWorkflow: Workflow | null;
 }
 
-export function useProtoFiles(
-  options: UseProtoFilesOptions,
-): Record<string, string> | null {
+const GENERATION_STAGES: ReadonlySet<PipelineStage> = new Set<PipelineStage>([
+  'scribe_clarifying',
+  'scribe_generating',
+  'critic_reviewing_spec',
+  'proto_building',
+  'critic_reviewing_code',
+]);
+
+export function useProtoFiles(options: UseProtoFilesOptions): Record<string, string> | null {
   const { conversationId, activeWorkflow } = options;
-  const [protoFilesFromApi, setProtoFilesFromApi] = useState<Record<string, string> | null>(
-    null,
-  );
+  const [protoFilesFromApi, setProtoFilesFromApi] = useState<Record<string, string> | null>(null);
+
+  const stage = activeWorkflow?.currentStage;
+  // Bulgu F — drop the cached API files when the source context changes:
+  // (1) different conversation entirely, or (2) the same pipeline re-enters a
+  // generation stage (iterate), which will produce fresh files. Without this
+  // the drawer flashes stale content from the previous run.
+  const prevContextRef = useRef<{ id: string | undefined; stage: PipelineStage | undefined }>({
+    id: conversationId,
+    stage,
+  });
+  useEffect(() => {
+    const prev = prevContextRef.current;
+    const conversationChanged = prev.id !== conversationId;
+    const restartedGeneration =
+      prev.stage !== stage && stage !== undefined && GENERATION_STAGES.has(stage);
+    if (conversationChanged || restartedGeneration) {
+      setProtoFilesFromApi(null);
+    }
+    prevContextRef.current = { id: conversationId, stage };
+  }, [conversationId, stage]);
 
   const protoFiles = useMemo(() => {
     if (activeWorkflow?.conversation) {
