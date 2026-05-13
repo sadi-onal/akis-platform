@@ -80,7 +80,7 @@ export default function ChatPage() {
   const upsertSidebarConversation = useCallback((w: Workflow) => {
     const item = workflowToListItem(w);
     setConversations((prev) =>
-      prev.some((c) => c.id === item.id) ? prev.map((c) => (c.id === item.id ? item : c)) : prev,
+      prev.some((c) => c.id === item.id) ? prev.map((c) => (c.id === item.id ? item : c)) : prev
     );
   }, []);
 
@@ -173,7 +173,7 @@ export default function ChatPage() {
 
   const chatMode = useMemo(
     () => mapStageToMode(activeWorkflow?.currentStage),
-    [activeWorkflow?.currentStage],
+    [activeWorkflow?.currentStage]
   );
 
   const handleRename = useCallback(async (id: string, newTitle: string) => {
@@ -203,7 +203,7 @@ export default function ChatPage() {
         if (import.meta.env.DEV) console.error('Failed to delete:', e);
       }
     },
-    [conversationId, navigate, lastMessagesKeyRef],
+    [conversationId, navigate, lastMessagesKeyRef]
   );
 
   const handleNewConversation = useCallback(() => {
@@ -216,10 +216,7 @@ export default function ChatPage() {
     navigate('/chat');
   }, [navigate, loadedIdRef, lastMessagesKeyRef, setMessages, setActiveWorkflow]);
 
-  const handleTogglePreview = useCallback(
-    () => setShowPreview((p) => !p),
-    [setShowPreview],
-  );
+  const handleTogglePreview = useCallback(() => setShowPreview((p) => !p), [setShowPreview]);
   const handleBack = useCallback(() => {
     setPendingConv(null);
     lastMessagesKeyRef.current = '';
@@ -291,7 +288,7 @@ export default function ChatPage() {
       ]);
       toast(`${label}: yakında.`, 'info');
     },
-    [setMessages],
+    [setMessages]
   );
 
   // ─── ASK intent — F-09 / FR-10 streaming RAG (F-06 extraction) ─
@@ -307,18 +304,18 @@ export default function ChatPage() {
 
   const handleIntentFeedback = useCallback(
     (message: string) => intentPlaceholder('Geribildirim', message),
-    [intentPlaceholder],
+    [intentPlaceholder]
   );
   const handleIntentChat = useCallback(
     (message: string) => intentPlaceholder('Sohbet', message),
-    [intentPlaceholder],
+    [intentPlaceholder]
   );
 
   const handleSuggestBuild = useCallback(
     (sourceMessage: string) => {
       void handleSend(sourceMessage);
     },
-    [handleSend],
+    [handleSend]
   );
 
   // B3 onboarding: demo template click → seed a pending conversation and fire
@@ -336,7 +333,7 @@ export default function ChatPage() {
       loadedIdRef.current = undefined;
       void handleSend(idea);
     },
-    [handleSend, setActiveWorkflow, setMessages, loadedIdRef],
+    [handleSend, setActiveWorkflow, setMessages, loadedIdRef]
   );
 
   const recentTextMessages = useMemo(() => {
@@ -367,28 +364,61 @@ export default function ChatPage() {
 
   const layoutProps = {
     akisLogoUrl,
-    sidebarOpen, setSidebarOpen, sidebarCollapsed, onToggleCollapse: handleToggleCollapse,
-    sidebarConversations, conversationId, pendingConv,
-    onNewConversation: handleNewConversation, onRename: handleRename, onDelete: handleDelete,
-    pendingGithubIdea, onCancelGithubGate: () => setPendingGithubIdea(null),
-    activeWorkflow, messages, uiState, isInputEnabled, showCancelButton, inputPlaceholder,
-    creating, chatMode, recentTextMessages, currentStep, pipelineActivities, createdFiles,
-    protoFiles, pipelineHasOutputs: hasPipelineOutputs(activeWorkflow), pipelineError,
+    sidebarOpen,
+    setSidebarOpen,
+    sidebarCollapsed,
+    onToggleCollapse: handleToggleCollapse,
+    sidebarConversations,
+    conversationId,
+    pendingConv,
+    onNewConversation: handleNewConversation,
+    onRename: handleRename,
+    onDelete: handleDelete,
+    pendingGithubIdea,
+    onCancelGithubGate: () => setPendingGithubIdea(null),
+    activeWorkflow,
+    messages,
+    uiState,
+    isInputEnabled,
+    showCancelButton,
+    inputPlaceholder,
+    creating,
+    chatMode,
+    recentTextMessages,
+    currentStep,
+    pipelineActivities,
+    createdFiles,
+    protoFiles,
+    pipelineHasOutputs: hasPipelineOutputs(activeWorkflow),
+    pipelineError,
     isRetrying,
-    showPreview, previewWidth, onTogglePreview: handleTogglePreview, setShowPreview,
-    splitContainerRef, handleDragStart,
-    onSend: handleSend, onAsk: handleIntentAsk,
-    onFeedback: handleIntentFeedback, onChat: handleIntentChat,
-    onCancel: handleCancel, onApprove: handleApprove, onReject: handleReject,
-    onRetry: handleRetry, onSkip: handleSkip, onBack: handleBack,
+    showPreview,
+    previewWidth,
+    onTogglePreview: handleTogglePreview,
+    setShowPreview,
+    splitContainerRef,
+    handleDragStart,
+    onSend: handleSend,
+    onAsk: handleIntentAsk,
+    onFeedback: handleIntentFeedback,
+    onChat: handleIntentChat,
+    onCancel: handleCancel,
+    onApprove: handleApprove,
+    onReject: handleReject,
+    onRetry: handleRetry,
+    onSkip: handleSkip,
+    onBack: handleBack,
     onSuggestBuild: handleSuggestBuild,
     // PDP-3 B4: after the user resolves the push gate, refresh the
     // workflow so the new stage (proto_building → trace → completed, or
     // completed_partial on cancel) reaches the chat surface.
     onPushResolved: refreshWorkflow,
-    traceEnabled, setTraceEnabled, pendingModel, setPendingModel,
-    onModelChange: handleModelChange, repoSelectorSlot,
-    isFirstTimeUser: conversations.length === 0,
+    traceEnabled,
+    setTraceEnabled,
+    pendingModel,
+    setPendingModel,
+    onModelChange: handleModelChange,
+    repoSelectorSlot,
     onDemoSelect: handleDemoSelect,
   };
 

@@ -12,7 +12,6 @@ import { ChatPanel } from '../../components/chat/ChatPanel';
 import { ChatRouter } from '../../components/chat/ChatRouter';
 import { ChatSkeleton } from '../../components/chat/ChatSkeleton';
 import { ConversationSidebar } from '../../components/chat/ConversationSidebar';
-import { EmptyState } from '../../components/chat/EmptyState';
 import { EmptyStateCard } from '../../components/chat/EmptyStateCard';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { GithubConnectGate } from '../../components/onboarding/GithubConnectGate';
@@ -29,7 +28,7 @@ import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import { cn } from '../../utils/cn';
 
 const PreviewPanel = lazy(() =>
-  import('../../components/workflow/PreviewPanel').then((m) => ({ default: m.PreviewPanel })),
+  import('../../components/workflow/PreviewPanel').then((m) => ({ default: m.PreviewPanel }))
 );
 
 export interface ChatPageLayoutProps {
@@ -109,11 +108,6 @@ export interface ChatPageLayoutProps {
 
   // ── B3 onboarding empty state ───────────────────
   /**
-   * True when the user has no real conversations yet (pendingConv excluded).
-   * Used to swap the legacy 3-agent hero for the demo-template card.
-   */
-  isFirstTimeUser: boolean;
-  /**
    * Fire a brand-new pipeline from a pre-filled idea. Skips the composer
    * and goes straight to `useHandleSend`'s new-conversation branch.
    */
@@ -175,7 +169,6 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
     setPendingModel,
     onModelChange,
     repoSelectorSlot,
-    isFirstTimeUser,
     onDemoSelect,
   } = props;
 
@@ -198,7 +191,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
           'flex-shrink-0 transition-transform duration-200 ease-out',
           'fixed inset-y-0 left-0 z-40',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-          'md:sticky md:top-0 md:z-auto md:translate-x-0 md:h-dvh',
+          'md:sticky md:top-0 md:z-auto md:translate-x-0 md:h-dvh'
         )}
       >
         <ConversationSidebar
@@ -332,7 +325,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                 />
                 <div
                   className={cn(
-                    'fixed inset-0 z-50 overflow-hidden lg:relative lg:inset-auto lg:z-auto',
+                    'fixed inset-0 z-50 overflow-hidden lg:relative lg:inset-auto lg:z-auto'
                   )}
                   style={{ flexBasis: `${previewWidth}%`, flexGrow: 0, flexShrink: 0 }}
                 >
@@ -348,11 +341,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       stroke="currentColor"
                       strokeWidth={1.5}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                   <ErrorBoundary fallbackPath="/chat" fallbackLabel="Chat">
@@ -369,10 +358,12 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
               </>
             )}
           </div>
-        ) : isFirstTimeUser ? (
-          <EmptyStateCard onDemoSelect={onDemoSelect} onManualStart={onNewConversation} />
         ) : (
-          <EmptyState variant="no-conversation" onNewConversation={onNewConversation} />
+          // B3 onboarding card — always shown when there's no active
+          // conversation, regardless of whether the user has prior chats.
+          // (Earlier condition gated on conversations.length === 0, which
+          // hid the demo templates from returning users.)
+          <EmptyStateCard onDemoSelect={onDemoSelect} onManualStart={onNewConversation} />
         )}
       </div>
     </div>

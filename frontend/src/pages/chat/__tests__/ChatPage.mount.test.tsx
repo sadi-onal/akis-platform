@@ -46,7 +46,13 @@ vi.mock('../../../hooks/useProfileCompleteness', () => ({
 }));
 
 vi.mock('../../../hooks/usePipelineStream', () => ({
-  usePipelineStream: () => ({ activities: [], currentStep: null, createdFiles: [], isConnected: false, progressByStage: {} }),
+  usePipelineStream: () => ({
+    activities: [],
+    currentStep: null,
+    createdFiles: [],
+    isConnected: false,
+    progressByStage: {},
+  }),
 }));
 
 // Mock workflowsApi — list returns empty, get rejects (no conversation selected)
@@ -86,7 +92,9 @@ vi.mock('../../../components/onboarding/githubConnectStorage', () => ({
 }));
 
 vi.mock('../../../components/onboarding/AgentFeatureCard', () => ({
-  AgentFeatureCard: ({ title }: { title: string }) => <div data-testid={`agent-${title}`}>{title}</div>,
+  AgentFeatureCard: ({ title }: { title: string }) => (
+    <div data-testid={`agent-${title}`}>{title}</div>
+  ),
 }));
 
 vi.mock('../../../components/chat/ChatSkeleton', () => ({
@@ -101,7 +109,7 @@ function renderChatPage(initialPath = '/chat') {
       <Routes>
         <Route path="/chat/*" element={<ChatPage />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
@@ -151,6 +159,37 @@ describe('ChatPage — mount', () => {
   it('shows the manual-start CTA on the empty state card', () => {
     renderChatPage('/chat');
     expect(screen.getByTestId('empty-state-manual-start')).toBeInTheDocument();
+  });
+
+  it('still shows EmptyStateCard at the root pane when 1+ prior conversations exist', async () => {
+    // Regression for the bug fixed in this PR: the demo-template cards used to
+    // be gated on `conversations.length === 0`, so any returning user who had
+    // a prior sohbet got the legacy 3-agent hero again. The demos are starting
+    // points for every user, not first-time-only — verify they render at the
+    // empty `/chat` pane even when the sidebar has workflows.
+    const mod = await import('../../../services/api/workflows');
+    vi.mocked(mod.workflowsApi).list.mockResolvedValueOnce([
+      {
+        id: 'prior-A',
+        title: 'Önceki Sohbet',
+        status: 'completed',
+        currentStage: 'completed',
+        traceEnabled: false,
+        createdAt: '2026-05-01T12:00:00.000Z',
+        updatedAt: '2026-05-01T12:00:01.000Z',
+        stages: {
+          scribe: { status: 'completed' as const },
+          approve: { status: 'completed' as const },
+          proto: { status: 'completed' as const },
+          trace: { status: 'idle' as const },
+        },
+      } as never,
+    ]);
+    renderChatPage('/chat');
+    expect(await screen.findByTestId('empty-state-demo-todo')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state-demo-currency')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state-demo-qr')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state-demo-markdown')).toBeInTheDocument();
   });
 
   it('memoized subtree mounts without runtime errors or warnings', () => {
@@ -250,7 +289,7 @@ describe('ChatPage — F-01 lastMessagesKeyRef reset on Yeni Sohbet', () => {
         <Routes>
           <Route path="/chat/*" element={<ChatPage />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Initial load: the user message renders.
@@ -319,7 +358,7 @@ describe('ChatPage — F-01 lastMessagesKeyRef reset on Yeni Sohbet', () => {
         <Routes>
           <Route path="/chat/*" element={<ChatPage />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
