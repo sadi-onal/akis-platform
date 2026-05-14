@@ -29,6 +29,14 @@ import { DisambiguationModal } from './DisambiguationModal';
 
 export interface ChatRouterProps {
   pipelineId?: string;
+  /**
+   * Current pipeline UI state — used to bias the classify-error fallback.
+   * At `awaiting_push_confirm`, a classifier hiccup should route to FEEDBACK
+   * (iterate the existing scaffold) rather than BUILD (which would restart
+   * the entire pipeline and toss the user's work-in-progress preview).
+   * Spec: docs/superpowers/specs/2026-05-14-preview-unify-chat-iterate-design.md § T3
+   */
+  pipelineUiState?: string;
   /** Last N messages from the chat scrollback (oldest → newest), max 20. */
   recentMessages?: string[];
   /**
@@ -66,6 +74,7 @@ interface PendingDecision {
 
 export function ChatRouter({
   pipelineId,
+  pipelineUiState,
   recentMessages,
   onBuild,
   onAsk,
@@ -82,6 +91,11 @@ export function ChatRouter({
 
   const apiRef = useRef(api ?? chatIntentApi);
   apiRef.current = api ?? chatIntentApi;
+
+  // Latest pipeline state in a ref so the classify-error fallback inside
+  // the async `send` callback reads the current value without a re-create.
+  const pipelineUiStateRef = useRef(pipelineUiState);
+  pipelineUiStateRef.current = pipelineUiState;
 
   const dispatch = useCallback(
     async (intent: IntentLabel, message: string, attachments?: ChatAttachment[]) => {
@@ -118,9 +132,14 @@ export function ChatRouter({
             recentMessages,
           });
         } catch {
-          // Network or auth failure — fall back to BUILD so the user is never
-          // blocked from the primary action by a classifier hiccup.
-          await dispatch('BUILD', message, attachments);
+          // Network or auth failure — state-aware fallback so a classifier
+          // hiccup never strands the user. At `awaiting_push_confirm` we
+          // prefer FEEDBACK (iterate the existing scaffold) so the user
+          // doesn't accidentally restart the whole pipeline; everywhere
+          // else BUILD remains the safer default (primary action).
+          const fallback: IntentLabel =
+            pipelineUiStateRef.current === 'awaiting_push_confirm' ? 'FEEDBACK' : 'BUILD';
+          await dispatch(fallback, message, attachments);
           return;
         }
 

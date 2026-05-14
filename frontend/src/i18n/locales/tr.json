@@ -330,6 +330,7 @@
   "chat.pushGate.feedback.placeholder": "Düzeltme isteğini buraya yaz...",
   "chat.pushGate.feedback.submit": "Düzelt",
   "chat.pushGate.feedback.iterating": "Kodu güncelliyorum...",
+  "chat.feedback.optimisticEcho": "Düzeltme gönderildi. Proto güncelleniyor...",
   "chat.agentLine.started": "Ajan başlatıldı",
   "chat.agentLine.finished": "Ajan tamamlandı",
   "chat.emptyState.greeting": "Merhaba! Ben",

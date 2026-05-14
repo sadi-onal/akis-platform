@@ -1095,6 +1095,7 @@ export const MESSAGE_KEYS = [
   'chat.pushGate.feedback.placeholder',
   'chat.pushGate.feedback.submit',
   'chat.pushGate.feedback.iterating',
+  'chat.feedback.optimisticEcho',
   'chat.agentLine.started',
   'chat.agentLine.finished',
 

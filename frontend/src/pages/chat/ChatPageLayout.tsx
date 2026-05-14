@@ -16,6 +16,7 @@ import { EmptyStateCard } from '../../components/chat/EmptyStateCard';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { GithubConnectGate } from '../../components/onboarding/GithubConnectGate';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
+import { useAutoOpenPreview } from '../../hooks/useAutoOpenPreview';
 import type {
   ChatMessage,
   ChatMode,
@@ -172,6 +173,11 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
     onDemoSelect,
   } = props;
 
+  // T3 (preview-unify): auto-open the right Preview Panel when the
+  // pipeline transitions into `awaiting_push_confirm`. Extracted to a
+  // hook so the effect is testable in isolation.
+  useAutoOpenPreview(uiState, showPreview, setShowPreview);
+
   return (
     <div className="flex h-dvh overflow-hidden bg-ak-bg" role="application" aria-label="AKIS Chat">
       {/* Mobile overlay */}
@@ -254,6 +260,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
               <ErrorBoundary>
                 <ChatRouter
                   pipelineId={conversationId}
+                  pipelineUiState={uiState}
                   recentMessages={recentTextMessages}
                   onBuild={onSend}
                   onAsk={onAsk}
@@ -351,6 +358,18 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                         branch={activeWorkflow?.stages?.proto?.branch}
                         activities={pipelineActivities}
                         createdFiles={createdFiles}
+                        pushGateProps={
+                          uiState === 'awaiting_push_confirm' && conversationId
+                            ? {
+                                pipelineId: conversationId,
+                                onResolved: onPushResolved
+                                  ? () => {
+                                      void onPushResolved();
+                                    }
+                                  : undefined,
+                              }
+                            : undefined
+                        }
                       />
                     </Suspense>
                   </ErrorBoundary>
