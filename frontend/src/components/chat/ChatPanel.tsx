@@ -232,6 +232,8 @@ export const ChatPanel = memo(function ChatPanel({
           pipelineHasOutputs={pipelineHasOutputs}
           protoFiles={protoFiles}
           onPushResolved={onPushResolved}
+          showPreview={showPreview}
+          onTogglePreview={onTogglePreview}
         />
       )}
 
