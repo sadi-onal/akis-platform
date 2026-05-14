@@ -4,6 +4,7 @@ import { cn } from '../../utils/cn';
 import { analyzePreviewCapability } from '../../utils/previewStrategy';
 import { akisSandpackTheme } from '../../utils/sandpackTheme';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
+import { PushGateFooter, type PushGateFooterProps } from './PushGateFooter';
 
 type PreviewView = 'web' | 'mobile';
 type PanelTab = 'preview' | 'console' | 'files';
@@ -42,6 +43,13 @@ interface PreviewPanelProps {
   activities?: PipelineActivity[];
   createdFiles?: string[];
   repoUrl?: string;
+  /**
+   * Opt-in: when provided, renders a sticky {@link PushGateFooter} at the
+   * bottom of the panel with confirm/cancel actions. Used while the pipeline
+   * is at `awaiting_push_confirm`. Omit (undefined) to preserve the previous
+   * footer-less rendering.
+   */
+  pushGateProps?: PushGateFooterProps;
 }
 
 function findMainFile(files: Record<string, string>): string {
@@ -257,7 +265,7 @@ function NotPreviewable({ reason, repoUrl }: { reason: string; repoUrl?: string 
 }
 
 /* ── Main Component ───────────────────────── */
-export const PreviewPanel = memo(function PreviewPanel({ files, loading: externalLoading, branch, activities, createdFiles, repoUrl }: PreviewPanelProps) {
+export const PreviewPanel = memo(function PreviewPanel({ files, loading: externalLoading, branch, activities, createdFiles, repoUrl, pushGateProps }: PreviewPanelProps) {
   const [tab, setTab] = useState<PanelTab>('preview');
   const [view, setView] = useState<PreviewView>('web');
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -593,6 +601,9 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
           <span className="text-[10px] text-ak-text-tertiary">Sandpack</span>
         </div>
       )}
+
+      {/* Push-gate footer (T1): opt-in via pushGateProps, undefined → not rendered. */}
+      {pushGateProps && <PushGateFooter {...pushGateProps} />}
     </div>
   );
 });
