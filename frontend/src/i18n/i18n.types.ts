@@ -1081,6 +1081,7 @@ export const MESSAGE_KEYS = [
   'chat.pushGate.title',
   'chat.pushGate.description',
   'chat.pushGate.fileCountSuffix',
+  'chat.pushGate.openPreview',
   'chat.pushGate.previewLoading',
   'chat.pushGate.confirm',
   'chat.pushGate.confirming',

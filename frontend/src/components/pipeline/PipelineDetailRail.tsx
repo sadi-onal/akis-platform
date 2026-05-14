@@ -39,6 +39,18 @@ export interface PipelineDetailRailProps {
    * longer triggers for finished work and this opt-in becomes dead weight.
    */
   pipelineHasOutputs?: boolean;
+  /**
+   * PDP-3 T2: whether the right-side Preview Panel is currently visible.
+   * Used by the compact PushConfirmGate to decide whether to offer the
+   * "Önizlemeyi aç" fallback button. Threaded from ChatPageLayout (which
+   * owns the showPreview state).
+   */
+  showPreview?: boolean;
+  /**
+   * PDP-3 T2: open the right Preview Panel. Invoked by the gate's
+   * "Önizlemeyi aç" button when previewOpen is false.
+   */
+  onTogglePreview?: () => void;
   /** DI for tests — falls back to workflowsApi.getExplanation */
   explanationFetcher?: (id: string) => Promise<PipelineExplanation>;
   /** DI for tests — falls back to workflowsApi.getRegression */
@@ -106,8 +118,13 @@ export function PipelineDetailRail({
   explanationFetcher,
   regressionFetcher,
   protoFiles,
-  onPushResolved,
+  showPreview,
+  onTogglePreview,
   className,
+  // onPushResolved is accepted in the interface so callers can keep
+  // passing it (it's still consumed by the T1 PushGateFooter render path,
+  // owned by ChatPageLayout). The rail itself no longer drives push
+  // confirm/cancel — those moved out of the chat card.
 }: PipelineDetailRailProps) {
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const [tab, setTab] = useState<Tab | null>(null);
@@ -365,8 +382,9 @@ export function PipelineDetailRail({
             <div className="mb-3">
               <PushConfirmGate
                 pipelineId={pipelineId}
-                files={protoFiles ?? null}
-                onResolved={onPushResolved}
+                fileCount={protoFiles ? Object.keys(protoFiles).length : 0}
+                previewOpen={showPreview ?? false}
+                onOpenPreview={() => onTogglePreview?.()}
               />
             </div>
           )}
