@@ -33,6 +33,7 @@ import { useModelPicker } from './hooks/useModelPicker';
 import { useShowPreview } from './hooks/useShowPreview';
 import { useProtoFiles } from './hooks/useProtoFiles';
 import { usePipelineControls } from './hooks/usePipelineControls';
+import { useHandleIntentFeedback } from './hooks/useHandleIntentFeedback';
 
 /* ── component ────────────────────────────────────── */
 
@@ -302,10 +303,15 @@ export default function ChatPage() {
     setMessages,
   });
 
-  const handleIntentFeedback = useCallback(
-    (message: string) => intentPlaceholder('Geribildirim', message),
-    [intentPlaceholder]
-  );
+  // T3 (preview-unify): at awaiting_push_confirm, FEEDBACK → iterate-with-feedback
+  // endpoint (optimistic echo + Proto re-run). Outside the gate, fall back to
+  // the legacy placeholder so messages aren't silently dropped.
+  const handleIntentFeedback = useHandleIntentFeedback({
+    uiState,
+    pipelineId: conversationId,
+    setMessages,
+    fallback: intentPlaceholder,
+  });
   const handleIntentChat = useCallback(
     (message: string) => intentPlaceholder('Sohbet', message),
     [intentPlaceholder]

@@ -43,10 +43,10 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
     if (uiState === 'scribe_clarifying') return 'Soruları yanıtlayın...';
     if (uiState === 'awaiting_approval') return 'Planı düzenlemek için yazın veya onaylayın...';
     if (uiState === 'awaiting_push_confirm')
-      // PDP-3 B4: at the push gate the user inspects the preview and
-      // chooses Send / Cancel; the chat input stays open for free-form
-      // notes but the gate buttons are the primary action.
-      return "Kodu inceleyin ve GitHub'a göndermek için yukarıdan onaylayın...";
+      // PDP-3 T3 (preview-unify): the right Preview Panel hosts the
+      // confirm/cancel buttons; the chat is the primary surface for
+      // free-form corrections (FEEDBACK intent → iterateWithFeedback).
+      return "Ne değişsin? Örn: 'renkleri pembe yap'. Veya sağdaki butonla GitHub'a gönder.";
     if (uiState === 'scribe_running' || uiState === 'scribe_revise')
       return 'Scribe çalışıyor... Mesaj bırakabilirsiniz.';
     if (uiState === 'critic_running') return 'Critic inceliyor... Mesaj bırakabilirsiniz.';

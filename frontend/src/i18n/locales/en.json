@@ -330,6 +330,7 @@
   "chat.pushGate.feedback.placeholder": "Type your correction here...",
   "chat.pushGate.feedback.submit": "Revise",
   "chat.pushGate.feedback.iterating": "Updating the code...",
+  "chat.feedback.optimisticEcho": "Correction sent. Proto is updating...",
   "chat.agentLine.started": "Agent started",
   "chat.agentLine.finished": "Agent finished",
   "chat.emptyState.greeting": "Hello! I am",

@@ -175,6 +175,62 @@ describe('ChatRouter', () => {
     await waitFor(() => expect(onBuild).toHaveBeenCalledTimes(1));
   });
 
+  // ── T3 state-aware classify-error fallback ─────────
+  it('falls back to FEEDBACK on classify error when pipelineUiState=awaiting_push_confirm', async () => {
+    const classify = vi.fn().mockRejectedValue(new Error('network'));
+    const override = vi.fn();
+    const onBuild = vi.fn();
+    const onFeedback = vi.fn();
+
+    render(
+      <ChatRouter
+        pipelineUiState="awaiting_push_confirm"
+        onBuild={onBuild}
+        onAsk={vi.fn()}
+        onFeedback={onFeedback}
+        onChat={vi.fn()}
+        api={{ classify, override }}
+      >
+        {({ send }) => (
+          <button type="button" onClick={() => void send('renkleri pembe yap')}>
+            send
+          </button>
+        )}
+      </ChatRouter>,
+    );
+    fireEvent.click(screen.getByText('send'));
+    await waitFor(() => expect(onFeedback).toHaveBeenCalledTimes(1));
+    expect(onFeedback).toHaveBeenCalledWith('renkleri pembe yap');
+    expect(onBuild).not.toHaveBeenCalled();
+  });
+
+  it('falls back to BUILD on classify error when pipelineUiState is not awaiting_push_confirm', async () => {
+    const classify = vi.fn().mockRejectedValue(new Error('network'));
+    const override = vi.fn();
+    const onBuild = vi.fn();
+    const onFeedback = vi.fn();
+
+    render(
+      <ChatRouter
+        pipelineUiState="idle"
+        onBuild={onBuild}
+        onAsk={vi.fn()}
+        onFeedback={onFeedback}
+        onChat={vi.fn()}
+        api={{ classify, override }}
+      >
+        {({ send }) => (
+          <button type="button" onClick={() => void send('build something')}>
+            send
+          </button>
+        )}
+      </ChatRouter>,
+    );
+    fireEvent.click(screen.getByText('send'));
+    await waitFor(() => expect(onBuild).toHaveBeenCalledTimes(1));
+    expect(onFeedback).not.toHaveBeenCalled();
+  });
+
   it('skips empty messages without calling classify', async () => {
     const classify = vi.fn().mockResolvedValue(classification({ intent: 'BUILD', confidence: 0.95 }));
     const override = vi.fn();
