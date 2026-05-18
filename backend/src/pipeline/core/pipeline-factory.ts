@@ -15,6 +15,28 @@ import { db } from '../../db/client.js';
 import type { AgenticLoopDeps } from './AgenticLoop.js';
 import { AgentActivityService } from '../services/AgentActivityService.js';
 import type { SkillRegistry } from '../agents/skills/index.js';
+import { getEnv } from '../../config/env.js';
+
+/**
+ * Resolve the CriticAgent approval threshold from env. Falls back to the
+ * default (75) if `getEnv()` throws — e.g. when the orchestrator is booted
+ * from a unit test without a full env. Reads `process.env` directly first
+ * to avoid the heavy zod parse cost for a single integer.
+ */
+function resolveCriticApprovalThreshold(): number | undefined {
+  const raw = process.env.CRITIC_APPROVAL_THRESHOLD;
+  if (raw && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, Math.min(100, Math.floor(parsed)));
+    }
+  }
+  try {
+    return getEnv().CRITIC_APPROVAL_THRESHOLD;
+  } catch {
+    return undefined;
+  }
+}
 
 // ─── AI Adapter ──────────────────────────────────
 // Bridges the existing AIService to agent AI deps interfaces.
@@ -257,7 +279,7 @@ export function createAgentsForModel(
     scribe: new ScribeAgent(scribeAI, skillRegistry),
     proto: new ProtoAgent(protoAI, protoGH, agenticDeps, skillRegistry),
     trace: new TraceAgent(traceAI, traceGH, agenticDeps, skillRegistry),
-    critic: new CriticAgent(criticAI, skillRegistry),
+    critic: new CriticAgent(criticAI, skillRegistry, resolveCriticApprovalThreshold()),
   };
 }
 
@@ -325,7 +347,9 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
 
   // Wire Level 3: CriticAgent for adversarial review
   const criticAI = createCriticAIDeps(opts.aiService);
-  orchestrator.setCriticAgent(new CriticAgent(criticAI, opts.skillRegistry));
+  orchestrator.setCriticAgent(
+    new CriticAgent(criticAI, opts.skillRegistry, resolveCriticApprovalThreshold()),
+  );
 
   // Wire AI service for RepoContextAgent
   orchestrator.setAIService(opts.aiService);

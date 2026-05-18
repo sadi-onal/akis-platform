@@ -10,6 +10,9 @@ export type PipelineStage =
   | 'awaiting_approval'
   | 'proto_building'
   | 'critic_reviewing_code'
+  // P8: Critic code review came back below the approval threshold; pipeline
+  // is hard-blocked until the user iterates with feedback or overrides.
+  | 'awaiting_critic_resolution'
   | 'awaiting_push_confirm'
   | 'trace_testing'
   | 'fix_loop_iteration'
@@ -188,6 +191,19 @@ export interface Pipeline {
   intermediateState?: {
     criticSpecOutput?: CriticReviewOutput;
     criticCodeOutput?: CriticReviewOutput;
+    /**
+     * P8 — audit + visualization payload for the Critic hard-block. Present
+     * once the orchestrator parked the pipeline at
+     * `awaiting_critic_resolution`. `manuallyOverridden=true` after the
+     * user clicked "Yine de devam et".
+     */
+    criticBlock?: {
+      blockedAt: string;
+      overallScore: number;
+      findingsCount: number;
+      manuallyOverridden: boolean;
+      overriddenAt?: string;
+    };
     [key: string]: unknown;
   };
   createdAt: string;

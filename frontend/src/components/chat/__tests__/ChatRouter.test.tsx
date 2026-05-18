@@ -231,6 +231,35 @@ describe('ChatRouter', () => {
     expect(onFeedback).not.toHaveBeenCalled();
   });
 
+  // ── P8 state-aware classify-error fallback ────────
+  it('falls back to FEEDBACK on classify error when pipelineUiState=awaiting_critic_resolution', async () => {
+    const classify = vi.fn().mockRejectedValue(new Error('network'));
+    const override = vi.fn();
+    const onBuild = vi.fn();
+    const onFeedback = vi.fn();
+
+    render(
+      <ChatRouter
+        pipelineUiState="awaiting_critic_resolution"
+        onBuild={onBuild}
+        onAsk={vi.fn()}
+        onFeedback={onFeedback}
+        onChat={vi.fn()}
+        api={{ classify, override }}
+      >
+        {({ send }) => (
+          <button type="button" onClick={() => void send('renkleri pembe yap')}>
+            send
+          </button>
+        )}
+      </ChatRouter>,
+    );
+    fireEvent.click(screen.getByText('send'));
+    await waitFor(() => expect(onFeedback).toHaveBeenCalledTimes(1));
+    expect(onFeedback).toHaveBeenCalledWith('renkleri pembe yap');
+    expect(onBuild).not.toHaveBeenCalled();
+  });
+
   it('skips empty messages without calling classify', async () => {
     const classify = vi.fn().mockResolvedValue(classification({ intent: 'BUILD', confidence: 0.95 }));
     const override = vi.fn();

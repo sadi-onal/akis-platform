@@ -1092,6 +1092,18 @@ export const MESSAGE_KEYS = [
   'chat.agentLine.started',
   'chat.agentLine.finished',
 
+  // P8: Critic hard-block — score bar + resolution gate
+  'chat.critic.scoreBar.title',
+  'chat.critic.scoreBar.threshold',
+  'chat.critic.scoreBar.approved',
+  'chat.critic.scoreBar.blocked',
+  'chat.critic.scoreBar.findingsSuffix',
+  'chat.critic.resolution.title',
+  'chat.critic.resolution.description',
+  'chat.critic.resolution.override',
+  'chat.critic.resolution.overriding',
+  'chat.critic.resolution.errorOverride',
+
   // Pipeline Stages
   'pipeline.stage.awaitingApproval',
   'pipeline.stage.cancelled',

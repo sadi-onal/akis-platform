@@ -369,6 +369,16 @@ export function mapPipelineToWorkflow(
     return firstLine.slice(0, 60) || 'Isimsiz Is Akisi';
   })();
 
+  // P8 — surface the Critic code review + hard-block audit so ChatPanel
+  // can render the score bar + resolution gate without reaching into
+  // `intermediateState` itself.
+  const criticReview = pipeline.intermediateState?.criticCodeOutput;
+  const rawCriticBlock = pipeline.intermediateState?.criticBlock;
+  const criticBlock =
+    rawCriticBlock && typeof rawCriticBlock === 'object'
+      ? (rawCriticBlock as Workflow['criticBlock'])
+      : undefined;
+
   return {
     id: pipeline.id,
     traceEnabled: pipeline.traceEnabled ?? false,
@@ -383,6 +393,8 @@ export function mapPipelineToWorkflow(
     model: pipeline.model ?? tokenUsage?.model,
     modelLockedAt: pipeline.modelLockedAt,
     error: pipeline.error,
+    criticReview,
+    criticBlock,
   };
 }
 
@@ -507,15 +519,27 @@ export const workflowsApi = {
 
   /**
    * PDP-3 B5: re-run Proto with the user's correction request while the
-   * pipeline is still at the push-confirm gate. Backend overwrites
-   * `protoOutput.files`; the pipeline transitions
-   * `awaiting_push_confirm → proto_building → … → awaiting_push_confirm`.
+   * pipeline is still at the push-confirm gate (or the P8 critic-resolution
+   * gate). Backend overwrites `protoOutput.files`; the pipeline transitions
+   * `awaiting_*` → `proto_building` → … → `awaiting_push_confirm` (or
+   * `awaiting_critic_resolution` again if the new score is still
+   * below threshold).
    * Spec: docs/product/wave3/b5-feedback-iteration.md
    */
   iterateWithFeedback: async (id: string, feedback: string): Promise<Workflow> => {
     const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/iterate-with-feedback`, {
       feedback,
     });
+    return mapPipelineToWorkflow(res.pipeline);
+  },
+
+  /**
+   * P8: user accepted the Critic findings and wants to push anyway. Advances
+   * the pipeline from `awaiting_critic_resolution` to `awaiting_push_confirm`
+   * so the existing PushGateFooter takes over the final commit decision.
+   */
+  criticOverride: async (id: string): Promise<Workflow> => {
+    const res = await http.post<PipelineResponse>(`/api/pipelines/${id}/critic-override`);
     return mapPipelineToWorkflow(res.pipeline);
   },
 

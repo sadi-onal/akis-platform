@@ -434,3 +434,81 @@ describe('CriticAgent — Edge cases', () => {
     }
   });
 });
+
+// ─── P8: env-configurable approval threshold ──────
+
+describe('CriticAgent — approval threshold injection (P8)', () => {
+  function makeFixedScoreReview(score: number): string {
+    return JSON.stringify({
+      approved: true /* ignored — agent decides from threshold */,
+      overallScore: score,
+      findings: [],
+      summary: 'fixed-score',
+      reviewType: 'spec_review',
+      iteration: 1,
+    });
+  }
+
+  it('defaults the approval threshold to 75 when none injected', async () => {
+    const ai = createMockAI([makeFixedScoreReview(74), makeFixedScoreReview(75)]);
+    const agent = new CriticAgent(ai);
+    assert.equal(agent.getApprovalThreshold(), 75);
+
+    const below = await agent.reviewSpec({
+      reviewType: 'spec_review',
+      artifact: goodSpec,
+      originalIdea: 'x',
+    });
+    const atBoundary = await agent.reviewSpec({
+      reviewType: 'spec_review',
+      artifact: goodSpec,
+      originalIdea: 'x',
+    });
+    if (below.type === 'review') assert.equal(below.data.approved, false);
+    if (atBoundary.type === 'review') assert.equal(atBoundary.data.approved, true);
+  });
+
+  it('uses an injected threshold (e.g. 85) for the approved decision', async () => {
+    const ai = createMockAI([makeFixedScoreReview(80), makeFixedScoreReview(85)]);
+    const agent = new CriticAgent(ai, undefined, 85);
+    assert.equal(agent.getApprovalThreshold(), 85);
+
+    const below = await agent.reviewSpec({
+      reviewType: 'spec_review',
+      artifact: goodSpec,
+      originalIdea: 'x',
+    });
+    const atBoundary = await agent.reviewSpec({
+      reviewType: 'spec_review',
+      artifact: goodSpec,
+      originalIdea: 'x',
+    });
+    if (below.type === 'review') {
+      assert.equal(below.data.approved, false);
+      assert.equal(below.data.overallScore, 80);
+    }
+    if (atBoundary.type === 'review') {
+      assert.equal(atBoundary.data.approved, true);
+      assert.equal(atBoundary.data.overallScore, 85);
+    }
+  });
+
+  it('clamps an out-of-range injected threshold to [0, 100]', async () => {
+    const high = new CriticAgent(createMockAI([]), undefined, 250);
+    assert.equal(high.getApprovalThreshold(), 100);
+
+    const low = new CriticAgent(createMockAI([]), undefined, -10);
+    assert.equal(low.getApprovalThreshold(), 0);
+  });
+
+  it('flips approval when threshold is 0 (every score is approved)', async () => {
+    const ai = createMockAI([makeFixedScoreReview(0)]);
+    const agent = new CriticAgent(ai, undefined, 0);
+    const result = await agent.reviewSpec({
+      reviewType: 'spec_review',
+      artifact: goodSpec,
+      originalIdea: 'x',
+    });
+    if (result.type === 'review') assert.equal(result.data.approved, true);
+  });
+});

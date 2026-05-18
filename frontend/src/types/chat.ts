@@ -10,6 +10,8 @@ export type ConversationUIState =
   | 'critic_running'
   | 'awaiting_approval'
   | 'awaiting_push_confirm'
+  // P8 — Critic hard-block: pipeline waits for user to fix or override.
+  | 'awaiting_critic_resolution'
   | 'scribe_revise'
   | 'proto_running'
   | 'trace_running'

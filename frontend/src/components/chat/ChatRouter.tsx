@@ -31,9 +31,10 @@ export interface ChatRouterProps {
   pipelineId?: string;
   /**
    * Current pipeline UI state — used to bias the classify-error fallback.
-   * At `awaiting_push_confirm`, a classifier hiccup should route to FEEDBACK
-   * (iterate the existing scaffold) rather than BUILD (which would restart
-   * the entire pipeline and toss the user's work-in-progress preview).
+   * At `awaiting_push_confirm` (and P8's `awaiting_critic_resolution`),
+   * a classifier hiccup should route to FEEDBACK (iterate the existing
+   * scaffold) rather than BUILD (which would restart the entire pipeline
+   * and toss the user's work-in-progress preview).
    * Spec: docs/superpowers/specs/2026-05-14-preview-unify-chat-iterate-design.md § T3
    */
   pipelineUiState?: string;
@@ -133,12 +134,15 @@ export function ChatRouter({
           });
         } catch {
           // Network or auth failure — state-aware fallback so a classifier
-          // hiccup never strands the user. At `awaiting_push_confirm` we
-          // prefer FEEDBACK (iterate the existing scaffold) so the user
-          // doesn't accidentally restart the whole pipeline; everywhere
-          // else BUILD remains the safer default (primary action).
-          const fallback: IntentLabel =
-            pipelineUiStateRef.current === 'awaiting_push_confirm' ? 'FEEDBACK' : 'BUILD';
+          // hiccup never strands the user. At `awaiting_push_confirm` and
+          // P8's `awaiting_critic_resolution` we prefer FEEDBACK (iterate
+          // the existing scaffold) so the user doesn't accidentally restart
+          // the whole pipeline; everywhere else BUILD remains the safer
+          // default (primary action).
+          const gateActive =
+            pipelineUiStateRef.current === 'awaiting_push_confirm' ||
+            pipelineUiStateRef.current === 'awaiting_critic_resolution';
+          const fallback: IntentLabel = gateActive ? 'FEEDBACK' : 'BUILD';
           await dispatch(fallback, message, attachments);
           return;
         }

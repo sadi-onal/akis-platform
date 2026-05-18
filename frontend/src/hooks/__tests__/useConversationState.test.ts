@@ -171,6 +171,16 @@ describe('useConversationState', () => {
       const { result } = renderHook(() => useConversationState('completed'));
       expect(result.current.inputPlaceholder).toContain('Projeniz hazır');
     });
+
+    // P8 — critic hard-block placeholder
+    it('shows critic-resolution prompt when blocked', () => {
+      const { result } = renderHook(() =>
+        useConversationState('awaiting_critic_resolution' as PipelineStage),
+      );
+      expect(result.current.uiState).toBe('awaiting_critic_resolution');
+      expect(result.current.inputPlaceholder).toContain('Kritik bulgu');
+      expect(result.current.inputPlaceholder).toContain('sağdaki');
+    });
   });
 
   // ── syncFromStage ────────────────────────────────

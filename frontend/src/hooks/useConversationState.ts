@@ -47,6 +47,10 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
       // confirm/cancel buttons; the chat is the primary surface for
       // free-form corrections (FEEDBACK intent → iterateWithFeedback).
       return "Ne değişsin? Örn: 'renkleri pembe yap'. Veya sağdaki butonla GitHub'a gönder.";
+    if (uiState === 'awaiting_critic_resolution')
+      // P8: critic flagged bulgu(s) — chat-driven düzelt or the sağdaki
+      // 'Yine de devam et' override are the two ways forward.
+      return "Kritik bulgu var — düzeltmek için yaz ya da sağdaki butonu kullan.";
     if (uiState === 'scribe_running' || uiState === 'scribe_revise')
       return 'Scribe çalışıyor... Mesaj bırakabilirsiniz.';
     if (uiState === 'critic_running') return 'Critic inceliyor... Mesaj bırakabilirsiniz.';
