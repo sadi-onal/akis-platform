@@ -274,6 +274,70 @@ describe('PipelineDetailRail — interactions', () => {
   });
 });
 
+describe('PipelineDetailRail — P5b AI Logs tab gating', () => {
+  // Tab is internal-only. Parent passes `showAiLogsTab` explicitly so the
+  // production gate (URL/localStorage/env) is bypassed for deterministic
+  // tests.
+  it('hides the AI Logları tab when showAiLogsTab is false', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        showAiLogsTab={false}
+      />
+    );
+    expect(screen.queryByRole('tab', { name: 'AI Logları' })).toBeNull();
+  });
+
+  it('shows the AI Logları tab when showAiLogsTab is true', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        showAiLogsTab
+      />
+    );
+    expect(screen.getByRole('tab', { name: 'AI Logları' })).toBeInTheDocument();
+  });
+
+  it('clicking the AI Logları tab triggers the aiCallsFetcher', async () => {
+    const aiCallsFetcher = vi.fn().mockResolvedValue([]);
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        showAiLogsTab
+        aiCallsFetcher={aiCallsFetcher}
+      />
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Logları' }));
+    await waitFor(() => expect(aiCallsFetcher).toHaveBeenCalledWith('p-1'));
+    // Empty state renders without crashing.
+    await waitFor(() => expect(screen.getByTestId('ai-calls-empty')).toBeInTheDocument());
+  });
+
+  it('hides tab by default (production gate disabled in test environment)', () => {
+    // No showAiLogsTab prop → falls back to isInternalUiVisible(). In
+    // jsdom the URL is `localhost`, localStorage is empty, and the env
+    // var is not set, so the gate is closed.
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+      />
+    );
+    expect(screen.queryByRole('tab', { name: 'AI Logları' })).toBeNull();
+  });
+});
+
 const mkRegression = (overrides: Partial<RegressionReport> = {}): RegressionReport => ({
   pipelineId: 'p-1',
   baseline: {

@@ -302,3 +302,32 @@ export interface RegressionReport {
   headline: string;
   bakkalSummary: string;
 }
+
+/**
+ * P5b: AI request log viewer entry — wire format for
+ * `GET /api/pipelines/:id/ai-calls`. Mirrors the backend's `AiCallEntry`.
+ *
+ * Content fields (systemPrompt/userPrompt/responseText/thinkingBlocks/
+ * toolCalls) are nullable because pre-P5a rows did not capture them, and
+ * the TraceRecorder appends `... [truncated]` when over
+ * `AI_LOG_CONTENT_MAX_BYTES` (default 100KB) per field.
+ */
+export interface AiCallEntry {
+  id: string;
+  callIndex: number;
+  provider: string;
+  model: string;
+  purpose: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  durationMs: number | null;
+  success: boolean;
+  errorCode: string | null;
+  timestamp: string;
+  systemPrompt: string | null;
+  userPrompt: string | null;
+  responseText: string | null;
+  thinkingBlocks: unknown[] | null;
+  toolCalls: unknown[] | null;
+}

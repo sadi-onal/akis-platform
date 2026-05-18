@@ -13,6 +13,8 @@ import { AttentionBanner } from './AttentionBanner';
 import { RegressionPanel } from './RegressionPanel';
 import { PushConfirmGate } from './PushConfirmGate';
 import { CriticResolutionGate } from './CriticResolutionGate';
+import { AiCallsPanel } from './AiCallsPanel';
+import type { AiCallEntry } from '../../types/pipeline';
 
 export interface PipelineDetailRailProps {
   pipelineId: string | undefined;
@@ -60,6 +62,15 @@ export interface PipelineDetailRailProps {
   explanationFetcher?: (id: string) => Promise<PipelineExplanation>;
   /** DI for tests — falls back to workflowsApi.getRegression */
   regressionFetcher?: (id: string) => Promise<RegressionReport>;
+  /** P5b — DI for tests; falls back to workflowsApi.getAiCalls */
+  aiCallsFetcher?: (id: string) => Promise<AiCallEntry[]>;
+  /**
+   * P5b — visibility override for the AI logs tab. When undefined, the tab
+   * is gated by `isInternalUiVisible()` (URL `?debug=1`, localStorage
+   * `akis_debug=true`, or build-time `VITE_SHOW_INTERNAL_UI=true`). Tests
+   * pass an explicit boolean so behavior is deterministic.
+   */
+  showAiLogsTab?: boolean;
   /**
    * P8 — latest Critic code-review output. Required to render the
    * `CriticResolutionGate` while the pipeline is at
@@ -77,7 +88,26 @@ export interface PipelineDetailRailProps {
   className?: string;
 }
 
-type Tab = 'flow' | 'why' | 'regression';
+type Tab = 'flow' | 'why' | 'regression' | 'aiLogs';
+
+/**
+ * P5b — internal-UI gate for the AI Logs tab. Mirrors the same three-way
+ * trigger as PreviewPanel's console (URL ?debug=1, localStorage flag, or
+ * build-time env var). Re-implemented locally instead of importing so this
+ * file stays free of cross-feature coupling.
+ */
+function isInternalUiVisible(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (new URLSearchParams(window.location.search).get('debug') === '1') return true;
+    if (window.localStorage?.getItem('akis_debug') === 'true') return true;
+  } catch {
+    // SecurityError under privacy-mode sandboxing — fall through.
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const env = (import.meta as any)?.env;
+  return env?.VITE_SHOW_INTERNAL_UI === 'true';
+}
 
 // uiStates after which the regression confidence surface makes sense.
 // Both root pipelines and iteration children settle into `idle` once
@@ -144,6 +174,8 @@ export function PipelineDetailRail({
   pipelineHasOutputs = false,
   explanationFetcher,
   regressionFetcher,
+  aiCallsFetcher,
+  showAiLogsTab,
   protoFiles,
   showPreview,
   onTogglePreview,
@@ -164,6 +196,9 @@ export function PipelineDetailRail({
   const regressionVisible = isRegressionVisible(uiState, activities.length > 0, pipelineHasOutputs);
   const pushGateActive = isPushGate(uiState);
   const criticGateActive = isCriticGate(uiState);
+  // P5b: AI logs tab is internal-only. Parent can override (tests + future
+  // admin-role plumbing); fall back to URL/localStorage/env gate.
+  const aiLogsTabVisible = showAiLogsTab ?? isInternalUiVisible();
   // Keep the collapse contract from v0.7.0: collapse on idle. The
   // Regresyon tab is still clickable and renders content when the user
   // manually expands the rail; auto-expansion would clobber the chat
@@ -365,6 +400,17 @@ export function PipelineDetailRail({
                   Regresyon
                 </button>
               )}
+              {aiLogsTabVisible && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={effectiveTab === 'aiLogs'}
+                  onClick={() => setTab('aiLogs')}
+                  className={`${tabBtnBase} ${effectiveTab === 'aiLogs' ? tabBtnActive : tabBtnInactive}`}
+                >
+                  AI Logları
+                </button>
+              )}
             </div>
           )}
           {effectiveCollapsed && (
@@ -461,6 +507,9 @@ export function PipelineDetailRail({
           )}
           {effectiveTab === 'regression' && (
             <RegressionPanel pipelineId={pipelineId} fetcher={regressionFetcher} />
+          )}
+          {effectiveTab === 'aiLogs' && aiLogsTabVisible && (
+            <AiCallsPanel pipelineId={pipelineId} fetcher={aiCallsFetcher} />
           )}
         </div>
       )}

@@ -445,6 +445,18 @@ export async function pipelinePlugin(fastify: FastifyInstance, opts: PipelinePlu
     }
   );
 
+  // GET /api/pipelines/:id/ai-calls — P5b: admin/debug AI request log viewer
+  // Returns each `job_ai_calls` row for jobs tied to this pipeline,
+  // including the P5a prompt/response/thinking/tool-calls content. Pipeline
+  // ownership is enforced; the panel itself is gated by isInternalUiVisible().
+  fastify.get(
+    '/:id/ai-calls',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.getAiCalls(request);
+    }
+  );
+
   // GET /api/pipelines/:id/files/* — get file content from stored pipeline data
   fastify.get('/:id/files/*', { preHandler: authPreHandler }, async (request: FastifyRequest) => {
     return routes.getFileContent(request);
