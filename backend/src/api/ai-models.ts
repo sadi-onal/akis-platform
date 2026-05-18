@@ -9,8 +9,8 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
    * Returns provider-specific list of supported AI models for agent jobs.
    * If provider omitted, uses user's active provider from DB; default 'anthropic'.
    *
-   * PR-A: 'openai' returns an empty list — see modelAllowlist for the rationale
-   * (runtime client lands in PR-B B5).
+   * P1a: 'openai' returns DEFAULT_OPENAI_MODELS now that the runtime client
+   * is wired up in AIService.
    */
   fastify.get(
     '/api/ai/supported-models',

@@ -1,7 +1,7 @@
 /**
  * Unit tests for AI model allowlist — pure function tests.
- * PR-A removed OpenRouter; OpenAI is type-level supported but excluded
- * from getAllKnownModels until PR-B B5 lights up the runtime client.
+ * PR-A removed OpenRouter. P1a lit up the OpenAI runtime, so the OpenAI
+ * defaults are now part of getAllKnownModels alongside the Anthropic ones.
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
@@ -143,22 +143,22 @@ describe('Default model lists', () => {
 // ─── getAllKnownModels (issue #437) ────────────────────────────────────
 
 describe('getAllKnownModels', () => {
-  test('PR-A: returns Anthropic-only — OpenAI excluded until B5 wires the runtime', () => {
+  test('P1a: includes both Anthropic and OpenAI defaults', () => {
     const all = getAllKnownModels();
     for (const m of DEFAULT_ANTHROPIC_MODELS) {
       assert.ok(all.includes(m), `${m} missing from allowlist`);
     }
     for (const m of DEFAULT_OPENAI_MODELS) {
-      assert.ok(!all.includes(m), `${m} should NOT be in allowlist (PR-A)`);
+      assert.ok(all.includes(m), `${m} missing from allowlist (P1a runtime active)`);
     }
   });
 
-  test('all entries pass detectProviderFromModel as anthropic', () => {
+  test('every entry is detected as either anthropic or openai', () => {
     for (const m of getAllKnownModels()) {
-      assert.strictEqual(
-        detectProviderFromModel(m),
-        'anthropic',
-        `model '${m}' must be detectable as anthropic`,
+      const provider = detectProviderFromModel(m);
+      assert.ok(
+        provider === 'anthropic' || provider === 'openai',
+        `model '${m}' must be detectable as anthropic or openai, got ${provider}`,
       );
     }
   });

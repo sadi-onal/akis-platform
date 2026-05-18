@@ -8,11 +8,8 @@ export const DEFAULT_ANTHROPIC_MODELS = [
 ];
 
 /**
- * OpenAI model allowlist — kept untouched in PR-A (per the user's "don't
- * touch OpenAI" directive) so PR-B B5 can wire up the runtime client and
- * promote the list. PR-A explicitly EXCLUDES OpenAI from
- * `getAllKnownModels()` so the picker / API validation rejects them today
- * even though the array exists.
+ * OpenAI model allowlist — promoted in P1a alongside the runtime client.
+ * The picker, API validation, and `getAllKnownModels()` now accept these.
  */
 export const DEFAULT_OPENAI_MODELS = [
   'gpt-4o-mini',
@@ -44,9 +41,8 @@ export function getScribeModelAllowlist(): string[] {
  * Get allowed models for a specific provider.
  * Env override applies to all providers (comma-separated list).
  *
- * Note: OpenAI returns an empty array in PR-A — there's no runtime client
- * yet (see PR-B B5). Frontend treats empty as "provider not yet available"
- * and shows the disabled-tab UX.
+ * P1a: OpenAI now returns DEFAULT_OPENAI_MODELS — the runtime client is
+ * wired in createAIService and the picker treats the list normally.
  */
 export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): string[] {
   const env = getEnv();
@@ -60,8 +56,7 @@ export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): str
     return DEFAULT_ANTHROPIC_MODELS;
   }
   if (provider === 'openai') {
-    // PR-A: defensively empty until B5 adds the runtime client.
-    return [];
+    return DEFAULT_OPENAI_MODELS;
   }
   return DEFAULT_ANTHROPIC_MODELS;
 }
@@ -70,12 +65,11 @@ export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): str
  * Combined allowlist across every supported provider — used by the per-chat
  * model picker (issue #437) to validate PATCH /api/pipelines/:id/model.
  *
- * PR-A: Anthropic-only. OpenAI models are deliberately excluded so a user
- * who somehow types one in gets rejected at the API boundary instead of
- * blowing up at runtime in AIService factory. PR-B B5 brings them back.
+ * P1a: includes OpenAI alongside Anthropic now that the runtime client is
+ * active. PATCH /api/pipelines/:id/model accepts either provider's models.
  */
 export function getAllKnownModels(): string[] {
-  return [...DEFAULT_ANTHROPIC_MODELS];
+  return [...DEFAULT_ANTHROPIC_MODELS, ...DEFAULT_OPENAI_MODELS];
 }
 
 /** Returns the recommended default model for a given AI provider. */
@@ -90,8 +84,7 @@ export function isModelAllowed(model: string, allowlist: string[]): boolean {
 
 /**
  * Check if a model ID looks like it belongs to a specific provider.
- * OpenAI models start with "gpt-", "o1", etc. — kept here because PR-B B5
- * needs the mapping; the runtime factory still rejects 'openai' until then.
+ * OpenAI models start with "gpt-", "o1", etc.
  */
 export function detectProviderFromModel(model: string): AIKeyProvider | null {
   if (

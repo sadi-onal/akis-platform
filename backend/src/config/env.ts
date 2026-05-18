@@ -128,8 +128,9 @@ const envSchema = z
     ATLASSIAN_ORG_ID: z.string().optional(),
     ATLASSIAN_API_TOKEN: z.string().optional(),
     ATLASSIAN_EMAIL: z.string().optional(),
-    // AI Provider configuration. PR-A removed 'openrouter'; PR-B B5 lights up
-    // 'openai' at runtime — for now the AIService factory rejects it.
+    // AI Provider configuration. PR-A removed 'openrouter'; P1a lit up
+    // 'openai' at runtime. AIService factory now routes both 'openai' and
+    // 'anthropic' to RealAIService.
     AI_PROVIDER: z.enum(['openai', 'anthropic', 'mock']).default('mock'),
     // DOGFOOD_MODE: token-free + GitHub-free local exercise. When `true`,
     // PipelineOrchestrator.validateGitHubAccess returns a stub
@@ -544,7 +545,9 @@ export function getAIConfig(env: Env): AIConfig {
   // Provider-specific defaults
   const OPENAI_DEFAULTS = {
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o',
+    // P1a: gpt-4o-mini is the cheapest in the supported allowlist and a
+    // sensible default. Env vars (AI_MODEL_DEFAULT etc.) can override.
+    model: 'gpt-4o-mini',
   };
 
   const ANTHROPIC_DEFAULTS = {

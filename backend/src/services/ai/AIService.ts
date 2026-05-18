@@ -1473,14 +1473,9 @@ export function createAIService(
     return new MockAIService(observer);
   }
 
-  // PR-A defensive guard: OpenAI runtime is not implemented yet (PR-B B5).
-  // The picker / API allowlist also rejects OpenAI models, so getting here
-  // means somebody bypassed those checks. Throw a clear, actionable error.
-  if (resolvedConfig.provider === 'openai') {
-    throw new Error(
-      'OpenAI desteklenecek (PR-B B5). Şu an Anthropic kullanın veya AI_PROVIDER=mock olarak ayarlayın.',
-    );
-  }
+  // P1a: OpenAI runtime is now active. RealAIService routes via
+  // buildOpenAIRequest + parseOpenAIResponse when provider === 'openai'.
+  // (Previously a defensive throw lived here per PR-A.)
 
   if (!resolvedConfig.apiKey) {
     logger.warn(
