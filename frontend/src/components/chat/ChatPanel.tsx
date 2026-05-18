@@ -60,7 +60,7 @@ interface ChatPanelProps {
   tokenUsage?: import('../../types/workflow').WorkflowTokenUsage;
   model?: string;
   onModelChange?: (modelId: string) => void | Promise<void>;
-  modelProviderHint?: 'anthropic' | 'openai';
+  modelProviderHint?: 'anthropic' | 'openai' | 'google';
   modelLocked?: boolean;
   /** Pipeline error — present when stage === 'failed'. Renders error banner + disables input. */
   pipelineError?: PipelineError;

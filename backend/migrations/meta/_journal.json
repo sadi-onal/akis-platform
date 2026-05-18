@@ -379,6 +379,13 @@
       "when": 1779840000000,
       "tag": "0052_pipeline_awaiting_critic_resolution_stage",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1779926400000,
+      "tag": "0053_ai_provider_enum_google",
+      "breakpoints": true
     }
   ]
 }

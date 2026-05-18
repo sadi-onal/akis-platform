@@ -5,12 +5,14 @@ import { getUserActiveProvider, type AIKeyProvider } from '../services/ai/user-a
 
 export async function aiModelsRoutes(fastify: FastifyInstance) {
   /**
-   * GET /api/ai/supported-models?provider=anthropic|openai
+   * GET /api/ai/supported-models?provider=anthropic|openai|google
    * Returns provider-specific list of supported AI models for agent jobs.
    * If provider omitted, uses user's active provider from DB; default 'anthropic'.
    *
    * P1a: 'openai' returns DEFAULT_OPENAI_MODELS now that the runtime client
    * is wired up in AIService.
+   * P1c: 'google' returns DEFAULT_GOOGLE_MODELS.
+   * P12: 'google' is now also accepted by the endpoint enum (DB column too).
    */
   fastify.get(
     '/api/ai/supported-models',
@@ -21,7 +23,7 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
         querystring: {
           type: 'object',
           properties: {
-            provider: { type: 'string', enum: ['anthropic', 'openai'] },
+            provider: { type: 'string', enum: ['anthropic', 'openai', 'google'] },
           },
         },
         response: {
@@ -52,7 +54,7 @@ export async function aiModelsRoutes(fastify: FastifyInstance) {
       // If explicit provider param, use it
       const query = request.query as Record<string, string> | undefined;
       const providerParam = query?.provider;
-      if (providerParam === 'anthropic' || providerParam === 'openai') {
+      if (providerParam === 'anthropic' || providerParam === 'openai' || providerParam === 'google') {
         provider = providerParam;
       } else {
         // Try to get user's active provider from DB

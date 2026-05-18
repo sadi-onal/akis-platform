@@ -16,8 +16,13 @@ interface ModelPickerProps {
   value?: string;
   /** Called with the new model ID after the dropdown selection. Parent owns the API call. */
   onSelect: (modelId: string) => void | Promise<void>;
-  /** Optional provider hint (anthropic | openai) to seed the list. */
-  providerHint?: 'anthropic' | 'openai';
+  /**
+   * Optional provider hint — historically scoped the dropdown to one provider.
+   * P12 changed behavior: the dropdown now fetches all providers in parallel
+   * and groups them by header, so the hint is informational only (kept for
+   * backward-compat with ChatPanel; ignored by the fetch).
+   */
+  providerHint?: 'anthropic' | 'openai' | 'google';
   disabled?: boolean;
   /**
    * When true, the picker renders as a read-only pill with a lock icon and
@@ -36,7 +41,21 @@ interface ModelPickerProps {
  *
  * Styling mirrors `TokenGauge` so the two active-session pills line up.
  */
-export function ModelPicker({ value, onSelect, providerHint, disabled, locked, className }: ModelPickerProps) {
+/**
+ * Provider list the dropdown fetches in parallel. P12 — all three are runtime
+ * active (Anthropic P1a, OpenAI P1a #553, Google Gemini P1c #552); the picker
+ * shows every model across providers so users can switch lanes mid-chat.
+ */
+const ALL_PROVIDERS = ['anthropic', 'openai', 'google'] as const;
+
+/** Human label shown above each group in the dropdown. */
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  google: 'Google',
+};
+
+export function ModelPicker({ value, onSelect, providerHint: _providerHint, disabled, locked, className }: ModelPickerProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -50,14 +69,25 @@ export function ModelPicker({ value, onSelect, providerHint, disabled, locked, c
     // cause a re-run (and cleanup) immediately after setLoading(true), which
     // sets `cancelled=true` on the in-flight fetch and permanently stalls the
     // dropdown on "loading…" (issue #465).
+    //
+    // P12: fetch all providers in parallel so the dropdown lists Anthropic +
+    // OpenAI + Google together; a single provider's failure does not blank
+    // the whole list (the catch swallows it and falls back to []).
     if (!open || options.length > 0) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    workflowsApi.listSupportedModels(providerHint)
-      .then((res) => {
+    Promise.all(
+      ALL_PROVIDERS.map((p) =>
+        workflowsApi
+          .listSupportedModels(p)
+          .catch(() => ({ provider: p, models: [] as ModelOption[] }))
+      )
+    )
+      .then((results) => {
         if (cancelled) return;
-        setOptions(res.models ?? []);
+        const merged = results.flatMap((r) => r.models ?? []);
+        setOptions(merged);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -69,7 +99,7 @@ export function ModelPicker({ value, onSelect, providerHint, disabled, locked, c
     return () => {
       cancelled = true;
     };
-  }, [open, options.length, providerHint]);
+  }, [open, options.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,6 +135,17 @@ export function ModelPicker({ value, onSelect, providerHint, disabled, locked, c
 
   const display = value ? shortModelLabel(value) : t('chat.model.auto');
   const lockTooltip = locked && value ? t('chat.model.locked').replace('{model}', shortModelLabel(value)) : undefined;
+
+  // P12 — group options by provider so the dropdown body shows three sections
+  // (Anthropic / OpenAI / Google) instead of a flat list. Order follows
+  // ALL_PROVIDERS so the layout stays stable regardless of fetch order.
+  const grouped = options.reduce<Record<string, ModelOption[]>>((acc, opt) => {
+    (acc[opt.provider] ??= []).push(opt);
+    return acc;
+  }, {});
+  const orderedGroups = ALL_PROVIDERS
+    .map((prov) => [prov, grouped[prov] ?? []] as const)
+    .filter(([, opts]) => opts.length > 0);
 
   return (
     <div ref={rootRef} className={cn('relative hidden sm:flex', className)}>
@@ -163,31 +204,38 @@ export function ModelPicker({ value, onSelect, providerHint, disabled, locked, c
               {t('chat.model.empty')}
             </div>
           )}
-          {!loading && !error && options.map((opt) => (
-            <button
-              key={opt.id}
-              role="option"
-              aria-selected={opt.id === value}
-              onClick={() => handleSelect(opt.id)}
-              disabled={saving}
-              className={cn(
-                'flex w-full items-center justify-between gap-3 rounded-md px-3 py-1.5 text-left text-[11px] transition-colors',
-                opt.id === value
-                  ? 'bg-ak-primary/10 text-ak-primary'
-                  : 'text-ak-text-secondary hover:bg-ak-surface hover:text-ak-text-primary',
-                saving && 'opacity-50 cursor-not-allowed',
-              )}
-            >
-              <div className="flex flex-col">
-                <span className="font-mono">{opt.id}</span>
-                <span className="text-[10px] text-ak-text-tertiary">{opt.provider}</span>
+          {!loading && !error && orderedGroups.map(([prov, opts]) => (
+            <div key={prov} className="py-0.5">
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-ak-text-tertiary">
+                {PROVIDER_LABELS[prov] ?? prov}
               </div>
-              {opt.recommended && (
-                <span className="rounded bg-ak-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ak-primary">
-                  {t('chat.model.recommended')}
-                </span>
-              )}
-            </button>
+              {opts.map((opt) => (
+                <button
+                  key={opt.id}
+                  role="option"
+                  aria-selected={opt.id === value}
+                  onClick={() => handleSelect(opt.id)}
+                  disabled={saving}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-3 rounded-md px-3 py-1.5 text-left text-[11px] transition-colors',
+                    opt.id === value
+                      ? 'bg-ak-primary/10 text-ak-primary'
+                      : 'text-ak-text-secondary hover:bg-ak-surface hover:text-ak-text-primary',
+                    saving && 'opacity-50 cursor-not-allowed',
+                  )}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-mono">{opt.id}</span>
+                    <span className="text-[10px] text-ak-text-tertiary">{opt.provider}</span>
+                  </div>
+                  {opt.recommended && (
+                    <span className="rounded bg-ak-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ak-primary">
+                      {t('chat.model.recommended')}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}

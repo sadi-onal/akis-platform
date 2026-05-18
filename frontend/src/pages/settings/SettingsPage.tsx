@@ -29,7 +29,7 @@ interface ProfileData {
   avatarUrl?: string | null;
 }
 
-type Provider = 'anthropic' | 'openai';
+type Provider = 'anthropic' | 'openai' | 'google';
 
 interface ProviderStatus {
   configured: boolean;
@@ -70,10 +70,12 @@ interface PipelineStatsData {
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-// PR-A: OpenAI tab kept visible but flagged "yakında" — runtime client lands in PR-B B5.
+// P12: All three providers are runtime-active. P1a brought OpenAI (#553) and
+// P1c brought Google Gemini (#552); the "yakında" label was stale.
 const PROVIDERS: { key: Provider; label: string; description: string; placeholder: string }[] = [
   { key: 'anthropic', label: 'Anthropic (Claude)', description: 'claude-haiku-4-5', placeholder: 'sk-ant-...' },
-  { key: 'openai', label: 'OpenAI (yakında)', description: 'PR-B ile aktif olacak', placeholder: 'sk-...' },
+  { key: 'openai', label: 'OpenAI (GPT)', description: 'gpt-4o-mini', placeholder: 'sk-...' },
+  { key: 'google', label: 'Google (Gemini)', description: 'gemini-1.5-flash', placeholder: 'AIza...' },
 ];
 
 const STAGE_I18N_KEYS: Record<string, { key: string; color: string }> = {

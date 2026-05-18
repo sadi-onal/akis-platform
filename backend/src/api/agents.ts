@@ -465,7 +465,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
           // CRITICAL: Frontend selection MUST be respected - no cross-provider fallback
           // ========================================================================
           const payloadObj = body.payload as Record<string, unknown> | undefined;
-          const frontendProvider = payloadObj?.aiProvider as 'openai' | 'anthropic' | undefined;
+          const frontendProvider = payloadObj?.aiProvider as 'openai' | 'anthropic' | 'google' | undefined;
 
           logger.debug(`[agents.ts] Frontend sent aiProvider: ${frontendProvider || 'none'}`);
 
@@ -476,16 +476,19 @@ export async function agentsRoutes(fastify: FastifyInstance) {
           // Determine if we should use ENV AI (only when NO frontend provider AND ENV is configured)
           // IMPORTANT: If frontend explicitly sends a provider, we MUST NOT override it with ENV
           const useEnvAI = !frontendProvider &&
-                          (aiConfig.provider === 'anthropic' || aiConfig.provider === 'openai') &&
+                          (aiConfig.provider === 'anthropic' || aiConfig.provider === 'openai' || aiConfig.provider === 'google') &&
                           aiConfig.apiKey;
 
           logger.debug(`[agents.ts] useEnvAI=${useEnvAI}, envProvider=${aiConfig.provider}, hasEnvKey=${!!aiConfig.apiKey}`);
 
           if (!useEnvAI && !frontendProvider) {
             // No env AI and no frontend provider - check if user has any key configured
-            const anthropicStatus = await getUserAiKeyStatus(userId, 'anthropic');
-            const openaiStatus = await getUserAiKeyStatus(userId, 'openai');
-            if (!anthropicStatus.configured && !openaiStatus.configured) {
+            const [anthropicStatus, openaiStatus, googleStatus] = await Promise.all([
+              getUserAiKeyStatus(userId, 'anthropic'),
+              getUserAiKeyStatus(userId, 'openai'),
+              getUserAiKeyStatus(userId, 'google'),
+            ]);
+            if (!anthropicStatus.configured && !openaiStatus.configured && !googleStatus.configured) {
               throw new MissingAIKeyError('anthropic', 'No AI provider configured. Please add an API key in Settings > API Keys.');
             }
           }
@@ -505,7 +508,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
           logger.debug(`[agents.ts] Frontend sent model: ${frontendModel || 'none'} (checked modelId, model, llmModelOverride)`);
 
           // Helper to detect provider from model ID
-          const detectModelProvider = (model: string): 'openai' | 'anthropic' | 'unknown' => {
+          const detectModelProvider = (model: string): 'openai' | 'anthropic' | 'google' | 'unknown' => {
             if (model.startsWith('gpt-') || model.startsWith('o1') ||
                 model.startsWith('text-') || model.startsWith('davinci') ||
                 model.startsWith('o3')) {
@@ -513,6 +516,9 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             }
             if (model.startsWith('claude-')) {
               return 'anthropic';
+            }
+            if (model.startsWith('gemini-')) {
+              return 'google';
             }
             return 'unknown';
           };
@@ -638,7 +644,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
             // ========================================================================
             
             // Helper to get provider-safe model
-            const getProviderSafeModel = (provider: 'openai' | 'anthropic', requestedModel: string | null): string => {
+            const getProviderSafeModel = (provider: 'openai' | 'anthropic' | 'google', requestedModel: string | null): string => {
               if (!requestedModel) {
                 return RECOMMENDED_MODELS[provider];
               }
@@ -666,7 +672,7 @@ export async function agentsRoutes(fastify: FastifyInstance) {
               logger.debug(`[agents.ts] Using frontend provider: ${aiProvider}, model: ${aiModel}`);
             } else if (useEnvAI) {
               // No frontend provider, use env-based AI configuration
-              const envProvider = aiConfig.provider === 'openai' || aiConfig.provider === 'anthropic'
+              const envProvider = aiConfig.provider === 'openai' || aiConfig.provider === 'anthropic' || aiConfig.provider === 'google'
                 ? aiConfig.provider
                 : 'anthropic';
               aiProvider = envProvider;

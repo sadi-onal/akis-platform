@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ModelPicker } from '../ModelPicker';
 import { shortModelLabel } from '../../../utils/modelLabel';
 
@@ -13,17 +13,44 @@ vi.mock('../../../i18n/useI18n', () => ({
   }),
 }));
 
+// P12: dropdown now fetches all three providers in parallel; the mock returns
+// a different payload per provider so the grouped-render assertions are real.
 vi.mock('../../../services/api/workflows', () => ({
   workflowsApi: {
-    listSupportedModels: vi.fn().mockResolvedValue({
-      provider: 'anthropic',
-      models: [
-        { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku', provider: 'anthropic', recommended: true },
-        { id: 'gpt-4o-mini', name: 'GPT-4o mini', provider: 'openai', recommended: false },
-      ],
+    listSupportedModels: vi.fn((provider?: 'anthropic' | 'openai' | 'google') => {
+      if (provider === 'openai') {
+        return Promise.resolve({
+          provider: 'openai',
+          models: [
+            { id: 'gpt-4o-mini', name: 'GPT-4o mini', provider: 'openai', recommended: false },
+            { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', recommended: true },
+          ],
+        });
+      }
+      if (provider === 'google') {
+        return Promise.resolve({
+          provider: 'google',
+          models: [
+            { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'google', recommended: true },
+          ],
+        });
+      }
+      // Default + 'anthropic'
+      return Promise.resolve({
+        provider: 'anthropic',
+        models: [
+          { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku', provider: 'anthropic', recommended: true },
+        ],
+      });
     }),
   },
 }));
+
+import { workflowsApi } from '../../../services/api/workflows';
+
+beforeEach(() => {
+  vi.mocked(workflowsApi.listSupportedModels).mockClear();
+});
 
 describe('ModelPicker — trigger', () => {
   it('renders auto label when value is undefined', () => {
@@ -93,6 +120,64 @@ describe('ModelPicker — trigger', () => {
     // If `loading` never clears (the bug), this assertion will time out / fail.
     const options = await screen.findAllByRole('option');
     expect(options.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// P12: dropdown now lists every provider — not just one. These specs guard
+// the parallel fetch + grouped render so future "single provider only"
+// regressions get caught early.
+describe('ModelPicker — multi-provider dropdown (P12)', () => {
+  it('fetches all three providers in parallel when opened', async () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.model.ariaLabel' }));
+    // Wait for options to appear so the parallel fetch has actually fired.
+    await screen.findAllByRole('option');
+    const mock = vi.mocked(workflowsApi.listSupportedModels);
+    const providers = mock.mock.calls.map((c) => c[0]);
+    expect(providers).toEqual(expect.arrayContaining(['anthropic', 'openai', 'google']));
+    expect(providers).toHaveLength(3);
+  });
+
+  it('renders one model option per fetched model across providers (merged list)', async () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.model.ariaLabel' }));
+    const options = await screen.findAllByRole('option');
+    // Mock returns 1 anthropic + 2 openai + 1 google = 4 total
+    expect(options).toHaveLength(4);
+    expect(screen.getByText('claude-haiku-4-5-20251001')).toBeInTheDocument();
+    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.getByText('gemini-1.5-flash')).toBeInTheDocument();
+  });
+
+  it('renders a provider-group header for each non-empty provider', async () => {
+    render(<ModelPicker onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.model.ariaLabel' }));
+    await screen.findAllByRole('option');
+    // Group headers — rendered as plain text labels above the option buttons.
+    expect(screen.getByText('Anthropic')).toBeInTheDocument();
+    expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    expect(screen.getByText('Google')).toBeInTheDocument();
+  });
+
+  it('still resolves when one provider fetch rejects (graceful degrade)', async () => {
+    const mock = vi.mocked(workflowsApi.listSupportedModels);
+    mock.mockReset();
+    mock.mockImplementation((provider?: 'anthropic' | 'openai' | 'google') => {
+      if (provider === 'google') return Promise.reject(new Error('boom'));
+      return Promise.resolve({
+        provider: provider ?? 'anthropic',
+        models: [
+          { id: `${provider}-model`, name: 'M', provider: provider ?? 'anthropic', recommended: false },
+        ],
+      });
+    });
+    render(<ModelPicker onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.model.ariaLabel' }));
+    // The 2 successful provider fetches still produce options; the google
+    // rejection is swallowed by the per-provider .catch().
+    await waitFor(() => {
+      expect(screen.getAllByRole('option')).toHaveLength(2);
+    });
   });
 });
 

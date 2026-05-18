@@ -557,7 +557,7 @@ export const workflowsApi = {
   },
 
   listSupportedModels: async (
-    provider?: 'anthropic' | 'openai'
+    provider?: 'anthropic' | 'openai' | 'google'
   ): Promise<{
     provider: string;
     models: Array<{ id: string; name: string; provider: string; recommended: boolean }>;

@@ -11,9 +11,10 @@ import {
 } from '../../services/ai/user-ai-keys.js';
 import { sendError } from '../../utils/errorHandler.js';
 
-const providerSchema = z.enum(['anthropic', 'openai']);
+// P12: 'google' joined the union now that the DB enum and runtime accept Gemini.
+const providerSchema = z.enum(['anthropic', 'openai', 'google']);
 
-// API key validation: Anthropic (sk-ant-...), OpenAI (sk-...)
+// API key validation: Anthropic (sk-ant-...), OpenAI (sk-...), Google (AIza...)
 const apiKeySchema = z
   .string()
   .min(20, 'API key must be at least 20 characters')
@@ -44,7 +45,7 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
           200: {
             type: 'object',
             properties: {
-              activeProvider: { type: ['string', 'null'], enum: ['anthropic', 'openai', null] },
+              activeProvider: { type: ['string', 'null'], enum: ['anthropic', 'openai', 'google', null] },
               providers: {
                 type: 'object',
                 properties: {
@@ -57,6 +58,14 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
                     },
                   },
                   openai: {
+                    type: 'object',
+                    properties: {
+                      configured: { type: 'boolean' },
+                      last4: { type: ['string', 'null'] },
+                      updatedAt: { type: ['string', 'null'] },
+                    },
+                  },
+                  google: {
                     type: 'object',
                     properties: {
                       configured: { type: 'boolean' },
@@ -119,7 +128,7 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
           type: 'object',
           required: ['provider', 'apiKey'],
           properties: {
-            provider: { type: 'string', enum: ['anthropic', 'openai'] },
+            provider: { type: 'string', enum: ['anthropic', 'openai', 'google'] },
             apiKey: { type: 'string', minLength: 20 },
           },
         },
@@ -182,14 +191,14 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
           type: 'object',
           required: ['provider'],
           properties: {
-            provider: { type: 'string', enum: ['anthropic', 'openai'] },
+            provider: { type: 'string', enum: ['anthropic', 'openai', 'google'] },
           },
         },
         response: {
           200: {
             type: 'object',
             properties: {
-              activeProvider: { type: ['string', 'null'], enum: ['anthropic', 'openai', null] },
+              activeProvider: { type: ['string', 'null'], enum: ['anthropic', 'openai', 'google', null] },
               providers: {
                 type: 'object',
                 properties: {
@@ -202,6 +211,14 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
                     },
                   },
                   openai: {
+                    type: 'object',
+                    properties: {
+                      configured: { type: 'boolean' },
+                      last4: { type: ['string', 'null'] },
+                      updatedAt: { type: ['string', 'null'] },
+                    },
+                  },
+                  google: {
                     type: 'object',
                     properties: {
                       configured: { type: 'boolean' },
@@ -259,7 +276,7 @@ export async function aiKeysRoutes(fastify: FastifyInstance) {
           type: 'object',
           required: ['provider'],
           properties: {
-            provider: { type: 'string', enum: ['anthropic', 'openai'] },
+            provider: { type: 'string', enum: ['anthropic', 'openai', 'google'] },
           },
         },
         response: {
