@@ -25,23 +25,19 @@ export interface PipelineCinemaProps {
   className?: string;
 }
 
+// PR-F (2026-05-19): Cinema 5 column → 3 column refactor. Critic ana akıştan
+// guardrail'e çekildi; bulgular CriticFindingsInline (Proto kartı altında)
+// ve ExplanationPanel'de gösterilir. Kalan 3 column klasik Scribe → Proto →
+// Trace zinciri.
 const STAGE_LABEL: Record<CinemaStage, string> = {
   scribe: 'Scribe',
-  critic_spec: 'Critic · Spec',
   proto: 'Proto',
-  critic_code: 'Critic · Kod',
   trace: 'Trace',
 };
 
 const STAGE_TAGLINE: Record<CinemaStage, string> = {
   scribe: 'Fikir → Spec',
-  // PR-A + PR-B: Critic'in eski 'Adversarial review' İngilizce taglinesi
-  // PR-B'de 'Kalite eleştirisi' olarak Türkçeleştirilmişti; PR-A'da Critic
-  // critic_spec + critic_code'a bölündüğünde her ikisi de Türkçe taglinea
-  // çevrildi (spec'i inceler / kodu inceler — daha somut).
-  critic_spec: "Spec'i inceler",
   proto: 'Spec → Kod',
-  critic_code: 'Kodu inceler',
   trace: 'Kod → Test',
 };
 
@@ -51,19 +47,13 @@ const STAGE_TAGLINE: Record<CinemaStage, string> = {
 // ready (e.g. in unit tests).
 const STAGE_TOOLTIP_FALLBACK: Record<CinemaStage, string> = {
   scribe: 'Fikri spec\'e çevirir — kabul kriterleri ve kullanıcı hikayeleri',
-  critic_spec:
-    "Spec'i denetler — eksik kabul kriterleri, çelişen kurallar, belirsiz hikayeler",
   proto: 'Spec\'ten kod üretir — proje iskeleti ve uygulama dosyaları',
-  critic_code:
-    'Yapay zekâ tabanlı kalite incelemesi — spec uyumu, güvenlik açıkları, en iyi pratikler',
-  trace: 'Otomatik test üretir — Playwright ile uçtan uca testler',
+  trace:
+    'Otomatik test üretir; eksik kabul kriteri varsa Proto yeniden çalıştırılır',
 };
 
 // Per-agent identity colours. Scribe/Proto/Trace match the rest of the app
-// (see tailwind config: ak-scribe/proto/trace tokens). Critic Spec is rose,
-// Critic Kod is amber-red — both read as "review/scrutiny" without being
-// alarming, and the slight hue difference visually distinguishes the two
-// critic passes (PR-A Fix 4).
+// (see tailwind config: ak-scribe/proto/trace tokens).
 const STAGE_ACCENT: Record<CinemaStage, { dot: string; ring: string; tint: string; text: string }> =
   {
     scribe: {
@@ -72,23 +62,11 @@ const STAGE_ACCENT: Record<CinemaStage, { dot: string; ring: string; tint: strin
       tint: 'bg-ak-scribe/5',
       text: 'text-ak-scribe',
     },
-    critic_spec: {
-      dot: 'bg-rose-400',
-      ring: 'border-rose-400/60 shadow-[0_0_0_1px_rgb(251_113_133/0.25)]',
-      tint: 'bg-rose-400/5',
-      text: 'text-rose-500 dark:text-rose-300',
-    },
     proto: {
       dot: 'bg-ak-proto',
       ring: 'border-ak-proto/60 shadow-[0_0_0_1px_rgb(245_158_11/0.25)]',
       tint: 'bg-ak-proto/5',
       text: 'text-ak-proto',
-    },
-    critic_code: {
-      dot: 'bg-orange-500',
-      ring: 'border-orange-500/60 shadow-[0_0_0_1px_rgb(249_115_22/0.25)]',
-      tint: 'bg-orange-500/5',
-      text: 'text-orange-600 dark:text-orange-300',
     },
     trace: {
       dot: 'bg-ak-trace',
@@ -102,9 +80,7 @@ const STAGE_ACCENT: Record<CinemaStage, { dot: string; ring: string; tint: strin
 // translation key lookup is a single read in StageColumn.
 const STAGE_TOOLTIP_KEY: Record<CinemaStage, string> = {
   scribe: 'pipeline.stage.scribe.tooltip',
-  critic_spec: 'pipeline.stage.criticSpec.tooltip',
   proto: 'pipeline.stage.proto.tooltip',
-  critic_code: 'pipeline.stage.criticCode.tooltip',
   trace: 'pipeline.stage.trace.tooltip',
 };
 
@@ -118,7 +94,7 @@ function StageColumn({
   /** PR-A Fix 3: bakkal-Türkçesi hover text describing what this stage does. */
   tooltip: string;
 }) {
-  const { stage, state, latest, progress, reasoning } = view;
+  const { stage, state, latest, progress, reasoning, meta } = view;
   const accent = STAGE_ACCENT[stage];
   const messageText = latest?.message ?? '';
   const baseClass =
@@ -129,6 +105,15 @@ function StageColumn({
       : state === 'complete'
         ? 'border-ak-border-default'
         : 'border-ak-border-subtle opacity-60';
+  // PR-F: Trace iterate-loop retry rozetinin gösterileceği koşul. retryCount
+  // tanımlı ise (en az 1 retry tetiklenmişse) badge görünür; max bilinmiyorsa
+  // sadece "Test deniyor (n)" formatında düşer.
+  const retryBadge =
+    stage === 'trace' && meta?.retryCount !== undefined && meta.retryCount > 0
+      ? meta.maxRetries
+        ? `Test deniyor (${meta.retryCount}/${meta.maxRetries})`
+        : `Test deniyor (${meta.retryCount})`
+      : null;
   return (
     <div
       data-stage={stage}
@@ -147,12 +132,23 @@ function StageColumn({
           />
           <span className={`text-sm font-semibold ${accent.text}`}>{STAGE_LABEL[stage]}</span>
         </span>
-        {reasoning?.confidence !== undefined && (
-          // PR-E bulgu #2: stage card already owns a Türkçe tooltip (title +
-          // aria-label on the wrapper). Suppress the badge's own popover so
-          // the user never sees two tooltips stacked on hover.
-          <ConfidenceBadge score={reasoning.confidence} compact suppressTooltip />
-        )}
+        <span className="flex items-center gap-1.5">
+          {retryBadge && (
+            <span
+              data-testid="trace-retry-badge"
+              className="inline-flex items-center rounded-full border border-amber-400/60 bg-amber-400/10 px-1.5 py-0 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+              aria-label={retryBadge}
+            >
+              {retryBadge}
+            </span>
+          )}
+          {reasoning?.confidence !== undefined && (
+            // PR-E bulgu #2: stage card already owns a Türkçe tooltip (title +
+            // aria-label on the wrapper). Suppress the badge's own popover so
+            // the user never sees two tooltips stacked on hover.
+            <ConfidenceBadge score={reasoning.confidence} compact suppressTooltip />
+          )}
+        </span>
       </header>
       <p className="text-xs text-ak-text-tertiary">{STAGE_TAGLINE[stage]}</p>
       {state !== 'pending' && (
@@ -255,14 +251,15 @@ export function PipelineCinema({
           </button>
         </header>
       )}
-      {/* PR-A Fix 4: 5 columns now (Scribe · Critic·Spec · Proto · Critic·Kod · Trace).
-          Compact mode wraps to 2-up on phones and 5-up on sm; full mode keeps
-          single column on phone, 2 on small, 3 on md, 5 on lg. */}
+      {/* PR-F: 3 columns (Scribe · Proto · Trace). Critic ana akıştan
+          guardrail'e çekildiğinden bulgular ayrı kart olarak değil,
+          CriticFindingsInline + ExplanationPanel üzerinden gösteriliyor.
+          Mobil compact: 2 column → genişledikçe 3. */}
       <div
         className={`grid gap-2 ${
           compact
-            ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
-            : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+            ? 'grid-cols-1 sm:grid-cols-3'
+            : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
         }`}
       >
         {views.map((v) => (

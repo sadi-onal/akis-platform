@@ -34,4 +34,17 @@ export interface CriticReviewOutput {
   reviewType: 'spec_review' | 'code_review';
   /** Which review iteration this is */
   iteration: number;
+  /**
+   * PR-F (mimari refactor 2026-05-19): Critic ana akıştan "guardrail"
+   * konumuna çekildi. Pipeline yalnızca findings içinde severity=critical
+   * bir bulgu varsa `awaiting_critic_resolution`'a düşer. Bu alan o kararı
+   * görünür kılmak için normalize aşamasında hesaplanır.
+   */
+  hasCriticalFinding: boolean;
+  /**
+   * En yüksek severity. Findings boşsa 'info'. UI rozetleri için pratik
+   * (hasCriticalFinding alanına bakmak istemeyen callers buradan
+   * okuyabilir).
+   */
+  maxSeverity: 'critical' | 'major' | 'minor' | 'info';
 }

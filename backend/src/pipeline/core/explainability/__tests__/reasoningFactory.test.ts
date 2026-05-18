@@ -104,6 +104,8 @@ function makeCriticResult(overrides: Partial<CriticReviewOutput> = {}): CriticRe
     summary: 'Genel olarak uygun',
     reviewType: 'spec_review',
     iteration: 1,
+    hasCriticalFinding: false,
+    maxSeverity: 'minor',
     ...overrides,
   };
 }

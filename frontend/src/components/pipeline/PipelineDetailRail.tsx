@@ -13,6 +13,7 @@ import { AttentionBanner } from './AttentionBanner';
 import { RegressionPanel } from './RegressionPanel';
 import { PushConfirmGate } from './PushConfirmGate';
 import { CriticResolutionGate } from './CriticResolutionGate';
+import { CriticFindingsInline } from './CriticFindingsInline';
 import { AiCallsPanel } from './AiCallsPanel';
 import type { AiCallEntry } from '../../types/pipeline';
 
@@ -348,32 +349,46 @@ export function PipelineDetailRail({
   const tabBtnActive = 'bg-ak-primary/15 text-ak-primary ring-1 ring-inset ring-ak-primary/30';
   const tabBtnInactive = 'text-ak-text-secondary hover:bg-ak-surface-2 hover:text-ak-text-primary';
 
-  // Mini per-stage progress so a collapsed rail still answers "where is
-  // the pipeline?" at a glance. Mirrors PipelineCinema's STAGE_ORDER /
-  // colours but without bringing in the full component (smaller bundle,
-  // independent of cinema layout choices).
-  type MiniStage = 'scribe' | 'critic' | 'proto' | 'trace';
-  const MINI_ORDER: MiniStage[] = ['scribe', 'critic', 'proto', 'trace'];
+  // PR-F (2026-05-19): mini per-stage progress 3 column'a indirildi.
+  // Critic ana akıştan guardrail'e çekildi; critic_spec aktiviteleri
+  // Scribe column'unun, critic_code aktiviteleri Proto column'unun
+  // ilerlemesine sayılır (PipelineCinema.utils.reduceStageViews ile aynı
+  // mantık, mini bağlamda manuel).
+  type MiniStage = 'scribe' | 'proto' | 'trace';
+  const MINI_ORDER: MiniStage[] = ['scribe', 'proto', 'trace'];
   const MINI_LABEL: Record<MiniStage, string> = {
     scribe: 'Scribe',
-    critic: 'Critic',
     proto: 'Proto',
     trace: 'Trace',
   };
+  // Critic events fold into Scribe (phase=spec) or Proto (phase=code).
+  // Chronological fallback: if any proto activity already happened, treat
+  // as code-phase critic; else spec-phase.
+  let protoSeenForMini = false;
   const stageOf = (a: PipelineActivity): MiniStage | null => {
     switch (a.stage) {
       case 'scribe':
-      case 'critic':
-      case 'trace':
-        return a.stage;
+        return 'scribe';
+      case 'critic': {
+        if (a.criticPhase === 'spec') return 'scribe';
+        if (a.criticPhase === 'code') return 'proto';
+        return protoSeenForMini ? 'proto' : 'scribe';
+      }
       case 'proto':
       case 'fix-loop':
         return 'proto';
+      case 'trace':
+        return 'trace';
       default:
         return null;
     }
   };
   const lastStage: MiniStage | null = (() => {
+    // Walk activities forward to update protoSeenForMini, then pick the
+    // most recent non-null stage (currentStep takes precedence).
+    for (const a of activities) {
+      if (a.stage === 'proto' || a.stage === 'fix-loop') protoSeenForMini = true;
+    }
     if (currentStep) {
       const s = stageOf(currentStep);
       if (s) return s;
@@ -400,11 +415,9 @@ export function PipelineDetailRail({
     const colour =
       stage === 'scribe'
         ? 'bg-ak-scribe'
-        : stage === 'critic'
-          ? 'bg-rose-400'
-          : stage === 'proto'
-            ? 'bg-ak-proto'
-            : 'bg-ak-trace';
+        : stage === 'proto'
+          ? 'bg-ak-proto'
+          : 'bg-ak-trace';
     return `${base} ${colour} ${state === 'active' ? 'animate-pulse' : ''}`;
   };
 
@@ -560,6 +573,25 @@ export function PipelineDetailRail({
               compact
             />
           )}
+          {/* PR-F (2026-05-19): Critic ana akıştan guardrail'e çekildi.
+              Hard-block durumlarında CriticResolutionGate yukarıda zaten
+              render ediliyor; severity<critical olduğunda findings'in
+              kaybolmaması için inline kart Cinema'nın altına eklenir.
+              Hard-block aktifken duplicate önlemek için sadece
+              !criticGateActive durumunda gösterilir. */}
+          {effectiveTab === 'flow' &&
+            !criticGateActive &&
+            pipelineId &&
+            criticReview &&
+            (criticReview.findings?.length ?? 0) > 0 && (
+              <div className="mt-3">
+                <CriticFindingsInline
+                  pipelineId={pipelineId}
+                  criticReview={criticReview}
+                  onIterationStarted={onCriticResolved}
+                />
+              </div>
+            )}
           {effectiveTab === 'why' && (
             <>
               {explanationError && (

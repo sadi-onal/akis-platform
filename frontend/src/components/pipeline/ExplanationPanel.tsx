@@ -109,7 +109,7 @@ function findingKey(category: string, indexInCategory: number): string {
   return `${category}::${indexInCategory}`;
 }
 
-function CriticFindingsSection({
+export function CriticFindingsSection({
   findings,
   pipelineId,
   onIterationStarted,

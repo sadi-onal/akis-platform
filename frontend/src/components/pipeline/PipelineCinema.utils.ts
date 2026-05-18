@@ -1,23 +1,16 @@
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import type { ConversationUIState } from '../../types/chat';
 
-// PR-A Fix 4: Critic runs twice per pipeline — once on the spec (before
-// Proto) and once on the code (after Proto). The cinema row mirrors the
-// real pipeline by giving each phase its own column. Older code still
-// emits `stage: 'critic'`; the activity's `criticPhase` field (set by the
-// orchestrator) decides which column we route the event into. For replay
-// from DB rows where `criticPhase` is missing we fall back to: "if any
-// proto activity has already been observed in the buffer, route to
-// critic_code; else critic_spec".
-export type CinemaStage = 'scribe' | 'critic_spec' | 'proto' | 'critic_code' | 'trace';
+// PR-F (mimari refactor 2026-05-19): Cinema artık 3 column —
+// Scribe / Proto / Trace. Critic ana akıştan "guardrail" konumuna
+// çekildi: critic_spec aktiviteleri Scribe column'una, critic_code
+// aktiviteleri Proto column'una map'leniyor. Görsel olarak ayrı bir
+// kart yok; bulgular ExplanationPanel + CriticFindingsInline ile
+// gösteriliyor. PR-A öncesi 5-column görünümü (Scribe · Critic·Spec
+// · Proto · Critic·Kod · Trace) tasfiye edildi.
+export type CinemaStage = 'scribe' | 'proto' | 'trace';
 
-export const STAGE_ORDER: CinemaStage[] = [
-  'scribe',
-  'critic_spec',
-  'proto',
-  'critic_code',
-  'trace',
-];
+export const STAGE_ORDER: CinemaStage[] = ['scribe', 'proto', 'trace'];
 
 export interface StageView {
   stage: CinemaStage;
@@ -25,6 +18,16 @@ export interface StageView {
   latest: PipelineActivity | null;
   progress: number;
   reasoning: PipelineActivity['reasoning'] | undefined;
+  /** PR-F: Trace iterate-loop retry rozetinden parse edilen meta. */
+  meta?: StageMeta;
+}
+
+// PR-F: Trace retry badge için stage view'a opsiyonel meta ekleniyor.
+// `retryCount` ve `maxRetries` Trace iterate-loop'tan (`step: 'retry-trigger'`)
+// emit edilen activity'lerden çıkarılır.
+export interface StageMeta {
+  retryCount?: number;
+  maxRetries?: number;
 }
 
 // Map the orchestrator-level UI state to the cinema column that should
@@ -32,20 +35,18 @@ export interface StageView {
 // for gates (awaiting_approval / awaiting_push_confirm) and idle, so the
 // last-touched stage doesn't stay stuck on `active` while the user reads
 // the approval card.
-function activeStageFor(
-  uiState: ConversationUIState | undefined,
-  protoSeen: boolean
-): CinemaStage | undefined {
+function activeStageFor(uiState: ConversationUIState | undefined): CinemaStage | undefined {
   switch (uiState) {
     case 'scribe_clarifying':
     case 'scribe_running':
     case 'scribe_revise':
       return 'scribe';
     case 'critic_running':
-      // PR-A Fix 4: pick the right critic column. If Proto has already
-      // emitted activity, we must be in the second (code) review; else
-      // the first (spec) review.
-      return protoSeen ? 'critic_code' : 'critic_spec';
+      // PR-F: Critic ana column değil; UI state critic_running ise hangi
+      // faza ait olduğunu chronological context belirler. Spec critic'i
+      // hâlâ Scribe column'unda nabız atar; code critic'i Proto'da.
+      // (Routing reduceStageViews içinde protoSeenSoFar üzerinden yapılır.)
+      return undefined;
     case 'proto_running':
       return 'proto';
     case 'trace_running':
@@ -61,20 +62,19 @@ export function reduceStageViews(
   current: PipelineActivity | null,
   uiState?: ConversationUIState
 ): StageView[] {
-  // PR-A Fix 4: track whether Proto has been seen yet so a critic event
-  // with no `criticPhase` hint can be routed to the right column.
+  // PR-F: Critic guardrail mode — critic_spec aktiviteleri Scribe column'una,
+  // critic_code aktiviteleri Proto column'una map'lenir. `protoSeenSoFar`
+  // chronological fallback için tutulur (criticPhase belirtilmeyen eski
+  // row'lar veya replay senaryoları).
   let protoSeenSoFar = false;
   const stageOf = (a: PipelineActivity): CinemaStage | null => {
     switch (a.stage) {
       case 'scribe':
         return 'scribe';
       case 'critic': {
-        if (a.criticPhase === 'spec') return 'critic_spec';
-        if (a.criticPhase === 'code') return 'critic_code';
-        // Fallback: position by chronology. Cinema activities are
-        // chronological, so anything before the first proto event is a
-        // spec review; anything after is a code review.
-        return protoSeenSoFar ? 'critic_code' : 'critic_spec';
+        if (a.criticPhase === 'spec') return 'scribe';
+        if (a.criticPhase === 'code') return 'proto';
+        return protoSeenSoFar ? 'proto' : 'scribe';
       }
       case 'proto':
       case 'fix-loop':
@@ -89,6 +89,7 @@ export function reduceStageViews(
   const lastFor = new Map<CinemaStage, PipelineActivity>();
   const progressFor = new Map<CinemaStage, number>();
   const reasoningFor = new Map<CinemaStage, PipelineActivity['reasoning']>();
+  const metaFor = new Map<CinemaStage, StageMeta>();
 
   for (const a of activities) {
     const s = stageOf(a);
@@ -96,8 +97,19 @@ export function reduceStageViews(
     lastFor.set(s, a);
     if (a.progress !== undefined) progressFor.set(s, a.progress);
     if (a.reasoning) reasoningFor.set(s, a.reasoning);
-    // Update protoSeenSoFar AFTER routing so a proto event itself doesn't
-    // retroactively reroute earlier critic events.
+    // PR-F: Trace retry badge — `retry-trigger` step'inde retryCount alanı
+    // doludur ve message metni `... (n/m)` formatında. Aktif retry sayısını
+    // ve maxRetries'i parse edip stage meta'sına yazıyoruz; PipelineCinema
+    // bunu Trace column'unda küçük bir rozet olarak gösterir.
+    if (a.stage === 'trace' && a.step === 'retry-trigger') {
+      const existing = metaFor.get('trace') ?? {};
+      const max = parseTraceMaxRetries(a.message);
+      metaFor.set('trace', {
+        ...existing,
+        retryCount: a.retryCount ?? existing.retryCount,
+        maxRetries: max ?? existing.maxRetries,
+      });
+    }
     if (a.stage === 'proto' || a.stage === 'fix-loop') protoSeenSoFar = true;
   }
 
@@ -107,10 +119,8 @@ export function reduceStageViews(
   // leave the Critic column pulsing "denetliyor…" forever (Bulgu D).
   let activeStage: CinemaStage | undefined;
   if (uiState !== undefined) {
-    activeStage = activeStageFor(uiState, protoSeenSoFar);
+    activeStage = activeStageFor(uiState);
   } else if (current) {
-    // Reset protoSeenSoFar tracking for the `current` lookup so the
-    // single-activity case works correctly without re-iterating.
     let protoSeenForCurrent = false;
     for (const a of activities) {
       if (a === current) break;
@@ -124,9 +134,9 @@ export function reduceStageViews(
         case 'scribe':
           return 'scribe' as CinemaStage;
         case 'critic':
-          if (current.criticPhase === 'spec') return 'critic_spec' as CinemaStage;
-          if (current.criticPhase === 'code') return 'critic_code' as CinemaStage;
-          return (protoSeenForCurrent ? 'critic_code' : 'critic_spec') as CinemaStage;
+          if (current.criticPhase === 'spec') return 'scribe' as CinemaStage;
+          if (current.criticPhase === 'code') return 'proto' as CinemaStage;
+          return (protoSeenForCurrent ? 'proto' : 'scribe') as CinemaStage;
         case 'proto':
         case 'fix-loop':
           return 'proto' as CinemaStage;
@@ -144,6 +154,7 @@ export function reduceStageViews(
     const latest = lastFor.get(stage) ?? null;
     const progress = progressFor.get(stage) ?? 0;
     const reasoning = reasoningFor.get(stage);
+    const meta = metaFor.get(stage);
     let state: StageView['state'] = 'pending';
     if (activeIdx === -1) {
       state = latest ? 'complete' : 'pending';
@@ -154,6 +165,18 @@ export function reduceStageViews(
     } else {
       state = 'pending';
     }
-    return { stage, state, latest, progress, reasoning };
+    return { stage, state, latest, progress, reasoning, meta };
   });
+}
+
+/**
+ * PR-F — Trace iterate-loop retry mesajından maxRetries değerini çıkarır.
+ * Backend emit'i `... (2/3)` formatında message yazar; rejex onu yakalar.
+ * Yakalanamazsa undefined döner (eski activity'lerle backward-compat).
+ */
+function parseTraceMaxRetries(message: string): number | undefined {
+  const match = /\((\d+)\/(\d+)\)/.exec(message);
+  if (!match) return undefined;
+  const max = parseInt(match[2] ?? '', 10);
+  return Number.isFinite(max) ? max : undefined;
 }
