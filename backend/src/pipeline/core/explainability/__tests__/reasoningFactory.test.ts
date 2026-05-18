@@ -179,7 +179,7 @@ describe('buildProtoReasoning', () => {
     assert.equal(r.confidence.score, 70);
   });
 
-  it('low confidence + risk note when not committed', () => {
+  it('low confidence + bakkal-Türkçesi confidence factor when not committed', () => {
     const r = buildProtoReasoning(
       makeProtoOutput({
         metadata: {
@@ -191,7 +191,35 @@ describe('buildProtoReasoning', () => {
       })
     );
     assert.equal(r.confidence.score, 55);
-    assert.ok(r.risks && r.risks.length > 0);
+    // PR-A Fix 1: risks field removed for non-committed (not a real risk,
+    // just a status). Instead the confidence factor uses everyday Turkish.
+    assert.equal(r.risks, undefined);
+    assert.ok(
+      r.confidence.factors.some((f) => f.includes('Sadece local taslak')),
+      `expected a 'Sadece local taslak' factor, got: ${JSON.stringify(r.confidence.factors)}`
+    );
+  });
+
+  it('committed scaffold uses bakkal-Türkçesi "uzaktaki repoya gönderildi" factor', () => {
+    const r = buildProtoReasoning(
+      makeProtoOutput({
+        metadata: {
+          filesCreated: 8,
+          totalLinesOfCode: 240,
+          stackUsed: 'React + Vite',
+          committed: true,
+        },
+      })
+    );
+    assert.ok(
+      r.confidence.factors.some((f) => f === 'Uzaktaki repoya gönderildi'),
+      `expected 'Uzaktaki repoya gönderildi' factor, got: ${JSON.stringify(r.confidence.factors)}`
+    );
+    // And confirm the old jargon is gone
+    assert.ok(
+      !r.confidence.factors.some((f) => f.toLowerCase().includes("github'a gönderildi:")),
+      'old "GitHub\'a gönderildi: ..." factor should be removed'
+    );
   });
 
   it('decision contains file count and LOC', () => {

@@ -179,7 +179,10 @@ describe('useConversationState', () => {
       );
       expect(result.current.uiState).toBe('awaiting_critic_resolution');
       expect(result.current.inputPlaceholder).toContain('Kritik bulgu');
-      expect(result.current.inputPlaceholder).toContain('sağdaki');
+      // PR-A Fix 2: 'sağdaki butonu' was ambiguous — now the placeholder
+      // names both the location ('sağ panel') and the button label.
+      expect(result.current.inputPlaceholder).toContain('sağ paneldeki');
+      expect(result.current.inputPlaceholder).toContain("'Yine de devam et'");
     });
   });
 

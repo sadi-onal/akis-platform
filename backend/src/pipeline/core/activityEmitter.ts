@@ -36,6 +36,14 @@ export interface PipelineActivity {
    */
   activityKey?: string;
   /**
+   * PR-A Fix 4: distinguishes Critic spec review from Critic code review on
+   * the SSE bus. The stage stays `'critic'` (single agent) but the cinema
+   * view needs two columns — one before Proto, one after — so the frontend
+   * can route the event to the correct column. `undefined` for non-critic
+   * stages.
+   */
+  criticPhase?: 'spec' | 'code';
+  /**
    * Optional reasoning snippet attached for "cinema" / explainability
    * surfaces. Compact subset of AgentReasoning so the SSE payload stays
    * small; the full reasoning record is still queryable via
@@ -209,7 +217,11 @@ export function cleanupPipelineListeners(pipelineId: string): void {
   setTimeout(() => activityBuffers.delete(pipelineId), 5 * 60 * 1000).unref();
 }
 
-export function createActivityEmitter(pipelineId: string, stage: PipelineActivity['stage']) {
+export function createActivityEmitter(
+  pipelineId: string,
+  stage: PipelineActivity['stage'],
+  options: { criticPhase?: 'spec' | 'code' } = {}
+) {
   return (
     step: string,
     message: string,
@@ -228,6 +240,7 @@ export function createActivityEmitter(pipelineId: string, stage: PipelineActivit
       detail,
       retryCount,
       ...(activityKey ? { activityKey } : {}),
+      ...(options.criticPhase ? { criticPhase: options.criticPhase } : {}),
       ...(reasoning ? { reasoning } : {}),
       timestamp: new Date().toISOString(),
     });

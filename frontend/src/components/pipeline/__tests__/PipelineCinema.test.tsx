@@ -30,38 +30,48 @@ const mk = (overrides: Partial<PipelineActivity>): PipelineActivity => ({
   ...overrides,
 });
 
+// PR-A Fix 4: views are now 5-wide:
+//   [0] scribe, [1] critic_spec, [2] proto, [3] critic_code, [4] trace
 describe('reduceStageViews (pure)', () => {
   it('marks all stages pending when no activities', () => {
     const views = reduceStageViews([], null);
-    expect(views.map((v) => v.state)).toEqual(['pending', 'pending', 'pending', 'pending']);
+    expect(views.map((v) => v.state)).toEqual([
+      'pending',
+      'pending',
+      'pending',
+      'pending',
+      'pending',
+    ]);
   });
 
   it('marks stages left of current as complete and current as active', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', progress: 100 }),
+      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
       mk({ stage: 'proto', progress: 40 }),
     ];
     const current = acts[acts.length - 1]!;
     const views = reduceStageViews(acts, current);
     expect(views[0]!.state).toBe('complete'); // scribe
-    expect(views[1]!.state).toBe('complete'); // critic
+    expect(views[1]!.state).toBe('complete'); // critic_spec
     expect(views[2]!.state).toBe('active'); // proto
-    expect(views[3]!.state).toBe('pending'); // trace
+    expect(views[3]!.state).toBe('pending'); // critic_code
+    expect(views[4]!.state).toBe('pending'); // trace
     expect(views[2]!.progress).toBe(40);
   });
 
   it('marks current as complete when progress hits 100', () => {
     const acts: PipelineActivity[] = [mk({ stage: 'trace', progress: 100 })];
     const views = reduceStageViews(acts, acts[0]!);
-    expect(views[3]!.state).toBe('complete');
+    expect(views[4]!.state).toBe('complete');
   });
 
   it('folds fix-loop activity into Proto column', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', progress: 100 }),
+      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
       mk({ stage: 'proto', progress: 100 }),
+      mk({ stage: 'critic', criticPhase: 'code', progress: 100 }),
       mk({ stage: 'trace', progress: 60, message: 'trace fail' }),
       mk({ stage: 'fix-loop', progress: 30, message: 'fix retry' }),
     ];
@@ -72,10 +82,11 @@ describe('reduceStageViews (pure)', () => {
     expect(views[2]!.state).toBe('active');
   });
 
-  it('captures reasoning per stage when present', () => {
+  it('captures reasoning per critic phase when present', () => {
     const acts: PipelineActivity[] = [
       mk({
         stage: 'critic',
+        criticPhase: 'spec',
         progress: 100,
         reasoning: { decision: 'Spec onaylandi', confidence: 88 },
       }),
@@ -89,11 +100,13 @@ describe('reduceStageViews (pure)', () => {
     const acts: PipelineActivity[] = [
       mk({
         stage: 'critic',
+        criticPhase: 'spec',
         progress: 50,
         reasoning: { decision: 'Inceleniyor', confidence: 0 },
       }),
       mk({
         stage: 'critic',
+        criticPhase: 'spec',
         progress: 100,
         reasoning: { decision: 'Spec onaylandi', confidence: 92 },
       }),
@@ -113,13 +126,18 @@ describe('reduceStageViews (pure)', () => {
     expect(views[0]!.state).toBe('complete');
   });
 
-  it('Bulgu D: settles Critic to complete at awaiting_approval even when current is a stale critic activity', () => {
+  it('Bulgu D: settles Critic·Spec to complete at awaiting_approval even when current is a stale critic activity', () => {
     // Reproduces the bug: SSE buffer keeps the last critic activity as
     // `current` while the pipeline is parked at awaiting_approval. Without
     // a uiState hint the column would stay pulsing forever.
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', progress: 80, message: 'Spesifikasyon inceleniyor…' }),
+      mk({
+        stage: 'critic',
+        criticPhase: 'spec',
+        progress: 80,
+        message: 'Spesifikasyon inceleniyor…',
+      }),
     ];
     const current = acts[acts.length - 1]!;
     const views = reduceStageViews(acts, current, 'awaiting_approval');
@@ -129,38 +147,112 @@ describe('reduceStageViews (pure)', () => {
   it('uses uiState to drive activeIdx instead of latest activity stage', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', progress: 100 }),
+      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
       mk({ stage: 'proto', progress: 30 }),
     ];
     // Latest activity is proto, uiState says proto_running → proto is active
     const views = reduceStageViews(acts, acts[2]!, 'proto_running');
     expect(views[0]!.state).toBe('complete'); // scribe
-    expect(views[1]!.state).toBe('complete'); // critic
+    expect(views[1]!.state).toBe('complete'); // critic_spec
     expect(views[2]!.state).toBe('active'); // proto
-    expect(views[3]!.state).toBe('pending'); // trace
+    expect(views[3]!.state).toBe('pending'); // critic_code
+    expect(views[4]!.state).toBe('pending'); // trace
   });
 
   it('settles every touched stage to complete at awaiting_push_confirm', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', progress: 100 }),
+      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
       mk({ stage: 'proto', progress: 100 }),
+      mk({ stage: 'critic', criticPhase: 'code', progress: 100 }),
     ];
-    const views = reduceStageViews(acts, acts[2]!, 'awaiting_push_confirm');
+    const views = reduceStageViews(acts, acts[3]!, 'awaiting_push_confirm');
     expect(views[0]!.state).toBe('complete');
     expect(views[1]!.state).toBe('complete');
     expect(views[2]!.state).toBe('complete');
-    expect(views[3]!.state).toBe('pending');
+    expect(views[3]!.state).toBe('complete');
+    expect(views[4]!.state).toBe('pending');
+  });
+
+  // PR-A Fix 4: new — explicit critic split coverage
+  it('routes critic activity with criticPhase=spec into critic_spec column', () => {
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'critic',
+        criticPhase: 'spec',
+        progress: 100,
+        message: 'Spec inceleme bitti',
+        reasoning: { decision: 'Spec onaylandi', confidence: 80 },
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[0]!);
+    expect(views[1]!.stage).toBe('critic_spec');
+    expect(views[1]!.latest?.message).toBe('Spec inceleme bitti');
+    expect(views[3]!.stage).toBe('critic_code');
+    expect(views[3]!.latest).toBeNull();
+  });
+
+  it('routes critic activity with criticPhase=code into critic_code column', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
+      mk({ stage: 'proto', progress: 100 }),
+      mk({
+        stage: 'critic',
+        criticPhase: 'code',
+        progress: 100,
+        message: 'Kod inceleme bitti',
+        reasoning: { decision: 'Kod onaylandi', confidence: 75 },
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[3]!);
+    expect(views[3]!.stage).toBe('critic_code');
+    expect(views[3]!.latest?.message).toBe('Kod inceleme bitti');
+    expect(views[3]!.reasoning?.confidence).toBe(75);
+  });
+
+  it('falls back to chronology when criticPhase is missing (DB-reconstructed activity)', () => {
+    // Replay scenario: a backend restart left the cinema rebuilding from
+    // pipeline_activities rows, which (today) don't persist criticPhase.
+    // Cinema should still place the first critic batch before proto and
+    // the second after.
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'critic', progress: 100, message: 'spec review' }),
+      mk({ stage: 'proto', progress: 100 }),
+      mk({ stage: 'critic', progress: 100, message: 'code review' }),
+    ];
+    const views = reduceStageViews(acts, acts[3]!);
+    expect(views[1]!.latest?.message).toBe('spec review');
+    expect(views[3]!.latest?.message).toBe('code review');
   });
 });
 
 describe('PipelineCinema component', () => {
-  it('renders all four stages', () => {
+  it('renders all five stages including split critic columns', () => {
     render(<PipelineCinema activities={[]} currentStep={null} />);
     expect(screen.getByText('Scribe')).toBeInTheDocument();
-    expect(screen.getByText('Critic')).toBeInTheDocument();
+    // PR-A Fix 4: critic split into spec + kod
+    expect(screen.getByText('Critic · Spec')).toBeInTheDocument();
     expect(screen.getByText('Proto')).toBeInTheDocument();
+    expect(screen.getByText('Critic · Kod')).toBeInTheDocument();
     expect(screen.getByText('Trace')).toBeInTheDocument();
+  });
+
+  it('attaches bakkal-Türkçesi tooltip to each stage card (PR-A Fix 3)', () => {
+    const { container } = render(<PipelineCinema activities={[]} currentStep={null} />);
+    const stages: Array<{ name: string; expected: string }> = [
+      { name: 'scribe', expected: "Fikri spec'e çevirir" },
+      { name: 'critic_spec', expected: "Spec'i denetler" },
+      { name: 'proto', expected: "Spec'ten kod üretir" },
+      { name: 'critic_code', expected: 'kalite incelemesi' },
+      { name: 'trace', expected: 'Otomatik test üretir' },
+    ];
+    for (const { name, expected } of stages) {
+      const card = container.querySelector(`[data-stage="${name}"]`);
+      expect(card, `card for ${name} should exist`).toBeTruthy();
+      expect(card?.getAttribute('title')).toContain(expected);
+    }
   });
 
   it('renders compact toggle when callback provided', () => {

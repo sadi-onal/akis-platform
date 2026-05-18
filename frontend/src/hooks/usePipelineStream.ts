@@ -17,6 +17,13 @@ export interface PipelineActivity {
   /** i18n key (e.g. `pipeline.activity.proto.writing_files`) — use this if present, fall back to `message`. */
   activityKey?: string;
   /**
+   * PR-A Fix 4: critic agent runs twice per pipeline (once on the spec
+   * before Proto, once on the code after Proto). `criticPhase` lets the
+   * cinema render the two reviews as separate columns without inventing
+   * a fake stage on the backend.
+   */
+  criticPhase?: 'spec' | 'code';
+  /**
    * Optional reasoning snippet — present on critic/fix-loop completion
    * events to drive the cinema/explainability UI without a second fetch.
    */

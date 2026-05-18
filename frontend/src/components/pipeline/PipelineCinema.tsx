@@ -3,6 +3,7 @@ import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import type { ConversationUIState } from '../../types/chat';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useI18n } from '../../i18n/useI18n';
 import { reduceStageViews, type CinemaStage, type StageView } from './PipelineCinema.utils';
 
 export interface PipelineCinemaProps {
@@ -26,21 +27,39 @@ export interface PipelineCinemaProps {
 
 const STAGE_LABEL: Record<CinemaStage, string> = {
   scribe: 'Scribe',
-  critic: 'Critic',
+  critic_spec: 'Critic · Spec',
   proto: 'Proto',
+  critic_code: 'Critic · Kod',
   trace: 'Trace',
 };
 
 const STAGE_TAGLINE: Record<CinemaStage, string> = {
   scribe: 'Fikir → Spec',
-  critic: 'Adversarial review',
+  critic_spec: "Spec'i inceler",
   proto: 'Spec → Kod',
+  critic_code: 'Kodu inceler',
   trace: 'Kod → Test',
 };
 
+// PR-A Fix 3: bakkal-Türkçesi hover tooltips for the cinema columns. Mirror
+// the wording in the explanation rail so the same vocabulary describes
+// each agent everywhere. Falls back to the constant below if i18n is not
+// ready (e.g. in unit tests).
+const STAGE_TOOLTIP_FALLBACK: Record<CinemaStage, string> = {
+  scribe: 'Fikri spec\'e çevirir — kabul kriterleri ve kullanıcı hikayeleri',
+  critic_spec:
+    "Spec'i denetler — eksik kabul kriterleri, çelişen kurallar, belirsiz hikayeler",
+  proto: 'Spec\'ten kod üretir — proje iskeleti ve uygulama dosyaları',
+  critic_code:
+    'Yapay zekâ tabanlı kalite incelemesi — spec uyumu, güvenlik açıkları, en iyi pratikler',
+  trace: 'Otomatik test üretir — Playwright ile uçtan uca testler',
+};
+
 // Per-agent identity colours. Scribe/Proto/Trace match the rest of the app
-// (see tailwind config: ak-scribe/proto/trace tokens). Critic is rose —
-// the visual cue for "review/scrutiny" without being alarming-red.
+// (see tailwind config: ak-scribe/proto/trace tokens). Critic Spec is rose,
+// Critic Kod is amber-red — both read as "review/scrutiny" without being
+// alarming, and the slight hue difference visually distinguishes the two
+// critic passes (PR-A Fix 4).
 const STAGE_ACCENT: Record<CinemaStage, { dot: string; ring: string; tint: string; text: string }> =
   {
     scribe: {
@@ -49,7 +68,7 @@ const STAGE_ACCENT: Record<CinemaStage, { dot: string; ring: string; tint: strin
       tint: 'bg-ak-scribe/5',
       text: 'text-ak-scribe',
     },
-    critic: {
+    critic_spec: {
       dot: 'bg-rose-400',
       ring: 'border-rose-400/60 shadow-[0_0_0_1px_rgb(251_113_133/0.25)]',
       tint: 'bg-rose-400/5',
@@ -61,6 +80,12 @@ const STAGE_ACCENT: Record<CinemaStage, { dot: string; ring: string; tint: strin
       tint: 'bg-ak-proto/5',
       text: 'text-ak-proto',
     },
+    critic_code: {
+      dot: 'bg-orange-500',
+      ring: 'border-orange-500/60 shadow-[0_0_0_1px_rgb(249_115_22/0.25)]',
+      tint: 'bg-orange-500/5',
+      text: 'text-orange-600 dark:text-orange-300',
+    },
     trace: {
       dot: 'bg-ak-trace',
       ring: 'border-ak-trace/60 shadow-[0_0_0_1px_rgb(167_139_250/0.25)]',
@@ -69,7 +94,26 @@ const STAGE_ACCENT: Record<CinemaStage, { dot: string; ring: string; tint: strin
     },
   };
 
-function StageColumn({ view, reducedMotion }: { view: StageView; reducedMotion: boolean }) {
+// PR-A Fix 3: i18n keys for the tooltips. Kept as a separate map so the
+// translation key lookup is a single read in StageColumn.
+const STAGE_TOOLTIP_KEY: Record<CinemaStage, string> = {
+  scribe: 'pipeline.stage.scribe.tooltip',
+  critic_spec: 'pipeline.stage.criticSpec.tooltip',
+  proto: 'pipeline.stage.proto.tooltip',
+  critic_code: 'pipeline.stage.criticCode.tooltip',
+  trace: 'pipeline.stage.trace.tooltip',
+};
+
+function StageColumn({
+  view,
+  reducedMotion,
+  tooltip,
+}: {
+  view: StageView;
+  reducedMotion: boolean;
+  /** PR-A Fix 3: bakkal-Türkçesi hover text describing what this stage does. */
+  tooltip: string;
+}) {
   const { stage, state, latest, progress, reasoning } = view;
   const accent = STAGE_ACCENT[stage];
   const messageText = latest?.message ?? '';
@@ -82,7 +126,13 @@ function StageColumn({ view, reducedMotion }: { view: StageView; reducedMotion: 
         ? 'border-ak-border-default'
         : 'border-ak-border-subtle opacity-60';
   return (
-    <div data-stage={stage} data-state={state} className={`${baseClass} ${stateClass}`}>
+    <div
+      data-stage={stage}
+      data-state={state}
+      className={`${baseClass} ${stateClass}`}
+      title={tooltip}
+      aria-label={tooltip}
+    >
       <header className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2">
           <span
@@ -151,10 +201,26 @@ export function PipelineCinema({
   className,
 }: PipelineCinemaProps) {
   const reducedMotion = useReducedMotion();
+  const i18n = useI18n();
   const views = useMemo(
     () => reduceStageViews(activities, currentStep, uiState),
     [activities, currentStep, uiState]
   );
+
+  const tooltipFor = (stage: CinemaStage): string => {
+    // i18n.t expects a MessageKey, but we type the map as plain strings to
+    // keep the file self-contained. Cast through `unknown` so missing keys
+    // are caught by the i18n provider's warnMissingKey path instead of
+    // breaking the build when the catalogue lags behind.
+    const key = STAGE_TOOLTIP_KEY[stage] as unknown as Parameters<typeof i18n.t>[0];
+    const translated = i18n.t(key);
+    // When the key is missing the provider returns the key string itself;
+    // detect that and fall back to the hardcoded Turkish copy so users
+    // never see a raw key in the tooltip.
+    return translated === STAGE_TOOLTIP_KEY[stage]
+      ? STAGE_TOOLTIP_FALLBACK[stage]
+      : translated;
+  };
 
   return (
     <section
@@ -182,13 +248,23 @@ export function PipelineCinema({
           </button>
         </header>
       )}
+      {/* PR-A Fix 4: 5 columns now (Scribe · Critic·Spec · Proto · Critic·Kod · Trace).
+          Compact mode wraps to 2-up on phones and 5-up on sm; full mode keeps
+          single column on phone, 2 on small, 3 on md, 5 on lg. */}
       <div
         className={`grid gap-2 ${
-          compact ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+          compact
+            ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+            : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
         }`}
       >
         {views.map((v) => (
-          <StageColumn key={v.stage} view={v} reducedMotion={reducedMotion} />
+          <StageColumn
+            key={v.stage}
+            view={v}
+            reducedMotion={reducedMotion}
+            tooltip={tooltipFor(v.stage)}
+          />
         ))}
       </div>
       {approvalSlot && (

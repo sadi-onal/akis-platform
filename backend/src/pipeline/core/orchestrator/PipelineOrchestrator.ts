@@ -1520,7 +1520,7 @@ export class PipelineOrchestrator {
       });
       this.emitEvent(pipelineId, 'stage_change', 'critic_reviewing_code');
 
-      const criticCodeEmit = createActivityEmitter(pipelineId, 'critic');
+      const criticCodeEmit = createActivityEmitter(pipelineId, 'critic', { criticPhase: 'code' });
       criticCodeEmit(
         'start',
         'Üretilen kod inceleniyor (adversarial review)...',
@@ -2414,7 +2414,9 @@ export class PipelineOrchestrator {
         });
         this.emitEvent(pipelineId, 'stage_change', 'critic_reviewing_spec');
 
-        const criticSpecEmit = createActivityEmitter(pipelineId, 'critic');
+        const criticSpecEmit = createActivityEmitter(pipelineId, 'critic', {
+          criticPhase: 'spec',
+        });
         criticSpecEmit(
           'start',
           'Spesifikasyon inceleniyor (adversarial review)...',
