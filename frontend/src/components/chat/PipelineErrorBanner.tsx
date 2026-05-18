@@ -1,4 +1,5 @@
 import { cn } from '../../utils/cn';
+import { errorCodeToFriendlyMessage } from '../../utils/errorMessages';
 import type { PipelineError } from '../../types/pipeline';
 
 interface PipelineErrorBannerProps {
@@ -18,11 +19,14 @@ interface PipelineErrorBannerProps {
 
 /**
  * Prominent banner displayed above the chat scroll view when a pipeline
- * reaches the `failed` stage. Shows the user-friendly error message from
- * the backend, the error code, and action buttons (retry / skip-trace)
- * based on the error's `retryable` flag and `recoveryAction`.
+ * reaches the `failed` stage. Shows a bakkal-Türkçesi friendly title
+ * (derived from `error.code` via `errorCodeToFriendlyMessage`), a single
+ * actionable sentence, the raw backend message as a small technical line,
+ * and recovery buttons (retry / skip-trace / reconnect-github).
  *
  * Issue #480 (BUG-I). Retry-in-flight state added in #490 (BUG-N).
+ * P11 — error-code → severity/title classification (rate-limit vs kota vs
+ * zaman aşımı vs ağ) so a demo audience does not see "rate limit exceeded".
  */
 export function PipelineErrorBanner({
   error,
@@ -35,20 +39,63 @@ export function PipelineErrorBanner({
   const showSkipTrace = error.recoveryAction === 'skip-trace' && onSkipTrace;
   const showReconnectGitHub = error.recoveryAction === 'reconnect_github';
 
+  const friendly = errorCodeToFriendlyMessage(error.code, error.message);
+
+  // Severity drives the color palette of the banner.
+  const palette =
+    friendly.severity === 'warn'
+      ? {
+          border: 'border-amber-500/30',
+          bg: 'bg-amber-500/[0.08]',
+          icon: 'text-amber-400',
+          title: 'text-amber-200',
+          chipBorder: 'border-amber-500/20',
+          chipBg: 'bg-amber-500/10',
+          chipText: 'text-amber-300',
+        }
+      : friendly.severity === 'info'
+        ? {
+            border: 'border-sky-500/30',
+            bg: 'bg-sky-500/[0.08]',
+            icon: 'text-sky-400',
+            title: 'text-sky-200',
+            chipBorder: 'border-sky-500/20',
+            chipBg: 'bg-sky-500/10',
+            chipText: 'text-sky-300',
+          }
+        : {
+            border: 'border-red-500/30',
+            bg: 'bg-red-500/[0.08]',
+            icon: 'text-red-400',
+            title: 'text-red-300',
+            chipBorder: 'border-red-500/20',
+            chipBg: 'bg-red-500/10',
+            chipText: 'text-red-400',
+          };
+
+  // When we matched the code, the backend's raw message lives on a second
+  // line as a (smaller) technical detail. When unmatched, the raw message
+  // already lives in `friendly.detail` (regression-safe fallback path).
+  const showTechnicalLine =
+    friendly.matched && error.message && error.message !== friendly.detail;
+
   return (
     <div
       role="alert"
       aria-live="assertive"
       className={cn(
-        'flex flex-col gap-2 border-b border-red-500/30 bg-red-500/[0.08] px-4 py-3 text-sm',
+        'flex flex-col gap-2 border-b px-4 py-3 text-sm',
+        palette.border,
+        palette.bg,
         className,
       )}
       data-testid="pipeline-error-banner"
+      data-error-severity={friendly.severity}
     >
       {/* Title row */}
       <div className="flex items-start gap-2">
         <svg
-          className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400"
+          className={cn('mt-0.5 h-4 w-4 flex-shrink-0', palette.icon)}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -62,11 +109,30 @@ export function PipelineErrorBanner({
           />
         </svg>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="font-semibold text-red-300">Pipeline başarısız</span>
-          <span className="text-ak-text-secondary">{error.message}</span>
+          <span className={cn('font-semibold', palette.title)}>
+            {friendly.title}
+          </span>
+          <span className="text-ak-text-secondary" data-testid="banner-detail">
+            {friendly.detail}
+          </span>
+          {showTechnicalLine && (
+            <span
+              className="text-[11px] text-ak-text-muted"
+              data-testid="banner-technical-detail"
+            >
+              {error.message}
+            </span>
+          )}
         </div>
         {/* Error code chip */}
-        <span className="flex-shrink-0 rounded border border-red-500/20 bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] text-red-400">
+        <span
+          className={cn(
+            'flex-shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]',
+            palette.chipBorder,
+            palette.chipBg,
+            palette.chipText,
+          )}
+        >
           {error.code}
         </span>
       </div>
