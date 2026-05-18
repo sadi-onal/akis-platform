@@ -282,6 +282,20 @@ export interface AICallMetrics {
   estimatedCostUsd?: number | null;
   success: boolean;
   errorCode?: string;
+  /**
+   * P5a: optional payload content captured for persistence to `job_ai_calls`
+   * (consumed by the upcoming admin/debug viewer, P5b). Truncation happens
+   * at the persistence layer (TraceRecorder), not here — observers that
+   * don't care about content can ignore these fields. Older callers that
+   * only emit metrics keep working unchanged.
+   */
+  content?: {
+    systemPrompt?: string;
+    userPrompt?: string;
+    responseText?: string;
+    thinkingBlocks?: unknown;
+    toolCalls?: unknown;
+  };
 }
 
 export interface AIServiceObserver {
@@ -533,10 +547,23 @@ class RealAIService implements AIService {
    * the collector can accumulate them and the billing layer can price the
    * cache read (at ~0.10x) separately from a fresh input (at 1.00x).
    */
-  private parseAnthropicResponse(data: Record<string, unknown>): { content: string; usage?: AIUsage } {
-    const contentArray = data.content as Array<{ type: string; text: string }>;
-    const textBlocks = contentArray?.filter((b) => b.type === 'text') ?? [];
+  private parseAnthropicResponse(data: Record<string, unknown>): {
+    content: string;
+    usage?: AIUsage;
+    thinkingBlocks?: unknown[];
+    toolCalls?: unknown[];
+  } {
+    const contentArray = (data.content ?? []) as Array<Record<string, unknown>>;
+    const textBlocks = contentArray.filter((b) => b.type === 'text') as Array<{ text: string }>;
     const content = textBlocks.map((b) => b.text).join('');
+
+    // P5a: surface extended-thinking + tool_use blocks for AI call logging.
+    // We only forward the blocks themselves; the persistence layer decides
+    // whether to keep, truncate, or drop them.
+    const thinkingBlocks = contentArray.filter(
+      (b) => b.type === 'thinking' || b.type === 'redacted_thinking',
+    );
+    const toolCalls = contentArray.filter((b) => b.type === 'tool_use');
 
     const rawUsage = data.usage as
       | {
@@ -560,13 +587,22 @@ class RealAIService implements AIService {
         }
       : undefined;
 
-    return { content, usage };
+    return {
+      content,
+      usage,
+      thinkingBlocks: thinkingBlocks.length > 0 ? thinkingBlocks : undefined,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    };
   }
 
   /**
    * Parse OpenAI-compatible response into standard format
    */
-  private parseOpenAIResponse(data: ChatCompletionResponse): { content: string; usage?: AIUsage } {
+  private parseOpenAIResponse(data: ChatCompletionResponse): {
+    content: string;
+    usage?: AIUsage;
+    toolCalls?: unknown[];
+  } {
     if (!data.choices || data.choices.length === 0) {
       throw new AIProviderError('AI_INVALID_RESPONSE', 'AI API returned no choices', this.config.provider);
     }
@@ -579,7 +615,14 @@ class RealAIService implements AIService {
         }
       : undefined;
 
-    return { content: data.choices[0].message.content, usage };
+    // P5a: OpenAI exposes tool calls via `choices[0].message.tool_calls`.
+    // Thinking blocks are Anthropic-specific so OpenAI returns none.
+    const message = data.choices[0].message as { content: string; tool_calls?: unknown[] };
+    const toolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0
+      ? message.tool_calls
+      : undefined;
+
+    return { content: message.content, usage, toolCalls };
   }
 
   /**
@@ -766,6 +809,22 @@ class RealAIService implements AIService {
             )
           : null;
 
+        // P5a: forward prompt/response content to the observer so it can be
+        // persisted to `job_ai_calls`. We pull system + user from the
+        // `messages` argument (which is the same array we just sent to the
+        // provider) so we capture exactly what went over the wire.
+        const systemPrompt = messages
+          .filter((m) => m.role === 'system')
+          .map((m) => m.content)
+          .join('\n\n');
+        const userPrompt = messages
+          .filter((m) => m.role === 'user')
+          .map((m) => m.content)
+          .join('\n\n');
+        const anthropicThinking =
+          'thinkingBlocks' in parsed ? parsed.thinkingBlocks : undefined;
+        const parsedToolCalls = 'toolCalls' in parsed ? parsed.toolCalls : undefined;
+
         this.observer?.onAiCall({
           purpose,
           provider: this.config.provider,
@@ -774,6 +833,13 @@ class RealAIService implements AIService {
           usage: parsed.usage,
           estimatedCostUsd,
           success: true,
+          content: {
+            systemPrompt: systemPrompt || undefined,
+            userPrompt: userPrompt || undefined,
+            responseText: parsed.content,
+            thinkingBlocks: anthropicThinking,
+            toolCalls: parsedToolCalls,
+          },
         });
 
         return {
@@ -1164,31 +1230,30 @@ class MockAIService implements AIService {
   }
 
   async planTask(input: PlanInput): Promise<Plan> {
+    const plan = {
+      steps: [
+        { id: 'step-1', title: `Analyze ${input.agent} requirements`, detail: `Goal: ${input.goal}` },
+        { id: 'step-2', title: 'Design solution architecture', detail: 'Mock design phase' },
+        { id: 'step-3', title: 'Execute implementation', detail: 'Mock execution phase' },
+        { id: 'step-4', title: 'Validate output', detail: 'Mock validation phase' },
+      ],
+      rationale: `Mock plan for ${input.agent} agent to achieve: ${input.goal}`,
+    };
     this.observer?.onAiCall({
       purpose: 'plan',
       provider: 'mock',
       model: 'mock-model',
       success: true,
+      content: {
+        systemPrompt: '[mock] plan system prompt',
+        userPrompt: `[mock] plan for agent=${input.agent}, goal=${input.goal}`,
+        responseText: JSON.stringify(plan),
+      },
     });
-    // Deterministic mock plan based on agent type
-    return {
-      steps: [
-      { id: 'step-1', title: `Analyze ${input.agent} requirements`, detail: `Goal: ${input.goal}` },
-      { id: 'step-2', title: 'Design solution architecture', detail: 'Mock design phase' },
-      { id: 'step-3', title: 'Execute implementation', detail: 'Mock execution phase' },
-      { id: 'step-4', title: 'Validate output', detail: 'Mock validation phase' },
-      ],
-      rationale: `Mock plan for ${input.agent} agent to achieve: ${input.goal}`,
-    };
+    return plan;
   }
 
   async generateWorkArtifact(input: WorkerInput): Promise<WorkerResult> {
-    this.observer?.onAiCall({
-      purpose: 'generate',
-      provider: 'mock',
-      model: 'mock-model',
-      success: true,
-    });
 
     // Pipeline-aware mock responses based on system prompt keywords
     const sys = (input.systemPrompt ?? '').toLowerCase();
@@ -1225,6 +1290,18 @@ class MockAIService implements AIService {
       content = `Mock generated content for task: ${input.task}`;
     }
 
+    this.observer?.onAiCall({
+      purpose: 'generate',
+      provider: 'mock',
+      model: 'mock-model',
+      success: true,
+      content: {
+        systemPrompt: input.systemPrompt,
+        userPrompt: input.task,
+        responseText: content,
+      },
+    });
+
     return {
       content,
       metadata: {
@@ -1235,14 +1312,8 @@ class MockAIService implements AIService {
     };
   }
 
-  async reflectOnArtifact(_input: ReflectionInput): Promise<Critique> {
-    this.observer?.onAiCall({
-      purpose: 'reflect',
-      provider: 'mock',
-      model: 'mock-model',
-      success: true,
-    });
-    return {
+  async reflectOnArtifact(input: ReflectionInput): Promise<Critique> {
+    const critique: Critique = {
       issues: [
         'Mock issue: Ensure all steps are executable',
         'Mock issue: Validate artifact completeness',
@@ -1253,22 +1324,46 @@ class MockAIService implements AIService {
       ],
       severity: 'low',
     };
-  }
-
-  async validateWithStrongModel(_input: ValidationInput): Promise<ValidationResult> {
     this.observer?.onAiCall({
-      purpose: 'validate',
+      purpose: 'reflect',
       provider: 'mock',
       model: 'mock-model',
       success: true,
+      content: {
+        systemPrompt: '[mock] reflect system prompt',
+        userPrompt:
+          typeof input.artifact === 'string'
+            ? input.artifact
+            : JSON.stringify(input.artifact),
+        responseText: JSON.stringify(critique),
+      },
     });
-    return {
+    return critique;
+  }
+
+  async validateWithStrongModel(input: ValidationInput): Promise<ValidationResult> {
+    const result: ValidationResult = {
       passed: true,
       confidence: 0.85,
       issues: [],
       suggestions: ['Mock suggestion: Consider adding more tests'],
       summary: 'Mock validation passed with high confidence',
     };
+    this.observer?.onAiCall({
+      purpose: 'validate',
+      provider: 'mock',
+      model: 'mock-model',
+      success: true,
+      content: {
+        systemPrompt: '[mock] validate system prompt',
+        userPrompt:
+          typeof input.artifact === 'string'
+            ? input.artifact
+            : JSON.stringify(input.artifact),
+        responseText: JSON.stringify(result),
+      },
+    });
+    return result;
   }
 }
 

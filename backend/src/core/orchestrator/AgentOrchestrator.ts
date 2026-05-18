@@ -1034,13 +1034,21 @@ export class AgentOrchestrator {
     const observer: AIServiceObserver = {
       onAiCall: (call) => {
         metrics.record(call);
-        traceRecorder.recordAiCall(call.purpose, call.success, call.durationMs ?? undefined, {
-          provider: call.provider,
-          model: call.model,
-          usage: call.usage,
-          estimatedCostUsd: call.estimatedCostUsd ?? undefined,
-          errorCode: call.errorCode,
-        });
+        traceRecorder.recordAiCall(
+          call.purpose,
+          call.success,
+          call.durationMs ?? undefined,
+          {
+            provider: call.provider,
+            model: call.model,
+            usage: call.usage,
+            estimatedCostUsd: call.estimatedCostUsd ?? undefined,
+            errorCode: call.errorCode,
+          },
+          // P5a: forward prompt/response content so TraceRecorder can persist
+          // it to `job_ai_calls` (truncated to AI_LOG_CONTENT_MAX_BYTES).
+          call.content,
+        );
       },
     };
 

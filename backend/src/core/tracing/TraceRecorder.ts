@@ -8,6 +8,21 @@ import { db } from '../../db/client.js';
 import { jobTraces, jobArtifacts, jobAiCalls, type NewJobTrace, type NewJobArtifact, type NewJobAiCall } from '../../db/schema.js';
 import { jobEventBus } from '../events/JobEventBus.js';
 import { logger } from '../../lib/logger.js';
+import { truncateForLog, truncateStructuredForLog } from '../../services/ai/truncatePromptContent.js';
+
+/**
+ * P5a: max bytes of prompt/response content persisted per AI call.
+ * Resolved lazily from `process.env` rather than via the typed env loader so
+ * test environments (which set NODE_ENV=test without booting env.ts) can
+ * still get a working default.
+ */
+function getAiLogContentMaxBytes(): number {
+  const raw = process.env.AI_LOG_CONTENT_MAX_BYTES;
+  if (!raw) return 100_000;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 100_000;
+  return parsed;
+}
 
 export type TraceEventType = 
   | 'step_start'
@@ -488,6 +503,11 @@ export class TraceRecorder {
   /**
    * Record an AI call with detailed metrics for breakdown
    * Persists to both jobTraces (for timeline) and jobAiCalls (for metrics breakdown)
+   *
+   * P5a: optional `content` carries the actual prompt/response payload for
+   * the upcoming admin/debug viewer (P5b). Values are truncated to
+   * `AI_LOG_CONTENT_MAX_BYTES` (default 100KB) per field before insert so a
+   * single huge call cannot blow up the row.
    */
   recordAiCall(
     purpose: string,
@@ -499,6 +519,13 @@ export class TraceRecorder {
       usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
       estimatedCostUsd?: number;
       errorCode?: string;
+    },
+    content?: {
+      systemPrompt?: string;
+      userPrompt?: string;
+      responseText?: string;
+      thinkingBlocks?: unknown;
+      toolCalls?: unknown;
     }
   ): void {
     // Record to job_traces for timeline view
@@ -512,6 +539,7 @@ export class TraceRecorder {
 
     // Record to job_ai_calls for metrics breakdown (if we have provider/model)
     if (detail?.provider && detail?.model) {
+      const maxBytes = getAiLogContentMaxBytes();
       const aiCallRecord: NewJobAiCall = {
         jobId: this.jobId,
         callIndex: this.aiCallIndex++,
@@ -525,6 +553,24 @@ export class TraceRecorder {
         estimatedCostUsd: detail.estimatedCostUsd !== undefined ? String(detail.estimatedCostUsd) : null,
         success,
         errorCode: detail.errorCode ?? null,
+        // P5a: content fields (nullable, truncated to byte budget)
+        systemPrompt: truncateForLog(content?.systemPrompt, maxBytes) ?? null,
+        userPrompt: truncateForLog(content?.userPrompt, maxBytes) ?? null,
+        responseText: truncateForLog(content?.responseText, maxBytes) ?? null,
+        thinkingBlocks:
+          content?.thinkingBlocks !== undefined
+            ? (truncateStructuredForLog(content.thinkingBlocks, maxBytes) as unknown as
+                | Record<string, unknown>
+                | unknown[]
+                | null)
+            : null,
+        toolCalls:
+          content?.toolCalls !== undefined
+            ? (truncateStructuredForLog(content.toolCalls, maxBytes) as unknown as
+                | Record<string, unknown>
+                | unknown[]
+                | null)
+            : null,
       };
       this.pendingAiCalls.push(aiCallRecord);
       
