@@ -11,7 +11,6 @@ import {
   isModelCompatibleWithProvider,
   getRecommendedModel,
   getAllKnownModels,
-  getScribeModelAllowlistByProvider,
   DEFAULT_ANTHROPIC_MODELS,
   DEFAULT_OPENAI_MODELS,
   DEFAULT_GOOGLE_MODELS,
