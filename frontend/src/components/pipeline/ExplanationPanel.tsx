@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { PipelineExplanation, AgentReasoning, ReasoningFinding } from '../../types/pipeline';
+import type {
+  PipelineExplanation,
+  AgentReasoning,
+  ReasoningFinding,
+  AcCoverageReport,
+} from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
 import { useI18n } from '../../i18n/useI18n';
 import { ConfidenceBadge } from './ConfidenceBadge';
+import { AcCoverageChecklist } from './AcCoverageChecklist';
 
 // Hard ceiling enforced by the backend feedback schema (B5,
 // `IterateFeedbackRequestSchema.feedback.max(2000)`). We mirror it
@@ -320,6 +326,12 @@ export interface ExplanationPanelProps {
   onIterationStarted?: () => void;
   /** PR-C: DI for tests — defaults to `workflowsApi.iterateWithFeedback`. */
   iterateWithFeedback?: (id: string, feedback: string) => Promise<unknown>;
+  /**
+   * PR-D: per-AC binary coverage report. When provided, the Proto reasoning
+   * card renders the AC checklist instead of (or alongside) the bullet
+   * list. Sourced from `pipeline.intermediateState.acCoverage` by the host.
+   */
+  acCoverage?: AcCoverageReport;
 }
 
 const AGENT_LABEL: Record<string, string> = {
@@ -354,6 +366,13 @@ interface ReasoningCardProps {
   pipelineId?: string;
   onIterationStarted?: () => void;
   iterateWithFeedback?: (id: string, feedback: string) => Promise<unknown>;
+  /**
+   * PR-D: when this card is for Proto AND the host supplied an
+   * AcCoverageReport, render the per-AC binary checklist between the
+   * decision line and the bullet list. Falls through to the legacy
+   * bullets when omitted, so existing callers + tests stay green.
+   */
+  acCoverage?: AcCoverageReport;
 }
 
 function ReasoningCard({
@@ -363,8 +382,11 @@ function ReasoningCard({
   pipelineId,
   onIterationStarted,
   iterateWithFeedback,
+  acCoverage,
 }: ReasoningCardProps) {
   const hasStructuredFindings = !!stage.findings && stage.findings.length > 0;
+  const showAcChecklist =
+    stage.agentName === 'proto' && !!acCoverage && acCoverage.totalAcs > 0;
   const hasDetail =
     stage.assumptions.length > 0 ||
     (stage.alternatives && stage.alternatives.length > 0) ||
@@ -391,7 +413,9 @@ function ReasoningCard({
       {/* When the agent produced structured findings (Critic), render them
           grouped by category so users can parse "neden geçmedi" — instead
           of a flat bullet list. Falls back to bullets for other agents
-          and for older runs that lack the findings field. */}
+          and for older runs that lack the findings field. PR-D adds a
+          Proto-specific path: when AC coverage is available, render the
+          per-AC binary checklist in place of the bullet list. */}
       {hasStructuredFindings ? (
         <div className="mt-2">
           <CriticFindingsSection
@@ -400,6 +424,10 @@ function ReasoningCard({
             onIterationStarted={onIterationStarted}
             iterateWithFeedback={iterateWithFeedback}
           />
+        </div>
+      ) : showAcChecklist ? (
+        <div className="mt-2">
+          <AcCoverageChecklist report={acCoverage!} />
         </div>
       ) : (
         stage.reasoning.length > 0 && (
@@ -472,6 +500,7 @@ export function ExplanationPanel({
   hideAttentionBanner: _hideAttentionBanner = false,
   onIterationStarted,
   iterateWithFeedback,
+  acCoverage,
 }: ExplanationPanelProps) {
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(priming ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -575,6 +604,7 @@ export function ExplanationPanel({
             pipelineId={pipelineId}
             onIterationStarted={onIterationStarted}
             iterateWithFeedback={iterateWithFeedback}
+            acCoverage={acCoverage}
           />
         ))}
       </div>

@@ -186,6 +186,13 @@ export interface Workflow {
     manuallyOverridden: boolean;
     overriddenAt?: string;
   };
+  /**
+   * PR-D — per-AC binary coverage checklist (mirror of
+   * `pipeline.intermediateState.acCoverage`). Threaded into ChatPanel →
+   * PipelineDetailRail → ExplanationPanel so the Proto reasoning card
+   * renders the checklist instead of the legacy bullet list.
+   */
+  acCoverage?: import('./pipeline').AcCoverageReport;
 }
 
 export interface WorkflowStats {

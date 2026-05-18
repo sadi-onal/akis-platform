@@ -53,6 +53,7 @@ import {
   buildTraceReasoning,
   buildCriticReasoning,
 } from '../explainability/reasoningFactory.js';
+import { buildAcCoverage } from '../explainability/acCoverage.js';
 import { LearningService } from '../learning/LearningService.js';
 import { buildUnifiedAgentKnowledgeContext } from '../unifiedPipelineContext.js';
 import {
@@ -450,9 +451,36 @@ export class PipelineOrchestrator {
   /** Level 4: Explainability — Proto reasoning after scaffold push. */
   private recordProtoReasoning(
     pipelineId: string,
-    output: import('../contracts/PipelineTypes.js').ProtoOutput
+    output: import('../contracts/PipelineTypes.js').ProtoOutput,
+    scribeOutput?: import('../contracts/PipelineTypes.js').ScribeOutput
   ): void {
-    this.persistReasoning(pipelineId, buildProtoReasoning(output));
+    this.persistReasoning(pipelineId, buildProtoReasoning(output, { scribeOutput }));
+  }
+
+  /**
+   * PR-D: Compute AC coverage report from the current pipeline outputs and
+   * merge it into `intermediateState.acCoverage`. Read-modify-write keeps
+   * existing keys (criticBlock, criticCodeOutput, …) intact. Best-effort —
+   * persistence failures are swallowed with a warning so a transient DB hiccup
+   * doesn't crash the orchestrator.
+   */
+  private async persistAcCoverage(
+    pipelineId: string,
+    protoOutput: import('../contracts/PipelineTypes.js').ProtoOutput,
+    scribeOutput: import('../contracts/PipelineTypes.js').ScribeOutput | undefined,
+    traceOutput?: import('../contracts/PipelineTypes.js').TraceOutput
+  ): Promise<void> {
+    try {
+      const report = buildAcCoverage(scribeOutput, protoOutput, traceOutput);
+      if (report.totalAcs === 0) return; // nothing to persist if spec had no AC
+      const current = await this.store.getById(pipelineId);
+      const existing = (current?.intermediateState ?? {}) as Record<string, unknown>;
+      await this.store.update(pipelineId, {
+        intermediateState: { ...existing, acCoverage: report },
+      });
+    } catch (err) {
+      logger.warn({ err, pipelineId }, '[Pipeline] Failed to persist acCoverage');
+    }
   }
 
   /** Level 4: Explainability — Trace reasoning after test generation. */
@@ -1593,7 +1621,11 @@ export class PipelineOrchestrator {
       // NOT advance to Trace or any GitHub push, which is the whole point
       // of the gate.
       if (criticResult && criticResult.approved === false) {
-        this.recordProtoReasoning(pipelineId, protoResult.data);
+        this.recordProtoReasoning(pipelineId, protoResult.data, pipeline.scribeOutput);
+        // PR-D: persist AC coverage even when Critic blocks — the user
+        // still wants to see which kabul kriteri the (rejected) scaffold
+        // does/doesn't address while deciding to iterate vs override.
+        await this.persistAcCoverage(pipelineId, protoResult.data, pipeline.scribeOutput);
         const currentStateForBlock = await this.store.getById(pipelineId);
         const existingIntermediateBlock = (currentStateForBlock?.intermediateState ?? {}) as Record<
           string,
@@ -1628,7 +1660,10 @@ export class PipelineOrchestrator {
     }
 
     // Level 4: Explainability — record Proto reasoning
-    this.recordProtoReasoning(pipelineId, protoResult.data);
+    this.recordProtoReasoning(pipelineId, protoResult.data, pipeline.scribeOutput);
+    // PR-D: AC coverage report — per-AC binary checklist surfaced in
+    // intermediateState.acCoverage for the explanation rail to render.
+    await this.persistAcCoverage(pipelineId, protoResult.data, pipeline.scribeOutput);
 
     // PDP-3 B4: preview-confirm gate — Proto ran in dryRun, files are in
     // protoOutput but nothing landed on GitHub yet. Persist the dryRun
@@ -2820,6 +2855,19 @@ export class PipelineOrchestrator {
 
     // Level 4: Explainability — record Trace reasoning
     this.recordTraceReasoning(pipelineId, traceResult.data);
+    // PR-D: Trace ran successfully — recompute AC coverage with the dynamic
+    // (test ↔ AC) layer filled in. Static layer stays the same (from Proto).
+    {
+      const pipelineAfterTrace = await this.store.getById(pipelineId);
+      if (pipelineAfterTrace?.protoOutput) {
+        await this.persistAcCoverage(
+          pipelineId,
+          pipelineAfterTrace.protoOutput,
+          pipelineAfterTrace.scribeOutput,
+          traceResult.data
+        );
+      }
+    }
 
     // Record learning for successful pipeline
     this.learningService.recordOutcome(pipelineId, 'trace', {

@@ -380,6 +380,11 @@ export function mapPipelineToWorkflow(
       ? (rawCriticBlock as Workflow['criticBlock'])
       : undefined;
 
+  // PR-D: surface the per-AC binary coverage checklist alongside critic
+  // metadata so the Explanation panel's Proto card can render it without
+  // having to traverse intermediateState itself.
+  const acCoverage = pipeline.intermediateState?.acCoverage;
+
   return {
     id: pipeline.id,
     traceEnabled: pipeline.traceEnabled ?? false,
@@ -396,6 +401,7 @@ export function mapPipelineToWorkflow(
     error: pipeline.error,
     criticReview,
     criticBlock,
+    acCoverage,
   };
 }
 

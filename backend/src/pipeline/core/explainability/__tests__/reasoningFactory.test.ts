@@ -155,31 +155,75 @@ describe('buildScribeReasoning', () => {
 // ─── Proto ───────────────────────────────────────────────────
 
 describe('buildProtoReasoning', () => {
-  it('high confidence when committed and 6+ files', () => {
+  // PR-D: confidence formula moved from heuristic (committed && files≥6 → 88,
+  // committed → 70, else → 55) to AC coverage ratio when scribeOutput is
+  // provided. Without scribeOutput we keep a neutral status-based fallback
+  // (committed → 70, else → 50) so legacy call sites don't break.
+  it('uses AC coverage ratio for confidence when scribeOutput is provided', () => {
+    // 3 AC, 2 of them will static-match the proto files. We use a hand-rolled
+    // AC list (rather than makeScribeOutput defaults) so keyword matching is
+    // explicit + readable.
+    const scribe = makeScribeOutput({
+      spec: {
+        ...makeScribeOutput().spec,
+        acceptanceCriteria: [
+          { id: 'ac-1', given: 'g', when: 'toplama butonu', then: 'toplam değer gösterilir' },
+          { id: 'ac-2', given: 'g', when: 'çarpma butonu', then: 'çarpım değer gösterilir' },
+          { id: 'ac-3', given: 'g', when: 'paylaş butonu', then: 'sosyal medya bağlantısı' },
+        ],
+      } as unknown as ScribeOutput['spec'],
+    });
     const r = buildProtoReasoning(
       makeProtoOutput({
+        files: [
+          {
+            filePath: 'src/calc.ts',
+            content: 'function toplama() { /* sum */ }',
+            linesOfCode: 5,
+          },
+          {
+            filePath: 'src/multiply.ts',
+            content: 'export function çarpma(a, b) { return a * b }',
+            linesOfCode: 5,
+          },
+        ],
         metadata: {
           filesCreated: 8,
           totalLinesOfCode: 240,
           stackUsed: 'React + Vite',
           committed: true,
         },
-      })
+      }),
+      { scribeOutput: scribe }
     );
-    assert.equal(r.confidence.score, 88);
-    assert.equal(r.risks, undefined);
+    // 2/3 AC covered → 67 (ac-3 mentions "paylaş/sosyal/medya" — no Proto match)
+    assert.equal(
+      r.confidence.score,
+      67,
+      `expected 67, got ${r.confidence.score} (factors=${JSON.stringify(r.confidence.factors)})`
+    );
+    assert.ok(
+      r.confidence.factors.some((f) => f.includes('Kabul kriteri kapsamı: 2/3')),
+      `expected AC coverage factor, got ${JSON.stringify(r.confidence.factors)}`
+    );
+    assert.ok(
+      r.reasoning.some((line) => line.includes('2/3 kabul kriteri için kod üretildi')),
+      `expected coverage reasoning line, got ${JSON.stringify(r.reasoning)}`
+    );
   });
 
-  it('medium confidence when committed but file count low', () => {
+  it('fallback confidence when scribeOutput is missing — committed → 70', () => {
     const r = buildProtoReasoning(
       makeProtoOutput({
         metadata: { filesCreated: 3, totalLinesOfCode: 50, stackUsed: 'React', committed: true },
       })
     );
     assert.equal(r.confidence.score, 70);
+    // No AC coverage factor since the spec wasn't passed in
+    assert.ok(!r.confidence.factors.some((f) => f.includes('Kabul kriteri kapsamı')));
   });
 
-  it('low confidence + bakkal-Türkçesi confidence factor when not committed', () => {
+  it('fallback confidence when scribeOutput is missing — uncommitted → 50', () => {
     const r = buildProtoReasoning(
       makeProtoOutput({
         metadata: {
@@ -190,9 +234,7 @@ describe('buildProtoReasoning', () => {
         },
       })
     );
-    assert.equal(r.confidence.score, 55);
-    // PR-A Fix 1: risks field removed for non-committed (not a real risk,
-    // just a status). Instead the confidence factor uses everyday Turkish.
+    assert.equal(r.confidence.score, 50);
     assert.equal(r.risks, undefined);
     assert.ok(
       r.confidence.factors.some((f) => f.includes('Sadece local taslak')),
@@ -220,6 +262,23 @@ describe('buildProtoReasoning', () => {
       !r.confidence.factors.some((f) => f.toLowerCase().includes("github'a gönderildi:")),
       'old "GitHub\'a gönderildi: ..." factor should be removed'
     );
+  });
+
+  it('zero-AC spec falls back to status-based confidence (no AC factor)', () => {
+    const scribe = makeScribeOutput({
+      spec: {
+        ...makeScribeOutput().spec,
+        acceptanceCriteria: [],
+      } as unknown as ScribeOutput['spec'],
+    });
+    const r = buildProtoReasoning(
+      makeProtoOutput({
+        metadata: { filesCreated: 5, totalLinesOfCode: 100, stackUsed: 'React', committed: true },
+      }),
+      { scribeOutput: scribe }
+    );
+    assert.equal(r.confidence.score, 70);
+    assert.ok(!r.confidence.factors.some((f) => f.includes('Kabul kriteri kapsamı')));
   });
 
   it('decision contains file count and LOC', () => {

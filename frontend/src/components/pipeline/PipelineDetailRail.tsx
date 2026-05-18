@@ -85,6 +85,13 @@ export interface PipelineDetailRailProps {
    * pipeline state. Mirrors `onPushResolved`.
    */
   onCriticResolved?: () => void;
+  /**
+   * PR-D — per-AC binary coverage report sourced from
+   * `pipeline.intermediateState.acCoverage`. Passed straight through to
+   * ExplanationPanel; the Proto reasoning card uses it to render the
+   * checklist in place of the confidence-bullet list.
+   */
+  acCoverage?: import('../../types/pipeline').AcCoverageReport;
   className?: string;
 }
 
@@ -182,6 +189,7 @@ export function PipelineDetailRail({
   criticReview,
   criticApprovalThreshold,
   onCriticResolved,
+  acCoverage,
   className,
   // onPushResolved is accepted in the interface so callers can keep
   // passing it (it's still consumed by the T1 PushGateFooter render path,
@@ -564,6 +572,7 @@ export function PipelineDetailRail({
                   fetcher={explanationFetcher}
                   hideAttentionBanner
                   onIterationStarted={onCriticResolved}
+                  acCoverage={acCoverage}
                 />
               )}
             </>

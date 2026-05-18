@@ -5,6 +5,7 @@
 import type { AgentReasoning } from './ExplainabilityTypes.js';
 import type { ScribeOutput, ProtoOutput, TraceOutput } from '../contracts/PipelineTypes.js';
 import type { CriticReviewOutput } from '../../agents/critic/CriticTypes.js';
+import { buildAcCoverage } from './acCoverage.js';
 
 export function buildScribeReasoning(
   output: ScribeOutput,
@@ -38,16 +39,34 @@ export function buildScribeReasoning(
 
 export function buildProtoReasoning(
   output: ProtoOutput,
-  opts: { now?: Date } = {}
+  opts: { now?: Date; scribeOutput?: ScribeOutput } = {}
 ): AgentReasoning {
   const filesCreated = output.metadata?.filesCreated ?? output.files?.length ?? 0;
   const totalLoc = output.metadata?.totalLinesOfCode ?? 0;
   const stack = output.metadata?.stackUsed ?? 'bilinmeyen';
   const committed = output.metadata?.committed === true;
-  // Heuristic confidence: committed scaffolds with 6+ files = high; just
-  // committed = medium; uncommitted = low. Mirrors MIN_SCAFFOLD_FILES from
-  // ProtoAgent so a "passes Proto's own minimum" output reads as confident.
-  const confidence = committed && filesCreated >= 6 ? 88 : committed ? 70 : 55;
+
+  // PR-D: Mechanical confidence formula (committed && files≥6 → 88, …)
+  // replaced by AC coverage ratio. When the spec is available, the score is
+  // `staticCoveredCount / totalAcs × 100`, which is a real measurement of
+  // "kaç kabul kriteri için kod üretildi" rather than a heuristic over file
+  // count. When no AC are available (zero-AC spec or scribeOutput missing),
+  // we fall back to a neutral status-based score: committed → 70, else → 50.
+  // The fallback is intentionally flat — it doesn't pretend to know more
+  // than "committed yes/no".
+  const coverage = opts.scribeOutput
+    ? buildAcCoverage(opts.scribeOutput, output)
+    : { totalAcs: 0, staticCoveredCount: 0, dynamicCoveredCount: 0, items: [] };
+  const hasAcs = coverage.totalAcs > 0;
+  const acScore = hasAcs
+    ? Math.round((coverage.staticCoveredCount / coverage.totalAcs) * 100)
+    : null;
+  const confidenceScore = acScore !== null ? acScore : committed ? 70 : 50;
+
+  const acFactor = hasAcs
+    ? `Kabul kriteri kapsamı: ${coverage.staticCoveredCount}/${coverage.totalAcs}`
+    : null;
+
   return {
     agentName: 'proto',
     timestamp: opts.now ?? new Date(),
@@ -56,12 +75,16 @@ export function buildProtoReasoning(
       `Teknoloji seti: ${stack}`,
       `Dal: ${output.branch ?? 'bilinmeyen'}`,
       committed ? 'GitHub deposu güncellendi' : "Henüz GitHub'a gönderilmedi",
+      ...(hasAcs
+        ? [`${coverage.staticCoveredCount}/${coverage.totalAcs} kabul kriteri için kod üretildi`]
+        : []),
       ...(output.summary ? [output.summary] : []),
     ],
     assumptions: ['Spec onaylandı ve iskelet için yeterli ayrıntıdaydı'],
     confidence: {
-      score: confidence,
+      score: confidenceScore,
       factors: [
+        ...(acFactor ? [acFactor] : []),
         `Dosya sayısı: ${filesCreated}`,
         `Toplam satır: ${totalLoc}`,
         committed
