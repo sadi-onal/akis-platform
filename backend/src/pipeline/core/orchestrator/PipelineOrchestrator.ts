@@ -46,6 +46,7 @@ import { DeterministicValidator } from '../validator/DeterministicValidator.js';
 import { SecurityGate } from '../security-gate/SecurityGate.js';
 import { ExplainabilityService } from '../explainability/ExplainabilityService.js';
 import { RegressionService } from '../regression/RegressionService.js';
+import { AiCallsService } from '../ai-calls/AiCallsService.js';
 import {
   buildScribeReasoning,
   buildProtoReasoning,
@@ -256,6 +257,8 @@ export class PipelineOrchestrator {
   private learningService = new LearningService();
   // ─── Tier 1.A — Regression Confidence ──────────────
   private regressionService: RegressionService | null = null;
+  // ─── P5b — AI request log viewer ───────────────────
+  private aiCallsService: AiCallsService | null = null;
 
   // ─── Chat memory (issue #462) ────────────────────
   private chatMemory: ChatMemoryContextService = chatMemoryContextService;
@@ -382,6 +385,19 @@ export class PipelineOrchestrator {
       });
     }
     return this.regressionService;
+  }
+
+  /**
+   * P5b: Lazily-built AiCallsService for the admin/debug AI log viewer.
+   * Returns the AI calls recorded under `job_ai_calls` for jobs whose
+   * payload carries this pipeline's id. Pipelines that never spawn such a
+   * job yield an empty list — the panel renders the empty state.
+   */
+  getAiCallsService(): AiCallsService {
+    if (!this.aiCallsService) {
+      this.aiCallsService = new AiCallsService();
+    }
+    return this.aiCallsService;
   }
 
   /** Level 4: Access learning service */

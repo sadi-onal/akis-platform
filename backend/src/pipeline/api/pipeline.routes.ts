@@ -300,6 +300,26 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
       return { report };
     },
 
+    /**
+     * P5b: AI request log viewer.
+     *
+     * Returns the persisted `job_ai_calls` rows for this pipeline, including
+     * the P5a content fields (`systemPrompt`, `userPrompt`, `responseText`,
+     * `thinkingBlocks`, `toolCalls`). The admin/debug rail tab renders
+     * each entry as a collapsable card so the demo can answer "what did we
+     * ask the model, and what did it say?" without re-running the call.
+     *
+     * Ownership is enforced before the lookup; pipelines without recorded
+     * AI calls yield `{ calls: [] }` and the UI shows the empty state.
+     */
+    async getAiCalls(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const svc = orchestrator.getAiCallsService();
+      const calls = await svc.getCalls(id);
+      return { calls };
+    },
+
     /** Level 4: Configure adaptive autonomy — auto-approve threshold */
     async setAutoApprove(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;

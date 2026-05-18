@@ -1128,6 +1128,19 @@ export const MESSAGE_KEYS = [
   'pipeline.activity.trace.writing_scenarios',
   'pipeline.activity.trace.pushing_tests',
   'pipeline.trace.proceedingWithoutPlan',
+
+  // P5b — AI request log viewer (admin/debug)
+  'pipeline.aiLogs.tab',
+  'pipeline.aiLogs.empty',
+  'pipeline.aiLogs.loading',
+  'pipeline.aiLogs.error',
+  'pipeline.aiLogs.section.systemPrompt',
+  'pipeline.aiLogs.section.userPrompt',
+  'pipeline.aiLogs.section.responseText',
+  'pipeline.aiLogs.section.thinking',
+  'pipeline.aiLogs.section.toolCalls',
+  'pipeline.aiLogs.noContent',
+
   'chat.model.locked',
   'chat.status.now',
 

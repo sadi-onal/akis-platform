@@ -21,6 +21,7 @@ import type {
   ScribeClarification,
   PipelineExplanation,
   RegressionReport,
+  AiCallEntry,
 } from '../../types/pipeline';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
 
@@ -585,6 +586,17 @@ export const workflowsApi = {
   getRegression: async (id: string): Promise<RegressionReport> => {
     const res = await http.get<{ report: RegressionReport }>(`/api/pipelines/${id}/regression`);
     return res.report;
+  },
+
+  /**
+   * P5b — fetch AI request log entries for a pipeline (admin/debug viewer).
+   * Returns each persisted `job_ai_calls` row including the P5a content
+   * fields (systemPrompt, userPrompt, responseText, thinkingBlocks,
+   * toolCalls). Empty array when the pipeline never recorded any.
+   */
+  getAiCalls: async (id: string): Promise<AiCallEntry[]> => {
+    const res = await http.get<{ calls: AiCallEntry[] }>(`/api/pipelines/${id}/ai-calls`);
+    return res.calls;
   },
 
   poll: async (id: string): Promise<Workflow> => {
