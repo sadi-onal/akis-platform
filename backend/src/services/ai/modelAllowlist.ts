@@ -2,13 +2,13 @@ import { getEnv } from '../../config/env.js';
 import type { AIKeyProvider } from './user-ai-keys.js';
 
 /**
- * Runtime AI provider — wider than {@link AIKeyProvider} because Google
- * Gemini (P1c) is supported at the AIService runtime layer but does not
- * yet ship user-key storage; Gemini keys come from `GOOGLE_API_KEY` env.
- * Use this type wherever model allowlist / runtime dispatch needs to
- * reason about google as well.
+ * Runtime AI provider — historically wider than {@link AIKeyProvider} when
+ * Gemini lived only at the AIService runtime layer. P12 promoted 'google'
+ * into {@link AIKeyProvider} (DB enum + Settings UI), so this alias is now
+ * structurally identical to {@link AIKeyProvider}. Kept as a distinct name
+ * because allowlist / model-dispatch call sites read more clearly with it.
  */
-export type RuntimeAIProvider = AIKeyProvider | 'google';
+export type RuntimeAIProvider = AIKeyProvider;
 
 export const DEFAULT_ANTHROPIC_MODELS = [
   'claude-haiku-4-5-20251001',

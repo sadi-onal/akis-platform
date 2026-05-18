@@ -168,6 +168,7 @@ function makeFetch(opts: MakeFetchOpts = {}) {
               providers: {
                 anthropic: { configured: false, last4: null, updatedAt: null },
                 openai: { configured: false, last4: null, updatedAt: null },
+                google: { configured: false, last4: null, updatedAt: null },
               },
               keySource: 'akis',
               canUseOwnKey: true,
@@ -375,12 +376,18 @@ describe('AIKeysTab', () => {
     mockGetUsage.mockResolvedValue(null);
   });
 
-  it('renders Anthropic + OpenAI provider rows', async () => {
+  // P12: All three providers (Anthropic, OpenAI, Google) are runtime-active; the
+  // "yakında" label for OpenAI was stale after P1a (#553) and Google never had a
+  // row before P1c (#552) shipped the runtime client.
+  it('renders Anthropic + OpenAI + Google provider rows (no "yakında" label)', async () => {
     render(<SettingsPage />);
     await waitFor(() => {
       expect(screen.getByText('Anthropic (Claude)')).toBeInTheDocument();
     });
-    expect(screen.getByText('OpenAI (yakında)')).toBeInTheDocument();
+    expect(screen.getByText('OpenAI (GPT)')).toBeInTheDocument();
+    expect(screen.getByText('Google (Gemini)')).toBeInTheDocument();
+    // Regression guard: the legacy "yakında" string must not appear anywhere.
+    expect(screen.queryByText(/yakında/i)).not.toBeInTheDocument();
   });
 
   it('shows AKIS built-in card as active by default', async () => {
@@ -397,6 +404,7 @@ describe('AIKeysTab', () => {
         providers: {
           anthropic: { configured: true, last4: '1234', updatedAt: '2026-01-01' },
           openai: { configured: false, last4: null, updatedAt: null },
+          google: { configured: false, last4: null, updatedAt: null },
         },
         keySource: 'own',
         canUseOwnKey: true,
@@ -483,6 +491,7 @@ describe('AIKeysTab', () => {
         providers: {
           anthropic: { configured: true, last4: '1234', updatedAt: '2026-01-01' },
           openai: { configured: false, last4: null, updatedAt: null },
+          google: { configured: false, last4: null, updatedAt: null },
         },
         keySource: 'own',
         canUseOwnKey: true,
@@ -515,6 +524,7 @@ describe('AIKeysTab', () => {
         providers: {
           anthropic: { configured: true, last4: '1234', updatedAt: '2026-01-01' },
           openai: { configured: false, last4: null, updatedAt: null },
+          google: { configured: false, last4: null, updatedAt: null },
         },
         keySource: 'own',
         canUseOwnKey: true,
@@ -546,6 +556,7 @@ describe('AIKeysTab', () => {
         providers: {
           anthropic: { configured: true, last4: '1234', updatedAt: '2026-01-01' },
           openai: { configured: true, last4: '5678', updatedAt: '2026-01-01' },
+          google: { configured: false, last4: null, updatedAt: null },
         },
         keySource: 'own',
         canUseOwnKey: true,

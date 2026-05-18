@@ -4,10 +4,12 @@ import { userAiKeys, users, type UserAiKey } from '../../db/schema.js';
 import { decryptSecret, encryptSecret } from '../../utils/crypto.js';
 
 /**
- * Supported AI providers. PR-A removed `'openrouter'`; OpenAI is type-level
- * supported but the runtime client (and modelAllowlist entry) lands in PR-B B5.
+ * Supported AI providers for user-key storage and `users.active_ai_provider`.
+ * P12 widened this to include 'google' alongside Anthropic (P1a) and OpenAI
+ * (P1c) now that the DB enum (`ai_provider`) and the runtime client both
+ * accept Gemini. {@link RuntimeAIProvider} stays an alias for symmetry.
  */
-export type AIKeyProvider = 'anthropic' | 'openai';
+export type AIKeyProvider = 'anthropic' | 'openai' | 'google';
 
 export type AIKeyStatus = {
   provider: AIKeyProvider;
@@ -22,6 +24,7 @@ export type MultiProviderStatus = {
   providers: {
     anthropic: Omit<AIKeyStatus, 'provider'>;
     openai: Omit<AIKeyStatus, 'provider'>;
+    google: Omit<AIKeyStatus, 'provider'>;
   };
 };
 
@@ -165,10 +168,11 @@ export async function getMultiProviderStatus(userId: string): Promise<MultiProvi
   // Do NOT apply hard default here - let orchestrator handle fallback logic
   const activeProvider: AIKeyProvider | null = (user?.activeAiProvider as AIKeyProvider) || null;
 
-  // Get status for all providers
-  const [anthropicStatus, openaiStatus] = await Promise.all([
+  // Get status for all providers (P12: includes Google Gemini)
+  const [anthropicStatus, openaiStatus, googleStatus] = await Promise.all([
     getUserAiKeyStatus(userId, 'anthropic'),
     getUserAiKeyStatus(userId, 'openai'),
+    getUserAiKeyStatus(userId, 'google'),
   ]);
 
   return {
@@ -183,6 +187,11 @@ export async function getMultiProviderStatus(userId: string): Promise<MultiProvi
         configured: openaiStatus.configured,
         last4: openaiStatus.last4,
         updatedAt: openaiStatus.updatedAt,
+      },
+      google: {
+        configured: googleStatus.configured,
+        last4: googleStatus.last4,
+        updatedAt: googleStatus.updatedAt,
       },
     },
   };

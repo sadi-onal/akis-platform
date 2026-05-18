@@ -555,9 +555,11 @@ export const userStatusEnum = pgEnum('user_status', [
 ]);
 
 /**
- * AI Provider enum for user settings
+ * AI Provider enum for user settings.
+ * P12: 'google' added to match the runtime allowlist (P1c). Migration
+ * 0053_ai_provider_enum_google.sql extends the underlying ai_provider TYPE.
  */
-export const aiProviderEnum = pgEnum('ai_provider', ['anthropic', 'openai']);
+export const aiProviderEnum = pgEnum('ai_provider', ['anthropic', 'openai', 'google']);
 export const userRoleEnum = pgEnum('user_role', ['admin', 'member']);
 
 /**
