@@ -11,6 +11,17 @@ export interface ModelOption {
   recommended: boolean;
 }
 
+/**
+ * Subset of /api/settings/ai-keys/status that ModelPicker needs to know.
+ * - Anthropic is ALWAYS available via the built-in AKIS key (sınırsız kullanim).
+ * - OpenAI / Google require the user to add their own key in Settings.
+ */
+interface ProviderAvailability {
+  anthropic: boolean;
+  openai: boolean;
+  google: boolean;
+}
+
 interface ModelPickerProps {
   /** Current model ID persisted on the pipeline; falls back to "auto" display when null. */
   value?: string;
@@ -67,6 +78,12 @@ export function ModelPicker({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [options, setOptions] = useState<ModelOption[]>([]);
+  const [availability, setAvailability] = useState<ProviderAvailability>({
+    // Anthropic is always available via the AKIS built-in key (sınırsız kullanım).
+    anthropic: true,
+    openai: false,
+    google: false,
+  });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -80,10 +97,17 @@ export function ModelPicker({
     // P12: fetch all providers in parallel so the dropdown lists Anthropic +
     // OpenAI + Google together; a single provider's failure does not blank
     // the whole list (the catch swallows it and falls back to []).
+    // P13 follow-up: also fetch /api/settings/ai-keys/status so providers
+    // without a configured key render greyed-out + tıklanamaz.
     if (!open || options.length > 0) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
+    // Models fetch drives the loading state. Status fetch runs alongside but
+    // does NOT block the dropdown — if the status endpoint is slow or
+    // unauthenticated (tests stub it out), the picker still renders the
+    // models grouped by provider; availability defaults to "anthropic only"
+    // until the status response lands.
     Promise.all(
       ALL_PROVIDERS.map((p) =>
         workflowsApi
@@ -103,6 +127,25 @@ export function ModelPicker({
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
+    // Fire-and-forget availability fetch. Updates the disabled state as soon
+    // as the response is available; failures leave the default (anthropic
+    // only) untouched.
+    void fetch('/api/settings/ai-keys/status', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((status) => {
+        if (cancelled || !status || typeof status !== 'object' || !('providers' in status)) return;
+        const provs = (status as { providers: Record<string, { configured?: boolean }> }).providers;
+        setAvailability({
+          anthropic: true,
+          openai: Boolean(provs?.openai?.configured),
+          google: Boolean(provs?.google?.configured),
+        });
+      })
+      .catch(() => {
+        /* swallow — availability stays at defaults */
+      });
+
     return () => {
       cancelled = true;
     };
@@ -239,39 +282,73 @@ export function ModelPicker({
           )}
           {!loading &&
             !error &&
-            orderedGroups.map(([prov, opts]) => (
-              <div key={prov} className="py-0.5">
-                <div className="sticky top-0 z-10 bg-ak-surface-2 px-3 py-1 text-[10px] uppercase tracking-wider text-ak-text-tertiary">
-                  {PROVIDER_LABELS[prov] ?? prov}
-                </div>
-                {opts.map((opt) => (
-                  <button
-                    key={opt.id}
-                    role="option"
-                    aria-selected={opt.id === value}
-                    onClick={() => handleSelect(opt.id)}
-                    disabled={saving}
+            orderedGroups.map(([prov, opts]) => {
+              const isAvailable = availability[prov as keyof ProviderAvailability] ?? false;
+              return (
+                <div key={prov} className="py-0.5">
+                  <div
                     className={cn(
-                      'flex w-full items-center justify-between gap-3 rounded-md px-3 py-1.5 text-left text-[11px] transition-colors',
-                      opt.id === value
-                        ? 'bg-ak-primary/10 text-ak-primary'
-                        : 'text-ak-text-secondary hover:bg-ak-surface hover:text-ak-text-primary',
-                      saving && 'opacity-50 cursor-not-allowed'
+                      'sticky top-0 z-10 flex items-center justify-between gap-2 bg-ak-surface-2 px-3 py-1',
+                      isAvailable ? 'text-ak-text-tertiary' : 'text-ak-text-tertiary/60'
                     )}
                   >
-                    <div className="flex flex-col">
-                      <span className="font-mono">{opt.id}</span>
-                      <span className="text-[10px] text-ak-text-tertiary">{opt.provider}</span>
-                    </div>
-                    {opt.recommended && (
-                      <span className="rounded bg-ak-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ak-primary">
-                        {t('chat.model.recommended')}
-                      </span>
+                    <span className="text-[10px] uppercase tracking-wider">
+                      {PROVIDER_LABELS[prov] ?? prov}
+                    </span>
+                    {!isAvailable && (
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setOpen(false);
+                          window.location.assign('/settings?tab=ai-keys');
+                        }}
+                        className="rounded bg-ak-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-ak-primary hover:bg-ak-primary/20"
+                      >
+                        + Anahtar ekle
+                      </button>
                     )}
-                  </button>
-                ))}
-              </div>
-            ))}
+                  </div>
+                  {opts.map((opt) => (
+                    <button
+                      key={opt.id}
+                      role="option"
+                      aria-selected={opt.id === value}
+                      aria-disabled={!isAvailable}
+                      onClick={() => {
+                        if (!isAvailable) return;
+                        void handleSelect(opt.id);
+                      }}
+                      disabled={saving || !isAvailable}
+                      title={
+                        !isAvailable
+                          ? 'API anahtarı gerekli — Ayarlar > AI Sağlayıcılar'
+                          : undefined
+                      }
+                      className={cn(
+                        'flex w-full items-center justify-between gap-3 rounded-md px-3 py-1.5 text-left text-[11px] transition-colors',
+                        opt.id === value && isAvailable
+                          ? 'bg-ak-primary/10 text-ak-primary'
+                          : isAvailable
+                            ? 'text-ak-text-secondary hover:bg-ak-surface hover:text-ak-text-primary'
+                            : 'text-ak-text-tertiary/50 cursor-not-allowed',
+                        saving && 'opacity-50 cursor-not-allowed'
+                      )}
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-mono">{opt.id}</span>
+                        <span className="text-[10px] text-ak-text-tertiary">{opt.provider}</span>
+                      </div>
+                      {opt.recommended && isAvailable && (
+                        <span className="rounded bg-ak-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ak-primary">
+                          {t('chat.model.recommended')}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
         </div>
       )}
     </div>
