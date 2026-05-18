@@ -83,6 +83,16 @@ interface ChatPanelProps {
    * can refetch / refresh workflow state.
    */
   onPushResolved?: () => void;
+  /**
+   * P8: latest Critic code review (from `pipeline.intermediateState
+   * .criticCodeOutput`). Forwarded to the rail's CriticResolutionGate
+   * while the pipeline is at `awaiting_critic_resolution`.
+   */
+  criticReview?: import('../../types/pipeline').CriticReviewOutput;
+  /** P8: approval threshold from backend env (defaults to 75 client-side). */
+  criticApprovalThreshold?: number;
+  /** P8: called after `critic-override` resolves so the parent can refetch. */
+  onCriticResolved?: () => void;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -128,6 +138,9 @@ export const ChatPanel = memo(function ChatPanel({
   pipelineHasOutputs = false,
   protoFiles,
   onPushResolved,
+  criticReview,
+  criticApprovalThreshold,
+  onCriticResolved,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -234,6 +247,9 @@ export const ChatPanel = memo(function ChatPanel({
           onPushResolved={onPushResolved}
           showPreview={showPreview}
           onTogglePreview={onTogglePreview}
+          criticReview={criticReview}
+          criticApprovalThreshold={criticApprovalThreshold}
+          onCriticResolved={onCriticResolved}
         />
       )}
 

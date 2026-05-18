@@ -211,6 +211,10 @@ export type PipelineStage =
   | 'awaiting_approval'
   | 'proto_building'
   | 'critic_reviewing_code' // Level 3: CriticAgent reviews Proto's code
+  // P8 — Critic code review came back below CRITIC_APPROVAL_THRESHOLD.
+  // Pipeline halts; user picks "Düzelt" (chat-iterate) or "Yine de devam et"
+  // (critic-override) to advance.
+  | 'awaiting_critic_resolution'
   | 'awaiting_push_confirm' // PDP-3 B4: user previews scaffold and confirms before GitHub push
   | 'trace_testing'
   | 'fix_loop_iteration' // Level 3: FixLoop retrying Proto+Trace

@@ -49,8 +49,12 @@ export function useHandleIntentFeedback(options: UseHandleIntentFeedbackOptions)
       const trimmed = message.trim();
       if (!trimmed) return;
 
-      const isPushConfirm = uiState === 'awaiting_push_confirm';
-      if (!isPushConfirm || !pipelineId) {
+      // P8: both the push-confirm gate (B5 origin) and the new
+      // critic-resolution gate route FEEDBACK messages through the same
+      // iterate endpoint — backend orchestrator accepts both stages.
+      const isIterableGate =
+        uiState === 'awaiting_push_confirm' || uiState === 'awaiting_critic_resolution';
+      if (!isIterableGate || !pipelineId) {
         fallback('Geribildirim', message);
         return;
       }

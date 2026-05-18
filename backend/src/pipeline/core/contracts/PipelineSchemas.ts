@@ -197,6 +197,11 @@ export const PipelineStageSchema = z.enum([
   'awaiting_approval',
   'proto_building',
   'critic_reviewing_code',
+  // P8 — Critic code review found bulgu(s) below CRITIC_APPROVAL_THRESHOLD.
+  // Pipeline is hard-blocked until the user either iterates with feedback
+  // (`POST /:id/iterate-with-feedback`) or manually overrides
+  // (`POST /:id/critic-override`).
+  'awaiting_critic_resolution',
   'awaiting_push_confirm',
   'trace_testing',
   'fix_loop_iteration',

@@ -252,6 +252,15 @@ const envSchema = z
       .transform((value) => value === 'true'),
     /** Maximum tokens reserved for the chat-memory block (default 8K per issue #462 acceptance). */
     CHAT_CONTEXT_MAX_TOKENS: z.coerce.number().int().min(256).max(32_000).default(8_000),
+
+    /**
+     * P8 — minimum CriticAgent overallScore (0-100) required for the code/spec
+     * review to count as "approved". When the score is below this threshold the
+     * orchestrator halts at `awaiting_critic_resolution` so the user can either
+     * iterate on the feedback or manually override the block. Default 75 mirrors
+     * the legacy hard-coded constant.
+     */
+    CRITIC_APPROVAL_THRESHOLD: z.coerce.number().int().min(0).max(100).default(75),
   })
   .superRefine((data, ctx) => {
     const isProduction = data.NODE_ENV === 'production';

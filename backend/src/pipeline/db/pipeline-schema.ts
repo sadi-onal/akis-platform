@@ -9,6 +9,7 @@ export const PIPELINE_TABLE_SQL = `
 CREATE TYPE pipeline_stage AS ENUM (
   'scribe_clarifying', 'scribe_generating', 'critic_reviewing_spec',
   'awaiting_approval', 'proto_building', 'critic_reviewing_code',
+  'awaiting_critic_resolution', -- P8: critic hard-block
   'awaiting_push_confirm', -- PDP-3 B4
   'trace_testing', 'fix_loop_iteration', 'ci_running',
   'completed', 'completed_partial', 'failed', 'cancelled'

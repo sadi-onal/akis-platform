@@ -25,17 +25,35 @@ export type CriticResult =
 
 // ─── Constants ───────────────────────────────────
 
-const APPROVAL_THRESHOLD = 75;
+/**
+ * Default minimum score for a CriticReviewOutput to count as approved.
+ * P8 — this used to be the hard-coded threshold; it now serves as the
+ * fallback when no env-driven value is injected into the agent.
+ */
+export const DEFAULT_APPROVAL_THRESHOLD = 75;
 
 // ─── CriticAgent ─────────────────────────────────
 
 export class CriticAgent {
   private ai: CriticAIDeps;
   private skillRegistry?: SkillRegistry;
+  private approvalThreshold: number;
 
-  constructor(ai: CriticAIDeps, skillRegistry?: SkillRegistry) {
+  constructor(
+    ai: CriticAIDeps,
+    skillRegistry?: SkillRegistry,
+    approvalThreshold: number = DEFAULT_APPROVAL_THRESHOLD,
+  ) {
     this.ai = ai;
     this.skillRegistry = skillRegistry;
+    // Clamp to the valid score range so a misconfigured env var can never
+    // crash review parsing.
+    this.approvalThreshold = Math.max(0, Math.min(100, Math.floor(approvalThreshold)));
+  }
+
+  /** Exposed for orchestrator/UI so the same threshold can be surfaced alongside the score. */
+  getApprovalThreshold(): number {
+    return this.approvalThreshold;
   }
 
   private enhance(basePrompt: string): string {
@@ -156,7 +174,7 @@ export class CriticAgent {
     const summary = typeof raw.summary === 'string' ? raw.summary : 'No summary provided';
 
     return {
-      approved: overallScore >= APPROVAL_THRESHOLD,
+      approved: overallScore >= this.approvalThreshold,
       overallScore,
       findings,
       summary,

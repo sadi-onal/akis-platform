@@ -168,6 +168,24 @@ export interface Workflow {
   model?: string;
   /** Pipeline creation stamp; ModelPicker locks when present (PR-A Commit 5). */
   modelLockedAt?: string;
+  /**
+   * P8 — latest Critic code-review output (mirror of
+   * `pipeline.intermediateState.criticCodeOutput`). Used by ChatPanel to
+   * render the score bar + resolution gate at `awaiting_critic_resolution`.
+   */
+  criticReview?: import('./pipeline').CriticReviewOutput;
+  /**
+   * P8 — audit metadata stamped when the orchestrator parks the pipeline
+   * at `awaiting_critic_resolution`. `manuallyOverridden=true` after the
+   * user clicked "Yine de devam et".
+   */
+  criticBlock?: {
+    blockedAt: string;
+    overallScore: number;
+    findingsCount: number;
+    manuallyOverridden: boolean;
+    overriddenAt?: string;
+  };
 }
 
 export interface WorkflowStats {

@@ -1567,6 +1567,48 @@ export class PipelineOrchestrator {
         { pipelineId, approved: criticResult?.approved, score: criticResult?.overallScore },
         '[Pipeline] Critic code review completed'
       );
+
+      // ─── P8: Critic hard-block ─────────────────────
+      // When the review falls below the configured threshold the pipeline
+      // halts at `awaiting_critic_resolution`. The cached dryRun scaffold
+      // stays on protoOutput so the preview keeps working — the user can
+      // either iterate (chat → /iterate-with-feedback) or override
+      // (/critic-override). Without an explicit decision the pipeline does
+      // NOT advance to Trace or any GitHub push, which is the whole point
+      // of the gate.
+      if (criticResult && criticResult.approved === false) {
+        this.recordProtoReasoning(pipelineId, protoResult.data);
+        const currentStateForBlock = await this.store.getById(pipelineId);
+        const existingIntermediateBlock = (currentStateForBlock?.intermediateState ?? {}) as Record<
+          string,
+          unknown
+        >;
+        await this.store.update(pipelineId, {
+          protoOutput: protoResult.data,
+          stage: 'awaiting_critic_resolution',
+          metrics: protoCompletedMetrics,
+          intermediateState: {
+            ...existingIntermediateBlock,
+            criticCodeOutput: criticResult,
+            criticBlock: {
+              blockedAt: new Date().toISOString(),
+              overallScore: criticResult.overallScore,
+              findingsCount: criticResult.findings?.length ?? 0,
+              manuallyOverridden: false,
+            },
+          },
+        });
+        this.emitEvent(pipelineId, 'stage_change', 'awaiting_critic_resolution');
+        logger.info(
+          {
+            pipelineId,
+            score: criticResult.overallScore,
+            findings: criticResult.findings?.length ?? 0,
+          },
+          '[Pipeline] P8 critic hard-block — pipeline halted at awaiting_critic_resolution'
+        );
+        return;
+      }
     }
 
     // Level 4: Explainability — record Proto reasoning
@@ -2057,7 +2099,19 @@ export class PipelineOrchestrator {
     feedback: string
   ): Promise<PipelineState> {
     const pipeline = await this.getPipeline(pipelineId);
-    this.assertStage(pipeline, 'awaiting_push_confirm');
+    // P8 — iterate is valid both at the push-confirm gate (B5 origin) and at
+    // the new critic hard-block stage. The downstream Proto re-run cycles
+    // through critic review again, so a sub-threshold result will simply
+    // bounce back to `awaiting_critic_resolution`.
+    if (
+      pipeline.stage !== 'awaiting_push_confirm' &&
+      pipeline.stage !== 'awaiting_critic_resolution'
+    ) {
+      throw new InvalidStageError(
+        'awaiting_push_confirm | awaiting_critic_resolution',
+        pipeline.stage
+      );
+    }
 
     if (!pipeline.approvedSpec) {
       throw new Error('Cannot iterate from feedback: pipeline has no approvedSpec on record');
@@ -2119,6 +2173,74 @@ export class PipelineOrchestrator {
       );
     });
 
+    return updated;
+  }
+
+  // ─── P8: Critic manual override ─────────────
+
+  /**
+   * User explicitly waved the Critic hard-block away. Transitions from
+   * `awaiting_critic_resolution` → `awaiting_push_confirm` so the existing
+   * push-confirm flow can take over (preview + GitHub'a gönder / İptal et).
+   *
+   * Audit trail: stamps `criticBlock.manuallyOverridden = true` and adds an
+   * `overriddenAt` timestamp on the existing intermediateState block.
+   * The criticCodeOutput itself is left untouched — the original score and
+   * findings remain visible to the user post-override.
+   */
+  async criticOverride(pipelineId: string): Promise<PipelineState> {
+    return this.withLock(pipelineId, () => this._criticOverride(pipelineId));
+  }
+
+  private async _criticOverride(pipelineId: string): Promise<PipelineState> {
+    const pipeline = await this.getPipeline(pipelineId);
+
+    // Idempotency: if the user double-clicks the button after the pipeline
+    // already advanced past the gate, just return the current state.
+    const alreadyAdvanced: readonly PipelineStage[] = [
+      'awaiting_push_confirm',
+      'proto_building',
+      'trace_testing',
+      'completed',
+      'completed_partial',
+    ];
+    if (alreadyAdvanced.includes(pipeline.stage)) {
+      logger.info(
+        { pipelineId, stage: pipeline.stage },
+        '[Pipeline] criticOverride idempotent hit — pipeline already past critic gate'
+      );
+      return pipeline;
+    }
+
+    this.assertStage(pipeline, 'awaiting_critic_resolution');
+
+    if (!pipeline.protoOutput || !pipeline.protoOutput.files?.length) {
+      throw new Error('Cannot override critic gate: no scaffold files cached on pipeline');
+    }
+
+    const existingIntermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
+    const existingBlock = (existingIntermediate.criticBlock ?? {}) as Record<string, unknown>;
+
+    const updated = await this.store.update(
+      pipelineId,
+      {
+        stage: 'awaiting_push_confirm',
+        intermediateState: {
+          ...existingIntermediate,
+          criticBlock: {
+            ...existingBlock,
+            manuallyOverridden: true,
+            overriddenAt: new Date().toISOString(),
+          },
+        },
+      },
+      { expectedStageVersion: pipeline.stageVersion }
+    );
+    this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
+    logger.info(
+      { pipelineId },
+      '[Pipeline] P8 critic override — advanced to awaiting_push_confirm'
+    );
     return updated;
   }
 

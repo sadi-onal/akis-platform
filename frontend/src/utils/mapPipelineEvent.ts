@@ -23,6 +23,10 @@ export function mapStageToUIState(stage: PipelineStage): ConversationUIState {
       return 'awaiting_approval';
     case 'awaiting_push_confirm':
       return 'awaiting_push_confirm';
+    case 'awaiting_critic_resolution':
+      // P8: surface the hard-block as a distinct UI state so the rail can
+      // render the resolution gate + score bar.
+      return 'awaiting_critic_resolution';
     case 'proto_building':
       return 'proto_running';
     case 'trace_testing':
@@ -55,6 +59,11 @@ export function mapStageToMode(stage?: PipelineStage): ChatMode {
       // the "act" phase from the user's perspective ("we're acting on the
       // approved plan; you decide whether to commit").
       return 'act';
+    case 'awaiting_critic_resolution':
+      // P8: Critic flagged the scaffold; user is reviewing findings. UX-wise
+      // this is the "review" gate from the lens of the Plan/Act/Ask/Review
+      // taxonomy — the chat is the place to push back / iterate.
+      return 'review';
     case 'proto_building':
     case 'critic_reviewing_code':
     case 'trace_testing':
@@ -86,8 +95,10 @@ export function mapStageToConversationStatus(stage: PipelineStage): Conversation
       return 'running';
     case 'awaiting_approval':
     case 'awaiting_push_confirm':
-      // PDP-3 B4: sidebar treats the new push gate the same as spec
-      // approval — both mean "needs your input next".
+    case 'awaiting_critic_resolution':
+      // PDP-3 B4 + P8: sidebar treats every "needs your input next" gate
+      // the same — both push-confirm and critic-resolution show as
+      // awaiting_approval in the sidebar status pill.
       return 'awaiting_approval';
     case 'failed':
       return 'error';

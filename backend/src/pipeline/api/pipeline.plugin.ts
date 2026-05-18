@@ -353,12 +353,23 @@ export async function pipelinePlugin(fastify: FastifyInstance, opts: PipelinePlu
   );
 
   // PDP-3 B5: POST /api/pipelines/:id/iterate-with-feedback —
-  // re-run Proto with user feedback while still at the push-confirm gate.
+  // re-run Proto with user feedback while still at the push-confirm gate
+  // (or the P8 critic-resolution gate).
   fastify.post(
     '/:id/iterate-with-feedback',
     { preHandler: [authPreHandler, ownershipPreHandler] },
     async (request: FastifyRequest) => {
       return routes.iterateWithFeedback(request);
+    }
+  );
+
+  // P8: POST /api/pipelines/:id/critic-override —
+  // user accepts the Critic findings and advances to push-confirm anyway.
+  fastify.post(
+    '/:id/critic-override',
+    { preHandler: [authPreHandler, ownershipPreHandler] },
+    async (request: FastifyRequest) => {
+      return routes.criticOverride(request);
     }
   );
 

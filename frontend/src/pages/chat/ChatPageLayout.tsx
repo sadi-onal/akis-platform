@@ -308,6 +308,14 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       pipelineHasOutputs={pipelineHasOutputs}
                       protoFiles={protoFiles}
                       onPushResolved={onPushResolved}
+                      criticReview={activeWorkflow?.criticReview}
+                      onCriticResolved={
+                        onPushResolved
+                          ? () => {
+                              void onPushResolved();
+                            }
+                          : undefined
+                      }
                     />
                   )}
                 </ChatRouter>

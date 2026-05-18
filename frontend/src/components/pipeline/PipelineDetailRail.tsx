@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import type { ConversationUIState } from '../../types/chat';
-import type { PipelineExplanation, RegressionReport } from '../../types/pipeline';
+import type {
+  CriticReviewOutput,
+  PipelineExplanation,
+  RegressionReport,
+} from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
 import { PipelineCinema } from './PipelineCinema';
 import { ExplanationPanel } from './ExplanationPanel';
 import { AttentionBanner } from './AttentionBanner';
 import { RegressionPanel } from './RegressionPanel';
 import { PushConfirmGate } from './PushConfirmGate';
+import { CriticResolutionGate } from './CriticResolutionGate';
 
 export interface PipelineDetailRailProps {
   pipelineId: string | undefined;
@@ -55,6 +60,20 @@ export interface PipelineDetailRailProps {
   explanationFetcher?: (id: string) => Promise<PipelineExplanation>;
   /** DI for tests — falls back to workflowsApi.getRegression */
   regressionFetcher?: (id: string) => Promise<RegressionReport>;
+  /**
+   * P8 — latest Critic code-review output. Required to render the
+   * `CriticResolutionGate` while the pipeline is at
+   * `awaiting_critic_resolution`. Threaded down from the host page
+   * (chat layout reads it from `pipeline.intermediateState.criticCodeOutput`).
+   */
+  criticReview?: CriticReviewOutput;
+  /** P8 — approval threshold from backend env, defaults to 75. */
+  criticApprovalThreshold?: number;
+  /**
+   * P8 — invoked after `critic-override` resolves so the parent can refresh
+   * pipeline state. Mirrors `onPushResolved`.
+   */
+  onCriticResolved?: () => void;
   className?: string;
 }
 
@@ -82,6 +101,11 @@ const REASONING_VISIBLE_STATES: ConversationUIState[] = ['awaiting_approval'];
 // `awaiting_approval` — auto-expand the rail and surface its UI inline.
 const PUSH_GATE_STATES: ConversationUIState[] = ['awaiting_push_confirm'];
 
+// P8: critic hard-block — same "needs your input now" gravity as the push
+// gate; auto-expand so the score bar + resolution buttons are immediately
+// visible.
+const CRITIC_GATE_STATES: ConversationUIState[] = ['awaiting_critic_resolution'];
+
 function isRunning(uiState: ConversationUIState): boolean {
   return RUNNING_STATES.includes(uiState);
 }
@@ -90,6 +114,9 @@ function isExplainable(uiState: ConversationUIState): boolean {
 }
 function isPushGate(uiState: ConversationUIState): boolean {
   return PUSH_GATE_STATES.includes(uiState);
+}
+function isCriticGate(uiState: ConversationUIState): boolean {
+  return CRITIC_GATE_STATES.includes(uiState);
 }
 function isRegressionVisible(
   uiState: ConversationUIState,
@@ -120,6 +147,9 @@ export function PipelineDetailRail({
   protoFiles,
   showPreview,
   onTogglePreview,
+  criticReview,
+  criticApprovalThreshold,
+  onCriticResolved,
   className,
   // onPushResolved is accepted in the interface so callers can keep
   // passing it (it's still consumed by the T1 PushGateFooter render path,
@@ -133,12 +163,15 @@ export function PipelineDetailRail({
 
   const regressionVisible = isRegressionVisible(uiState, activities.length > 0, pipelineHasOutputs);
   const pushGateActive = isPushGate(uiState);
+  const criticGateActive = isCriticGate(uiState);
   // Keep the collapse contract from v0.7.0: collapse on idle. The
   // Regresyon tab is still clickable and renders content when the user
   // manually expands the rail; auto-expansion would clobber the chat
-  // viewport every time a pipeline finishes. PDP-3 B4 adds the push gate
-  // to the auto-expand set so the user can't miss the inline preview.
-  const autoCollapsed = !isRunning(uiState) && !isExplainable(uiState) && !pushGateActive;
+  // viewport every time a pipeline finishes. PDP-3 B4 + P8 add the push +
+  // critic gates to the auto-expand set so the user can't miss the inline
+  // resolution surface.
+  const autoCollapsed =
+    !isRunning(uiState) && !isExplainable(uiState) && !pushGateActive && !criticGateActive;
   const autoTab: Tab = isRunning(uiState) ? 'flow' : 'why';
   const effectiveCollapsed = collapsed ?? autoCollapsed;
   const effectiveTab = tab ?? autoTab;
@@ -385,6 +418,16 @@ export function PipelineDetailRail({
                 fileCount={protoFiles ? Object.keys(protoFiles).length : 0}
                 previewOpen={showPreview ?? false}
                 onOpenPreview={() => onTogglePreview?.()}
+              />
+            </div>
+          )}
+          {criticGateActive && pipelineId && criticReview && (
+            <div className="mb-3">
+              <CriticResolutionGate
+                pipelineId={pipelineId}
+                criticReview={criticReview}
+                approvalThreshold={criticApprovalThreshold}
+                onResolved={() => onCriticResolved?.()}
               />
             </div>
           )}

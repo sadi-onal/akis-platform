@@ -208,15 +208,29 @@ export function createPipelineRoutes(deps: PipelineRoutesDeps) {
 
     /**
      * PDP-3 B5: user-driven Proto re-iteration at the push-confirm gate.
-     * Body: `{ feedback: string }` (3-2000 chars). Only valid while the
-     * pipeline is at `awaiting_push_confirm`; orchestrator enforces the
-     * stage rejection. Spec: docs/product/wave3/b5-feedback-iteration.md
+     * Body: `{ feedback: string }` (3-2000 chars). Valid at both
+     * `awaiting_push_confirm` (B5 origin) and `awaiting_critic_resolution`
+     * (P8 hard-block); orchestrator enforces the stage rejection.
+     * Spec: docs/product/wave3/b5-feedback-iteration.md
      */
     async iterateWithFeedback(request: unknown) {
       const { id } = (request as { params: { id: string } }).params;
       await assertOwnership(request, id);
       const body = IterateFeedbackRequestSchema.parse((request as { body: unknown }).body);
       const pipeline = await orchestrator.iterateProtoFromFeedback(id, body.feedback);
+      return { pipeline };
+    },
+
+    /**
+     * P8: user manually overrode the Critic hard-block at
+     * `awaiting_critic_resolution`. Pipeline advances to
+     * `awaiting_push_confirm` so the existing PushGateFooter can drive the
+     * final commit decision.
+     */
+    async criticOverride(request: unknown) {
+      const { id } = (request as { params: { id: string } }).params;
+      await assertOwnership(request, id);
+      const pipeline = await orchestrator.criticOverride(id);
       return { pipeline };
     },
 
