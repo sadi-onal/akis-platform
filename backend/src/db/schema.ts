@@ -1589,7 +1589,7 @@ export const pipelines = pgTable('pipelines', {
   approvedSpec: jsonb('approved_spec'),
   protoOutput: jsonb('proto_output'),
   traceOutput: jsonb('trace_output'),
-  traceEnabled: boolean('trace_enabled').default(false).notNull(),
+  traceEnabled: boolean('trace_enabled').default(true).notNull(),
   repoContext: jsonb('repo_context'),
   protoConfig: jsonb('proto_config'),
   jiraConfig: jsonb('jira_config'),
