@@ -320,3 +320,107 @@ describe('ExplanationPanel — PR-C suggestion selection', () => {
     expect(screen.getByRole('checkbox')).toBeChecked();
   });
 });
+
+// ─── PR-D: AC coverage integration ───────────────────────────
+
+describe('ExplanationPanel — AC coverage (PR-D)', () => {
+  it('renders the AC checklist inside the Proto card when acCoverage is provided', () => {
+    const protoStage = mkStage({
+      agentName: 'proto',
+      decision: 'İskelet üretildi: 5 dosya',
+      reasoning: ['eski bullet listesi'],
+    });
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [protoStage] })}
+        acCoverage={{
+          totalAcs: 2,
+          staticCoveredCount: 1,
+          dynamicCoveredCount: 0,
+          items: [
+            {
+              acId: 'ac-1',
+              acDescription: 'QR PNG indir',
+              staticCovered: true,
+              dynamicCovered: false,
+              coveringFiles: ['src/QR.tsx'],
+              coveringTests: [],
+            },
+            {
+              acId: 'ac-2',
+              acDescription: 'Geçmiş listesi',
+              staticCovered: false,
+              dynamicCovered: false,
+              coveringFiles: [],
+              coveringTests: [],
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByTestId('ac-coverage')).toBeInTheDocument();
+    expect(screen.getByTestId('ac-coverage-item-ac-1')).toHaveAttribute('data-covered', 'true');
+    expect(screen.getByTestId('ac-coverage-item-ac-2')).toHaveAttribute('data-covered', 'false');
+    // Legacy bullet list should NOT render alongside — the AC checklist
+    // replaces it for Proto when AC are available.
+    expect(screen.queryByText('eski bullet listesi')).toBeNull();
+  });
+
+  it('falls back to bullet list when no acCoverage is provided', () => {
+    const protoStage = mkStage({
+      agentName: 'proto',
+      reasoning: ['Bullet kalır'],
+    });
+    render(
+      <ExplanationPanel pipelineId="p-1" explanation={mkExplanation({ stages: [protoStage] })} />
+    );
+    expect(screen.queryByTestId('ac-coverage')).toBeNull();
+    expect(screen.getByText('Bullet kalır')).toBeInTheDocument();
+  });
+
+  it('falls back to bullet list when acCoverage has zero AC', () => {
+    const protoStage = mkStage({ agentName: 'proto', reasoning: ['Bullet kalır'] });
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [protoStage] })}
+        acCoverage={{
+          totalAcs: 0,
+          staticCoveredCount: 0,
+          dynamicCoveredCount: 0,
+          items: [],
+        }}
+      />
+    );
+    expect(screen.queryByTestId('ac-coverage')).toBeNull();
+    expect(screen.getByText('Bullet kalır')).toBeInTheDocument();
+  });
+
+  it('does NOT render the AC checklist on non-Proto stage cards', () => {
+    const scribeStage = mkStage({ agentName: 'scribe', reasoning: ['Scribe bullet'] });
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [scribeStage] })}
+        acCoverage={{
+          totalAcs: 1,
+          staticCoveredCount: 1,
+          dynamicCoveredCount: 0,
+          items: [
+            {
+              acId: 'ac-1',
+              acDescription: 'x',
+              staticCovered: true,
+              dynamicCovered: false,
+              coveringFiles: [],
+              coveringTests: [],
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.queryByTestId('ac-coverage')).toBeNull();
+    expect(screen.getByText('Scribe bullet')).toBeInTheDocument();
+  });
+});

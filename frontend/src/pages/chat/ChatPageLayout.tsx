@@ -309,6 +309,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       protoFiles={protoFiles}
                       onPushResolved={onPushResolved}
                       criticReview={activeWorkflow?.criticReview}
+                      acCoverage={activeWorkflow?.acCoverage}
                       onCriticResolved={
                         onPushResolved
                           ? () => {

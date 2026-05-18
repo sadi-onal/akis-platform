@@ -93,6 +93,12 @@ interface ChatPanelProps {
   criticApprovalThreshold?: number;
   /** P8: called after `critic-override` resolves so the parent can refetch. */
   onCriticResolved?: () => void;
+  /**
+   * PR-D: AC coverage report from `pipeline.intermediateState.acCoverage`.
+   * Threaded through to PipelineDetailRail → ExplanationPanel so the Proto
+   * reasoning card can render the per-AC binary checklist.
+   */
+  acCoverage?: import('../../types/pipeline').AcCoverageReport;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -141,6 +147,7 @@ export const ChatPanel = memo(function ChatPanel({
   criticReview,
   criticApprovalThreshold,
   onCriticResolved,
+  acCoverage,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -250,6 +257,7 @@ export const ChatPanel = memo(function ChatPanel({
           criticReview={criticReview}
           criticApprovalThreshold={criticApprovalThreshold}
           onCriticResolved={onCriticResolved}
+          acCoverage={acCoverage}
         />
       )}
 

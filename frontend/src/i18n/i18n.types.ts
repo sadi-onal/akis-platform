@@ -1143,6 +1143,19 @@ export const MESSAGE_KEYS = [
   'pipeline.activity.trace.pushing_tests',
   'pipeline.trace.proceedingWithoutPlan',
 
+  // PR-D: AC coverage checklist (replaces mechanical Proto confidence formula)
+  'pipeline.acCoverage.title',
+  'pipeline.acCoverage.summaryStatic',
+  'pipeline.acCoverage.summaryDynamic',
+  'pipeline.acCoverage.covered',
+  'pipeline.acCoverage.notCovered',
+  'pipeline.acCoverage.coveringFiles',
+  'pipeline.acCoverage.coveringTests',
+  'pipeline.acCoverage.testBadge',
+  'pipeline.acCoverage.showList',
+  'pipeline.acCoverage.hideList',
+  'pipeline.acCoverage.emptyState',
+
   // P5b — AI request log viewer (admin/debug)
   'pipeline.aiLogs.tab',
   'pipeline.aiLogs.empty',

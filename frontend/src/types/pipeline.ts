@@ -204,6 +204,12 @@ export interface Pipeline {
       manuallyOverridden: boolean;
       overriddenAt?: string;
     };
+    /**
+     * PR-D — per-AC binary coverage checklist. Replaces the mechanical
+     * Proto-confidence formula. Static layer is filled once Proto produces
+     * files; dynamic layer is filled once Trace runs successfully.
+     */
+    acCoverage?: AcCoverageReport;
     [key: string]: unknown;
   };
   createdAt: string;
@@ -272,6 +278,28 @@ export interface PipelineExplanation {
   overallNarrative: string;
   attentionPoints: AttentionPoint[];
   meta?: PipelineExplanationMeta;
+}
+
+// ─── PR-D: AC Coverage ───────────────────────────────────────
+
+export interface AcCoverageItem {
+  acId: string;
+  acDescription: string;
+  /** Proto file content lightweight-matched at least one AC keyword. */
+  staticCovered: boolean;
+  /** Trace test references this AC (coverageMatrix or content keyword match). */
+  dynamicCovered: boolean;
+  /** Up to 3 Proto file paths whose content/path matched. */
+  coveringFiles: string[];
+  /** Up to 3 Trace test file paths whose content/path matched. */
+  coveringTests: string[];
+}
+
+export interface AcCoverageReport {
+  totalAcs: number;
+  staticCoveredCount: number;
+  dynamicCoveredCount: number;
+  items: AcCoverageItem[];
 }
 
 // ─── Tier 1.A: Regression Confidence ─────────────────────────
