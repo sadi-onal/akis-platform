@@ -97,7 +97,7 @@ function createOrchestrator(store: PipelineStore) {
 // ─── Tests ───────────────────────────────────────
 
 describe('Trace Toggle — traceEnabled field in startPipeline', () => {
-  it('startPipeline stores traceEnabled=false by default', async () => {
+  it('startPipeline stores traceEnabled=true by default (P9: opt-out)', async () => {
     const store = createMockStore();
     const orchestrator = createOrchestrator(store);
 
@@ -106,10 +106,26 @@ describe('Trace Toggle — traceEnabled field in startPipeline', () => {
     // Find the update that set traceEnabled
     const traceUpdate = store.updates.find(u => u.traceEnabled !== undefined);
     assert.notEqual(traceUpdate, undefined, 'should have an update with traceEnabled');
+    assert.equal(traceUpdate!.traceEnabled, true);
+  });
+
+  it('startPipeline stores traceEnabled=false when explicitly opted out', async () => {
+    const store = createMockStore();
+    const orchestrator = createOrchestrator(store);
+
+    await orchestrator.startPipeline(
+      'user-1',
+      { idea: 'Build a simple calculator app' },
+      undefined, undefined, undefined, undefined,
+      false, // traceEnabled
+    );
+
+    const traceUpdate = store.updates.find(u => u.traceEnabled !== undefined);
+    assert.notEqual(traceUpdate, undefined, 'should have an update with traceEnabled');
     assert.equal(traceUpdate!.traceEnabled, false);
   });
 
-  it('startPipeline stores traceEnabled=true when passed', async () => {
+  it('startPipeline stores traceEnabled=true when passed explicitly', async () => {
     const store = createMockStore();
     const orchestrator = createOrchestrator(store);
 

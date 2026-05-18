@@ -358,6 +358,13 @@
       "when": 1779580800000,
       "tag": "0049_pipeline_awaiting_push_confirm_stage",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1779667200000,
+      "tag": "0050_trace_enabled_default_true",
+      "breakpoints": true
     }
   ]
 }

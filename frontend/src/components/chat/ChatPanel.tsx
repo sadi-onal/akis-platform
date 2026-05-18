@@ -257,6 +257,29 @@ export const ChatPanel = memo(function ChatPanel({
         />
       )}
 
+      {/* P9: early hint — when Proto is running and Trace is enabled, tell
+          the user upfront that the verification step will follow. Otherwise
+          the Trace stage feels like it "appeared from nowhere" and the
+          alternative ("Trace hiç çalışmadı") signal is harder to spot. */}
+      {conversationId &&
+        traceEnabled === true &&
+        (uiState === 'proto_running' || uiState === 'awaiting_approval') && (
+          <div
+            data-testid="trace-pending-hint"
+            className="mx-auto w-full max-w-3xl px-4 sm:px-6"
+          >
+            <div className="mt-2 flex items-center gap-2 rounded-md border border-ak-trace/30 bg-ak-trace/5 px-3 py-1.5 text-xs text-ak-text-secondary">
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: 'var(--ak-trace, #8b5cf6)' }}
+              />
+              <span>
+                Bu pipeline&apos;da Trace çalışacak — Proto kodu üretildikten sonra Playwright testleri otomatik yazılır.
+              </span>
+            </div>
+          </div>
+        )}
+
       {/* Messages */}
       {isEmpty ? (
         <EmptyState variant={conversationId ? 'new-conversation' : 'no-conversation'} />
@@ -448,11 +471,24 @@ export const ChatPanel = memo(function ChatPanel({
         <div className="mx-auto w-full max-w-4xl px-3 pt-1 sm:px-6 md:max-w-5xl xl:max-w-6xl">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             {onTraceToggle && (
-              <div className="flex items-center gap-2">
+              <div
+                className="flex items-center gap-2"
+                data-testid="trace-toggle"
+                title={
+                  traceEnabled
+                    ? 'Trace açık — Proto kodu üretildikten sonra Playwright testleri otomatik yazılacak'
+                    : 'Trace kapalı — sadece kod üretilecek, test yazılmayacak'
+                }
+              >
                 <button
                   type="button"
                   role="switch"
                   aria-checked={traceEnabled}
+                  aria-label={
+                    traceEnabled
+                      ? 'Trace açık — testler üretilecek'
+                      : 'Trace kapalı — sadece kod üretilecek'
+                  }
                   onClick={() => onTraceToggle(!traceEnabled)}
                   className={cn(
                     'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ak-primary focus-visible:ring-offset-2',
@@ -467,11 +503,21 @@ export const ChatPanel = memo(function ChatPanel({
                   />
                 </button>
                 <div className="flex flex-col">
-                  <span className="text-xs font-medium text-ak-text-secondary">
-                    Test Yaz (Trace)
+                  <span
+                    className={cn(
+                      'text-xs font-medium transition-colors',
+                      traceEnabled ? 'text-ak-primary' : 'text-ak-text-tertiary'
+                    )}
+                    data-testid="trace-toggle-label"
+                  >
+                    {traceEnabled
+                      ? 'Trace açık — testler üretilecek'
+                      : 'Trace kapalı — sadece kod'}
                   </span>
                   <span className="text-[10px] text-ak-text-tertiary">
-                    Koddan Playwright testleri üretir
+                    {traceEnabled
+                      ? 'Kod sonrası Playwright testleri otomatik yazılır'
+                      : 'Trace agent çalışmayacak'}
                   </span>
                 </div>
               </div>

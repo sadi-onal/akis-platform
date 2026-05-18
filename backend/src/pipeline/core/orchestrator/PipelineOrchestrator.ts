@@ -496,7 +496,12 @@ export class PipelineOrchestrator {
       title: ideaToTitle(input.idea),
       model: lockedModel,
       modelLockedAt: new Date(),
-      traceEnabled: traceEnabled ?? false,
+      // P9: single source of truth — schema default, DB column default, and
+      // orchestrator fallback all align on `true`. Trace is opt-out: the user
+      // can flip the ChatPanel toggle off before submitting, otherwise we run
+      // the verification step the platform's whole "Scribe→Proto→Trace" thesis
+      // depends on.
+      traceEnabled: traceEnabled ?? true,
       scribeConversation: conversation,
       metrics: { ...pipeline.metrics, startedAt: new Date() },
     };
