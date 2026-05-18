@@ -10,6 +10,12 @@
  * (no DB / no auth) — `requireAuth` is the only DB-touching helper and it
  * is short-circuited by the lack of cookies (catch in the handler).
  */
+// Set CI-required env vars BEFORE any module imports — the route's import
+// chain reaches env.ts:getEnv() which fails fast on missing DATABASE_URL /
+// AUTH_JWT_SECRET. CI does not provide them for unit tests.
+process.env.DATABASE_URL ??= 'postgres://test:test@localhost:5432/test';
+process.env.AUTH_JWT_SECRET ??= 'a'.repeat(32);
+
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import Fastify from 'fastify';
