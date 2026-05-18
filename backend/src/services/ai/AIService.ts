@@ -510,6 +510,58 @@ class RealAIService implements AIService {
   }
 
   /**
+   * Build request for Google Gemini's `generateContent` REST endpoint (P1c).
+   *
+   * Gemini's API shape is unique among the three providers:
+   *   - Auth via `?key=<API_KEY>` query string, NOT a header.
+   *   - Per-model endpoint path: `/v1beta/models/{model}:generateContent`.
+   *   - `system` is a top-level `systemInstruction` block, NOT a role-in-array.
+   *   - Roles in `contents[]` use `user` + `model` (assistant → model).
+   *   - Generation tuning lives in `generationConfig: { temperature, maxOutputTokens }`.
+   *
+   * Multimodal (image parts) is out of scope for this PR — text-only.
+   */
+  private buildGoogleRequest(
+    messages: ChatMessage[],
+    model: string,
+    options: { temperature?: number; maxTokens?: number },
+  ): { endpoint: string; headers: Record<string, string>; body: Record<string, unknown> } {
+    const apiKey = this.config.apiKey!;
+    const endpoint =
+      `${this.config.baseUrl}/models/${encodeURIComponent(model)}:generateContent` +
+      `?key=${encodeURIComponent(apiKey)}`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Separate system prompts (Gemini puts them in `systemInstruction`, not contents[]).
+    const systemMessages = messages.filter((m) => m.role === 'system');
+    const nonSystemMessages = messages.filter((m) => m.role !== 'system');
+
+    const contents = nonSystemMessages.map((m) => ({
+      // Anthropic/OpenAI use `assistant`; Gemini uses `model`.
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+
+    const body: Record<string, unknown> = {
+      contents,
+      generationConfig: {
+        ...(options.temperature !== undefined && { temperature: options.temperature }),
+        maxOutputTokens: options.maxTokens ?? 4096,
+      },
+    };
+
+    if (systemMessages.length > 0) {
+      const systemText = systemMessages.map((m) => m.content).join('\n\n');
+      body.systemInstruction = { parts: [{ text: systemText }] };
+    }
+
+    return { endpoint, headers, body };
+  }
+
+  /**
    * Build request for OpenAI-compatible APIs (OpenAI, OpenRouter)
    */
   private buildOpenAIRequest(
@@ -596,6 +648,58 @@ class RealAIService implements AIService {
   }
 
   /**
+   * Parse Google Gemini `generateContent` response into the standard format (P1c).
+   *
+   * Gemini returns: `{ candidates: [{ content: { parts: [{ text }] }, finishReason }],
+   * usageMetadata: { promptTokenCount, candidatesTokenCount, totalTokenCount } }`.
+   * We pick the first candidate, concatenate its text parts, and map the
+   * usageMetadata fields onto AIUsage (input = prompt, output = candidates).
+   *
+   * Cache token fields are intentionally omitted — Gemini exposes implicit cache
+   * stats only in v1beta paid tier and the format isn't stable yet; we'll
+   * revisit in a follow-up once that lands.
+   */
+  private parseGoogleResponse(data: Record<string, unknown>): {
+    content: string;
+    usage?: AIUsage;
+  } {
+    const candidates = (data.candidates ?? []) as Array<Record<string, unknown>>;
+    if (candidates.length === 0) {
+      throw new AIProviderError(
+        'AI_INVALID_RESPONSE',
+        'Gemini API returned no candidates',
+        this.config.provider,
+      );
+    }
+
+    const firstCandidate = candidates[0];
+    const candidateContent = firstCandidate.content as
+      | { parts?: Array<{ text?: string }> }
+      | undefined;
+    const parts = candidateContent?.parts ?? [];
+    const content = parts.map((p) => p.text ?? '').join('');
+
+    const rawUsage = data.usageMetadata as
+      | {
+          promptTokenCount?: number;
+          candidatesTokenCount?: number;
+          totalTokenCount?: number;
+        }
+      | undefined;
+    const usage: AIUsage | undefined = rawUsage
+      ? {
+          inputTokens: rawUsage.promptTokenCount,
+          outputTokens: rawUsage.candidatesTokenCount,
+          totalTokens:
+            rawUsage.totalTokenCount ??
+            (rawUsage.promptTokenCount ?? 0) + (rawUsage.candidatesTokenCount ?? 0),
+        }
+      : undefined;
+
+    return { content, usage };
+  }
+
+  /**
    * Parse OpenAI-compatible response into standard format
    */
   private parseOpenAIResponse(data: ChatCompletionResponse): {
@@ -626,6 +730,24 @@ class RealAIService implements AIService {
   }
 
   /**
+   * Human-friendly label for the current provider (used in error messages
+   * surfaced to the chat UI). Defaults to capitalised provider name for any
+   * future addition so the chain doesn't silently mis-label.
+   */
+  private getProviderLabel(): string {
+    switch (this.config.provider) {
+      case 'openai':
+        return 'OpenAI';
+      case 'anthropic':
+        return 'Anthropic';
+      case 'google':
+        return 'Google Gemini';
+      default:
+        return this.config.provider;
+    }
+  }
+
+  /**
    * Make a chat completion request to the AI API with retry logic
    */
   private async chatCompletion(
@@ -644,9 +766,12 @@ class RealAIService implements AIService {
 
     // Build provider-specific request
     const isAnthropic = this.config.provider === 'anthropic';
+    const isGoogle = this.config.provider === 'google';
     const { endpoint, headers, body } = isAnthropic
       ? this.buildAnthropicRequest(messages, model, options)
-      : this.buildOpenAIRequest(messages, model, options);
+      : isGoogle
+        ? this.buildGoogleRequest(messages, model, options)
+        : this.buildOpenAIRequest(messages, model, options);
 
     let lastError: Error | null = null;
 
@@ -697,10 +822,13 @@ class RealAIService implements AIService {
         if (!response.ok) {
           const errorText = await response.text().catch(() => 'Unknown error');
           
-          // Auth errors (401, 403) - provide clear, actionable message
+          // Auth errors (401, 403) - provide clear, actionable message.
+          // Gemini returns 400 with code PERMISSION_DENIED when the key is bad,
+          // but it also returns 401/403 for legitimate auth issues — mapping all
+          // auth-class statuses here keeps the user-facing message consistent.
           if (response.status === 401 || response.status === 403) {
-            const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : 'Anthropic';
-            
+            const providerLabel = this.getProviderLabel();
+
             // Create user-friendly error message (don't expose raw API errors like "cookie auth")
             let friendlyMessage: string;
             if (response.status === 401) {
@@ -731,7 +859,7 @@ class RealAIService implements AIService {
           
           // Model not found errors (404) - provide actionable message
           if (response.status === 404) {
-            const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : 'Anthropic';
+            const providerLabel = this.getProviderLabel();
             const modelNotFoundError = new AIProviderError(
               'AI_MODEL_NOT_FOUND',
               `Model "${model}" is not available on ${providerLabel}. Please select a different model in the agent configuration.`,
@@ -761,7 +889,7 @@ class RealAIService implements AIService {
           }
           
           // Generic error - provide friendly message
-          const providerLabel = this.config.provider === 'openai' ? 'OpenAI' : 'Anthropic';
+          const providerLabel = this.getProviderLabel();
           let friendlyMessage = `${providerLabel} returned an error (${response.status}).`;
           
           // Add context based on error content
@@ -797,7 +925,9 @@ class RealAIService implements AIService {
         // Parse response based on provider format
         const parsed = isAnthropic
           ? this.parseAnthropicResponse(data as Record<string, unknown>)
-          : this.parseOpenAIResponse(data as ChatCompletionResponse);
+          : isGoogle
+            ? this.parseGoogleResponse(data as Record<string, unknown>)
+            : this.parseOpenAIResponse(data as ChatCompletionResponse);
 
         const estimatedCostUsd = parsed.usage
           ? estimateCostUsd(
