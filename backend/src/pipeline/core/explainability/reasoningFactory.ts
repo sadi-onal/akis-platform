@@ -64,12 +64,11 @@ export function buildProtoReasoning(
       factors: [
         `Dosya sayısı: ${filesCreated}`,
         `Toplam satır: ${totalLoc}`,
-        `GitHub'a gönderildi: ${committed ? 'evet' : 'hayır'}`,
+        committed
+          ? 'Uzaktaki repoya gönderildi'
+          : 'Sadece local taslak — uzaktaki repoya gönderilmedi',
       ],
     },
-    ...(output.metadata?.committed === false
-      ? { risks: ["İskelet henüz GitHub'a gönderilmedi — kullanıcı onayı bekleniyor"] }
-      : {}),
   };
 }
 

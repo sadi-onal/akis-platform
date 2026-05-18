@@ -48,9 +48,11 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
       // free-form corrections (FEEDBACK intent → iterateWithFeedback).
       return "Ne değişsin? Örn: 'renkleri pembe yap'. Veya sağdaki butonla GitHub'a gönder.";
     if (uiState === 'awaiting_critic_resolution')
-      // P8: critic flagged bulgu(s) — chat-driven düzelt or the sağdaki
-      // 'Yine de devam et' override are the two ways forward.
-      return "Kritik bulgu var — düzeltmek için yaz ya da sağdaki butonu kullan.";
+      // P8 + PR-A Fix 2: critic flagged bulgu(s) — chat-driven düzelt or the
+      // right-pane 'Yine de devam et' override are the two ways forward.
+      // Spell out which panel and which button so users find the action
+      // without scanning the whole screen.
+      return "Kritik bulgu bulundu — düzeltmek için chat'e yaz ya da sağ paneldeki 'Yine de devam et' butonuna bas.";
     if (uiState === 'scribe_running' || uiState === 'scribe_revise')
       return 'Scribe çalışıyor... Mesaj bırakabilirsiniz.';
     if (uiState === 'critic_running') return 'Critic inceliyor... Mesaj bırakabilirsiniz.';

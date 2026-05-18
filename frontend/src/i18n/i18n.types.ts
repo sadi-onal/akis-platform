@@ -1117,6 +1117,14 @@ export const MESSAGE_KEYS = [
   'pipeline.stage.traceTesting',
   'pipeline.stage.awaitingPushConfirm',
 
+  // PR-A Fix 3: bakkal-Türkçesi hover tooltips for the Cinema stage cards.
+  // Each tooltip explains what the stage does in everyday language.
+  'pipeline.stage.scribe.tooltip',
+  'pipeline.stage.criticSpec.tooltip',
+  'pipeline.stage.proto.tooltip',
+  'pipeline.stage.criticCode.tooltip',
+  'pipeline.stage.trace.tooltip',
+
   // Pipeline activity sub-stage keys (PR-A: emitted by agents, rendered as live status)
   'pipeline.activity.scribe.analyzing_questions',
   'pipeline.activity.scribe.writing_spec',
