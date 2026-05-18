@@ -148,7 +148,10 @@ function StageColumn({
           <span className={`text-sm font-semibold ${accent.text}`}>{STAGE_LABEL[stage]}</span>
         </span>
         {reasoning?.confidence !== undefined && (
-          <ConfidenceBadge score={reasoning.confidence} compact />
+          // PR-E bulgu #2: stage card already owns a Türkçe tooltip (title +
+          // aria-label on the wrapper). Suppress the badge's own popover so
+          // the user never sees two tooltips stacked on hover.
+          <ConfidenceBadge score={reasoning.confidence} compact suppressTooltip />
         )}
       </header>
       <p className="text-xs text-ak-text-tertiary">{STAGE_TAGLINE[stage]}</p>

@@ -274,12 +274,17 @@ export function PipelineDetailRail({
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
 
-    const RAIL_MIN_HEIGHT_PX = 120;
+    // PR-E bulgu #3: previous bounds (120px / 70vh) left users complaining
+    // that the rail couldn't shrink small enough to give the chat surface
+    // back. Drop the floor to 60px (just the tab strip + a sliver of body)
+    // and lift the ceiling to 85vh so power-users can fill the column
+    // while still leaving a chat handle visible.
+    const RAIL_MIN_HEIGHT_PX = 60;
     const onMove = (ev: MouseEvent) => {
       if (!dragRef.current) return;
       const { startY, startHeight } = dragRef.current;
       const dy = ev.clientY - startY;
-      const max = Math.round(window.innerHeight * 0.7);
+      const max = Math.round(window.innerHeight * 0.85);
       const next = Math.max(RAIL_MIN_HEIGHT_PX, Math.min(max, startHeight + dy));
       setBodyHeightPx(next);
     };

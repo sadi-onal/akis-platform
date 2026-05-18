@@ -287,9 +287,33 @@ describe('PipelineCinema component', () => {
       }),
     ];
     render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
-    // ConfidenceBadge renders as a button with the score
-    const badge = screen.getAllByRole('button').find((b) => b.textContent?.includes('88%'));
-    expect(badge).toBeDefined();
+    // PR-E bulgu #2: cinema renders the badge with suppressTooltip so it is
+    // now a plain span (no button) — surface it via the aria-label instead.
+    expect(screen.getByLabelText(/88%/)).toBeInTheDocument();
+  });
+
+  // PR-E bulgu #2: prior behaviour was two stacked tooltips on hover (the
+  // stage card's `title` + the badge's popover). The cinema column now
+  // passes suppressTooltip so the badge no longer renders a button, and
+  // therefore can't surface a second popover.
+  it('does not stack a confidence-badge tooltip on top of the stage tooltip', () => {
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'critic',
+        criticPhase: 'spec',
+        progress: 100,
+        reasoning: { decision: 'Spec OK', confidence: 88 },
+      }),
+    ];
+    const { container } = render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
+    // No interactive ConfidenceBadge button inside the critic_spec card.
+    const critic = container.querySelector('[data-stage="critic_spec"]');
+    expect(critic).toBeTruthy();
+    // The card itself owns the tooltip via `title`; the badge inside is a
+    // non-interactive span. Assert by attribute presence on the badge tier
+    // pill.
+    expect(critic?.querySelector('[data-tier]')?.tagName).toBe('SPAN');
+    expect(critic?.querySelector('[data-tier]')?.getAttribute('role')).not.toBe('button');
   });
 
   it('exposes data-cinema-mode attribute', () => {
