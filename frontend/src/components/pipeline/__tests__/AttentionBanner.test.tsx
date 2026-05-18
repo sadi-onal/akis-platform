@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { AttentionBanner } from '../AttentionBanner';
 import type { AttentionPoint } from '../../../types/pipeline';
 
@@ -35,17 +35,40 @@ describe('AttentionBanner', () => {
     expect(items[2]).toHaveAttribute('data-severity', 'low');
   });
 
-  it('caps at limit and shows overflow note', () => {
+  it('caps at limit and shows overflow toggle button', () => {
     const points = Array.from({ length: 6 }, (_, i) => mk('medium', 'scribe', `Issue ${i}`));
     render(<AttentionBanner points={points} limit={3} />);
     const items = screen.getAllByRole('status');
     expect(items.length).toBe(3);
-    expect(screen.getByText(/3 ek dikkat noktası gizlendi/)).toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: /3 ek dikkat noktası göster/ });
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('omits overflow note when within limit', () => {
+  it('omits overflow toggle when within limit', () => {
     render(<AttentionBanner points={[mk('high', 'critic', 'Test')]} limit={3} />);
     expect(screen.queryByText(/ek dikkat noktası/)).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('expands to show all points when toggle clicked and collapses on second click', () => {
+    const points = Array.from({ length: 6 }, (_, i) => mk('medium', 'scribe', `Issue ${i}`));
+    render(<AttentionBanner points={points} limit={3} />);
+    expect(screen.getAllByRole('status').length).toBe(3);
+
+    const toggle = screen.getByRole('button', { name: /göster/ });
+    fireEvent.click(toggle);
+
+    expect(screen.getAllByRole('status').length).toBe(6);
+    const gizle = screen.getByRole('button', { name: /Gizle/ });
+    expect(gizle).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(gizle);
+    expect(screen.getAllByRole('status').length).toBe(3);
+    expect(screen.getByRole('button', { name: /göster/ })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
   });
 
   it('uses Turkish severity labels', () => {

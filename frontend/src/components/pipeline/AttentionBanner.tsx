@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { AttentionPoint } from '../../types/pipeline';
 
 export interface AttentionBannerProps {
@@ -44,10 +45,12 @@ function labelForStage(stage: string): string {
  * Sorts by severity, caps at `limit`, and renders nothing when empty.
  */
 export function AttentionBanner({ points, limit = 3, className }: AttentionBannerProps) {
+  const [expanded, setExpanded] = useState(false);
   if (!points || points.length === 0) return null;
   const sorted = [...points].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
-  const visible = sorted.slice(0, limit);
-  const overflow = sorted.length - visible.length;
+  const capped = sorted.slice(0, limit);
+  const overflow = sorted.length - capped.length;
+  const visible = expanded ? sorted : capped;
   return (
     <div
       role="region"
@@ -71,7 +74,14 @@ export function AttentionBanner({ points, limit = 3, className }: AttentionBanne
         </div>
       ))}
       {overflow > 0 && (
-        <p className="text-xs text-ak-text-tertiary">+{overflow} ek dikkat noktası gizlendi</p>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="self-start text-xs text-ak-text-tertiary underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+        >
+          {expanded ? 'Gizle' : `+${overflow} ek dikkat noktası göster`}
+        </button>
       )}
     </div>
   );
