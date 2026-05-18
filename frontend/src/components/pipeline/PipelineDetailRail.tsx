@@ -563,6 +563,7 @@ export function PipelineDetailRail({
                   explanation={explanation ?? undefined}
                   fetcher={explanationFetcher}
                   hideAttentionBanner
+                  onIterationStarted={onCriticResolved}
                 />
               )}
             </>

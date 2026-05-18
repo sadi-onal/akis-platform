@@ -1,10 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 
-// ConfidenceBadge (transitively rendered) requires I18nProvider; stub here.
+// Lightweight i18n stub. Returns the key for unknown ids so older tests
+// keep matching "{key.path}"; substitutes {n}/{total} for the PR-C
+// counter so the rendered label is readable in DOM queries.
 vi.mock('../../../i18n/useI18n', () => ({
   useI18n: () => ({
-    t: (key: string) => key,
+    t: (key: string) => {
+      if (key === 'chat.criticFindings.selectedCount') return '{n}/{total} öneri seçildi';
+      if (key === 'chat.criticFindings.applySelected') return 'Seçilenleri uygula';
+      if (key === 'chat.criticFindings.applying') return 'Uygulanıyor...';
+      if (key === 'chat.criticFindings.checkbox.aria')
+        return 'Bu öneriyi uygulanacak listeye ekle';
+      if (key === 'chat.criticFindings.feedbackHeader')
+        return 'Aşağıdaki Critic önerileri uygulansın:';
+      if (key === 'chat.criticFindings.applyError') return 'Düzeltme gönderilemedi.';
+      return key;
+    },
     locale: 'tr',
     availableLocales: ['tr', 'en'],
     status: 'ready',
@@ -13,7 +25,11 @@ vi.mock('../../../i18n/useI18n', () => ({
 }));
 
 import { ExplanationPanel } from '../ExplanationPanel';
-import type { PipelineExplanation, AgentReasoning } from '../../../types/pipeline';
+import type {
+  PipelineExplanation,
+  AgentReasoning,
+  ReasoningFinding,
+} from '../../../types/pipeline';
 
 const mkStage = (overrides: Partial<AgentReasoning> = {}): AgentReasoning => ({
   agentName: 'scribe',
@@ -142,5 +158,165 @@ describe('ExplanationPanel', () => {
       />
     );
     expect(screen.getByText('Özetlenmiş hikaye')).toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// PR-C — Critic suggestion checkbox + "Seçilenleri uygula"
+// ─────────────────────────────────────────────────────────
+
+const mkFinding = (over: Partial<ReasoningFinding> = {}): ReasoningFinding => ({
+  severity: 'major',
+  category: 'completeness',
+  description: 'desc',
+  suggestion: 'do x',
+  ...over,
+});
+
+const mkCriticStage = (findings: ReasoningFinding[]): AgentReasoning => ({
+  agentName: 'critic',
+  timestamp: new Date('2026-05-08T10:00:00Z').toISOString(),
+  decision: 'Code review tamamlandı',
+  reasoning: [],
+  assumptions: [],
+  confidence: { score: 60, factors: [] },
+  findings,
+});
+
+describe('ExplanationPanel — PR-C suggestion selection', () => {
+  it('renders a checkbox for every finding that has a non-empty suggestion', () => {
+    const findings = [
+      mkFinding({ category: 'completeness', description: 'A', suggestion: 'fix A' }),
+      mkFinding({ category: 'security', description: 'B', suggestion: 'fix B' }),
+      mkFinding({ category: 'completeness', description: 'C', suggestion: 'fix C' }),
+    ];
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={vi.fn()}
+      />
+    );
+    const boxes = screen.getAllByRole('checkbox');
+    expect(boxes).toHaveLength(3);
+    expect(screen.getByText('0/3 öneri seçildi')).toBeInTheDocument();
+    expect(screen.getByTestId('critic-findings-apply-button')).toBeDisabled();
+  });
+
+  it('does not render a checkbox for findings that have no suggestion', () => {
+    const findings = [
+      mkFinding({ description: 'A', suggestion: 'fix A' }),
+      mkFinding({ description: 'B', suggestion: '' }),
+    ];
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={vi.fn()}
+      />
+    );
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByText('0/1 öneri seçildi')).toBeInTheDocument();
+  });
+
+  it('updates the selected counter as the user toggles checkboxes', () => {
+    const findings = [
+      mkFinding({ description: 'A', suggestion: 'fix A' }),
+      mkFinding({ description: 'B', suggestion: 'fix B' }),
+      mkFinding({ description: 'C', suggestion: 'fix C' }),
+    ];
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={vi.fn()}
+      />
+    );
+    const boxes = screen.getAllByRole('checkbox');
+    fireEvent.click(boxes[0]);
+    expect(screen.getByText('1/3 öneri seçildi')).toBeInTheDocument();
+    fireEvent.click(boxes[2]);
+    expect(screen.getByText('2/3 öneri seçildi')).toBeInTheDocument();
+    fireEvent.click(boxes[0]);
+    expect(screen.getByText('1/3 öneri seçildi')).toBeInTheDocument();
+  });
+
+  it('apply button calls iterateWithFeedback with a numbered, header-prefixed prompt', async () => {
+    const findings = [
+      mkFinding({ category: 'completeness', description: 'A', suggestion: 'fix A' }),
+      mkFinding({ category: 'security', description: 'B', suggestion: 'fix B' }),
+    ];
+    const iterate = vi.fn().mockResolvedValue(undefined);
+    const onIterationStarted = vi.fn();
+    render(
+      <ExplanationPanel
+        pipelineId="p-42"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={iterate}
+        onIterationStarted={onIterationStarted}
+      />
+    );
+    const boxes = screen.getAllByRole('checkbox');
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    fireEvent.click(screen.getByTestId('critic-findings-apply-button'));
+
+    await waitFor(() => expect(iterate).toHaveBeenCalledTimes(1));
+    const [pipelineId, feedback] = iterate.mock.calls[0];
+    expect(pipelineId).toBe('p-42');
+    expect(feedback).toContain('Aşağıdaki Critic önerileri uygulansın:');
+    expect(feedback).toMatch(/1\.\s.+/);
+    expect(feedback).toMatch(/2\.\s.+/);
+    // Both selected suggestions should appear regardless of grouping order.
+    expect(feedback).toContain('fix A');
+    expect(feedback).toContain('fix B');
+
+    await waitFor(() => expect(onIterationStarted).toHaveBeenCalled());
+    // Selection should reset after a successful apply.
+    expect(screen.getByText('0/2 öneri seçildi')).toBeInTheDocument();
+  });
+
+  it('apply button stays disabled when nothing is selected', () => {
+    const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('critic-findings-apply-button')).toBeDisabled();
+  });
+
+  it('hides the apply bar when no finding has a non-empty suggestion', () => {
+    const findings = [mkFinding({ description: 'A', suggestion: '' })];
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId('critic-findings-apply-bar')).toBeNull();
+    expect(screen.queryByTestId('critic-findings-apply-button')).toBeNull();
+  });
+
+  it('surfaces an inline error if iterateWithFeedback rejects', async () => {
+    const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+    const iterate = vi.fn().mockRejectedValue(new Error('429 Too Many Requests'));
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={iterate}
+      />
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByTestId('critic-findings-apply-button'));
+    expect(await screen.findByTestId('critic-findings-apply-error')).toHaveTextContent(
+      '429 Too Many Requests'
+    );
+    // Selection survives a failed apply so the user can retry.
+    expect(screen.getByRole('checkbox')).toBeChecked();
   });
 });

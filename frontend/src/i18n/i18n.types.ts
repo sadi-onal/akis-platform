@@ -1103,6 +1103,12 @@ export const MESSAGE_KEYS = [
   'chat.critic.resolution.override',
   'chat.critic.resolution.overriding',
   'chat.critic.resolution.errorOverride',
+  'chat.criticFindings.checkbox.aria',
+  'chat.criticFindings.selectedCount',
+  'chat.criticFindings.applySelected',
+  'chat.criticFindings.applying',
+  'chat.criticFindings.feedbackHeader',
+  'chat.criticFindings.applyError',
 
   // Pipeline Stages
   'pipeline.stage.awaitingApproval',

@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { PipelineExplanation, AgentReasoning, ReasoningFinding } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
+import { useI18n } from '../../i18n/useI18n';
 import { ConfidenceBadge } from './ConfidenceBadge';
+
+// Hard ceiling enforced by the backend feedback schema (B5,
+// `IterateFeedbackRequestSchema.feedback.max(2000)`). We mirror it
+// client-side so very long aggregated suggestions don't 400 on submit.
+const FEEDBACK_MAX_CHARS = 2000;
 
 // Per-category surface metadata. Icons are simple text glyphs (not
 // emoji) so they stay legible across systems and don't fight the AKIS
@@ -69,26 +75,146 @@ const SEVERITY_RANK: Record<ReasoningFinding['severity'], number> = {
   info: 3,
 };
 
-function CriticFindingsSection({ findings }: { findings: ReasoningFinding[] }) {
+interface CriticFindingsSectionProps {
+  findings: ReasoningFinding[];
+  /**
+   * PR-C: when provided, every finding that ships a non-empty `suggestion`
+   * gets a checkbox + the section renders an "Apply selected" footer that
+   * bundles the chosen suggestions and POSTs them through
+   * `workflowsApi.iterateWithFeedback` (or the injected fetcher). Without a
+   * pipelineId, the section stays read-only — keeps standalone usage on
+   * legacy pages clean.
+   */
+  pipelineId?: string;
+  /** Invoked after a successful iterate so the host can refresh state. */
+  onIterationStarted?: () => void;
+  /** DI for tests — defaults to `workflowsApi.iterateWithFeedback`. */
+  iterateWithFeedback?: (id: string, feedback: string) => Promise<unknown>;
+}
+
+/**
+ * Stable per-finding key built from category + index inside its group.
+ * Findings don't ship a server-side ID, but the order is deterministic
+ * per render and we group/sort the same way each pass, so this works as
+ * a selection token between renders. Switching to a content hash would
+ * survive list reorderings but adds complexity without a known need.
+ */
+function findingKey(category: string, indexInCategory: number): string {
+  return `${category}::${indexInCategory}`;
+}
+
+function CriticFindingsSection({
+  findings,
+  pipelineId,
+  onIterationStarted,
+  iterateWithFeedback,
+}: CriticFindingsSectionProps) {
+  const { t } = useI18n();
   // Group by category, then sort each group by severity (worst first).
-  const byCategory = new Map<ReasoningFinding['category'], ReasoningFinding[]>();
-  for (const f of findings) {
-    if (!byCategory.has(f.category)) byCategory.set(f.category, []);
-    byCategory.get(f.category)!.push(f);
-  }
-  const orderedCats = Array.from(byCategory.keys()).sort((a, b) => {
-    const aMin = Math.min(...byCategory.get(a)!.map((f) => SEVERITY_RANK[f.severity]));
-    const bMin = Math.min(...byCategory.get(b)!.map((f) => SEVERITY_RANK[f.severity]));
-    return aMin - bMin || a.localeCompare(b);
-  });
+  const { orderedCats, groupedByCat, eligibleKeys } = useMemo(() => {
+    const byCategory = new Map<ReasoningFinding['category'], ReasoningFinding[]>();
+    for (const f of findings) {
+      if (!byCategory.has(f.category)) byCategory.set(f.category, []);
+      byCategory.get(f.category)!.push(f);
+    }
+    for (const list of byCategory.values()) {
+      list.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
+    }
+    const cats = Array.from(byCategory.keys()).sort((a, b) => {
+      const aMin = Math.min(...byCategory.get(a)!.map((f) => SEVERITY_RANK[f.severity]));
+      const bMin = Math.min(...byCategory.get(b)!.map((f) => SEVERITY_RANK[f.severity]));
+      return aMin - bMin || a.localeCompare(b);
+    });
+    const eligible = new Set<string>();
+    for (const cat of cats) {
+      byCategory.get(cat)!.forEach((f, idx) => {
+        if (f.suggestion && f.suggestion.trim().length > 0) {
+          eligible.add(findingKey(cat, idx));
+        }
+      });
+    }
+    return { orderedCats: cats, groupedByCat: byCategory, eligibleKeys: eligible };
+  }, [findings]);
+
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const interactive = !!pipelineId && eligibleKeys.size > 0;
+  const eligibleCount = eligibleKeys.size;
+
+  // Prune stale selections if the findings list changes (e.g. a new
+  // Critic pass came in and previously-checked items disappeared).
+  useEffect(() => {
+    setSelected((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const k of prev) {
+        if (eligibleKeys.has(k)) next.add(k);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [eligibleKeys]);
+
+  const toggleSelection = (key: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const handleApplySelected = async () => {
+    if (!pipelineId || selected.size === 0 || busy) return;
+    setBusy(true);
+    setError(null);
+
+    // Collect selected suggestions in the same order they appear on screen
+    // so the prompt mirrors what the user sees.
+    const orderedSelected: string[] = [];
+    for (const cat of orderedCats) {
+      const items = groupedByCat.get(cat) ?? [];
+      items.forEach((f, idx) => {
+        const key = findingKey(cat, idx);
+        if (selected.has(key) && f.suggestion && f.suggestion.trim().length > 0) {
+          orderedSelected.push(f.suggestion.trim());
+        }
+      });
+    }
+    if (orderedSelected.length === 0) {
+      setBusy(false);
+      return;
+    }
+    const header = t('chat.criticFindings.feedbackHeader');
+    const numbered = orderedSelected.map((s, idx) => `${idx + 1}. ${s}`).join('\n\n');
+    let feedback = `${header}\n\n${numbered}`;
+    if (feedback.length > FEEDBACK_MAX_CHARS) {
+      feedback = feedback.slice(0, FEEDBACK_MAX_CHARS);
+    }
+
+    const send = iterateWithFeedback ?? workflowsApi.iterateWithFeedback;
+    try {
+      await send(pipelineId, feedback);
+      setSelected(new Set());
+      onIterationStarted?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('chat.criticFindings.applyError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const selectedCountLabel = t('chat.criticFindings.selectedCount')
+    .replace('{n}', String(selected.size))
+    .replace('{total}', String(eligibleCount));
+
   return (
     <section className="space-y-2">
       <h4 className="font-semibold text-ak-text-primary">Bulgular</h4>
       {orderedCats.map((cat) => {
         const meta = CATEGORY_META[cat];
-        const items = byCategory
-          .get(cat)!
-          .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
+        const items = groupedByCat.get(cat)!;
         return (
           <div key={cat} className={`rounded-md border p-2 ${meta.tint}`}>
             <header className="mb-1 flex items-center gap-2 text-xs font-semibold text-ak-text-primary">
@@ -101,8 +227,11 @@ function CriticFindingsSection({ findings }: { findings: ReasoningFinding[] }) {
             <ul className="space-y-1.5 pl-5 text-xs">
               {items.map((f, i) => {
                 const sev = SEVERITY_META[f.severity];
+                const key = findingKey(cat, i);
+                const hasSuggestion = !!f.suggestion && f.suggestion.trim().length > 0;
+                const isChecked = selected.has(key);
                 return (
-                  <li key={i} className="space-y-0.5">
+                  <li key={key} className="space-y-0.5">
                     <div className="flex flex-wrap items-start gap-2">
                       <span
                         className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold ${sev.chip}`}
@@ -111,10 +240,23 @@ function CriticFindingsSection({ findings }: { findings: ReasoningFinding[] }) {
                       </span>
                       <span className="flex-1 text-ak-text-primary">{f.description}</span>
                     </div>
-                    {f.suggestion && (
-                      <p className="pl-1 text-ak-text-tertiary">
-                        <span className="text-ak-text-secondary">Öneri:</span> {f.suggestion}
-                      </p>
+                    {hasSuggestion && (
+                      <div className="flex items-start gap-2 pl-1">
+                        {interactive && (
+                          <input
+                            type="checkbox"
+                            data-testid={`critic-finding-checkbox-${key}`}
+                            aria-label={t('chat.criticFindings.checkbox.aria')}
+                            className="mt-[3px] h-3.5 w-3.5 shrink-0 cursor-pointer accent-rose-500 disabled:cursor-not-allowed"
+                            checked={isChecked}
+                            disabled={busy}
+                            onChange={() => toggleSelection(key)}
+                          />
+                        )}
+                        <p className="text-ak-text-tertiary">
+                          <span className="text-ak-text-secondary">Öneri:</span> {f.suggestion}
+                        </p>
+                      </div>
                     )}
                   </li>
                 );
@@ -123,6 +265,35 @@ function CriticFindingsSection({ findings }: { findings: ReasoningFinding[] }) {
           </div>
         );
       })}
+
+      {interactive && (
+        <div
+          data-testid="critic-findings-apply-bar"
+          className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-ak-border-subtle pt-2"
+        >
+          <span className="text-xs text-ak-text-tertiary">{selectedCountLabel}</span>
+          <button
+            type="button"
+            onClick={handleApplySelected}
+            disabled={selected.size === 0 || busy}
+            data-testid="critic-findings-apply-button"
+            className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-700 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-200"
+          >
+            {busy
+              ? t('chat.criticFindings.applying')
+              : t('chat.criticFindings.applySelected')}
+          </button>
+        </div>
+      )}
+      {error && (
+        <div
+          role="alert"
+          data-testid="critic-findings-apply-error"
+          className="mt-1 rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-700 dark:text-rose-200"
+        >
+          {error}
+        </div>
+      )}
     </section>
   );
 }
@@ -141,6 +312,14 @@ export interface ExplanationPanelProps {
    * stability so existing callers don't break the build; it is ignored.
    */
   hideAttentionBanner?: boolean;
+  /**
+   * PR-C: when the panel is shown while the pipeline still has a Critic
+   * gate active, the host can wire this callback to refresh state after
+   * the user clicks "Seçilenleri uygula" (mirrors `onCriticResolved`).
+   */
+  onIterationStarted?: () => void;
+  /** PR-C: DI for tests — defaults to `workflowsApi.iterateWithFeedback`. */
+  iterateWithFeedback?: (id: string, feedback: string) => Promise<unknown>;
 }
 
 const AGENT_LABEL: Record<string, string> = {
@@ -171,9 +350,20 @@ interface ReasoningCardProps {
   stage: AgentReasoning;
   expanded: boolean;
   onToggle: () => void;
+  /** PR-C: forwarded to the Critic findings selection footer. */
+  pipelineId?: string;
+  onIterationStarted?: () => void;
+  iterateWithFeedback?: (id: string, feedback: string) => Promise<unknown>;
 }
 
-function ReasoningCard({ stage, expanded, onToggle }: ReasoningCardProps) {
+function ReasoningCard({
+  stage,
+  expanded,
+  onToggle,
+  pipelineId,
+  onIterationStarted,
+  iterateWithFeedback,
+}: ReasoningCardProps) {
   const hasStructuredFindings = !!stage.findings && stage.findings.length > 0;
   const hasDetail =
     stage.assumptions.length > 0 ||
@@ -204,7 +394,12 @@ function ReasoningCard({ stage, expanded, onToggle }: ReasoningCardProps) {
           and for older runs that lack the findings field. */}
       {hasStructuredFindings ? (
         <div className="mt-2">
-          <CriticFindingsSection findings={stage.findings!} />
+          <CriticFindingsSection
+            findings={stage.findings!}
+            pipelineId={pipelineId}
+            onIterationStarted={onIterationStarted}
+            iterateWithFeedback={iterateWithFeedback}
+          />
         </div>
       ) : (
         stage.reasoning.length > 0 && (
@@ -272,6 +467,11 @@ export function ExplanationPanel({
   defaultExpanded = false,
   className,
   fetcher,
+  // PR-B sonrası AttentionBanner render'ı tamamen kaldırıldı; bu prop
+  // backward-compat için interface'te no-op olarak duruyor.
+  hideAttentionBanner: _hideAttentionBanner = false,
+  onIterationStarted,
+  iterateWithFeedback,
 }: ExplanationPanelProps) {
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(priming ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -372,6 +572,9 @@ export function ExplanationPanel({
             stage={s}
             expanded={expandedStages.has(idx)}
             onToggle={() => toggle(idx)}
+            pipelineId={pipelineId}
+            onIterationStarted={onIterationStarted}
+            iterateWithFeedback={iterateWithFeedback}
           />
         ))}
       </div>
