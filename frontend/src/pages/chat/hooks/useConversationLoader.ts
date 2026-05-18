@@ -118,7 +118,10 @@ export function useConversationLoader(
   const syncFromStageRef = useRef(syncFromStage);
   syncFromStageRef.current = syncFromStage;
 
-  // Load active conversation — keep old content visible until new data arrives
+  // Load active conversation — clear synchronously when switching chats so the
+  // previous conversation's messages can never bleed into the new view (PR-E
+  // bulgu #1: old messages remained visible for ~5s while the new fetch was
+  // in flight because the loader intentionally avoided clearing).
   useEffect(() => {
     if (!conversationId) {
       // Going to /chat (no id) — only clear if we had a conversation before
@@ -136,11 +139,19 @@ export function useConversationLoader(
     // Same chat — skip
     if (loadedIdRef.current === conversationId) return;
 
+    // Different chat — clear the previous conversation's surface
+    // synchronously, then load the new one. Without this clear, the old
+    // messages stay on screen for the full fetch round-trip (~3–5s on
+    // slow connections), which reads as a stale-state bug.
+    setActiveWorkflow(null);
+    setMessages([]);
+    lastMessagesKeyRef.current = '';
+    prevConvLenRef.current = 0;
+
     // Mark immediately to prevent double-fetch on rapid navigation
     const targetId = conversationId;
     loadedIdRef.current = targetId;
 
-    // Different chat — load without clearing (keeps old content visible during fetch)
     workflowsApi
       .get(targetId)
       .then((w) => {

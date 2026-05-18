@@ -9,6 +9,13 @@ export interface ConfidenceBadgeProps {
   factors?: string[];
   /** Compact form — just the number, no label */
   compact?: boolean;
+  /**
+   * PR-E bulgu #2: suppress the hover/click tooltip entirely so the badge can
+   * sit inside a parent that already supplies its own tooltip (e.g. the
+   * cinema column's stage-tooltip). The badge renders as a plain pill — same
+   * tier colour + score, no popover, no cursor-help affordance.
+   */
+  suppressTooltip?: boolean;
   /** Additional class names */
   className?: string;
 }
@@ -47,7 +54,13 @@ const TIER_CLASS: Record<Tier, string> = {
  * ConfidenceBadge — color-coded confidence indicator.
  * Hover/focus reveals a per-tier explanation plus optional factor list.
  */
-export function ConfidenceBadge({ score, factors, compact, className }: ConfidenceBadgeProps) {
+export function ConfidenceBadge({
+  score,
+  factors,
+  compact,
+  suppressTooltip,
+  className,
+}: ConfidenceBadgeProps) {
   const { t } = useI18n();
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
   const tier = tierFor(clamped);
@@ -74,6 +87,23 @@ export function ConfidenceBadge({ score, factors, compact, className }: Confiden
   const hasFactors = !!factors && factors.length > 0;
   const tierLabel = t(TIER_LABEL_KEY[tier]);
   const explanation = t(TIER_EXPLANATION_KEY[tier]);
+
+  // PR-E bulgu #2: when the parent already owns a tooltip (cinema column
+  // stage-tooltip), render a non-interactive pill so we don't stack a
+  // second popover on top of the parent's. Same colours + score, no
+  // hover/click handlers, no cursor-help, no popover.
+  if (suppressTooltip) {
+    return (
+      <span
+        aria-label={`${tierLabel}: ${clamped}%`}
+        data-tier={tier}
+        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold leading-none ${TIER_CLASS[tier]} ${className ?? ''}`}
+      >
+        <span aria-hidden="true">●</span>
+        <span>{compact ? `${clamped}%` : `${tierLabel} · ${clamped}%`}</span>
+      </span>
+    );
+  }
 
   return (
     <span ref={ref} className={`relative inline-flex ${className ?? ''}`}>

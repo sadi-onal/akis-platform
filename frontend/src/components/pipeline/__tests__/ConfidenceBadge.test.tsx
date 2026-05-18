@@ -118,4 +118,22 @@ describe('ConfidenceBadge', () => {
     expect(tooltip.className).toMatch(/\bright-0\b/);
     expect(tooltip.className).not.toMatch(/\bleft-0\b/);
   });
+
+  // PR-E bulgu #2: PipelineCinema columns already own a Türkçe stage tooltip
+  // (title + aria-label). With suppressTooltip the badge must NOT expose a
+  // popover-trigger button so the two tooltips can't stack on hover.
+  it('renders as a plain pill (no button, no tooltip) when suppressTooltip=true', () => {
+    render(<ConfidenceBadge score={88} suppressTooltip />);
+    // No button → no hover/click handlers → no popover.
+    expect(screen.queryByRole('button')).toBeNull();
+    // Tier + score are still surfaced for screen readers.
+    expect(screen.getByLabelText(/88%/)).toBeInTheDocument();
+  });
+
+  it('does not open a tooltip on hover when suppressTooltip=true', () => {
+    render(<ConfidenceBadge score={88} suppressTooltip />);
+    const pill = screen.getByLabelText(/88%/);
+    fireEvent.mouseEnter(pill);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
 });

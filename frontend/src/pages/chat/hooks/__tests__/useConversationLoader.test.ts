@@ -130,6 +130,41 @@ describe('useConversationLoader', () => {
     expect(mockedGet).toHaveBeenNthCalledWith(2, 'B');
   });
 
+  // PR-E bulgu #1: prior behaviour was to keep the old conversation visible
+  // until the new fetch resolved (~3–5s). Switching chats should now clear
+  // synchronously so the old messages never bleed into the new view.
+  it('clears messages + workflow synchronously when conversationId switches to a different id', async () => {
+    const a = buildWorkflow('A', 'hello A');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedGet.mockResolvedValueOnce(a as any);
+    const { result, rerender } = renderLoader({ conversationId: 'A' });
+
+    await waitFor(() => expect(result.current.activeWorkflow?.id).toBe('A'));
+    expect(result.current.messages.length).toBeGreaterThan(0);
+
+    // Stage a pending fetch for B so the rerender doesn't immediately resolve.
+    let resolveB: (w: ReturnType<typeof buildWorkflow>) => void = () => {};
+    mockedGet.mockImplementationOnce(
+      () =>
+        new Promise((res) => {
+          resolveB = res as typeof resolveB;
+        }),
+    );
+
+    rerender({ conversationId: 'B' });
+
+    // BEFORE B resolves — old A messages must already be gone.
+    expect(result.current.activeWorkflow).toBeNull();
+    expect(result.current.messages).toEqual([]);
+
+    const b = buildWorkflow('B', 'hello B');
+    await act(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      resolveB(b as any);
+    });
+    await waitFor(() => expect(result.current.activeWorkflow?.id).toBe('B'));
+  });
+
   it('clears workflow + messages + refs when conversationId becomes undefined', async () => {
     const wf = buildWorkflow('A', 'hello A');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
