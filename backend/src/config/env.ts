@@ -156,6 +156,14 @@ const envSchema = z
      * Issue #449.
      */
     AI_COST_MARKUP: z.coerce.number().positive().default(1.5),
+    /**
+     * P5a: maximum bytes (UTF-8) of prompt/response content persisted to the
+     * `job_ai_calls` table per call. Anything over the limit is truncated with
+     * a "... [truncated]" suffix so production DB does not balloon. Default
+     * 100KB is enough for typical Scribe/Proto/Trace prompts; raise via env
+     * for debugging huge calls.
+     */
+    AI_LOG_CONTENT_MAX_BYTES: z.coerce.number().int().positive().default(100_000),
 
     // API Keys (PR-A removed OPENROUTER_*; OPENAI_* kept as a legacy alias for now)
     AI_API_KEY: z.string().optional(),

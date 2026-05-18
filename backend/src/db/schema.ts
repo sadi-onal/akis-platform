@@ -309,6 +309,35 @@ export const jobAiCalls = pgTable('job_ai_calls', {
   errorCode: varchar('error_code', { length: 50 }),
   /** Timestamp of the call */
   timestamp: timestamp('timestamp').defaultNow().notNull(),
+  /**
+   * P5a: AI call content persistence. These columns capture the actual
+   * prompt/response payloads of each AI call so the admin/debug viewer
+   * (P5b) can show "what we asked the model and what it answered" without
+   * re-running the call.
+   *
+   * WARNING: PII surface area. The values can contain user-typed
+   * descriptions, generated code, model-side reasoning, etc. Retention
+   * trimming + access control are intentionally out of scope here; tracked
+   * separately. The TraceRecorder truncates over `AI_LOG_CONTENT_MAX_BYTES`
+   * (default 100KB) before insert so a single call cannot blow up the row.
+   */
+  /** Full system prompt sent to the model (truncated to AI_LOG_CONTENT_MAX_BYTES). */
+  systemPrompt: text('system_prompt'),
+  /** Full user-role prompt sent to the model (truncated to AI_LOG_CONTENT_MAX_BYTES). */
+  userPrompt: text('user_prompt'),
+  /** Model's text response (truncated to AI_LOG_CONTENT_MAX_BYTES). */
+  responseText: text('response_text'),
+  /**
+   * Anthropic extended-thinking blocks captured from the response, when the
+   * provider returned them. JSON array; structured-truncated when over the
+   * size budget so a malformed JSON string never lands in the DB.
+   */
+  thinkingBlocks: jsonb('thinking_blocks'),
+  /**
+   * Tool-use blocks the model emitted in its response (function/tool
+   * calls). Same truncation treatment as `thinkingBlocks`.
+   */
+  toolCalls: jsonb('tool_calls'),
 }, (table) => ({
   jobIdIdx: index('idx_job_ai_calls_job_id').on(table.jobId),
   jobIdCallIndexIdx: index('idx_job_ai_calls_job_id_call_index').on(table.jobId, table.callIndex),
