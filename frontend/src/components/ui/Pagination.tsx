@@ -14,7 +14,8 @@ export function Pagination({ nextCursor, onNext, isLoading }: PaginationProps) {
   return (
     <div className="mt-6 flex justify-center">
       <Button onClick={onNext} disabled={isLoading}>
-        {isLoading ? 'Loading…' : 'Load more'}
+        {/* PR-B: previously 'Loading…' / 'Load more' — English in a TR UI. */}
+        {isLoading ? 'Yükleniyor…' : 'Daha fazla'}
       </Button>
     </div>
   );

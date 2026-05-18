@@ -75,7 +75,12 @@ describe('ExplanationPanel', () => {
     expect(screen.queryByText(/Henüz açıklama yok/)).toBeNull();
   });
 
-  it('renders attention banner when points exist', () => {
+  // PR-B (2026-05-18): the panel no longer renders an inline
+  // AttentionBanner. Attention points live on the Akış tab of
+  // PipelineDetailRail; surfacing them here too duplicated the banner and
+  // pushed the per-stage reasoning cards below the fold. The Açıklama tab
+  // is now reserved for stage-level "neden böyle karar verdi" content.
+  it('does not render an attention banner even when points exist', () => {
     render(
       <ExplanationPanel
         pipelineId="p-1"
@@ -84,8 +89,8 @@ describe('ExplanationPanel', () => {
         })}
       />
     );
-    expect(screen.getByText('XSS açığı')).toBeInTheDocument();
-    expect(screen.getByText('Önemli')).toBeInTheDocument();
+    expect(screen.queryByText('XSS açığı')).toBeNull();
+    expect(screen.queryByText('Önemli')).toBeNull();
   });
 
   it('toggles details section per stage', () => {

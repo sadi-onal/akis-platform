@@ -501,3 +501,89 @@ describe('PipelineDetailRail — Regresyon tab', () => {
     expect(screen.getByLabelText('Regresyon güven yüzeyi')).toBeInTheDocument();
   });
 });
+
+// PR-B (user feedback 2026-05-15 #5): AttentionBanner +
+// CriticResolutionGate must only surface on the Akış (flow) tab. Before
+// this fix they rendered above both tabs so the Açıklama tab looked
+// "buried under banners". Header badge stays unchanged (count is useful
+// metadata at every tab).
+describe('PipelineDetailRail — PR-B tab scoping', () => {
+  it('renders AttentionBanner inside the body on the Akış tab', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      mkExpl({
+        attentionPoints: [{ severity: 'high', stage: 'critic', issue: 'XSS-test-issue' }],
+      })
+    );
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        explanationFetcher={fetcher}
+      />
+    );
+    // Flow tab is auto-active on proto_running; switch to why so the
+    // explanationFetcher fires and we can verify attentionPoints made
+    // it into state. Then switch back to flow.
+    fireEvent.click(screen.getByRole('tab', { name: 'Açıklama' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('p-1'));
+    await screen.findByText(/1 dikkat noktası/);
+    fireEvent.click(screen.getByRole('tab', { name: 'Akış' }));
+    expect(await screen.findByText('XSS-test-issue')).toBeInTheDocument();
+  });
+
+  it('does NOT render AttentionBanner body content on the Açıklama tab', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      mkExpl({
+        attentionPoints: [{ severity: 'high', stage: 'critic', issue: 'XSS-test-issue' }],
+      })
+    );
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="awaiting_approval"
+        activities={[]}
+        currentStep={null}
+        explanationFetcher={fetcher}
+      />
+    );
+    // awaiting_approval auto-routes to Açıklama (why) tab.
+    expect(screen.getByLabelText('Pipeline detayı')).toHaveAttribute('data-active-tab', 'why');
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('p-1'));
+    // Header badge still shows the count …
+    expect(await screen.findByText(/1 dikkat noktası/)).toBeInTheDocument();
+    // … but the inline banner body content is no longer rendered on this tab.
+    expect(screen.queryByText('XSS-test-issue')).toBeNull();
+  });
+
+  it('renders a vertical resize handle below the body when expanded', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+      />
+    );
+    const handle = screen.getByTestId('pipeline-rail-resize-handle');
+    expect(handle).toBeInTheDocument();
+    expect(handle).toHaveAttribute('role', 'separator');
+    expect(handle).toHaveAttribute('aria-orientation', 'horizontal');
+    expect(handle).toHaveAttribute('aria-controls', 'pipeline-rail-body');
+  });
+
+  it('does NOT render the resize handle when the rail is collapsed', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('scribe')]}
+        currentStep={null}
+      />
+    );
+    // idle + activities → rail is mounted but auto-collapsed.
+    expect(screen.getByLabelText('Pipeline detayı')).toHaveAttribute('data-collapsed', 'true');
+    expect(screen.queryByTestId('pipeline-rail-resize-handle')).toBeNull();
+  });
+});

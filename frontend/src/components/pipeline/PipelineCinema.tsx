@@ -35,6 +35,10 @@ const STAGE_LABEL: Record<CinemaStage, string> = {
 
 const STAGE_TAGLINE: Record<CinemaStage, string> = {
   scribe: 'Fikir → Spec',
+  // PR-A + PR-B: Critic'in eski 'Adversarial review' İngilizce taglinesi
+  // PR-B'de 'Kalite eleştirisi' olarak Türkçeleştirilmişti; PR-A'da Critic
+  // critic_spec + critic_code'a bölündüğünde her ikisi de Türkçe taglinea
+  // çevrildi (spec'i inceler / kodu inceler — daha somut).
   critic_spec: "Spec'i inceler",
   proto: 'Spec → Kod',
   critic_code: 'Kodu inceler',
