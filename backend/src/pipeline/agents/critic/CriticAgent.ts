@@ -1,4 +1,8 @@
-import type { CriticReviewInput, CriticReviewOutput } from './CriticTypes.js';
+import type {
+  CriticFinding,
+  CriticReviewInput,
+  CriticReviewOutput,
+} from './CriticTypes.js';
 import {
   SPEC_REVIEW_SYSTEM_PROMPT,
   buildSpecReviewUserPrompt,
@@ -173,6 +177,23 @@ export class CriticAgent {
 
     const summary = typeof raw.summary === 'string' ? raw.summary : 'No summary provided';
 
+    // PR-F: compute severity aggregates from findings array so the
+    // orchestrator can decide between guardrail-mode (non-blocking advice)
+    // and hard-block (severity=critical) without re-walking the list.
+    const SEVERITY_ORDER: Record<CriticFinding['severity'], number> = {
+      info: 0,
+      minor: 1,
+      major: 2,
+      critical: 3,
+    };
+    let maxSeverity: CriticFinding['severity'] = 'info';
+    for (const f of findings) {
+      if (SEVERITY_ORDER[f.severity] > SEVERITY_ORDER[maxSeverity]) {
+        maxSeverity = f.severity;
+      }
+    }
+    const hasCriticalFinding = maxSeverity === 'critical';
+
     return {
       approved: overallScore >= this.approvalThreshold,
       overallScore,
@@ -180,6 +201,8 @@ export class CriticAgent {
       summary,
       reviewType,
       iteration,
+      hasCriticalFinding,
+      maxSeverity,
     };
   }
 

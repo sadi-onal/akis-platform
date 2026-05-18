@@ -30,90 +30,60 @@ const mk = (overrides: Partial<PipelineActivity>): PipelineActivity => ({
   ...overrides,
 });
 
-// PR-A Fix 4: views are now 5-wide:
-//   [0] scribe, [1] critic_spec, [2] proto, [3] critic_code, [4] trace
-describe('reduceStageViews (pure)', () => {
+// PR-F (2026-05-19): Cinema 5 column → 3 column refactor.
+//   [0] scribe, [1] proto, [2] trace
+// Critic ana column değil; critic_spec aktiviteleri Scribe column'una,
+// critic_code aktiviteleri Proto column'una map'lenir.
+describe('reduceStageViews (pure, 3-column PR-F)', () => {
   it('marks all stages pending when no activities', () => {
     const views = reduceStageViews([], null);
-    expect(views.map((v) => v.state)).toEqual([
-      'pending',
-      'pending',
-      'pending',
-      'pending',
-      'pending',
-    ]);
+    expect(views.map((v) => v.state)).toEqual(['pending', 'pending', 'pending']);
   });
 
   it('marks stages left of current as complete and current as active', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
       mk({ stage: 'proto', progress: 40 }),
     ];
     const current = acts[acts.length - 1]!;
     const views = reduceStageViews(acts, current);
     expect(views[0]!.state).toBe('complete'); // scribe
-    expect(views[1]!.state).toBe('complete'); // critic_spec
-    expect(views[2]!.state).toBe('active'); // proto
-    expect(views[3]!.state).toBe('pending'); // critic_code
-    expect(views[4]!.state).toBe('pending'); // trace
-    expect(views[2]!.progress).toBe(40);
+    expect(views[1]!.state).toBe('active'); // proto
+    expect(views[2]!.state).toBe('pending'); // trace
+    expect(views[1]!.progress).toBe(40);
   });
 
   it('marks current as complete when progress hits 100', () => {
     const acts: PipelineActivity[] = [mk({ stage: 'trace', progress: 100 })];
     const views = reduceStageViews(acts, acts[0]!);
-    expect(views[4]!.state).toBe('complete');
+    expect(views[2]!.state).toBe('complete');
   });
 
   it('folds fix-loop activity into Proto column', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
       mk({ stage: 'proto', progress: 100 }),
-      mk({ stage: 'critic', criticPhase: 'code', progress: 100 }),
       mk({ stage: 'trace', progress: 60, message: 'trace fail' }),
       mk({ stage: 'fix-loop', progress: 30, message: 'fix retry' }),
     ];
     const current = acts[acts.length - 1]!;
     const views = reduceStageViews(acts, current);
     // fix-loop maps to proto column
-    expect(views[2]!.latest?.message).toBe('fix retry');
-    expect(views[2]!.state).toBe('active');
+    expect(views[1]!.latest?.message).toBe('fix retry');
+    expect(views[1]!.state).toBe('active');
   });
 
-  it('captures reasoning per critic phase when present', () => {
+  it('captures reasoning per stage when present', () => {
     const acts: PipelineActivity[] = [
       mk({
-        stage: 'critic',
-        criticPhase: 'spec',
+        stage: 'scribe',
         progress: 100,
-        reasoning: { decision: 'Spec onaylandi', confidence: 88 },
+        reasoning: { decision: 'Spec hazır', confidence: 88 },
       }),
     ];
     const views = reduceStageViews(acts, acts[0]!);
-    expect(views[1]!.reasoning?.decision).toBe('Spec onaylandi');
-    expect(views[1]!.reasoning?.confidence).toBe(88);
-  });
-
-  it('keeps last reasoning when later events overwrite', () => {
-    const acts: PipelineActivity[] = [
-      mk({
-        stage: 'critic',
-        criticPhase: 'spec',
-        progress: 50,
-        reasoning: { decision: 'Inceleniyor', confidence: 0 },
-      }),
-      mk({
-        stage: 'critic',
-        criticPhase: 'spec',
-        progress: 100,
-        reasoning: { decision: 'Spec onaylandi', confidence: 92 },
-      }),
-    ];
-    const views = reduceStageViews(acts, acts[1]!);
-    expect(views[1]!.reasoning?.decision).toBe('Spec onaylandi');
-    expect(views[1]!.reasoning?.confidence).toBe(92);
+    expect(views[0]!.reasoning?.decision).toBe('Spec hazır');
+    expect(views[0]!.reasoning?.confidence).toBe(88);
   });
 
   it('ignores unknown stage values', () => {
@@ -122,61 +92,25 @@ describe('reduceStageViews (pure)', () => {
       mk({ stage: 'unknown' as PipelineActivity['stage'], progress: 50 }),
     ];
     const views = reduceStageViews(acts, acts[0]!);
-    // unknown stage doesn't crash and doesn't pollute any column
     expect(views[0]!.state).toBe('complete');
-  });
-
-  it('Bulgu D: settles Critic·Spec to complete at awaiting_approval even when current is a stale critic activity', () => {
-    // Reproduces the bug: SSE buffer keeps the last critic activity as
-    // `current` while the pipeline is parked at awaiting_approval. Without
-    // a uiState hint the column would stay pulsing forever.
-    const acts: PipelineActivity[] = [
-      mk({ stage: 'scribe', progress: 100 }),
-      mk({
-        stage: 'critic',
-        criticPhase: 'spec',
-        progress: 80,
-        message: 'Spesifikasyon inceleniyor…',
-      }),
-    ];
-    const current = acts[acts.length - 1]!;
-    const views = reduceStageViews(acts, current, 'awaiting_approval');
-    expect(views[1]!.state).toBe('complete');
   });
 
   it('uses uiState to drive activeIdx instead of latest activity stage', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
       mk({ stage: 'proto', progress: 30 }),
     ];
     // Latest activity is proto, uiState says proto_running → proto is active
-    const views = reduceStageViews(acts, acts[2]!, 'proto_running');
+    const views = reduceStageViews(acts, acts[1]!, 'proto_running');
     expect(views[0]!.state).toBe('complete'); // scribe
-    expect(views[1]!.state).toBe('complete'); // critic_spec
-    expect(views[2]!.state).toBe('active'); // proto
-    expect(views[3]!.state).toBe('pending'); // critic_code
-    expect(views[4]!.state).toBe('pending'); // trace
+    expect(views[1]!.state).toBe('active'); // proto
+    expect(views[2]!.state).toBe('pending'); // trace
   });
 
-  it('settles every touched stage to complete at awaiting_push_confirm', () => {
+  // PR-F: Critic activities map to Scribe/Proto columns silently.
+  it('routes critic activity with criticPhase=spec into Scribe column', () => {
     const acts: PipelineActivity[] = [
-      mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
-      mk({ stage: 'proto', progress: 100 }),
-      mk({ stage: 'critic', criticPhase: 'code', progress: 100 }),
-    ];
-    const views = reduceStageViews(acts, acts[3]!, 'awaiting_push_confirm');
-    expect(views[0]!.state).toBe('complete');
-    expect(views[1]!.state).toBe('complete');
-    expect(views[2]!.state).toBe('complete');
-    expect(views[3]!.state).toBe('complete');
-    expect(views[4]!.state).toBe('pending');
-  });
-
-  // PR-A Fix 4: new — explicit critic split coverage
-  it('routes critic activity with criticPhase=spec into critic_spec column', () => {
-    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 60, message: 'Spec yazılıyor' }),
       mk({
         stage: 'critic',
         criticPhase: 'spec',
@@ -185,18 +119,20 @@ describe('reduceStageViews (pure)', () => {
         reasoning: { decision: 'Spec onaylandi', confidence: 80 },
       }),
     ];
-    const views = reduceStageViews(acts, acts[0]!);
-    expect(views[1]!.stage).toBe('critic_spec');
-    expect(views[1]!.latest?.message).toBe('Spec inceleme bitti');
-    expect(views[3]!.stage).toBe('critic_code');
-    expect(views[3]!.latest).toBeNull();
+    const views = reduceStageViews(acts, acts[1]!);
+    // Critic activities fold into Scribe column — the latest scribe message
+    // is the critic event itself.
+    expect(views[0]!.latest?.message).toBe('Spec inceleme bitti');
+    expect(views[0]!.reasoning?.decision).toBe('Spec onaylandi');
+    // Proto/Trace stay untouched.
+    expect(views[1]!.latest).toBeNull();
+    expect(views[2]!.latest).toBeNull();
   });
 
-  it('routes critic activity with criticPhase=code into critic_code column', () => {
+  it('routes critic activity with criticPhase=code into Proto column', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
-      mk({ stage: 'critic', criticPhase: 'spec', progress: 100 }),
-      mk({ stage: 'proto', progress: 100 }),
+      mk({ stage: 'proto', progress: 100, message: 'Kod hazır' }),
       mk({
         stage: 'critic',
         criticPhase: 'code',
@@ -205,47 +141,69 @@ describe('reduceStageViews (pure)', () => {
         reasoning: { decision: 'Kod onaylandi', confidence: 75 },
       }),
     ];
-    const views = reduceStageViews(acts, acts[3]!);
-    expect(views[3]!.stage).toBe('critic_code');
-    expect(views[3]!.latest?.message).toBe('Kod inceleme bitti');
-    expect(views[3]!.reasoning?.confidence).toBe(75);
+    const views = reduceStageViews(acts, acts[2]!);
+    expect(views[1]!.latest?.message).toBe('Kod inceleme bitti');
+    expect(views[1]!.reasoning?.confidence).toBe(75);
   });
 
-  it('falls back to chronology when criticPhase is missing (DB-reconstructed activity)', () => {
-    // Replay scenario: a backend restart left the cinema rebuilding from
-    // pipeline_activities rows, which (today) don't persist criticPhase.
-    // Cinema should still place the first critic batch before proto and
-    // the second after.
+  it('falls back to chronology when criticPhase is missing (DB-replay)', () => {
+    // Replay scenario: backend restart, pipeline_activities replay without
+    // criticPhase field. Cinema routes by position: before proto → scribe,
+    // after proto → proto column.
     const acts: PipelineActivity[] = [
-      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'scribe', progress: 100, message: 'spec done' }),
       mk({ stage: 'critic', progress: 100, message: 'spec review' }),
-      mk({ stage: 'proto', progress: 100 }),
+      mk({ stage: 'proto', progress: 100, message: 'proto done' }),
       mk({ stage: 'critic', progress: 100, message: 'code review' }),
     ];
     const views = reduceStageViews(acts, acts[3]!);
-    expect(views[1]!.latest?.message).toBe('spec review');
-    expect(views[3]!.latest?.message).toBe('code review');
+    // Latest event landing on scribe column is the critic spec review.
+    expect(views[0]!.latest?.message).toBe('spec review');
+    // Latest event landing on proto column is the critic code review.
+    expect(views[1]!.latest?.message).toBe('code review');
+  });
+
+  // PR-F: Trace iterate-loop retry badge meta exposure
+  it('extracts retryCount + maxRetries from Trace retry-trigger activity', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'trace', progress: 50 }),
+      mk({
+        stage: 'trace',
+        step: 'retry-trigger',
+        retryCount: 2,
+        progress: 80,
+        message: 'Test eksik kaldı (2/3 kabul kriteri) — Proto yeniden çalışıyor (2/3)',
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!);
+    expect(views[2]!.meta?.retryCount).toBe(2);
+    expect(views[2]!.meta?.maxRetries).toBe(3);
+  });
+
+  it('does NOT set retry meta when no retry-trigger activity emitted', () => {
+    const acts: PipelineActivity[] = [mk({ stage: 'trace', progress: 100 })];
+    const views = reduceStageViews(acts, acts[0]!);
+    expect(views[2]!.meta?.retryCount).toBeUndefined();
   });
 });
 
-describe('PipelineCinema component', () => {
-  it('renders all five stages including split critic columns', () => {
+describe('PipelineCinema component (PR-F 3-column)', () => {
+  it('renders three columns (Scribe / Proto / Trace) — no Critic columns', () => {
     render(<PipelineCinema activities={[]} currentStep={null} />);
     expect(screen.getByText('Scribe')).toBeInTheDocument();
-    // PR-A Fix 4: critic split into spec + kod
-    expect(screen.getByText('Critic · Spec')).toBeInTheDocument();
     expect(screen.getByText('Proto')).toBeInTheDocument();
-    expect(screen.getByText('Critic · Kod')).toBeInTheDocument();
     expect(screen.getByText('Trace')).toBeInTheDocument();
+    // Critic column labels must NOT appear anywhere — they were folded into
+    // Scribe/Proto cards as part of the PR-F refactor.
+    expect(screen.queryByText('Critic · Spec')).not.toBeInTheDocument();
+    expect(screen.queryByText('Critic · Kod')).not.toBeInTheDocument();
   });
 
-  it('attaches bakkal-Türkçesi tooltip to each stage card (PR-A Fix 3)', () => {
+  it('attaches bakkal-Türkçesi tooltip to each stage card', () => {
     const { container } = render(<PipelineCinema activities={[]} currentStep={null} />);
     const stages: Array<{ name: string; expected: string }> = [
       { name: 'scribe', expected: "Fikri spec'e çevirir" },
-      { name: 'critic_spec', expected: "Spec'i denetler" },
       { name: 'proto', expected: "Spec'ten kod üretir" },
-      { name: 'critic_code', expected: 'kalite incelemesi' },
       { name: 'trace', expected: 'Otomatik test üretir' },
     ];
     for (const { name, expected } of stages) {
@@ -266,54 +224,54 @@ describe('PipelineCinema component', () => {
   it('switches button label when in compact mode', () => {
     const onToggle = vi.fn();
     render(
-      <PipelineCinema activities={[]} currentStep={null} compact onToggleCompact={onToggle} />
+      <PipelineCinema activities={[]} currentStep={null} compact onToggleCompact={onToggle} />,
     );
     expect(screen.getByRole('button', { name: /Geniş görünüm/ })).toBeInTheDocument();
   });
 
   it('renders approval slot when provided', () => {
     render(
-      <PipelineCinema activities={[]} currentStep={null} approvalSlot={<button>Onayla</button>} />
+      <PipelineCinema
+        activities={[]}
+        currentStep={null}
+        approvalSlot={<button>Onayla</button>}
+      />,
     );
     expect(screen.getByRole('button', { name: 'Onayla' })).toBeInTheDocument();
   });
 
-  it('shows confidence badge for stage with reasoning', () => {
+  it('shows confidence badge on stage with reasoning', () => {
     const acts: PipelineActivity[] = [
       mk({
-        stage: 'critic',
+        stage: 'scribe',
         progress: 100,
         reasoning: { decision: 'Approved', confidence: 88 },
       }),
     ];
     render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
-    // PR-E bulgu #2: cinema renders the badge with suppressTooltip so it is
-    // now a plain span (no button) — surface it via the aria-label instead.
     expect(screen.getByLabelText(/88%/)).toBeInTheDocument();
   });
 
-  // PR-E bulgu #2: prior behaviour was two stacked tooltips on hover (the
-  // stage card's `title` + the badge's popover). The cinema column now
-  // passes suppressTooltip so the badge no longer renders a button, and
-  // therefore can't surface a second popover.
-  it('does not stack a confidence-badge tooltip on top of the stage tooltip', () => {
+  it('renders Trace retry badge when iterate-loop activity present', () => {
     const acts: PipelineActivity[] = [
       mk({
-        stage: 'critic',
-        criticPhase: 'spec',
-        progress: 100,
-        reasoning: { decision: 'Spec OK', confidence: 88 },
+        stage: 'trace',
+        step: 'retry-trigger',
+        retryCount: 2,
+        progress: 80,
+        message: 'Test eksik kaldı — Proto yeniden çalışıyor (2/3)',
       }),
     ];
-    const { container } = render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
-    // No interactive ConfidenceBadge button inside the critic_spec card.
-    const critic = container.querySelector('[data-stage="critic_spec"]');
-    expect(critic).toBeTruthy();
-    // The card itself owns the tooltip via `title`; the badge inside is a
-    // non-interactive span. Assert by attribute presence on the badge tier
-    // pill.
-    expect(critic?.querySelector('[data-tier]')?.tagName).toBe('SPAN');
-    expect(critic?.querySelector('[data-tier]')?.getAttribute('role')).not.toBe('button');
+    render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
+    expect(screen.getByTestId('trace-retry-badge')).toHaveTextContent(/2\/3/);
+  });
+
+  it('does NOT render Trace retry badge in steady-state', () => {
+    const acts: PipelineActivity[] = [mk({ stage: 'trace', progress: 100 })];
+    const { queryByTestId } = render(
+      <PipelineCinema activities={acts} currentStep={acts[0]!} />,
+    );
+    expect(queryByTestId('trace-retry-badge')).toBeNull();
   });
 
   it('exposes data-cinema-mode attribute', () => {

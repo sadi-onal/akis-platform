@@ -1612,15 +1612,16 @@ export class PipelineOrchestrator {
         '[Pipeline] Critic code review completed'
       );
 
-      // ─── P8: Critic hard-block ─────────────────────
-      // When the review falls below the configured threshold the pipeline
-      // halts at `awaiting_critic_resolution`. The cached dryRun scaffold
-      // stays on protoOutput so the preview keeps working — the user can
-      // either iterate (chat → /iterate-with-feedback) or override
-      // (/critic-override). Without an explicit decision the pipeline does
-      // NOT advance to Trace or any GitHub push, which is the whole point
-      // of the gate.
-      if (criticResult && criticResult.approved === false) {
+      // ─── PR-F: Critic guardrail mode ──────────────
+      // Mimari refactor (2026-05-19): Critic ana akıştan "guardrail"
+      // konumuna çekildi. Pipeline yalnızca findings içinde severity=critical
+      // bir bulgu varsa `awaiting_critic_resolution`'a düşer; aksi halde
+      // findings intermediateState'e yazılır ve akış (Trace / push-gate)
+      // sessizce devam eder. PR-A öncesi davranış (approved=false → her
+      // zaman hard-block) artık geriye dönük yalnızca `hasCriticalFinding`
+      // üzerinden tetiklenir. Bkz. memory: coverage_metric_research_findings.
+      const hasCritical = criticResult?.hasCriticalFinding === true;
+      if (criticResult && hasCritical) {
         this.recordProtoReasoning(pipelineId, protoResult.data, pipeline.scribeOutput);
         // PR-D: persist AC coverage even when Critic blocks — the user
         // still wants to see which kabul kriteri the (rejected) scaffold
@@ -1642,6 +1643,7 @@ export class PipelineOrchestrator {
               blockedAt: new Date().toISOString(),
               overallScore: criticResult.overallScore,
               findingsCount: criticResult.findings?.length ?? 0,
+              maxSeverity: criticResult.maxSeverity,
               manuallyOverridden: false,
             },
           },
@@ -1652,11 +1654,15 @@ export class PipelineOrchestrator {
             pipelineId,
             score: criticResult.overallScore,
             findings: criticResult.findings?.length ?? 0,
+            maxSeverity: criticResult.maxSeverity,
           },
-          '[Pipeline] P8 critic hard-block — pipeline halted at awaiting_critic_resolution'
+          '[Pipeline] PR-F critic hard-block — severity=critical, pipeline halted at awaiting_critic_resolution'
         );
         return;
       }
+      // Critic guardrail: findings intermediateState'te zaten yazıldı
+      // (yukarıdaki `criticCodeOutput` yazımı). severity<critical ise akış
+      // doğal olarak Trace / push-gate'e devam eder.
     }
 
     // Level 4: Explainability — record Proto reasoning
@@ -2833,6 +2839,67 @@ export class PipelineOrchestrator {
       return updated;
     }
 
+    // ─── PR-F: Trace iterate-loop ──────────────────
+    // Mimari refactor (2026-05-19): Trace başarılı dönse bile uncovered AC
+    // veya test failure varsa Proto'yu otomatik re-iterate eder. Max retry
+    // sayısı TRACE_MAX_ITERATE_RETRIES env var ile parametrik (default 3).
+    // Retry tükenince pipeline awaiting_push_confirm'e geçer (preview gate
+    // varsa) ya da completed'a düşer; kullanıcı kararı verebilir.
+    // ATDD/TDD literatürüyle uyumlu: Scribe→Proto→Trace→Proto→Trace döngüsü.
+    const iterateLoopDecision = await this.evaluateTraceIterateLoop(
+      pipelineId,
+      traceResult.data,
+      spec
+    );
+    if (iterateLoopDecision.shouldIterate) {
+      logger.info(
+        {
+          pipelineId,
+          retry: iterateLoopDecision.nextRetry,
+          maxRetries: iterateLoopDecision.maxRetries,
+          uncoveredCount: iterateLoopDecision.uncoveredCount,
+        },
+        '[Pipeline] PR-F Trace iterate-loop — re-iterating Proto'
+      );
+      // Persist intermediate state + activity emit; the actual Proto+Trace
+      // re-run is dispatched (fire-and-forget) so the orchestrator's
+      // current `runTrace` call returns cleanly.
+      const traceEmit = createActivityEmitter(pipelineId, 'trace');
+      traceEmit(
+        'retry-trigger',
+        `Test eksik kaldı (${iterateLoopDecision.uncoveredCount}/${iterateLoopDecision.totalCount} kabul kriteri) — Proto yeniden çalışıyor (${iterateLoopDecision.nextRetry}/${iterateLoopDecision.maxRetries})`,
+        80,
+        iterateLoopDecision.feedback,
+        iterateLoopDecision.nextRetry,
+        'pipeline.trace.iterate.retry'
+      );
+      // Persist coverage + reasoning before re-running so the UI shows the
+      // failing snapshot until the next retry overwrites it.
+      this.recordTraceReasoning(pipelineId, traceResult.data);
+      {
+        const pipelineAfterTrace = await this.store.getById(pipelineId);
+        if (pipelineAfterTrace?.protoOutput) {
+          await this.persistAcCoverage(
+            pipelineId,
+            pipelineAfterTrace.protoOutput,
+            pipelineAfterTrace.scribeOutput,
+            traceResult.data
+          );
+        }
+      }
+      // Dispatch re-iterate and return — async re-run will land on
+      // awaiting_push_confirm / completed when the loop terminates.
+      void this.dispatchTraceIterate(pipelineId, iterateLoopDecision.feedback).catch((err) => {
+        logger.error(
+          { err, pipelineId },
+          '[Pipeline] PR-F Trace iterate-loop dispatch failed'
+        );
+      });
+      // We return the current pipeline state; the user-facing transition
+      // (proto_building) lands inside dispatchTraceIterate.
+      return (await this.store.getById(pipelineId)) as PipelineState;
+    }
+
     const updated = await this.store.update(pipelineId, {
       stage: 'completed',
       traceOutput: traceResult.data,
@@ -3399,5 +3466,169 @@ export class PipelineOrchestrator {
       logger.warn({ err, pipelineId }, '[Pipeline] Critic code review failed (non-fatal)');
       return null;
     }
+  }
+
+  // ─── PR-F: Trace iterate-loop helpers ─────────
+
+  /**
+   * PR-F (2026-05-19) — Trace başarılı dönse bile uncovered AC veya test
+   * failure (`traceOutput.ok === false`) durumunda Proto'yu re-iterate
+   * edip etmememeyi karar verir.
+   *
+   * Kurallar:
+   *   - `traceEnabled === false` ise iterate loop devre dışı.
+   *   - `uncoveredCriteria.length === 0` ve `ok !== false` ise hiçbir şey
+   *     yapma (iterate yok).
+   *   - `intermediateState.traceIterateRetryCount` `TRACE_MAX_ITERATE_RETRIES`'a
+   *     ulaştıysa iterate'i durdur, push gate'e bırak.
+   *   - Aksi halde feedback metnini üret, retry counter'ı increment et,
+   *     `shouldIterate=true` ile dön.
+   */
+  private async evaluateTraceIterateLoop(
+    pipelineId: string,
+    traceOutput: TraceOutput,
+    spec?: StructuredSpec
+  ): Promise<{
+    shouldIterate: boolean;
+    nextRetry: number;
+    maxRetries: number;
+    uncoveredCount: number;
+    totalCount: number;
+    feedback: string;
+  }> {
+    // Read env directly (same rationale as previewGateEnabled — orchestrator
+    // is wired into unit tests that don't boot full zod schema validation).
+    const maxRetriesRaw = parseInt(process.env.TRACE_MAX_ITERATE_RETRIES ?? '3', 10);
+    const maxRetries = Number.isFinite(maxRetriesRaw)
+      ? Math.max(0, Math.min(10, maxRetriesRaw))
+      : 3;
+
+    const pipeline = await this.store.getById(pipelineId);
+    const noopResult = {
+      shouldIterate: false,
+      nextRetry: 0,
+      maxRetries,
+      uncoveredCount: 0,
+      totalCount: 0,
+      feedback: '',
+    };
+    if (!pipeline) return noopResult;
+    // Trace disabled — iterate loop yok.
+    if (pipeline.traceEnabled === false) return noopResult;
+
+    const uncovered = traceOutput.testSummary?.uncoveredCriteria ?? [];
+    const covered = traceOutput.testSummary?.coveredCriteria ?? [];
+    const uncoveredCount = uncovered.length;
+    const traceOk = traceOutput.ok !== false;
+    if (uncoveredCount === 0 && traceOk) return noopResult;
+    // Max retry kontrolü — bu noktada retry hakkı bitmiş olabilir.
+    const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
+    const currentRetry =
+      typeof intermediate.traceIterateRetryCount === 'number'
+        ? (intermediate.traceIterateRetryCount as number)
+        : 0;
+    const totalCount = uncovered.length + covered.length;
+    if (currentRetry >= maxRetries) {
+      logger.info(
+        { pipelineId, currentRetry, maxRetries, uncoveredCount },
+        '[Pipeline] PR-F Trace iterate-loop max retries reached — handing off to push gate'
+      );
+      return { ...noopResult, uncoveredCount, totalCount };
+    }
+
+    const nextRetry = currentRetry + 1;
+    // Feedback metni: hangi AC'ler için test eksik veya başarısız?
+    const acDetails =
+      spec?.acceptanceCriteria
+        ?.filter((ac) => uncovered.includes(ac.id))
+        .map((ac) => `- ${ac.id}: ${ac.given} → ${ac.when} → ${ac.then}`) ?? [];
+    const feedbackLines = [
+      'Trace tamamlandı ama bazı kabul kriterleri test edilmedi.',
+      '',
+      `Eksik kabul kriterleri (${uncoveredCount}/${totalCount}):`,
+      ...(acDetails.length > 0
+        ? acDetails
+        : uncovered.map((id) => `- ${id}`)),
+      '',
+      'Bu kabul kriterlerini karşılayan ek kod üretmeni veya mevcut kodu güncellemeni istiyorum.',
+    ];
+    if (!traceOk) {
+      feedbackLines.splice(1, 0, 'Bazı testler başarısız oldu, davranışı düzeltmeni istiyorum.');
+    }
+    const feedback = feedbackLines.join('\n');
+    return {
+      shouldIterate: true,
+      nextRetry,
+      maxRetries,
+      uncoveredCount,
+      totalCount,
+      feedback,
+    };
+  }
+
+  /**
+   * PR-F (2026-05-19) — Trace iterate-loop'unda re-iterate dispatch'i.
+   * `iterateProtoFromFeedback`'in stage guard'ları (awaiting_push_confirm
+   * / awaiting_critic_resolution) bu otomatik trigger için uygun değil,
+   * çünkü Trace iterate-loop trace_testing içinden çağrılıyor. Bu yüzden
+   * runProtoAndTrace'i doğrudan yeniden başlatıyoruz; `feedbackContext`
+   * Proto'ya plumb edilir, intermediateState'teki `traceIterateRetryCount`
+   * artırılır.
+   */
+  private async dispatchTraceIterate(
+    pipelineId: string,
+    feedback: string
+  ): Promise<void> {
+    const pipeline = await this.store.getById(pipelineId);
+    if (!pipeline) return;
+    if (!pipeline.approvedSpec || !pipeline.protoConfig) {
+      logger.warn(
+        { pipelineId },
+        '[Pipeline] PR-F Trace iterate-loop: missing approvedSpec/protoConfig'
+      );
+      return;
+    }
+    // Owner re-resolve (DOGFOOD_MODE'ta stub döner).
+    let owner: string;
+    try {
+      const gh = await this.validateGitHubAccess(pipeline.userId);
+      owner = gh.owner;
+    } catch (err) {
+      logger.warn({ err, pipelineId }, '[Pipeline] PR-F iterate dispatch: GitHub owner failed');
+      return;
+    }
+    const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
+    const currentRetry =
+      typeof intermediate.traceIterateRetryCount === 'number'
+        ? (intermediate.traceIterateRetryCount as number)
+        : 0;
+    // proto_building'a geç + retry counter'ı kaydet.
+    await this.store.update(pipelineId, {
+      stage: 'proto_building',
+      intermediateState: {
+        ...intermediate,
+        traceIterateRetryCount: currentRetry + 1,
+        traceIterateLastFeedback: feedback,
+        traceIterateLastAt: new Date().toISOString(),
+      },
+    });
+    this.emitEvent(pipelineId, 'stage_change', 'proto_building');
+    // Fire-and-forget. Trace fail'de fix-loop yine kendi içinde sarmalanır.
+    this.runProtoAndTrace(
+      pipelineId,
+      pipeline.metrics,
+      pipeline.approvedSpec,
+      pipeline.protoConfig.repoName,
+      pipeline.protoConfig.repoVisibility,
+      owner,
+      pipeline.model,
+      undefined,
+      feedback
+    ).catch((err) => {
+      logger.error(
+        { err, pipelineId },
+        '[Pipeline] PR-F Trace iterate-loop runProtoAndTrace failed'
+      );
+    });
   }
 }

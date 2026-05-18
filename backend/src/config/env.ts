@@ -266,6 +266,16 @@ const envSchema = z
      * the legacy hard-coded constant.
      */
     CRITIC_APPROVAL_THRESHOLD: z.coerce.number().int().min(0).max(100).default(75),
+
+    /**
+     * PR-F (mimari refactor 2026-05-19) — Trace iterate-loop maksimum retry
+     * sayısı. Trace başarılı (test failures + uncovered AC = 0) olana kadar
+     * Proto'yu otomatik re-iterate eder. Default 3 (ATDD/TDD literatürüyle
+     * uyumlu, kullanıcı bekleme süresini de makul tutar). Retry tükenince
+     * pipeline `awaiting_push_confirm`'e geçer; kullanıcı yine de devam
+     * etmek isterse Push gate'inden onaylar.
+     */
+    TRACE_MAX_ITERATE_RETRIES: z.coerce.number().int().min(0).max(10).default(3),
   })
   .superRefine((data, ctx) => {
     const isProduction = data.NODE_ENV === 'production';

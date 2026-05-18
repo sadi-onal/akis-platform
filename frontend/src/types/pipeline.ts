@@ -168,6 +168,13 @@ export interface CriticReviewOutput {
   summary: string;
   reviewType: 'spec_review' | 'code_review';
   iteration: number;
+  /**
+   * PR-F (mimari refactor 2026-05-19): backend artık findings array'inden
+   * `hasCriticalFinding` ve `maxSeverity` türetir. Eski pipeline'larda
+   * (PR-F öncesi run) alan yok — opsiyonel.
+   */
+  hasCriticalFinding?: boolean;
+  maxSeverity?: 'critical' | 'major' | 'minor' | 'info';
 }
 
 export interface Pipeline {
