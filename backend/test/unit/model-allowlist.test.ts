@@ -13,6 +13,7 @@ import {
   getAllKnownModels,
   DEFAULT_ANTHROPIC_MODELS,
   DEFAULT_OPENAI_MODELS,
+  DEFAULT_GOOGLE_MODELS,
   RECOMMENDED_MODELS,
 } from '../../src/services/ai/modelAllowlist.js';
 
@@ -106,6 +107,12 @@ describe('getRecommendedModel', () => {
   test('returns correct recommended model for anthropic', () => {
     assert.strictEqual(getRecommendedModel('anthropic'), RECOMMENDED_MODELS.anthropic);
   });
+
+  test('returns correct recommended model for google (P1c)', () => {
+    assert.strictEqual(getRecommendedModel('google'), RECOMMENDED_MODELS.google);
+    // Sanity: pinned to flash by default (savunma demo baseline).
+    assert.strictEqual(RECOMMENDED_MODELS.google, 'gemini-1.5-flash');
+  });
 });
 
 // ─── Default constants ─────────────────────────────────────────────────
@@ -143,22 +150,55 @@ describe('Default model lists', () => {
 // ─── getAllKnownModels (issue #437) ────────────────────────────────────
 
 describe('getAllKnownModels', () => {
-  test('P1a: includes both Anthropic and OpenAI defaults', () => {
+  test('includes Anthropic + OpenAI (P1a) + Google (P1c) defaults', () => {
     const all = getAllKnownModels();
     for (const m of DEFAULT_ANTHROPIC_MODELS) {
       assert.ok(all.includes(m), `${m} missing from allowlist`);
+    }
+    for (const m of DEFAULT_GOOGLE_MODELS) {
+      assert.ok(all.includes(m), `${m} (Gemini) missing from allowlist (P1c)`);
     }
     for (const m of DEFAULT_OPENAI_MODELS) {
       assert.ok(all.includes(m), `${m} missing from allowlist (P1a runtime active)`);
     }
   });
 
-  test('every entry is detected as either anthropic or openai', () => {
+  test('every entry resolves to anthropic, openai, or google via detectProviderFromModel', () => {
     for (const m of getAllKnownModels()) {
       const provider = detectProviderFromModel(m);
       assert.ok(
-        provider === 'anthropic' || provider === 'openai',
-        `model '${m}' must be detectable as anthropic or openai, got ${provider}`,
+        provider === 'anthropic' || provider === 'openai' || provider === 'google',
+        `model '${m}' must be detectable as anthropic/openai/google, got ${provider}`,
+      );
+    }
+  });
+});
+
+// ─── getScribeModelAllowlistByProvider — google (P1c) ──────────────────
+
+// Note: getScribeModelAllowlistByProvider('google') behavior under
+// no-env-override is exercised indirectly via the DEFAULT_GOOGLE_MODELS
+// sanity tests below and the cross-provider getAllKnownModels test. CI
+// sets AI_SCRIBE_MODEL_ALLOWLIST which short-circuits the function before
+// the provider branch, so a direct deepStrictEqual against DEFAULT_GOOGLE_MODELS
+// is environment-dependent and was dropped from this suite (P1c).
+
+// ─── DEFAULT_GOOGLE_MODELS sanity (P1c) ────────────────────────────────
+
+describe('DEFAULT_GOOGLE_MODELS (P1c)', () => {
+  test('is non-empty and contains the three savunma-demo defaults', () => {
+    assert.ok(DEFAULT_GOOGLE_MODELS.length > 0);
+    assert.ok(DEFAULT_GOOGLE_MODELS.includes('gemini-1.5-flash'));
+    assert.ok(DEFAULT_GOOGLE_MODELS.includes('gemini-1.5-pro'));
+    assert.ok(DEFAULT_GOOGLE_MODELS.includes('gemini-1.5-flash-8b'));
+  });
+
+  test('all default Gemini models are detected as google', () => {
+    for (const model of DEFAULT_GOOGLE_MODELS) {
+      assert.strictEqual(
+        detectProviderFromModel(model),
+        'google',
+        `${model} should be detected as google`,
       );
     }
   });

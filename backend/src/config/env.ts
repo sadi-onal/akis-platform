@@ -129,9 +129,10 @@ const envSchema = z
     ATLASSIAN_API_TOKEN: z.string().optional(),
     ATLASSIAN_EMAIL: z.string().optional(),
     // AI Provider configuration. PR-A removed 'openrouter'; P1a lit up
-    // 'openai' at runtime. AIService factory now routes both 'openai' and
-    // 'anthropic' to RealAIService.
-    AI_PROVIDER: z.enum(['openai', 'anthropic', 'mock']).default('mock'),
+    // 'openai' at runtime; P1c added 'google' (Gemini direct).
+    // AIService factory routes 'openai', 'anthropic', and 'google' to
+    // RealAIService; 'mock' uses MockAIService.
+    AI_PROVIDER: z.enum(['openai', 'anthropic', 'google', 'mock']).default('mock'),
     // DOGFOOD_MODE: token-free + GitHub-free local exercise. When `true`,
     // PipelineOrchestrator.validateGitHubAccess returns a stub
     // `{ token: 'ghp_mock_dogfood', owner: 'dogfood-owner' }` and
@@ -169,10 +170,13 @@ const envSchema = z
     // API Keys (PR-A removed OPENROUTER_*; OPENAI_* kept as a legacy alias for now)
     AI_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
+    // P1c: Gemini direct integration via Google AI Studio.
+    GOOGLE_API_KEY: z.string().optional(),
 
     // Base URLs
     AI_BASE_URL: z.string().url().optional(),
     OPENAI_BASE_URL: z.string().url().optional(),
+    GOOGLE_BASE_URL: z.string().url().optional(),
 
     // Model names
     AI_MODEL: z.string().optional(),
@@ -484,10 +488,12 @@ const envSchema = z
 export type Env = z.infer<typeof envSchema>;
 
 /**
- * Resolved AI configuration with fallbacks for legacy variable names
+ * Resolved AI configuration with fallbacks for legacy variable names.
+ *
+ * P1c: 'google' provider for Gemini direct integration (savunma three-provider demo).
  */
 export interface AIConfig {
-  provider: 'openai' | 'anthropic' | 'mock';
+  provider: 'openai' | 'anthropic' | 'google' | 'mock';
   apiKey: string | undefined;
   baseUrl: string;
   modelDefault: string;
@@ -499,8 +505,9 @@ export interface AIConfig {
  * Detect provider from model ID pattern.
  * OpenAI: starts with 'gpt-', 'o1', 'o3', 'text-', 'davinci'
  * Anthropic: starts with 'claude-'
+ * Google: starts with 'gemini-' (P1c)
  */
-function detectProviderFromModel(model: string): 'openai' | 'anthropic' | null {
+function detectProviderFromModel(model: string): 'openai' | 'anthropic' | 'google' | null {
   if (
     model.startsWith('gpt-') ||
     model.startsWith('o1') ||
@@ -513,15 +520,20 @@ function detectProviderFromModel(model: string): 'openai' | 'anthropic' | null {
   if (model.startsWith('claude-')) {
     return 'anthropic';
   }
+  if (model.startsWith('gemini-')) {
+    return 'google';
+  }
   return null;
 }
 
 /**
  * Detect provider from API key prefix.
  * Anthropic keys start with 'sk-ant-', OpenAI keys with 'sk-' (excluding 'sk-ant-').
+ * Google AI Studio keys start with 'AIza' (P1c).
  */
-function detectProviderFromKey(key: string): 'openai' | 'anthropic' | null {
+function detectProviderFromKey(key: string): 'openai' | 'anthropic' | 'google' | null {
   if (key.startsWith('sk-ant-')) return 'anthropic';
+  if (key.startsWith('AIza')) return 'google';
   if (key.startsWith('sk-')) return 'openai';
   return null;
 }
@@ -555,11 +567,23 @@ export function getAIConfig(env: Env): AIConfig {
     model: 'claude-haiku-4-5-20251001',
   };
 
+  // P1c: Gemini direct via Google AI Studio. The {model}:generateContent path is
+  // appended at request build time; baseUrl is the API root only.
+  const GOOGLE_DEFAULTS = {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    model: 'gemini-1.5-flash',
+  };
+
   // Step 1: Resolve API key (needed for provider detection)
-  const apiKey = env.AI_API_KEY || env.OPENAI_API_KEY;
+  // Note: GOOGLE_API_KEY is checked first when AI_PROVIDER=google so the
+  // Anthropic/OpenAI shared AI_API_KEY doesn't get confused with a Gemini key.
+  const apiKey =
+    env.AI_PROVIDER === 'google'
+      ? env.GOOGLE_API_KEY || env.AI_API_KEY
+      : env.AI_API_KEY || env.OPENAI_API_KEY;
 
   // Step 2: Determine provider with validation
-  let provider: 'openai' | 'anthropic' | 'mock' = env.AI_PROVIDER;
+  let provider: 'openai' | 'anthropic' | 'google' | 'mock' = env.AI_PROVIDER;
 
   // Auto-detect provider if set to mock but we have a real key
   if (provider === 'mock' && apiKey) {
@@ -588,6 +612,11 @@ export function getAIConfig(env: Env): AIConfig {
   } else if (provider === 'anthropic') {
     const envUrl = env.AI_BASE_URL;
     baseUrl = envUrl && envUrl.includes('anthropic.com') ? envUrl : ANTHROPIC_DEFAULTS.baseUrl;
+  } else if (provider === 'google') {
+    // P1c: only accept an env override that points at the official Google host.
+    const envUrl = env.GOOGLE_BASE_URL || env.AI_BASE_URL;
+    baseUrl =
+      envUrl && envUrl.includes('googleapis.com') ? envUrl : GOOGLE_DEFAULTS.baseUrl;
   } else {
     baseUrl = 'mock://localhost';
   }
@@ -614,7 +643,9 @@ export function getAIConfig(env: Env): AIConfig {
       ? OPENAI_DEFAULTS.model
       : provider === 'anthropic'
         ? ANTHROPIC_DEFAULTS.model
-        : 'mock-model';
+        : provider === 'google'
+          ? GOOGLE_DEFAULTS.model
+          : 'mock-model';
 
   const modelDefault = getValidatedModel(
     env.AI_MODEL_DEFAULT || env.AI_MODEL || env.OPENAI_MODEL,

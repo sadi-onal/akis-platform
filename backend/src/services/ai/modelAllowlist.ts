@@ -1,6 +1,15 @@
 import { getEnv } from '../../config/env.js';
 import type { AIKeyProvider } from './user-ai-keys.js';
 
+/**
+ * Runtime AI provider — wider than {@link AIKeyProvider} because Google
+ * Gemini (P1c) is supported at the AIService runtime layer but does not
+ * yet ship user-key storage; Gemini keys come from `GOOGLE_API_KEY` env.
+ * Use this type wherever model allowlist / runtime dispatch needs to
+ * reason about google as well.
+ */
+export type RuntimeAIProvider = AIKeyProvider | 'google';
+
 export const DEFAULT_ANTHROPIC_MODELS = [
   'claude-haiku-4-5-20251001',
   'claude-sonnet-4-6',
@@ -17,9 +26,22 @@ export const DEFAULT_OPENAI_MODELS = [
   'gpt-4.1-mini',
 ];
 
-export const RECOMMENDED_MODELS: Record<AIKeyProvider, string> = {
+/**
+ * Google Gemini model allowlist (P1c). Default trio covers the three
+ * common tiers: fast/cheap (flash-8b), balanced (flash), strong (pro).
+ * Model IDs are the bare Google AI Studio identifiers used in the
+ * `:generateContent` REST endpoint URL.
+ */
+export const DEFAULT_GOOGLE_MODELS = [
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-1.5-flash-8b',
+];
+
+export const RECOMMENDED_MODELS: Record<RuntimeAIProvider, string> = {
   anthropic: 'claude-haiku-4-5-20251001',
   openai: 'gpt-4o',
+  google: 'gemini-1.5-flash',
 };
 
 /** @deprecated Use getScribeModelAllowlistByProvider instead */
@@ -41,10 +63,10 @@ export function getScribeModelAllowlist(): string[] {
  * Get allowed models for a specific provider.
  * Env override applies to all providers (comma-separated list).
  *
- * P1a: OpenAI now returns DEFAULT_OPENAI_MODELS — the runtime client is
- * wired in createAIService and the picker treats the list normally.
+ * P1a: OpenAI returns DEFAULT_OPENAI_MODELS — runtime client active.
+ * P1c: 'google' returns the Gemini default trio.
  */
-export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): string[] {
+export function getScribeModelAllowlistByProvider(provider?: RuntimeAIProvider): string[] {
   const env = getEnv();
   if (env.AI_SCRIBE_MODEL_ALLOWLIST) {
     return env.AI_SCRIBE_MODEL_ALLOWLIST.split(',')
@@ -58,6 +80,9 @@ export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): str
   if (provider === 'openai') {
     return DEFAULT_OPENAI_MODELS;
   }
+  if (provider === 'google') {
+    return DEFAULT_GOOGLE_MODELS;
+  }
   return DEFAULT_ANTHROPIC_MODELS;
 }
 
@@ -66,14 +91,15 @@ export function getScribeModelAllowlistByProvider(provider?: AIKeyProvider): str
  * model picker (issue #437) to validate PATCH /api/pipelines/:id/model.
  *
  * P1a: includes OpenAI alongside Anthropic now that the runtime client is
- * active. PATCH /api/pipelines/:id/model accepts either provider's models.
+ * active. P1c: includes Google Gemini. PATCH /api/pipelines/:id/model
+ * accepts any of the three providers' models.
  */
 export function getAllKnownModels(): string[] {
-  return [...DEFAULT_ANTHROPIC_MODELS, ...DEFAULT_OPENAI_MODELS];
+  return [...DEFAULT_ANTHROPIC_MODELS, ...DEFAULT_OPENAI_MODELS, ...DEFAULT_GOOGLE_MODELS];
 }
 
 /** Returns the recommended default model for a given AI provider. */
-export function getRecommendedModel(provider: AIKeyProvider): string {
+export function getRecommendedModel(provider: RuntimeAIProvider): string {
   return RECOMMENDED_MODELS[provider];
 }
 
@@ -85,8 +111,9 @@ export function isModelAllowed(model: string, allowlist: string[]): boolean {
 /**
  * Check if a model ID looks like it belongs to a specific provider.
  * OpenAI models start with "gpt-", "o1", etc.
+ * P1c: Gemini models match the `gemini-` prefix.
  */
-export function detectProviderFromModel(model: string): AIKeyProvider | null {
+export function detectProviderFromModel(model: string): RuntimeAIProvider | null {
   if (
     model.startsWith('gpt-') ||
     model.startsWith('o1') ||
@@ -99,6 +126,9 @@ export function detectProviderFromModel(model: string): AIKeyProvider | null {
   if (model.startsWith('claude-')) {
     return 'anthropic';
   }
+  if (model.startsWith('gemini-')) {
+    return 'google';
+  }
   return null;
 }
 
@@ -106,7 +136,10 @@ export function detectProviderFromModel(model: string): AIKeyProvider | null {
  * Validate that a model is compatible with a provider.
  * Returns true if model can be used with the provider.
  */
-export function isModelCompatibleWithProvider(model: string, provider: AIKeyProvider): boolean {
+export function isModelCompatibleWithProvider(
+  model: string,
+  provider: RuntimeAIProvider,
+): boolean {
   const modelProvider = detectProviderFromModel(model);
 
   // Unknown model format - allow it (could be a new model)
