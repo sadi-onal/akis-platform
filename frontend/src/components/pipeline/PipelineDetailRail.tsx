@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import type { ConversationUIState } from '../../types/chat';
 import type {
@@ -192,6 +192,16 @@ export function PipelineDetailRail({
   const [tab, setTab] = useState<Tab | null>(null);
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(null);
   const [explanationError, setExplanationError] = useState<string | null>(null);
+  // PR-B (user feedback 2026-05-15 ek #2): user-controllable rail body
+  // height. `null` → fall back to the `max-h-[55vh]/[60vh]` Tailwind
+  // tokens (the original sizing). A number means the user dragged the
+  // handle and we apply an explicit max-height in pixels instead. Bounds
+  // are enforced on every drag tick (see RAIL_MIN_HEIGHT_PX +
+  // RAIL_MAX_HEIGHT_VH) so the rail can never collapse to zero or eat
+  // the chat surface beneath it.
+  const [bodyHeightPx, setBodyHeightPx] = useState<number | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
   const regressionVisible = isRegressionVisible(uiState, activities.length > 0, pipelineHasOutputs);
   const pushGateActive = isPushGate(uiState);
@@ -207,7 +217,13 @@ export function PipelineDetailRail({
   // resolution surface.
   const autoCollapsed =
     !isRunning(uiState) && !isExplainable(uiState) && !pushGateActive && !criticGateActive;
-  const autoTab: Tab = isRunning(uiState) ? 'flow' : 'why';
+  // PR-B: push + critic gates render their inline action UI inside the
+  // Akış tab (alongside the cinema). Auto-route to 'flow' for those so the
+  // gate is immediately reachable — otherwise the user lands on Açıklama
+  // (where we no longer surface the gates) and has to click around to find
+  // the resolve button.
+  const autoTab: Tab =
+    isRunning(uiState) || pushGateActive || criticGateActive ? 'flow' : 'why';
   const effectiveCollapsed = collapsed ?? autoCollapsed;
   const effectiveTab = tab ?? autoTab;
 
@@ -238,6 +254,37 @@ export function PipelineDetailRail({
   // `RegressionPanel` itself (via `regressionFetcher`). The rail does
   // not duplicate that effect — it only forwards the DI fetcher and
   // mounts the panel when the user activates the Regresyon tab.
+
+  // PR-B: vertical resize handle. Mirrors the chat ↔ preview split-pane
+  // pattern from useSplitResize (mousedown → document mousemove/up + a
+  // ref to track drag state) but applied to the rail body's height.
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const currentH = bodyRef.current?.offsetHeight ?? 0;
+    if (currentH <= 0) return;
+    dragRef.current = { startY: e.clientY, startHeight: currentH };
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const RAIL_MIN_HEIGHT_PX = 120;
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const { startY, startHeight } = dragRef.current;
+      const dy = ev.clientY - startY;
+      const max = Math.round(window.innerHeight * 0.7);
+      const next = Math.max(RAIL_MIN_HEIGHT_PX, Math.min(max, startHeight + dy));
+      setBodyHeightPx(next);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   const attentionPoints = useMemo(() => explanation?.attentionPoints ?? [], [explanation]);
   const highSevCount = useMemo(
@@ -446,13 +493,28 @@ export function PipelineDetailRail({
       </header>
       {!effectiveCollapsed && (
         <div
+          ref={bodyRef}
           id="pipeline-rail-body"
           tabIndex={0}
           role="region"
           aria-label="Pipeline detayı içeriği"
-          className="max-h-[55vh] overflow-y-auto overscroll-contain px-4 pb-3 sm:max-h-[60vh]"
+          // PR-B: when the user drags the resize handle we apply an
+          // explicit pixel maxHeight; otherwise the original vh tokens
+          // win (preserving the F-02 scrollability + breakpoint
+          // contract). The drag clamp is min 120px / max 70vh — see
+          // handleResizeStart.
+          className="overflow-y-auto overscroll-contain px-4 pb-3 max-h-[55vh] sm:max-h-[60vh]"
+          style={bodyHeightPx !== null ? { maxHeight: `${bodyHeightPx}px` } : undefined}
         >
-          {attentionPoints.length > 0 && (
+          {/* PR-B (user feedback 2026-05-15 #5): AttentionBanner +
+              CriticResolutionGate are scoped to the Akış tab. Previously
+              they rendered above both tabs, which made the Açıklama tab
+              top with the same red/amber banners users already see in Akış
+              — duplicate noise, less room for the per-stage reasoning
+              cards that Açıklama is actually meant to surface.
+              PushConfirmGate stays above-the-fold so the user can resolve
+              it regardless of which tab is open. */}
+          {effectiveTab === 'flow' && attentionPoints.length > 0 && (
             <div className="mb-3">
               <AttentionBanner points={attentionPoints} limit={2} />
             </div>
@@ -467,7 +529,7 @@ export function PipelineDetailRail({
               />
             </div>
           )}
-          {criticGateActive && pipelineId && criticReview && (
+          {effectiveTab === 'flow' && criticGateActive && pipelineId && criticReview && (
             <div className="mb-3">
               <CriticResolutionGate
                 pipelineId={pipelineId}
@@ -511,6 +573,29 @@ export function PipelineDetailRail({
           {effectiveTab === 'aiLogs' && aiLogsTabVisible && (
             <AiCallsPanel pipelineId={pipelineId} fetcher={aiCallsFetcher} />
           )}
+        </div>
+      )}
+      {/* PR-B (user feedback 2026-05-15 ek #2): vertical drag handle
+          between the rail and the chat below. Mirrors the chat ↔ preview
+          horizontal handle pattern in ChatPageLayout (line ~327): same
+          design tokens, same group-hover affordance, same body cursor
+          override. Hidden when the rail is collapsed — no body to
+          resize. Hidden under md to match the project's mobile posture
+          (the chat-preview split also hides its handle under lg). */}
+      {!effectiveCollapsed && (
+        <div
+          onMouseDown={handleResizeStart}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Pipeline detayı yüksekliğini ayarla"
+          aria-controls="pipeline-rail-body"
+          data-testid="pipeline-rail-resize-handle"
+          className="group hidden h-1 w-full flex-shrink-0 cursor-row-resize bg-ak-border transition-colors hover:bg-ak-primary/50 active:bg-ak-primary md:block"
+          title="Sürükleyerek yüksekliği ayarla"
+        >
+          <div className="flex h-full items-center justify-center">
+            <div className="h-0.5 w-8 rounded-full bg-ak-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+          </div>
         </div>
       )}
     </section>

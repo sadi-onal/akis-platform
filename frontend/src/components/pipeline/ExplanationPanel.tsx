@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { PipelineExplanation, AgentReasoning, ReasoningFinding } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
 import { ConfidenceBadge } from './ConfidenceBadge';
-import { AttentionBanner } from './AttentionBanner';
 
 // Per-category surface metadata. Icons are simple text glyphs (not
 // emoji) so they stay legible across systems and don't fight the AKIS
@@ -135,10 +134,11 @@ export interface ExplanationPanelProps {
   className?: string;
   fetcher?: (id: string) => Promise<PipelineExplanation>;
   /**
-   * Skip the inline AttentionBanner — use when the host (e.g.
-   * PipelineDetailRail) already renders attention points itself, so we
-   * don't end up showing the same banner twice. Defaults to false so
-   * standalone usage keeps the banner.
+   * @deprecated PR-B (2026-05-18): the panel no longer renders an inline
+   * AttentionBanner — attention points live on the Akış tab of
+   * PipelineDetailRail, and duplicating them here was the source of the
+   * "Açıklama tab is buried under banners" feedback. Prop kept for API
+   * stability so existing callers don't break the build; it is ignored.
    */
   hideAttentionBanner?: boolean;
 }
@@ -272,7 +272,6 @@ export function ExplanationPanel({
   defaultExpanded = false,
   className,
   fetcher,
-  hideAttentionBanner = false,
 }: ExplanationPanelProps) {
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(priming ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -366,9 +365,6 @@ export function ExplanationPanel({
 
   return (
     <section aria-label="Pipeline açıklaması" className={`flex flex-col gap-3 ${className ?? ''}`}>
-      {!hideAttentionBanner && explanation.attentionPoints.length > 0 && (
-        <AttentionBanner points={explanation.attentionPoints} />
-      )}
       <div className="flex flex-col gap-2">
         {explanation.stages.map((s, idx) => (
           <ReasoningCard

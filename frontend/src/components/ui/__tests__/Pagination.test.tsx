@@ -10,9 +10,9 @@ describe('Pagination', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders "Load more" button when nextCursor is set', () => {
+  it('renders the "Daha fazla" button when nextCursor is set', () => {
     render(<Pagination nextCursor="abc123" onNext={() => {}} />);
-    expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Daha fazla' })).toBeInTheDocument();
   });
 
   it('calls onNext when button is clicked', () => {
@@ -22,9 +22,9 @@ describe('Pagination', () => {
     expect(handleNext).toHaveBeenCalledOnce();
   });
 
-  it('shows "Loading…" text when isLoading is true', () => {
+  it('shows "Yükleniyor…" text when isLoading is true', () => {
     render(<Pagination nextCursor="abc123" onNext={() => {}} isLoading />);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByText('Yükleniyor…')).toBeInTheDocument();
   });
 
   it('disables button when isLoading is true', () => {
