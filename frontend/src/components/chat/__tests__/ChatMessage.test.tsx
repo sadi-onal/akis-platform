@@ -499,3 +499,38 @@ describe('ChatMessage — info', () => {
     expect(wrapper.className).toContain('justify-center');
   });
 });
+
+// ─── 11. agent_started message — Critic filter (PR-F1) ─────────────────────
+
+describe('ChatMessage — agent_started (PR-F1 critic filter)', () => {
+  it('renders Scribe/Proto/Trace agent_started rows', () => {
+    const scribeMsg = {
+      type: 'agent_started',
+      agent: 'scribe',
+      task: 'pipeline.activity.scribe.writing_spec',
+      state: 'running',
+      timestamp: TS,
+    } as ChatMessageType;
+    const { container } = render(<ChatMessage message={scribeMsg} />);
+    // The wrapper div from ChatMessage exists (non-null first child).
+    expect(container.firstElementChild).not.toBeNull();
+    expect(screen.getByText('Scribe')).toBeInTheDocument();
+  });
+
+  it('PR-F1: returns null for agent="critic" (background guardrail)', () => {
+    // Defensive guard — AgentName type currently excludes 'critic' but a future
+    // refactor could widen it; this test pins the modern-stack invariant that
+    // Critic events do NOT appear as chat rows. The user finding (image #40)
+    // showed "Critic Spesifikasyon inceleniyor (adversarial review)..." in
+    // the chat flow; the cast below simulates that leak.
+    const criticLeak = {
+      type: 'agent_started',
+      agent: 'critic',
+      task: 'Spesifikasyon inceleniyor (adversarial review)...',
+      state: 'running',
+      timestamp: TS,
+    } as unknown as ChatMessageType;
+    const { container } = render(<ChatMessage message={criticLeak} />);
+    expect(container.firstElementChild).toBeNull();
+  });
+});

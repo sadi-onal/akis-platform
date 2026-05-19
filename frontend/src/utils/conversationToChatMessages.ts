@@ -73,6 +73,13 @@ export function conversationToChatMessages(
     timestamp: string,
     taskKey?: string
   ) => {
+    // PR-F1 (2026-05-19): Defensive — modern stack pattern says Critic
+    // guardrail runs in the background; users do not see "Critic started"
+    // rows in the chat timeline. The NarratorAgent type already restricts
+    // the agent to scribe/proto/trace, but we add a runtime guard so future
+    // refactors (e.g. someone widening NarratorAgent) don't silently leak
+    // Critic markers into the chat.
+    if ((agent as string) === 'critic') return;
     // De-dup across BOTH `started` and `running` — earlier the set only
     // tracked `running`, so a `started` marker (emitted on a spec-approved
     // system message) plus the live-stage `running` marker rendered TWO
