@@ -60,16 +60,54 @@ paths:
       security: []
       responses:
         "200":
-          description: All subsystems ready
+          description: |
+            All subsystems ready. Response is a structured object — `database`,
+            `migrations`, `encryption`, `email`, `oauth`, `mcp` each carry a
+            sub-status string or object (NOT booleans). Pre-PR-U1 spec listed
+            these as booleans which did not match the implementation.
           content:
             application/json:
               schema:
                 type: object
+                required: [ready, database, migrations, encryption, timestamp]
                 properties:
                   ready: { type: boolean }
-                  database: { type: boolean }
-                  migrations: { type: boolean }
-                  encryption: { type: boolean }
+                  database:
+                    type: string
+                    enum: [connected, disconnected]
+                  migrations:
+                    type: string
+                    enum: [ok, pending, unknown]
+                  encryption:
+                    type: object
+                    description: AES-GCM keyring status (active / rotation pending / etc).
+                  email:
+                    type: object
+                    description: Email provider connectivity snapshot.
+                  oauth:
+                    type: object
+                    description: OAuth provider availability per provider.
+                  mcp:
+                    type: object
+                    description: GitHub MCP gateway status.
+                  timestamp: { type: string, format: date-time }
+        "503":
+          description: One or more subsystems unavailable. Same envelope; `ready=false` + optional `error` message.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ready, database, migrations, timestamp]
+                properties:
+                  ready: { type: boolean, enum: [false] }
+                  database: { type: string, enum: [connected, disconnected] }
+                  migrations: { type: string, enum: [ok, pending, unknown] }
+                  encryption: { type: object }
+                  email: { type: object }
+                  oauth: { type: object }
+                  mcp: { type: object }
+                  error: { type: string }
+                  timestamp: { type: string, format: date-time }
 
   /version:
     get:
@@ -135,14 +173,23 @@ paths:
                 password: { type: string, minLength: 8 }
       responses:
         "200":
-          description: Password set
+          description: |
+            Password set. In normal flow `verificationBypassed=false` and the
+            user proceeds to /auth/verify-email. In DEV_MODE the email step is
+            skipped, `verificationBypassed=true`, and `user` is populated so
+            the client can log in immediately.
           content:
             application/json:
               schema:
                 type: object
+                required: [ok, message, verificationBypassed]
                 properties:
                   ok: { type: boolean }
-                  needsDataSharingConsent: { type: boolean }
+                  message: { type: string }
+                  verificationBypassed: { type: boolean }
+                  user:
+                    description: Present only when `verificationBypassed=true` (DEV_MODE).
+                    $ref: "#/components/schemas/User"
 
   /auth/verify-email:
     post:
@@ -809,6 +856,51 @@ components:
         format: uuid
 
   schemas:
+    # PR-U1 H8: every 4xx/5xx response in this API follows the same envelope.
+    # Backend defines this in `backend/src/utils/errorHandler.ts:61` and the
+    # global error handler enforces it. Use `$ref: '#/components/schemas/ErrorResponse'`
+    # in every endpoint's 400/401/403/404/409/500 response.
+    ErrorResponse:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: |
+                Stable, machine-readable error code. Defined in
+                `backend/src/utils/errorHandler.ts`. Frontend may localize
+                via `localizeError(code)`. New codes are additive; never
+                renamed in place.
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - RATE_LIMITED
+                - INTERNAL_ERROR
+                - DATABASE_ERROR
+                - DUPLICATE_KEY
+                - EMAIL_TAKEN
+                - INVALID_CREDENTIALS
+                - EMAIL_NOT_VERIFIED
+                - PASSWORD_TOO_WEAK
+                - AI_KEY_MISSING
+                - GITHUB_NOT_CONNECTED
+                - PIPELINE_STALE_STATE
+            message:
+              type: string
+              description: Human-readable error message (may be Turkish or English).
+            details:
+              description: Optional structured detail payload (e.g. ZodError list, field errors).
+        requestId:
+          type: string
+          description: Fastify request id — quoted in logs for support correlation.
+
     User:
       type: object
       properties:
@@ -862,12 +954,22 @@ components:
         userId: { type: string, format: uuid }
         stage:
           type: string
+          description: |
+            Pipeline state machine. 15 stages aligned with backend Drizzle
+            schema (PR-U1). Critic + gate stages added when adversarial
+            review and the preview-confirm gate became first-class.
           enum:
             - scribe_clarifying
             - scribe_generating
+            - critic_reviewing_spec
             - awaiting_approval
             - proto_building
+            - critic_reviewing_code
+            - awaiting_critic_resolution
+            - awaiting_push_confirm
             - trace_testing
+            - fix_loop_iteration
+            - ci_running
             - completed
             - completed_partial
             - failed

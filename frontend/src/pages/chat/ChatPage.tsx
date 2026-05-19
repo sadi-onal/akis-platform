@@ -168,29 +168,45 @@ export default function ChatPage() {
   //      ensures the chat lands on `completed`/`awaiting_push_confirm` even
   //      if polling teared down already (isRunning flips false).
   //
-  // We debounce with a 250ms timer so a stage that emits several activities
-  // back-to-back only triggers one refresh.
+  // PR-U1 M14: previously this used a 250ms `setTimeout` debounce — when
+  // multiple stage-transitioning activities landed in <250ms (e.g. critic
+  // → proto → trace in a fast iterate-loop), the 2nd/3rd timer kept
+  // resetting the 1st, but if processing took >250ms only the LAST
+  // captured snapshot reached `refreshWorkflow`. Middle transitions could
+  // be skipped because `lastStageRef.current` was already updated.
+  // RAF coalescing fixes both: every effect run marks the refresh as
+  // "needed" and only one rAF tick fires per frame regardless of how many
+  // activities arrive within it. The rAF callback re-reads the latest
+  // ref so it never operates on stale snapshots.
   const lastStageRef = useRef<string | undefined>(undefined);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const refreshPendingRef = useRef(false);
+  const refreshRafRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (pipelineActivities.length === 0) return;
     const latest = pipelineActivities[pipelineActivities.length - 1];
     const stageChanged =
       lastStageRef.current !== undefined && lastStageRef.current !== latest.stage;
-    // PR-T3 S1: `gate_open` is the new explicit signal emitted by the
-    // orchestrator when the pipeline lands on `awaiting_push_confirm`. We
-    // treat it as terminal-equivalent so the chat refreshes the workflow
-    // even when no stage label changed (Trace stayed `trace`, only the
-    // pipeline-level state moved).
+    // PR-T3 S1: `gate_open` is the explicit signal emitted by the
+    // orchestrator when the pipeline lands on `awaiting_push_confirm` or
+    // `awaiting_critic_resolution`. Treat it as terminal-equivalent so the
+    // chat refreshes even when no stage label changed (e.g. Trace stayed
+    // `trace`, only the pipeline-level state moved).
     const isTerminal = latest.step === 'pipeline_complete' || latest.step === 'gate_open';
     lastStageRef.current = latest.stage;
     if (!stageChanged && !isTerminal) return;
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(() => {
+    refreshPendingRef.current = true;
+    if (refreshRafRef.current !== undefined) return; // already scheduled this frame
+    refreshRafRef.current = requestAnimationFrame(() => {
+      refreshRafRef.current = undefined;
+      if (!refreshPendingRef.current) return;
+      refreshPendingRef.current = false;
       void refreshWorkflow();
-    }, 250);
+    });
     return () => {
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      if (refreshRafRef.current !== undefined) {
+        cancelAnimationFrame(refreshRafRef.current);
+        refreshRafRef.current = undefined;
+      }
     };
   }, [pipelineActivities, refreshWorkflow]);
 

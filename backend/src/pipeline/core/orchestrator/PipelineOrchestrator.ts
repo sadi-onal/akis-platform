@@ -3771,6 +3771,19 @@ export class PipelineOrchestrator {
    * Proto'ya plumb edilir, intermediateState'teki `traceIterateRetryCount`
    * artırılır.
    */
+  /**
+   * PR-U1 (C4 + H1): fire-and-forget dispatchers (`dispatchTraceIterate`,
+   * `dispatchCriticIterate`) run after `runProtoAndTrace` returns to its
+   * caller — meanwhile the user can click "İptal" and the orchestrator
+   * transitions the pipeline to `cancelled`. Without a re-check, the
+   * dispatcher's `store.update(stage: 'proto_building', …)` overwrites the
+   * terminal `cancelled` state and "resurrects" the pipeline. Guard: read
+   * fresh state right before the update; bail out if terminal.
+   */
+  private isTerminalStage(stage: PipelineStage): boolean {
+    return stage === 'cancelled' || stage === 'failed' || stage === 'completed';
+  }
+
   private async dispatchTraceIterate(pipelineId: string, feedback: string): Promise<void> {
     const pipeline = await this.store.getById(pipelineId);
     if (!pipeline) return;
@@ -3795,6 +3808,18 @@ export class PipelineOrchestrator {
       typeof intermediate.traceIterateRetryCount === 'number'
         ? (intermediate.traceIterateRetryCount as number)
         : 0;
+    // PR-U1 C4: cancel race guard — re-read state right before the update.
+    // Between the top-of-fn `getById` and here, the user may have clicked
+    // "İptal" and the pipeline transitioned to `cancelled`. We must NOT
+    // overwrite a terminal state and resurrect the pipeline.
+    const fresh = await this.store.getById(pipelineId);
+    if (!fresh || this.isTerminalStage(fresh.stage)) {
+      logger.info(
+        { pipelineId, terminalStage: fresh?.stage },
+        '[Pipeline] PR-U1 Trace iterate-loop: pipeline reached terminal state mid-flight, skipping re-iterate'
+      );
+      return;
+    }
     // proto_building'a geç + retry counter'ı kaydet.
     await this.store.update(pipelineId, {
       stage: 'proto_building',
@@ -3950,6 +3975,16 @@ export class PipelineOrchestrator {
       typeof intermediate.criticIterateRetryCount === 'number'
         ? (intermediate.criticIterateRetryCount as number)
         : 0;
+    // PR-U1 C4: cancel race guard — aynı dispatchTraceIterate'deki pattern.
+    // User Critic-iterate'in mid-flight'ında "İptal"e basarsa burada yakala.
+    const fresh = await this.store.getById(pipelineId);
+    if (!fresh || this.isTerminalStage(fresh.stage)) {
+      logger.info(
+        { pipelineId, terminalStage: fresh?.stage },
+        '[Pipeline] PR-U1 Critic iterate-loop: pipeline reached terminal state mid-flight, skipping re-iterate'
+      );
+      return;
+    }
     // proto_building'a geç + retry counter'ı kaydet.
     await this.store.update(pipelineId, {
       stage: 'proto_building',
