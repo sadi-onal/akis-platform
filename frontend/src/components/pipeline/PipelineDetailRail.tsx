@@ -620,28 +620,30 @@ export function PipelineDetailRail({
               compact
             />
           )}
-          {/* PR-F (2026-05-19): Critic ana akıştan guardrail'e çekildi.
-              Hard-block durumlarında CriticResolutionGate yukarıda zaten
-              render ediliyor; severity<critical olduğunda findings'in
-              kaybolmaması için inline kart Cinema'nın altına eklenir.
-              Hard-block aktifken duplicate önlemek için sadece
-              !criticGateActive durumunda gösterilir. */}
+          {/* PR-V2 (2026-05-19): Akış tab'ında Critic findings yalnızca özet
+              chip olarak gösterilir; tam liste + apply UI Açıklama tab'ında.
+              Hard-block aktifken CriticResolutionGate yukarıda render edildiği
+              için chip'i de gizliyoruz (duplicate önlemi). */}
           {effectiveTab === 'flow' &&
             !criticGateActive &&
             criticReview &&
-            (criticReview.findings?.length ?? 0) > 0 && (
-              <button
-                type="button"
-                onClick={() => setTab('why')}
-                className="mt-3 inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/10 px-2.5 py-0.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-500/20 dark:text-rose-300"
-                aria-label={`${criticReview.findings!.length} Critic bulgusu — Açıklama sekmesinde göster`}
-                title="Açıklama sekmesine geç ve Critic bulgularını gör"
-                data-testid="critic-findings-summary-chip"
-              >
-                <span aria-hidden="true">⚠</span>
-                {criticReview.findings!.length} Critic bulgusu — Açıklama'da
-              </button>
-            )}
+            (criticReview.findings?.length ?? 0) > 0 &&
+            (() => {
+              const findingCount = criticReview.findings?.length ?? 0;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setTab('why')}
+                  className="mt-3 inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/10 px-2.5 py-0.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-500/20 dark:text-rose-300"
+                  aria-label={`${findingCount} Critic bulgusu — Açıklama sekmesinde göster`}
+                  title="Açıklama sekmesine geç ve Critic bulgularını gör"
+                  data-testid="critic-findings-summary-chip"
+                >
+                  <span aria-hidden="true">⚠</span>
+                  {findingCount} Critic bulgusu — Açıklama'da
+                </button>
+              );
+            })()}
           {effectiveTab === 'why' && (
             <>
               {/* PR-U2 #15: persistent error surface with retry — the user
