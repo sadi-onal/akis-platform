@@ -22,6 +22,12 @@ vi.mock('../../i18n/useI18n', () => ({
         'chat.emptyState.scribeDesc': 'Scribe desc',
         'chat.emptyState.protoDesc': 'Proto desc',
         'chat.emptyState.traceDesc': 'Trace desc',
+        // PR-T2: chip-friendly short mode labels (TR).
+        'chat.modeBadge.label.ask': 'Soru',
+        'chat.modeBadge.label.plan': 'Plan',
+        'chat.modeBadge.label.act': 'Yapım',
+        'chat.modeBadge.label.review': 'İnceleme',
+        'chat.header.preview': 'Önizleme',
       };
       return map[key] ?? key;
     },
@@ -96,25 +102,25 @@ describe('ChatHeader', () => {
     expect(screen.getByText('feat/auth')).toBeInTheDocument();
   });
 
-  it.each(['ask', 'plan', 'act', 'review'] as const)(
-    'mode badge renders correctly for mode=%s',
-    (mode) => {
-      render(<ChatHeader {...base} mode={mode} />);
-      expect(screen.getByText(mode)).toBeInTheDocument();
-    },
-  );
+  it.each([
+    ['ask', 'Soru'],
+    ['plan', 'Plan'],
+    ['act', 'Yapım'],
+    ['review', 'İnceleme'],
+  ] as const)('mode badge renders correctly for mode=%s', (mode, label) => {
+    render(<ChatHeader {...base} mode={mode} />);
+    const badge = screen.getByTestId('chat-mode-badge');
+    expect(badge).toHaveTextContent(label);
+  });
 
   it('preview button visible when hasPreview=true', () => {
-    render(
-      <ChatHeader {...base} hasPreview showPreview={false} onTogglePreview={vi.fn()} />,
-    );
-    expect(screen.getByLabelText('Preview aç')).toBeInTheDocument();
+    render(<ChatHeader {...base} hasPreview showPreview={false} onTogglePreview={vi.fn()} />);
+    expect(screen.getByLabelText('Önizleme')).toBeInTheDocument();
   });
 
   it('preview button hidden when hasPreview=false', () => {
     render(<ChatHeader {...base} />);
-    expect(screen.queryByLabelText('Preview aç')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Preview kapat')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Önizleme')).not.toBeInTheDocument();
   });
 });
 

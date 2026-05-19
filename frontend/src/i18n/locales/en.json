@@ -1110,5 +1110,17 @@
   "docsPage.sections.settings.title": "Settings",
   "docsPage.sections.settings.content": "## Settings\n\n### API Key Management\n- You can add a separate key for each provider\n- Keys are encrypted and stored using AES-256-GCM\n- You can select your default provider\n- You can update or delete keys at any time\n\n### GitHub Connection\n- If you signed in with OAuth, it is automatically connected\n- You can check the connection status on the Settings page",
   "docsPage.sections.faq.title": "FAQ",
-  "docsPage.sections.faq.content": "## Frequently Asked Questions\n\n### How long does a pipeline take?\nA typical pipeline takes 2-5 minutes. Complex projects may take longer.\n\n### Which languages are supported?\nSpec writing can be in Turkish or English. Code generation is based on the project's stack.\n\n### Which model does it use?\nClaude Haiku 4.5 by default. You can pick Sonnet 4.6 or Opus 4.7 when you start a chat; the choice is locked for the lifetime of that chat (open a new chat to switch models).\n\n### Can I edit the spec?\nYes, after Scribe generates the spec you can click \"Reject\" to make edits and resubmit.\n\n### Can it push to my existing repo?\nYes, the Proto agent can push to an existing repo by opening a new branch."
+  "docsPage.sections.faq.content": "## Frequently Asked Questions\n\n### How long does a pipeline take?\nA typical pipeline takes 2-5 minutes. Complex projects may take longer.\n\n### Which languages are supported?\nSpec writing can be in Turkish or English. Code generation is based on the project's stack.\n\n### Which model does it use?\nClaude Haiku 4.5 by default. You can pick Sonnet 4.6 or Opus 4.7 when you start a chat; the choice is locked for the lifetime of that chat (open a new chat to switch models).\n\n### Can I edit the spec?\nYes, after Scribe generates the spec you can click \"Reject\" to make edits and resubmit.\n\n### Can it push to my existing repo?\nYes, the Proto agent can push to an existing repo by opening a new branch.",
+
+  "chat.modeBadge.label.ask": "Ask",
+  "chat.modeBadge.label.plan": "Plan",
+  "chat.modeBadge.label.act": "Act",
+  "chat.modeBadge.label.review": "Review",
+  "chat.header.preview": "Preview",
+  "pipeline.miniState.pending": "pending",
+  "pipeline.miniState.active": "active",
+  "pipeline.miniState.complete": "complete",
+  "pipeline.cinema.title": "Pipeline flow",
+  "pipeline.cinema.toggleCompact": "Compact view",
+  "pipeline.cinema.toggleWide": "Wide view"
 }

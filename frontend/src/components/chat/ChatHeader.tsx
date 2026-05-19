@@ -14,11 +14,29 @@ const MODE_STYLES: Record<ChatMode, string> = {
 // Bakkal-language one-liners — see docs/product/02-ux.md § 6 + 05-findings F-05.
 // Tooltip text is intentionally jargon-free (no "Scribe / Proto / Trace / spec");
 // strings live in `frontend/src/i18n/locales/{tr,en}.json` under `chat.modeBadge.*`.
-const MODE_TOOLTIP_KEYS: Record<ChatMode, 'chat.modeBadge.ask' | 'chat.modeBadge.plan' | 'chat.modeBadge.act' | 'chat.modeBadge.review'> = {
+const MODE_TOOLTIP_KEYS: Record<
+  ChatMode,
+  'chat.modeBadge.ask' | 'chat.modeBadge.plan' | 'chat.modeBadge.act' | 'chat.modeBadge.review'
+> = {
   ask: 'chat.modeBadge.ask',
   plan: 'chat.modeBadge.plan',
   act: 'chat.modeBadge.act',
   review: 'chat.modeBadge.review',
+};
+
+// PR-T2: visible chip label (short, fits in the uppercase tracking-wider 10px
+// pill). Tooltip remains the long-form sentence from MODE_TOOLTIP_KEYS.
+const MODE_LABEL_KEYS: Record<
+  ChatMode,
+  | 'chat.modeBadge.label.ask'
+  | 'chat.modeBadge.label.plan'
+  | 'chat.modeBadge.label.act'
+  | 'chat.modeBadge.label.review'
+> = {
+  ask: 'chat.modeBadge.label.ask',
+  plan: 'chat.modeBadge.label.plan',
+  act: 'chat.modeBadge.label.act',
+  review: 'chat.modeBadge.label.review',
 };
 
 interface ChatHeaderProps {
@@ -101,7 +119,7 @@ export function ChatHeader({
           title={modeTooltip}
           aria-label={modeTooltip}
         >
-          {mode}
+          {t(MODE_LABEL_KEYS[mode])}
         </span>
       ) : null}
 
@@ -167,7 +185,8 @@ export function ChatHeader({
       {hasPreview && (
         <button
           onClick={onTogglePreview}
-          aria-label={showPreview ? 'Preview kapat' : 'Preview aç'}
+          aria-label={t('chat.header.preview')}
+          aria-pressed={!!showPreview}
           className={cn(
             'hidden items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-medium md:flex transition-colors',
             showPreview
@@ -193,7 +212,7 @@ export function ChatHeader({
               d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          Preview
+          {t('chat.header.preview')}
         </button>
       )}
 

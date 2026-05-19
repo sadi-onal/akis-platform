@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '../../i18n/useI18n';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import type { ConversationUIState } from '../../types/chat';
 import type {
@@ -197,6 +198,7 @@ export function PipelineDetailRail({
   // owned by ChatPageLayout). The rail itself no longer drives push
   // confirm/cancel — those moved out of the chat card.
 }: PipelineDetailRailProps) {
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const [tab, setTab] = useState<Tab | null>(null);
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(null);
@@ -485,11 +487,18 @@ export function PipelineDetailRail({
             <span aria-label="Pipeline durumu" className="ml-1 flex items-center gap-1.5">
               {MINI_ORDER.map((s, idx) => {
                 const state = stateOf(idx);
+                const stateLabel = t(
+                  state === 'pending'
+                    ? 'pipeline.miniState.pending'
+                    : state === 'active'
+                      ? 'pipeline.miniState.active'
+                      : 'pipeline.miniState.complete'
+                );
                 return (
                   <span
                     key={s}
                     className={dotClass(s, state)}
-                    title={`${MINI_LABEL[s]} — ${state}`}
+                    title={`${MINI_LABEL[s]} — ${stateLabel}`}
                     data-stage={s}
                     data-state={state}
                   />

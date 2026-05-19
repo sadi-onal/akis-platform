@@ -46,10 +46,9 @@ const STAGE_TAGLINE: Record<CinemaStage, string> = {
 // each agent everywhere. Falls back to the constant below if i18n is not
 // ready (e.g. in unit tests).
 const STAGE_TOOLTIP_FALLBACK: Record<CinemaStage, string> = {
-  scribe: 'Fikri spec\'e çevirir — kabul kriterleri ve kullanıcı hikayeleri',
-  proto: 'Spec\'ten kod üretir — proje iskeleti ve uygulama dosyaları',
-  trace:
-    'Otomatik test üretir; eksik kabul kriteri varsa Proto yeniden çalıştırılır',
+  scribe: "Fikri spec'e çevirir — kabul kriterleri ve kullanıcı hikayeleri",
+  proto: "Spec'ten kod üretir — proje iskeleti ve uygulama dosyaları",
+  trace: 'Otomatik test üretir; eksik kabul kriteri varsa Proto yeniden çalıştırılır',
 };
 
 // Per-agent identity colours. Scribe/Proto/Trace match the rest of the app
@@ -238,9 +237,7 @@ export function PipelineCinema({
     // When the key is missing the provider returns the key string itself;
     // detect that and fall back to the hardcoded Turkish copy so users
     // never see a raw key in the tooltip.
-    return translated === STAGE_TOOLTIP_KEY[stage]
-      ? STAGE_TOOLTIP_FALLBACK[stage]
-      : translated;
+    return translated === STAGE_TOOLTIP_KEY[stage] ? STAGE_TOOLTIP_FALLBACK[stage] : translated;
   };
 
   return (
@@ -257,7 +254,7 @@ export function PipelineCinema({
       {onToggleCompact && (
         <header className="flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-ak-text-tertiary">
-            Pipeline akışı
+            {i18n.t('pipeline.cinema.title')}
           </h2>
           <button
             type="button"
@@ -265,7 +262,9 @@ export function PipelineCinema({
             className="rounded-md border border-ak-border bg-ak-surface px-2 py-1 text-xs text-ak-text-secondary hover:bg-ak-surface-2 hover:text-ak-text-primary"
             aria-pressed={compact}
           >
-            {compact ? 'Geniş görünüm' : 'Kompakt görünüm'}
+            {compact
+              ? i18n.t('pipeline.cinema.toggleWide')
+              : i18n.t('pipeline.cinema.toggleCompact')}
           </button>
         </header>
       )}
@@ -275,9 +274,7 @@ export function PipelineCinema({
           Mobil compact: 2 column → genişledikçe 3. */}
       <div
         className={`grid gap-2 ${
-          compact
-            ? 'grid-cols-1 sm:grid-cols-3'
-            : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+          compact ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
         }`}
       >
         {views.map((v) => (

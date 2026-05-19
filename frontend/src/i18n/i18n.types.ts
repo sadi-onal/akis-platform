@@ -1219,6 +1219,24 @@ export const MESSAGE_KEYS = [
   'docsPage.sections.settings.content',
   'docsPage.sections.faq.title',
   'docsPage.sections.faq.content',
+
+  // PR-T2: short chip-friendly labels for the mode badge (paired with the
+  // existing long-form chat.modeBadge.{mode} tooltips).
+  'chat.modeBadge.label.ask',
+  'chat.modeBadge.label.plan',
+  'chat.modeBadge.label.act',
+  'chat.modeBadge.label.review',
+  // PR-T2: chat header preview-toggle label.
+  'chat.header.preview',
+  // PR-T2: compact pipeline status — Turkish names for the per-dot tooltip
+  // (Scribe — bekliyor / çalışıyor / tamamlandı).
+  'pipeline.miniState.pending',
+  'pipeline.miniState.active',
+  'pipeline.miniState.complete',
+  // PR-T2: cinema panel header + density toggle.
+  'pipeline.cinema.title',
+  'pipeline.cinema.toggleCompact',
+  'pipeline.cinema.toggleWide',
 ] as const;
 
 // Keep strong autocomplete for known keys while allowing incremental key rollout.
