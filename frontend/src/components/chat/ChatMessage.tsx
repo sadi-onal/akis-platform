@@ -381,6 +381,10 @@ export function ChatMessage({
             isChangeRequest={false}
             onApprove={message.status === 'active' ? onApprove : undefined}
             onReject={message.status === 'active' ? onReject : undefined}
+            // PR-V6 — thread Scribe's structured spec + assumptions to the
+            // card so they render as disclosures below the summary.
+            spec={message.spec}
+            assumptions={message.assumptions}
           />
         </div>
       );

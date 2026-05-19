@@ -165,6 +165,9 @@ export function conversationToChatMessages(
             version: 1,
             status: planStatus,
             spec: m.spec,
+            // PR-V6 — surface Scribe's assumption list through to PlanCard
+            // so the user can expand it as a disclosure beneath the plan.
+            assumptions: m.assumptions,
             timestamp: ts,
           });
         } else {

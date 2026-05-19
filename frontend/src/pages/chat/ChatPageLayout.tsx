@@ -311,6 +311,10 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       criticReview={activeWorkflow?.criticReview}
                       acCoverage={activeWorkflow?.acCoverage}
                       traceDryRunStatus={activeWorkflow?.traceDryRunStatus}
+                      // PR-V6 — thread full Scribe spec to the rail so the
+                      // Açıklama tab's Scribe card surfaces AC + user stories
+                      // + problem statement as disclosures.
+                      scribeSpec={activeWorkflow?.stages?.scribe?.spec}
                       onCriticResolved={
                         onPushResolved
                           ? () => {

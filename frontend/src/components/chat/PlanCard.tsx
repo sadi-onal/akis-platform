@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { cn } from '../../utils/cn';
 import type { UserFriendlyPlan, ChangePlan, PlanStatus } from '../../types/plan';
+import type { StructuredSpec } from '../../types/workflow';
+import { ScribeOutputDisclosures } from '../pipeline/ScribeOutputDisclosures';
 
 interface PlanCardProps {
   plan: UserFriendlyPlan | ChangePlan;
@@ -9,6 +11,17 @@ interface PlanCardProps {
   isChangeRequest: boolean;
   onApprove?: () => void;
   onReject?: () => void;
+  /**
+   * PR-V6 — full Scribe structured spec. When present, the card renders
+   * `<details>` disclosures below the summary so AC, user stories, problem
+   * statement, and out-of-scope are reachable. Optional so the change-plan
+   * path (no spec) keeps working.
+   */
+  spec?: StructuredSpec | null;
+  /**
+   * PR-V6 — Scribe assumptions surfaced through the same disclosure UI.
+   */
+  assumptions?: string[] | null;
 }
 
 const STATUS_LABELS: Record<PlanStatus, string> = {
@@ -70,6 +83,8 @@ export function PlanCard({
   isChangeRequest,
   onApprove,
   onReject,
+  spec,
+  assumptions,
 }: PlanCardProps) {
   const [expanded, setExpanded] = useState(status === 'active');
   const isActive = status === 'active';
@@ -266,6 +281,12 @@ export function PlanCard({
               {plan.testRationale}
             </p>
           )}
+
+          {/* PR-V6 — full Scribe outputs (problem, AC, user stories,
+              out-of-scope, assumptions) as native disclosures. Renders
+              nothing when neither spec nor assumptions carry content,
+              so change-plan / pre-Scribe paths stay unchanged. */}
+          <ScribeOutputDisclosures spec={spec} assumptions={assumptions} />
         </div>
       )}
 
