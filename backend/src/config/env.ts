@@ -276,6 +276,15 @@ const envSchema = z
      * etmek isterse Push gate'inden onaylar.
      */
     TRACE_MAX_ITERATE_RETRIES: z.coerce.number().int().min(0).max(10).default(3),
+    /**
+     * PR-F3 (2026-05-19) — Critic critical-finding iterate-loop maksimum
+     * retry sayısı. Critic kod review'da severity=critical bulgu varsa
+     * pipeline kullanıcıyı `awaiting_critic_resolution`'a düşürmeden önce
+     * Proto'yu otomatik re-iterate eder ve kritik bulguları feedback olarak
+     * iletir. Default 3 (Trace iterate-loop ile simetrik). Retry tükenince
+     * mevcut hard-block davranışı (awaiting_critic_resolution) devreye girer.
+     */
+    CRITIC_CRITICAL_MAX_ITERATE_RETRIES: z.coerce.number().int().min(0).max(10).default(3),
   })
   .superRefine((data, ctx) => {
     const isProduction = data.NODE_ENV === 'production';

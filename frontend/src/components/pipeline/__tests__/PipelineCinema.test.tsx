@@ -211,6 +211,67 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
     const views = reduceStageViews(acts, acts[0]!);
     expect(views[2]!.meta?.retryCount).toBeUndefined();
   });
+
+  // PR-F3 (2026-05-19): Critic critical-finding iterate-loop retry meta on
+  // Proto column. Critic `criticPhase=code` + `step=retry-trigger` activity
+  // is interpreted as "Critic is re-driving Proto" — badge appears on the
+  // Proto card with retrySource='critic' so the UI can label it
+  // "Critic düzeltiyor (n/m)" instead of "Test deniyor (n/m)".
+  it('PR-F3: extracts Critic retry meta from criticPhase=code retry-trigger into Proto column', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'proto', progress: 100, message: 'Kod hazır' }),
+      mk({
+        stage: 'critic',
+        criticPhase: 'code',
+        step: 'retry-trigger',
+        retryCount: 2,
+        progress: 80,
+        message: 'Critic kritik bulgu raporladı — Proto yeniden çalışıyor (2/3)',
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[2]!);
+    expect(views[1]!.meta?.retryCount).toBe(2);
+    expect(views[1]!.meta?.maxRetries).toBe(3);
+    expect(views[1]!.meta?.retrySource).toBe('critic');
+    // Trace column untouched.
+    expect(views[2]!.meta?.retryCount).toBeUndefined();
+  });
+
+  it('PR-F3: Trace iterate retry meta still tagged with retrySource=trace', () => {
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'trace',
+        step: 'retry-trigger',
+        retryCount: 1,
+        progress: 80,
+        message: 'Test eksik kaldı (2/3 kabul kriteri) — Proto yeniden çalışıyor (1/3)',
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[0]!);
+    expect(views[2]!.meta?.retrySource).toBe('trace');
+    expect(views[2]!.meta?.retryCount).toBe(1);
+    expect(views[2]!.meta?.maxRetries).toBe(3);
+  });
+
+  it('PR-F3: critic retry-trigger WITHOUT criticPhase=code is NOT routed as Critic iterate', () => {
+    // Defensive: only `criticPhase: 'code'` activities should drive the
+    // Proto-column Critic badge. Spec-phase retry-triggers (currently not
+    // emitted, but reserved) should not surface as Critic iterate.
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'critic',
+        criticPhase: 'spec',
+        step: 'retry-trigger',
+        retryCount: 1,
+        progress: 60,
+        message: 'spec retry (1/3)',
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[0]!);
+    expect(views[1]!.meta?.retryCount).toBeUndefined();
+    expect(views[1]!.meta?.retrySource).toBeUndefined();
+  });
 });
 
 describe('PipelineCinema component (PR-F 3-column)', () => {
@@ -298,6 +359,39 @@ describe('PipelineCinema component (PR-F 3-column)', () => {
       <PipelineCinema activities={acts} currentStep={acts[0]!} />,
     );
     expect(queryByTestId('trace-retry-badge')).toBeNull();
+  });
+
+  // PR-F3 (2026-05-19): Critic iterate-loop badge — Proto column shows
+  // "Critic düzeltiyor (n/max)" instead of trace's "Test deniyor".
+  it('renders Critic retry badge on Proto column when critic iterate-loop active', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'proto', progress: 100, message: 'Kod hazır' }),
+      mk({
+        stage: 'critic',
+        criticPhase: 'code',
+        step: 'retry-trigger',
+        retryCount: 2,
+        progress: 80,
+        message: 'Critic kritik bulgu raporladı — Proto yeniden çalışıyor (2/3)',
+      }),
+    ];
+    render(<PipelineCinema activities={acts} currentStep={acts[2]!} />);
+    const badge = screen.getByTestId('critic-retry-badge');
+    expect(badge).toHaveTextContent(/Critic düzeltiyor/);
+    expect(badge).toHaveTextContent(/2\/3/);
+    // Trace column has no badge in this scenario.
+    expect(screen.queryByTestId('trace-retry-badge')).toBeNull();
+  });
+
+  it('does NOT render Critic retry badge when no critic iterate-loop activity', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'proto', progress: 100, message: 'Kod hazır' }),
+    ];
+    const { queryByTestId } = render(
+      <PipelineCinema activities={acts} currentStep={acts[0]!} />,
+    );
+    expect(queryByTestId('critic-retry-badge')).toBeNull();
   });
 
   it('exposes data-cinema-mode attribute', () => {

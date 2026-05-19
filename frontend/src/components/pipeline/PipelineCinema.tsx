@@ -108,12 +108,30 @@ function StageColumn({
   // PR-F: Trace iterate-loop retry rozetinin gösterileceği koşul. retryCount
   // tanımlı ise (en az 1 retry tetiklenmişse) badge görünür; max bilinmiyorsa
   // sadece "Test deniyor (n)" formatında düşer.
-  const retryBadge =
-    stage === 'trace' && meta?.retryCount !== undefined && meta.retryCount > 0
-      ? meta.maxRetries
-        ? `Test deniyor (${meta.retryCount}/${meta.maxRetries})`
-        : `Test deniyor (${meta.retryCount})`
-      : null;
+  // PR-F3 (2026-05-19): Critic critical-finding iterate-loop için aynı meta
+  // shape kullanılır; Critic retry'ı Proto column'unda "Critic düzeltiyor
+  // (n/max)" olarak gösterilir (`meta.retrySource === 'critic'`).
+  const showRetryBadge =
+    meta?.retryCount !== undefined &&
+    meta.retryCount > 0 &&
+    ((stage === 'trace' && meta.retrySource !== 'critic') ||
+      (stage === 'proto' && meta.retrySource === 'critic'));
+  const retryLabel = (() => {
+    if (!showRetryBadge || !meta) return null;
+    if (stage === 'proto' && meta.retrySource === 'critic') {
+      return meta.maxRetries
+        ? `Critic düzeltiyor (${meta.retryCount}/${meta.maxRetries})`
+        : `Critic düzeltiyor (${meta.retryCount})`;
+    }
+    return meta.maxRetries
+      ? `Test deniyor (${meta.retryCount}/${meta.maxRetries})`
+      : `Test deniyor (${meta.retryCount})`;
+  })();
+  const retryBadge = retryLabel;
+  const retryBadgeTestId =
+    stage === 'proto' && meta?.retrySource === 'critic'
+      ? 'critic-retry-badge'
+      : 'trace-retry-badge';
   return (
     <div
       data-stage={stage}
@@ -135,7 +153,7 @@ function StageColumn({
         <span className="flex items-center gap-1.5">
           {retryBadge && (
             <span
-              data-testid="trace-retry-badge"
+              data-testid={retryBadgeTestId}
               className="inline-flex items-center rounded-full border border-amber-400/60 bg-amber-400/10 px-1.5 py-0 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
               aria-label={retryBadge}
             >
