@@ -1027,6 +1027,7 @@ export const MESSAGE_KEYS = [
   'chat.criticFindings.applying',
   'chat.criticFindings.feedbackHeader',
   'chat.criticFindings.applyError',
+  'chat.criticFindings.applySuccess',
 
   // Pipeline Stages
   'pipeline.stage.awaitingApproval',

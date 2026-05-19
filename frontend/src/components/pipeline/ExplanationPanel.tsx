@@ -145,6 +145,12 @@ export function CriticFindingsSection({
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // PR-V4: visible feedback the apply happened (success) or failed (error).
+  // The button click previously only cleared the selection and the parent
+  // had no obligation to surface a banner, so users assumed the button was
+  // broken. Toast lives next to the apply bar so the cause-effect link is
+  // unambiguous; auto-dismiss after 4s mirrors the global Toast variant.
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const interactive = !!pipelineId && eligibleKeys.size > 0;
   const eligibleCount = eligibleKeys.size;
@@ -203,13 +209,32 @@ export function CriticFindingsSection({
     try {
       await send(pipelineId, feedback);
       setSelected(new Set());
+      // PR-V4: visible success acknowledgement. Without this the button
+      // looked broken — only the selection cleared, no toast, no banner.
+      setToast({
+        kind: 'success',
+        text: t('chat.criticFindings.applySuccess'),
+      });
       onIterationStarted?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('chat.criticFindings.applyError'));
+      const message = e instanceof Error ? e.message : t('chat.criticFindings.applyError');
+      setError(message);
+      // PR-V4: mirror error to the toast so the failure is just as visible
+      // as the success. Inline `applyError` banner stays for backward-compat
+      // with the existing test + for richer detail (server-provided message).
+      setToast({ kind: 'error', text: t('chat.criticFindings.applyError') });
     } finally {
       setBusy(false);
     }
   };
+
+  // PR-V4: auto-dismiss toast after 4s. Effect-driven so manual state
+  // updates (e.g. a second apply mid-window) restart the timer cleanly.
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [toast]);
 
   const selectedCountLabel = t('chat.criticFindings.selectedCount')
     .replace('{n}', String(selected.size))
@@ -296,6 +321,21 @@ export function CriticFindingsSection({
           className="mt-1 rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-700 dark:text-rose-200"
         >
           {error}
+        </div>
+      )}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="critic-apply-toast"
+          data-toast-kind={toast.kind}
+          className={`mt-2 rounded-md px-3 py-2 text-xs ${
+            toast.kind === 'success'
+              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-200'
+              : 'bg-rose-500/10 text-rose-700 dark:text-rose-200'
+          }`}
+        >
+          {toast.text}
         </div>
       )}
     </section>

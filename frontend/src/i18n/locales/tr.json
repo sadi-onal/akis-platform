@@ -257,6 +257,7 @@
   "chat.criticFindings.applying": "Uygulanıyor...",
   "chat.criticFindings.feedbackHeader": "Aşağıdaki Critic önerileri uygulansın:",
   "chat.criticFindings.applyError": "Düzeltme gönderilemedi.",
+  "chat.criticFindings.applySuccess": "Yeni Proto iterasyonu başladı.",
   "chat.feedback.optimisticEcho": "Düzeltme gönderildi. Proto güncelleniyor...",
   "chat.agentLine.started": "Ajan başlatıldı",
   "chat.agentLine.finished": "Ajan tamamlandı",

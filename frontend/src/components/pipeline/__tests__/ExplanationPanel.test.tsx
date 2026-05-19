@@ -10,11 +10,11 @@ vi.mock('../../../i18n/useI18n', () => ({
       if (key === 'chat.criticFindings.selectedCount') return '{n}/{total} öneri seçildi';
       if (key === 'chat.criticFindings.applySelected') return 'Seçilenleri uygula';
       if (key === 'chat.criticFindings.applying') return 'Uygulanıyor...';
-      if (key === 'chat.criticFindings.checkbox.aria')
-        return 'Bu öneriyi uygulanacak listeye ekle';
+      if (key === 'chat.criticFindings.checkbox.aria') return 'Bu öneriyi uygulanacak listeye ekle';
       if (key === 'chat.criticFindings.feedbackHeader')
         return 'Aşağıdaki Critic önerileri uygulansın:';
       if (key === 'chat.criticFindings.applyError') return 'Düzeltme gönderilemedi.';
+      if (key === 'chat.criticFindings.applySuccess') return 'Yeni Proto iterasyonu başladı.';
       return key;
     },
     locale: 'tr',
@@ -318,6 +318,79 @@ describe('ExplanationPanel — PR-C suggestion selection', () => {
     );
     // Selection survives a failed apply so the user can retry.
     expect(screen.getByRole('checkbox')).toBeChecked();
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// PR-V4 — Apply toast (success + error + auto-dismiss)
+// ─────────────────────────────────────────────────────────
+
+describe('ExplanationPanel — PR-V4 apply toast', () => {
+  it('shows a visible success toast after a successful apply', async () => {
+    const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+    const iterate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={iterate}
+      />
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByTestId('critic-findings-apply-button'));
+
+    const toast = await screen.findByTestId('critic-apply-toast');
+    expect(toast).toHaveAttribute('data-toast-kind', 'success');
+    expect(toast).toHaveTextContent(/başladı/i);
+  });
+
+  it('shows an error-styled toast when the apply fails', async () => {
+    const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+    const iterate = vi.fn().mockRejectedValue(new Error('boom'));
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={iterate}
+      />
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByTestId('critic-findings-apply-button'));
+
+    const toast = await screen.findByTestId('critic-apply-toast');
+    expect(toast).toHaveAttribute('data-toast-kind', 'error');
+    expect(toast).toHaveTextContent(/Düzeltme gönderilemedi/);
+  });
+
+  it('auto-dismisses the toast after 4 seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+      const iterate = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ExplanationPanel
+          pipelineId="p-1"
+          explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+          iterateWithFeedback={iterate}
+        />
+      );
+      fireEvent.click(screen.getByRole('checkbox'));
+      fireEvent.click(screen.getByTestId('critic-findings-apply-button'));
+
+      // Flush the pending promise so the success branch runs and sets the
+      // toast state. waitFor itself drives fake timers forward via act().
+      await vi.waitFor(() => {
+        expect(screen.getByTestId('critic-apply-toast')).toBeInTheDocument();
+      });
+
+      vi.advanceTimersByTime(4000);
+
+      await vi.waitFor(() => {
+        expect(screen.queryByTestId('critic-apply-toast')).toBeNull();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

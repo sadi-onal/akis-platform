@@ -257,6 +257,7 @@
   "chat.criticFindings.applying": "Applying...",
   "chat.criticFindings.feedbackHeader": "Please apply the following Critic suggestions:",
   "chat.criticFindings.applyError": "Could not send the fix.",
+  "chat.criticFindings.applySuccess": "New Proto iteration started.",
   "chat.feedback.optimisticEcho": "Correction sent. Proto is updating...",
   "chat.agentLine.started": "Agent started",
   "chat.agentLine.finished": "Agent finished",
