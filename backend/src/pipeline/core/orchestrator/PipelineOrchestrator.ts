@@ -419,6 +419,36 @@ export class PipelineOrchestrator {
   }
 
   /**
+   * PR-V5: emit an explicit `status: 'completed'` SSE activity for the
+   * outgoing stage BEFORE the orchestrator advances the pipeline to the
+   * next stage. This replaces the frontend's old heuristic of "stage X is
+   * not the latest activity ⇒ stage X is done", which caused premature
+   * checkmarks on Scribe→Proto / Proto→Trace handoffs (the next stage's
+   * first activity would land before the previous stage's actual exit).
+   *
+   * Encoding: `step: 'stage_completed'` is the DB-schema-compatible
+   * carrier for the new `status` field (the `pipeline_activities` table
+   * has no dedicated status column). `activityEmitter.rowToActivity`
+   * rehydrates `status: 'completed'` from this step value on replay so
+   * fresh page loads see the same completion signal as live SSE listeners.
+   */
+  private emitStageCompleted(
+    pipelineId: string,
+    stage: 'scribe' | 'proto' | 'trace',
+    summary?: string
+  ): void {
+    emitActivity({
+      pipelineId,
+      stage,
+      step: 'stage_completed',
+      message: summary ?? `${stage} aşaması tamamlandı`,
+      progress: 100,
+      status: 'completed',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
    * Persist a reasoning entry without blocking the caller.
    *
    * `addReasoning` is async since PDP-2 Wave 2 (F-03 + F-11 / NFR-1) — it
@@ -1442,6 +1472,10 @@ export class PipelineOrchestrator {
     const pipeline = await this.getPipeline(pipelineId);
 
     if (!pipeline.traceEnabled) {
+      // PR-V5: explicit Proto completion signal — Trace is disabled so the
+      // pipeline jumps straight to `completed`. Emit before the transition
+      // so SSE consumers see Proto close cleanly.
+      this.emitStageCompleted(pipelineId, 'proto');
       // User explicitly disabled Trace — skip and mark completed.
       await this.store.update(pipelineId, {
         protoOutput: protoResult.data,
@@ -1795,6 +1829,11 @@ export class PipelineOrchestrator {
     // Trace iterate-loop (uncovered AC veya test fail → Proto re-iterate)
     // bu noktada zaten çalışır; retry tükenince push gate'e devredilir.
     if (previewGateEnabled) {
+      // PR-V5: explicit Proto completion signal — preview-gate path hands
+      // off to Trace dryRun. Emit before the transition so SSE consumers
+      // see Proto close cleanly (the first Trace activity otherwise tips
+      // the frontend into "Proto done" via stale lastIdx heuristic).
+      this.emitStageCompleted(pipelineId, 'proto');
       // Persist Proto output + transition to trace_testing so the UI cinema
       // column lights up. We deliberately stay short of the gate until Trace
       // is done.
@@ -1846,6 +1885,8 @@ export class PipelineOrchestrator {
       return;
     }
 
+    // PR-V5: explicit Proto completion signal (legacy auto-push path).
+    this.emitStageCompleted(pipelineId, 'proto');
     // Proto succeeded → transition to trace_testing
     await this.store.update(pipelineId, {
       protoOutput: protoResult.data,
@@ -1905,6 +1946,10 @@ export class PipelineOrchestrator {
 
     if (result.type === 'spec') {
       conversation.push({ type: 'spec_draft', content: result.data });
+      // PR-V5: explicit Scribe completion signal — same rationale as
+      // handleScribeResult's spec branch. Emit before the awaiting_approval
+      // transition so SSE consumers see Scribe close cleanly.
+      this.emitStageCompleted(pipelineId, 'scribe');
       const updated = await this.store.update(pipelineId, {
         stage: 'awaiting_approval',
         scribeConversation: conversation,
@@ -2593,6 +2638,13 @@ export class PipelineOrchestrator {
 
       this.recordScribeReasoning(pipelineId, result.data, /* regenerated */ false);
 
+      // PR-V5: explicit Scribe completion signal BEFORE the next stage
+      // (critic_reviewing_spec / awaiting_approval) takes over the SSE
+      // stream. Without this, the frontend "stage X is no longer latest"
+      // heuristic would flip Scribe's checkmark on as soon as the first
+      // critic/proto activity lands — i.e. before Scribe's real exit.
+      this.emitStageCompleted(pipelineId, 'scribe');
+
       // ─── Level 3: CriticAgent spec review (if available) ───
       if (this.criticAgent) {
         this.metricsService.startStage(pipelineId, 'critic_spec');
@@ -3129,6 +3181,11 @@ export class PipelineOrchestrator {
     const intermediateForFlag = traceDryRun
       ? ((pipelineForFlag?.intermediateState ?? {}) as Record<string, unknown>)
       : undefined;
+    // PR-V5: explicit Trace completion signal — emit BEFORE the pipeline
+    // moves to its terminal/gate stage so SSE consumers receive the close
+    // event on the same Trace stream they have been listening to. Both
+    // `awaiting_push_confirm` and `completed` are valid terminals here.
+    this.emitStageCompleted(pipelineId, 'trace');
     const updated = await this.store.update(pipelineId, {
       stage: postSuccessStage,
       traceOutput: traceResult.data,

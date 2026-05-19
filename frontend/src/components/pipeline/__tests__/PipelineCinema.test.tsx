@@ -47,21 +47,26 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
     expect(views.map((v) => v.state)).toEqual(['pending', 'pending', 'pending']);
   });
 
-  it('marks stages left of current as complete and current as active', () => {
+  // PR-V5: completion is now driven by explicit `status: 'completed'`
+  // activities. The old "left-of-current ⇒ complete" heuristic produced
+  // premature checkmarks — see PR-V5 in CHANGELOG.
+  it('marks stages with explicit completed status as complete and current as active', () => {
     const acts: PipelineActivity[] = [
-      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
       mk({ stage: 'proto', progress: 40 }),
     ];
     const current = acts[acts.length - 1]!;
     const views = reduceStageViews(acts, current);
-    expect(views[0]!.state).toBe('complete'); // scribe
-    expect(views[1]!.state).toBe('active'); // proto
+    expect(views[0]!.state).toBe('complete'); // scribe (explicit completed)
+    expect(views[1]!.state).toBe('active'); // proto (latest activity, no completion yet)
     expect(views[2]!.state).toBe('pending'); // trace
     expect(views[1]!.progress).toBe(40);
   });
 
-  it('marks current as complete when progress hits 100', () => {
-    const acts: PipelineActivity[] = [mk({ stage: 'trace', progress: 100 })];
+  it('marks current as complete only when an explicit completion activity arrives', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'trace', progress: 100, status: 'completed', step: 'stage_completed' }),
+    ];
     const views = reduceStageViews(acts, acts[0]!);
     expect(views[2]!.state).toBe('complete');
   });
@@ -95,21 +100,21 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
 
   it('ignores unknown stage values', () => {
     const acts: PipelineActivity[] = [
-      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
       mk({ stage: 'unknown' as PipelineActivity['stage'], progress: 50 }),
     ];
     const views = reduceStageViews(acts, acts[0]!);
     expect(views[0]!.state).toBe('complete');
   });
 
-  it('uses uiState to drive activeIdx instead of latest activity stage', () => {
+  it('uses uiState to drive activeIdx — explicit completion drives the previous columns', () => {
     const acts: PipelineActivity[] = [
-      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
       mk({ stage: 'proto', progress: 30 }),
     ];
     // Latest activity is proto, uiState says proto_running → proto is active
     const views = reduceStageViews(acts, acts[1]!, 'proto_running');
-    expect(views[0]!.state).toBe('complete'); // scribe
+    expect(views[0]!.state).toBe('complete'); // scribe (explicit completion)
     expect(views[1]!.state).toBe('active'); // proto
     expect(views[2]!.state).toBe('pending'); // trace
   });
@@ -259,6 +264,37 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
     expect(views[2]!.meta?.retrySource).toBe('trace');
     expect(views[2]!.meta?.retryCount).toBe(1);
     expect(views[2]!.meta?.maxRetries).toBe(3);
+  });
+
+  // ─── PR-V5: explicit-completion completion logic ────────────────────
+  // Pre-PR-V5 the frontend inferred completion from "stage is no longer
+  // the latest activity" — which fired premature checkmarks at every
+  // Scribe→Proto / Proto→Trace handoff. PR-V5 derives completion ONLY
+  // from explicit `status: 'completed'` activities. The two cases below
+  // pin down the new contract.
+  it('PR-V5: completion ONLY derived from explicit completed-status activities', () => {
+    // Both Scribe and Proto have in-progress activities. Without an
+    // explicit completion signal, Scribe must NOT be marked complete just
+    // because Proto activities have arrived (the old bug).
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 60, message: 'Spec yazılıyor' }),
+      mk({ stage: 'proto', progress: 10, message: 'Proto başladı' }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!, 'proto_running');
+    expect(views[0]!.state).not.toBe('complete'); // scribe: no explicit completion
+    expect(views[1]!.state).toBe('active'); // proto: live
+    expect(views[2]!.state).toBe('pending'); // trace: untouched
+  });
+
+  it('PR-V5: explicit completed activity marks the stage as complete', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 30, message: 'Kod yazılıyor' }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!, 'proto_running');
+    expect(views[0]!.state).toBe('complete'); // scribe: explicit completion
+    expect(views[1]!.state).toBe('active'); // proto: live
+    expect(views[2]!.state).toBe('pending'); // trace: untouched
   });
 
   it('PR-F3: critic retry-trigger WITHOUT criticPhase=code is NOT routed as Critic iterate', () => {

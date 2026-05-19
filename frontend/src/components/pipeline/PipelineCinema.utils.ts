@@ -165,6 +165,20 @@ export function reduceStageViews(
     if (a.stage === 'proto' || a.stage === 'fix-loop') protoSeenSoFar = true;
   }
 
+  // PR-V5: derive completion from EXPLICIT `status === 'completed'`
+  // activities emitted by the orchestrator BEFORE each stage transition.
+  // Pre-PR-V5 the rule was "stage idx < activeIdx ⇒ complete", which
+  // produced premature checkmarks: the orchestrator transitions to the
+  // next stage and the next stage's first activity arrives before the
+  // outgoing stage's actual exit. The explicit signal removes that
+  // ambiguity.
+  const completed = new Set<CinemaStage>();
+  for (const a of activities) {
+    if (a.status !== 'completed') continue;
+    const s = stageOf(a);
+    if (s) completed.add(s);
+  }
+
   // Prefer the orchestrator-level uiState over the latest activity's
   // stage: the SSE buffer keeps emitting a stale critic activity well
   // after the pipeline has moved into `awaiting_approval`, which used to
@@ -200,9 +214,8 @@ export function reduceStageViews(
     })();
     activeStage = stageOfCurrent;
   }
-  const activeIdx = activeStage ? STAGE_ORDER.indexOf(activeStage) : -1;
 
-  return STAGE_ORDER.map((stage, idx) => {
+  return STAGE_ORDER.map((stage) => {
     // PR-F1: `latest` (display) = native stage activity'sinin sonu. Combined
     // `lastFor` hâlâ state hesaplaması için fallback olarak kullanılır — eğer
     // hiç native activity yoksa column "complete" yerine "pending" görünmemeli.
@@ -212,16 +225,28 @@ export function reduceStageViews(
     const progress = progressFor.get(stage) ?? 0;
     const reasoning = reasoningFor.get(stage);
     const meta = metaFor.get(stage);
-    let state: StageView['state'] = 'pending';
-    if (activeIdx === -1) {
-      // Column complete olarak görünmesi için en az bir activity yeterli
-      // (native veya mapped — Critic-only senaryolar mantıken çalışmıyor
-      // ama defensive: pending kalmasın).
-      state = combined ? 'complete' : 'pending';
-    } else if (idx < activeIdx) {
+    // PR-V5 completion rule:
+    //   1. Explicit completed activity (status === 'completed') → complete.
+    //   2. uiState says this column's stage is live → active.
+    //   3. Idle uiState + any activity for this column → complete
+    //      (replay back-compat: pre-PR-V5 pipelines have no explicit
+    //      completion signal but reaching a terminal/gate state implies
+    //      the stage finished).
+    //   4. Otherwise → pending.
+    //
+    // The pre-PR-V5 rule "stage idx < activeIdx ⇒ complete" was removed —
+    // it caused premature checkmarks because the next stage's first
+    // activity could land BEFORE the outgoing stage's actual exit.
+    let state: StageView['state'];
+    if (completed.has(stage)) {
       state = 'complete';
-    } else if (idx === activeIdx) {
-      state = progress >= 100 ? 'complete' : 'active';
+    } else if (activeStage === stage) {
+      state = 'active';
+    } else if (activeStage === undefined && combined) {
+      // Idle uiState + at least one activity → legacy completion fallback.
+      // New emissions will populate the `completed` Set above; this branch
+      // covers pre-PR-V5 history and DB replays of older pipelines.
+      state = 'complete';
     } else {
       state = 'pending';
     }

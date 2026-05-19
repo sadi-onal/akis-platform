@@ -93,7 +93,11 @@ function StageColumn({
   /** PR-A Fix 3: bakkal-Türkçesi hover text describing what this stage does. */
   tooltip: string;
 }) {
-  const { stage, state, latest, progress, reasoning, meta } = view;
+  // PR-V5: `progress` removed from the destructure — the bar is now
+  // indeterminate (shimmer) when active and full when complete; the
+  // numeric percent on a `StageView` is kept on the type for back-compat
+  // with the rail/explainability rail but no longer drives the UI here.
+  const { stage, state, latest, reasoning, meta } = view;
   const accent = STAGE_ACCENT[stage];
   const messageText = latest?.message ?? '';
   const baseClass =
@@ -173,14 +177,35 @@ function StageColumn({
           className="mt-1 h-1 w-full overflow-hidden rounded-full"
           style={{ background: 'var(--ak-border-subtle)' }}
         >
-          <div
-            className={accent.dot}
-            style={{
-              height: '100%',
-              width: `${progress}%`,
-              transition: reducedMotion ? 'none' : 'width 400ms ease-out',
-            }}
-          />
+          {/* PR-V5: active stages show an indeterminate shimmer instead of a
+              fake percentage. The old `width: ${progress}%` would sit at 0%
+              the whole stage and then jump to 100% on transition, because
+              the orchestrator rarely sets `progress`. Completed stages
+              stay at a full bar. `prefers-reduced-motion` collapses the
+              shimmer to a static 40% wide indicator. */}
+          {state === 'active' ? (
+            <div
+              className={accent.dot}
+              data-testid={`stage-progress-${stage}`}
+              data-state="active"
+              style={
+                reducedMotion
+                  ? { height: '100%', width: '40%' }
+                  : {
+                      height: '100%',
+                      width: '40%',
+                      animation: 'ak-indeterminate 1.4s ease-in-out infinite',
+                    }
+              }
+            />
+          ) : (
+            <div
+              className={accent.dot}
+              data-testid={`stage-progress-${stage}`}
+              data-state="complete"
+              style={{ height: '100%', width: '100%' }}
+            />
+          )}
         </div>
       )}
       {messageText && (

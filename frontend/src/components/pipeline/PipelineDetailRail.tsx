@@ -439,14 +439,35 @@ export function PipelineDetailRail({
     uiState === 'awaiting_push_confirm' ||
     uiState === 'awaiting_critic_resolution' ||
     (uiState === 'idle' && lastIdx >= 0);
+  // PR-V5: explicit-completion set. Pre-PR-V5 the mini-rail flipped
+  // `idx < lastIdx` straight to "complete", which produced premature
+  // checkmarks on every Scribe→Proto / Proto→Trace handoff (the next
+  // stage's first activity moved `lastIdx` forward before the outgoing
+  // stage actually exited). The orchestrator now emits an explicit
+  // `status: 'completed'` activity BEFORE each stage transition; we
+  // collect those into a Set and prefer it over the lastIdx heuristic.
+  const miniCompleted = new Set<MiniStage>();
+  for (const a of activities) {
+    if (a.status !== 'completed') continue;
+    const s = stageOf(a);
+    if (s) miniCompleted.add(s);
+  }
   const stateOf = (idx: number): 'pending' | 'active' | 'complete' => {
+    const stage = MINI_ORDER[idx]!;
     if (isPostTrace) return 'complete';
-    if (lastIdx === -1) return 'pending';
-    if (idx < lastIdx) return 'complete';
+    if (miniCompleted.has(stage)) return 'complete';
     if (idx === lastIdx) {
       const isRunningState = isRunning(uiState);
       return isRunningState ? 'active' : 'complete';
     }
+    // Pre-PR-V5 fallback path: stages strictly to the LEFT of the current
+    // one that have not received an explicit completion event AND are not
+    // running. Without this, replays of older pipelines (no completion
+    // signal in their activity log) would show all-pending. We keep this
+    // narrow — only when uiState is idle/terminal — to avoid the premature
+    // checkmark bug in active pipelines.
+    if (lastIdx === -1) return 'pending';
+    if (idx < lastIdx && !isRunning(uiState)) return 'complete';
     return 'pending';
   };
   const dotClass = (stage: MiniStage, state: 'pending' | 'active' | 'complete') => {

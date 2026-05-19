@@ -13,6 +13,16 @@ export interface PipelineActivity {
   message: string;
   detail?: string;
   progress?: number;
+  /**
+   * PR-V5: explicit stage lifecycle signal. Backend emits exactly one
+   * `status: 'completed'` activity per stage success (with progress 100,
+   * `step: 'stage_completed'`) BEFORE transitioning to the next stage.
+   * The cinema/rail UIs use this Set-based signal to mark a stage as
+   * complete instead of inferring it from "no longer the latest activity"
+   * — a heuristic that produced premature checkmarks at every handoff.
+   * `undefined` for older or intermediate events.
+   */
+  status?: 'completed';
   retryCount?: number;
   /** i18n key (e.g. `pipeline.activity.proto.writing_files`) — use this if present, fall back to `message`. */
   activityKey?: string;
