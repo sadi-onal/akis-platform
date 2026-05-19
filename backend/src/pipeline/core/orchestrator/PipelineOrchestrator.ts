@@ -35,6 +35,7 @@ import { logger } from '../../../lib/logger.js';
 import { PipelineKnowledgeIngester } from '../../../services/knowledge/ingestion/PipelineKnowledgeIngester.js';
 import type { ScribeAgent, ScribeState, ScribeResult } from '../../agents/scribe/ScribeAgent.js';
 import type { ProtoAgent } from '../../agents/proto/ProtoAgent.js';
+import { injectArtifacts } from '../../agents/proto/artifactInjector.js';
 import type { TraceAgent } from '../../agents/trace/TraceAgent.js';
 import type { CriticAgent, CriticResult } from '../../agents/critic/CriticAgent.js';
 import type { CriticReviewOutput } from '../../agents/critic/CriticTypes.js';
@@ -521,6 +522,47 @@ export class PipelineOrchestrator {
     scribeOutput?: import('../contracts/PipelineTypes.js').ScribeOutput
   ): void {
     this.persistReasoning(pipelineId, buildProtoReasoning(output, { scribeOutput }));
+  }
+
+  /**
+   * PR-V-spec-artifacts — inject `docs/PRD.md`, `docs/TECHNICAL-ANALYSIS.md`,
+   * and optionally `docs/API-CONTRACT.md` into Proto's file set before the
+   * orchestrator persists `protoOutput` or hands it to downstream stages.
+   *
+   * Called right after each Proto success path so the artifacts travel
+   * through:
+   *   - the dryRun preview cache (used by Sandpack + push-confirm gate)
+   *   - Trace's `inputFiles` (so test plans see the spec artifacts)
+   *   - the eventual GitHub push (auto-push, push-confirm, and iteration)
+   *
+   * Idempotent — see {@link injectArtifacts}. Failures here are non-fatal:
+   * we log and continue with the original file set so a bad heuristic can't
+   * brick a healthy pipeline run.
+   */
+  private applyArtifactInjection(
+    protoOutput: import('../contracts/PipelineTypes.js').ProtoOutput,
+    scribeOutput?: import('../contracts/PipelineTypes.js').ScribeOutput
+  ): import('../contracts/PipelineTypes.js').ProtoOutput {
+    try {
+      const result = injectArtifacts({
+        files: protoOutput.files,
+        scribeOutput,
+      });
+      if (result.added.length === 0) return protoOutput;
+      const totalLOC = result.files.reduce((sum, f) => sum + (f.linesOfCode ?? 0), 0);
+      return {
+        ...protoOutput,
+        files: result.files,
+        metadata: {
+          ...protoOutput.metadata,
+          filesCreated: result.files.length,
+          totalLinesOfCode: totalLOC,
+        },
+      };
+    } catch (err) {
+      logger.warn({ err }, '[Pipeline] applyArtifactInjection failed — using original files');
+      return protoOutput;
+    }
   }
 
   /**
@@ -1237,6 +1279,11 @@ export class PipelineOrchestrator {
       return;
     }
 
+    // PR-V-spec-artifacts: refresh docs/PRD.md, docs/TECHNICAL-ANALYSIS.md
+    // (and docs/API-CONTRACT.md when relevant) on every iteration so the
+    // user's repo stays in sync with the latest spec snapshot.
+    protoResult.data = this.applyArtifactInjection(protoResult.data, pipeline.scribeOutput);
+
     const protoCompletedMetrics = { ...metrics, protoCompletedAt: new Date() };
     this.logActivity(pipelineId, 'proto', 'iteration_applied', {
       filesGenerated: protoResult.data.files?.length ?? 0,
@@ -1470,6 +1517,13 @@ export class PipelineOrchestrator {
     });
 
     const pipeline = await this.getPipeline(pipelineId);
+
+    // PR-V-spec-artifacts: inject docs/PRD.md + docs/TECHNICAL-ANALYSIS.md
+    // (and docs/API-CONTRACT.md when applicable) BEFORE Proto's files are
+    // persisted, surfaced via Sandpack preview, fed to Trace, or pushed to
+    // GitHub. The injection is idempotent + non-fatal — see
+    // {@link applyArtifactInjection}.
+    protoResult.data = this.applyArtifactInjection(protoResult.data, pipeline.scribeOutput);
 
     if (!pipeline.traceEnabled) {
       // PR-V5: explicit Proto completion signal — Trace is disabled so the
