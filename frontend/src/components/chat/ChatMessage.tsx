@@ -476,11 +476,15 @@ export function ChatMessage({
             </div>
           )}
 
-          {/* Test files — collapsible */}
+          {/* Test files — collapsible. PR-T3 S7: Trace çıktısında 4 dosyadan
+              sadece biri gerçek spec (.spec.ts); kalanı playwright.config +
+              page-objects (yardımcı). Eski başlık "Test Dosyaları (4)" yanıltıcı
+              olduğundan "Test ve yardımcı dosyalar" yapıldı; her satırda 0 test
+              olanlar "(yardımcı)" olarak işaretleniyor. */}
           {message.testFiles && message.testFiles.length > 0 && (
             <details className="mt-3">
               <summary className="cursor-pointer text-sm font-medium text-ak-text-secondary transition-colors hover:text-ak-text-primary">
-                Test Dosyaları ({message.testFiles.length})
+                Test ve yardımcı dosyalar ({message.testFiles.length})
               </summary>
               <ul className="mt-2 space-y-1">
                 {message.testFiles.map((f) => (
@@ -490,7 +494,9 @@ export function ChatMessage({
                   >
                     <span className="text-green-500">✓</span>
                     {f.filePath}
-                    <span className="text-ak-text-tertiary">({f.testCount} test)</span>
+                    <span className="text-ak-text-tertiary">
+                      {f.testCount > 0 ? `(${f.testCount} test)` : '(yardımcı)'}
+                    </span>
                   </li>
                 ))}
               </ul>

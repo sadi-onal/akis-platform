@@ -247,7 +247,20 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
 
   // Add proto result message if completed
   if (pipeline.protoOutput?.ok) {
-    const stat = `Scaffold oluşturuldu — ${pipeline.protoOutput.metadata.filesCreated} dosya, ${pipeline.protoOutput.metadata.totalLinesOfCode} satır`;
+    // PR-T3 S4: protoOutput sadece son iterasyonu saklıyor (backend overwrite
+    // ediyor); manuel testte kullanıcı "scaffold 14 dosya" gördükten sonra
+    // sayfa yenileyince "10 dosya"ya dönüştüğünü farkedip iterasyon olduğunu
+    // anlamamıştı. `intermediateState.criticIterateRetryCount` Critic-Proto
+    // loop tetiklendiyse > 0 oluyor — bu sayıyı mesajın altına net bir not
+    // olarak ekliyoruz ki kullanıcı bir öncekinin Critic geri bildirimine
+    // göre yenilendiğini bilsin.
+    const criticIter =
+      typeof pipeline.intermediateState?.criticIterateRetryCount === 'number'
+        ? (pipeline.intermediateState.criticIterateRetryCount as number)
+        : 0;
+    const iterNote =
+      criticIter > 0 ? `\n\n_Critic geri bildirimi sonrası ${criticIter}. iterasyon._` : '';
+    const stat = `Scaffold oluşturuldu — ${pipeline.protoOutput.metadata.filesCreated} dosya, ${pipeline.protoOutput.metadata.totalLinesOfCode} satır${iterNote}`;
     const summary = pipeline.protoOutput.summary;
     messages.push({
       role: 'proto',

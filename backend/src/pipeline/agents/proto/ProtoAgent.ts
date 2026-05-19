@@ -13,7 +13,11 @@ import {
 import type { PipelineError } from '../../core/contracts/PipelineTypes.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { logger } from '../../../lib/logger.js';
-import { extractJsonSafe, sanitizeJsonControlChars, repairTruncatedJson } from '../../core/json-extract.js';
+import {
+  extractJsonSafe,
+  sanitizeJsonControlChars,
+  repairTruncatedJson,
+} from '../../core/json-extract.js';
 import type { AgenticLoopDeps } from '../../core/AgenticLoop.js';
 import { runAgenticLoop } from '../../core/AgenticLoop.js';
 import { PROTO_TOOLS, createProtoToolHandlers, type ProtoToolDeps } from './proto-tools.js';
@@ -38,7 +42,7 @@ export interface ProtoAIDeps {
   generateTextWithImages?(
     systemPrompt: string,
     userPrompt: string,
-    images: readonly AnthropicImageBlock[],
+    images: readonly AnthropicImageBlock[]
   ): Promise<string>;
 }
 
@@ -251,7 +255,7 @@ export class ProtoAgent {
     ai: ProtoAIDeps,
     github: ProtoGitHubDeps,
     agenticDeps?: AgenticLoopDeps,
-    skillRegistry?: SkillRegistry,
+    skillRegistry?: SkillRegistry
   ) {
     this.ai = ai;
     this.github = github;
@@ -267,9 +271,12 @@ export class ProtoAgent {
    */
   private applyEnrichment(
     files: ProtoOutput['files'],
-    spec: { title: string; description?: string },
+    spec: { title: string; description?: string }
   ): ProtoOutput['files'] {
-    const scaffoldFiles: ScaffoldFile[] = files.map((f) => ({ path: f.filePath, content: f.content }));
+    const scaffoldFiles: ScaffoldFile[] = files.map((f) => ({
+      path: f.filePath,
+      content: f.content,
+    }));
     const enriched = this.enricher.enrich(scaffoldFiles, spec);
     return enriched.map((f) => ({
       filePath: f.path,
@@ -284,9 +291,7 @@ export class ProtoAgent {
   }
 
   async execute(input: ProtoInput): Promise<ProtoResult> {
-    const emit = input.pipelineId
-      ? createActivityEmitter(input.pipelineId, 'proto')
-      : undefined;
+    const emit = input.pipelineId ? createActivityEmitter(input.pipelineId, 'proto') : undefined;
 
     // ─── Iteration Mode: modify existing code instead of building from scratch ───
     if (input.iterationRequest && input.existingFiles?.length) {
@@ -300,7 +305,14 @@ export class ProtoAgent {
 
     // Fallback: legacy text-generation path
     // Step 1: Generate scaffold via AI
-    emit?.('ai_call', 'Claude AI ile MVP iskeleti oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_scaffold');
+    emit?.(
+      'ai_call',
+      'Claude AI ile MVP iskeleti oluşturuluyor...',
+      20,
+      undefined,
+      undefined,
+      'pipeline.activity.proto.creating_scaffold'
+    );
     const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
       emit?.('error', 'İskelet üretimi başarısız oldu', 0);
@@ -308,7 +320,13 @@ export class ProtoAgent {
     }
 
     const { files: rawFiles, setupCommands, metadata } = scaffoldResult.data;
-    emit?.('parsing', `AI yanıtından dosya yapısı çıkarıldı: ${rawFiles.length} dosya`, 55);
+    // PR-T3 S3: kullanıcıya raw (enrichment öncesi) sayıyı göstermiyoruz —
+    // sonradan `applyEnrichment` install.sh + README + Dockerfile + .env.example
+    // ekleyince cinema'daki "X dosya" değeri chat'teki nihai sayıyla
+    // (örn. raw 6 → enriched 14) tutmuyordu. Genel bir mesajla geçiyoruz;
+    // nihai sayıyı zaten "Scaffold oluşturuldu — N dosya, M satır" satırı
+    // gösteriyor.
+    emit?.('parsing', 'Dosya yapısı çıkarıldı, zenginleştirme uygulanıyor…', 55);
 
     // F-08: enrich AI output with portability layer (install.sh + Turkish
     // README + optional Dockerfile + .env.example) — see ScaffoldEnricher.ts.
@@ -353,7 +371,14 @@ export class ProtoAgent {
     const branchName = 'main';
 
     // Step 4: Push files
-    emit?.('github_push', `${files.length} dosya GitHub'a yükleniyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
+    emit?.(
+      'github_push',
+      `${files.length} dosya GitHub'a yükleniyor...`,
+      75,
+      undefined,
+      undefined,
+      'pipeline.activity.proto.pushing_github'
+    );
     const pushResult = await this.pushFiles(input.owner, input.repoName, branchName, files, emit);
     if (pushResult.type === 'error') {
       emit?.('error', 'Dosyalar yüklenemedi', 0);
@@ -390,7 +415,7 @@ export class ProtoAgent {
   private async dispatchIterationGenerate(
     systemPrompt: string,
     userPrompt: string,
-    images?: readonly AnthropicImageBlock[],
+    images?: readonly AnthropicImageBlock[]
   ): Promise<string> {
     const hasImages = images && images.length > 0;
     if (hasImages && this.ai.generateTextWithImages) {
@@ -399,7 +424,7 @@ export class ProtoAgent {
       } catch (err) {
         logger.warn(
           { err, imageCount: images.length },
-          '[proto] multimodal iteration path failed, falling back to text-only',
+          '[proto] multimodal iteration path failed, falling back to text-only'
         );
       }
     }
@@ -408,12 +433,12 @@ export class ProtoAgent {
 
   private async executeIteration(
     input: ProtoInput,
-    emit?: ReturnType<typeof createActivityEmitter>,
+    emit?: ReturnType<typeof createActivityEmitter>
   ): Promise<ProtoResult> {
     emit?.('ai_call', 'Mevcut kod analiz ediliyor ve değişiklikler uygulanıyor...', 20);
 
-    const existingFilesContext = input.existingFiles!
-      .map(f => `--- ${f.path} ---\n${f.content}`)
+    const existingFilesContext = input
+      .existingFiles!.map((f) => `--- ${f.path} ---\n${f.content}`)
       .join('\n\n');
 
     const hasImages = (input.imageBlocks?.length ?? 0) > 0;
@@ -426,7 +451,7 @@ export class ProtoAgent {
 ORIGINAL SPEC (for context):
 Title: ${input.spec.title}
 Problem: ${input.spec.problemStatement}
-Features: ${input.spec.userStories.map(s => `${s.persona}: ${s.action} → ${s.benefit}`).join('\n')}
+Features: ${input.spec.userStories.map((s) => `${s.persona}: ${s.action} → ${s.benefit}`).join('\n')}
 
 USER'S CHANGE REQUEST:
 "${input.iterationRequest}"${imageAckSection}
@@ -446,21 +471,22 @@ RULES:
 JSON format (respond with ONLY this, nothing else):
 {"files":[{"filePath":"...","content":"...","linesOfCode":N}],"setupCommands":["npm install","npm run dev"],"metadata":{"filesCreated":N,"totalLinesOfCode":N,"stackUsed":"..."},"verificationReport":{"specCoverage":"...","integrityIssues":[],"missingDependencies":[],"unresolvedImports":[],"confidenceScore":0.9}}`;
 
-    const iterationSystemPrompt = 'You are Proto, an iteration specialist. Output ONLY valid JSON. No markdown, no explanations.';
+    const iterationSystemPrompt =
+      'You are Proto, an iteration specialist. Output ONLY valid JSON. No markdown, no explanations.';
 
     let raw: string;
     try {
       raw = await this.dispatchIterationGenerate(
         iterationSystemPrompt,
         iterationPrompt,
-        input.imageBlocks,
+        input.imageBlocks
       );
     } catch (err) {
       return {
         type: 'error',
         error: createPipelineError(
           PipelineErrorCode.AI_PROVIDER_ERROR,
-          `İterasyon AI çağrısı başarısız: ${err instanceof Error ? err.message : String(err)}`,
+          `İterasyon AI çağrısı başarısız: ${err instanceof Error ? err.message : String(err)}`
         ),
       };
     }
@@ -476,14 +502,20 @@ JSON format (respond with ONLY this, nothing else):
     let parsed: Record<string, unknown> | null = null;
     try {
       if (jsonStr) parsed = JSON.parse(jsonStr) as Record<string, unknown>;
-    } catch { /* invalid JSON */ }
-    const parsedFiles = (parsed?.files ?? []) as Array<{ filePath: string; content: string; linesOfCode?: number }>;
+    } catch {
+      /* invalid JSON */
+    }
+    const parsedFiles = (parsed?.files ?? []) as Array<{
+      filePath: string;
+      content: string;
+      linesOfCode?: number;
+    }>;
     if (!parsedFiles?.length) {
       return {
         type: 'error',
         error: createPipelineError(
           PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
-          'İterasyon sonucu ayrıştırılamadı veya dosya üretilmedi',
+          'İterasyon sonucu ayrıştırılamadı veya dosya üretilmedi'
         ),
       };
     }
@@ -520,11 +552,19 @@ JSON format (respond with ONLY this, nothing else):
         repo: `${input.owner}/${input.repoName}`,
         repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
         files,
-        setupCommands: (parsed?.setupCommands as string[] | undefined) ?? ['npm install', 'npm run dev'],
+        setupCommands: (parsed?.setupCommands as string[] | undefined) ?? [
+          'npm install',
+          'npm run dev',
+        ],
         metadata: {
           filesCreated: files.length,
-          totalLinesOfCode: files.reduce((sum: number, f: { linesOfCode: number }) => sum + f.linesOfCode, 0),
-          stackUsed: (parsed?.metadata as Record<string, unknown> | undefined)?.stackUsed as string ?? 'iteration',
+          totalLinesOfCode: files.reduce(
+            (sum: number, f: { linesOfCode: number }) => sum + f.linesOfCode,
+            0
+          ),
+          stackUsed:
+            ((parsed?.metadata as Record<string, unknown> | undefined)?.stackUsed as string) ??
+            'iteration',
           committed: true,
         },
       },
@@ -535,14 +575,21 @@ JSON format (respond with ONLY this, nothing else):
 
   private async executeWithTools(
     input: ProtoInput,
-    emit?: ReturnType<typeof createActivityEmitter>,
+    emit?: ReturnType<typeof createActivityEmitter>
   ): Promise<ProtoResult> {
     emit?.('ai_call', 'Claude AI tool_use ile iskelet oluşturuluyor...', 10);
 
     // Issue #483 BUG-J: Hard-enforce repo creation BEFORE the agentic loop so the
     // LLM cannot skip create_repository and call push_files on a non-existent repo.
     // Tool-orchestration for a deterministic step must not depend on LLM reasoning.
-    emit?.('github_push', 'GitHub deposu oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_repo');
+    emit?.(
+      'github_push',
+      'GitHub deposu oluşturuluyor...',
+      20,
+      undefined,
+      undefined,
+      'pipeline.activity.proto.creating_repo'
+    );
     const repoResult = await this.createRepo(input);
     if (repoResult.type === 'error') {
       emit?.('error', 'GitHub deposu oluşturulamadı', 0);
@@ -562,11 +609,16 @@ JSON format (respond with ONLY this, nothing else):
     // the bytes that land on GitHub include install.sh + Turkish README +
     // Dockerfile + .env.example. See FR-6.5..6.8 / 03-architecture § 5.4.
     const toolDeps: ProtoToolDeps = {
-      createRepository: (owner, name, isPrivate) => this.github.createRepository(owner, name, isPrivate),
+      createRepository: (owner, name, isPrivate) =>
+        this.github.createRepository(owner, name, isPrivate),
       pushFiles: async (owner, repo, branch, files, message) => {
         const enriched = this.applyEnrichment(
-          files.map((f) => ({ filePath: f.path, content: f.content, linesOfCode: f.content.split('\n').length })),
-          { title: input.spec.title, description: input.spec.problemStatement },
+          files.map((f) => ({
+            filePath: f.path,
+            content: f.content,
+            linesOfCode: f.content.split('\n').length,
+          })),
+          { title: input.spec.title, description: input.spec.problemStatement }
         );
         enrichedPushed = enriched;
         await this.github.pushFiles!(
@@ -574,7 +626,7 @@ JSON format (respond with ONLY this, nothing else):
           repo,
           branch,
           enriched.map((f) => ({ path: f.filePath, content: f.content })),
-          message,
+          message
         );
       },
     };
@@ -592,8 +644,14 @@ Repository: owner="${input.owner}", name="${input.repoName}" (already exists on 
 Spec:
 - Title: ${input.spec.title}
 - Problem: ${input.spec.problemStatement}
-- User Stories: ${input.spec.userStories.slice(0, 6).map((s) => `${s.persona}: ${s.action} → ${s.benefit}`).join('\n  ')}
-- Acceptance Criteria: ${input.spec.acceptanceCriteria.slice(0, 8).map((ac) => `${ac.id}: ${ac.when} → ${ac.then}`).join('\n  ')}
+- User Stories: ${input.spec.userStories
+      .slice(0, 6)
+      .map((s) => `${s.persona}: ${s.action} → ${s.benefit}`)
+      .join('\n  ')}
+- Acceptance Criteria: ${input.spec.acceptanceCriteria
+      .slice(0, 8)
+      .map((ac) => `${ac.id}: ${ac.when} → ${ac.then}`)
+      .join('\n  ')}
 - Tech: ${input.spec.technicalConstraints?.stack || 'React + Vite'}${input.spec.technicalConstraints?.integrations?.length ? `, integrations: ${input.spec.technicalConstraints.integrations.join(', ')}` : ''}${imageAck}
 
 Steps:
@@ -629,12 +687,20 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           // vision-capable model can reference the mockup while scaffolding.
           initialImages: hasImages ? input.imageBlocks : undefined,
           onToolCall: (name, _input) => {
-            if (name === 'push_files') emit?.('github_push', 'Dosyalar yükleniyor...', 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
+            if (name === 'push_files')
+              emit?.(
+                'github_push',
+                'Dosyalar yükleniyor...',
+                75,
+                undefined,
+                undefined,
+                'pipeline.activity.proto.pushing_github'
+              );
           },
           onToolResult: (name, _result, isError) => {
             if (isError) emit?.('error', `Tool ${name} başarısız`, 0);
           },
-        },
+        }
       );
 
       // Extract files from tool calls
@@ -648,7 +714,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.PROTO_PUSH_FAILED,
-            'Agentic loop completed without calling push_files — scaffold was not committed to GitHub',
+            'Agentic loop completed without calling push_files — scaffold was not committed to GitHub'
           ),
         };
       }
@@ -659,7 +725,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       // tool_result block sent back to Claude. Detect both forms of failure.
       const pushResult = pushCall.result;
       const pushFailed =
-        typeof pushResult === 'string' && pushResult.startsWith('Error:') ||
+        (typeof pushResult === 'string' && pushResult.startsWith('Error:')) ||
         (typeof pushResult === 'object' &&
           pushResult !== null &&
           (pushResult as Record<string, unknown>).success === false);
@@ -671,7 +737,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.PROTO_PUSH_FAILED,
-            `push_files tool error: ${detail}`,
+            `push_files tool error: ${detail}`
           ),
         };
       }
@@ -694,7 +760,13 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       // Pass pushedPaths so verifyRepoPushed can detect auto_init false-positives.
       emit?.('verification', 'GitHub deposu içeriği doğrulanıyor...', 92);
       const pushedPaths = files.map((f) => f.filePath);
-      const verifyResult = await this.verifyRepoPushed(input.owner, input.repoName, 'main', files.length, pushedPaths);
+      const verifyResult = await this.verifyRepoPushed(
+        input.owner,
+        input.repoName,
+        'main',
+        files.length,
+        pushedPaths
+      );
       if (verifyResult.type === 'error') {
         emit?.('error', 'GitHub doğrulaması başarısız — depo boş veya bulunamadı', 0);
         return verifyResult;
@@ -710,9 +782,17 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           repo: `${input.owner}/${input.repoName}`,
           repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
           files,
-          setupCommands: this.buildSetupCommands(input.owner, input.repoName, ['npm install', 'npm run dev']),
+          setupCommands: this.buildSetupCommands(input.owner, input.repoName, [
+            'npm install',
+            'npm run dev',
+          ]),
           ...(summary ? { summary } : {}),
-          metadata: { filesCreated: files.length, totalLinesOfCode: totalLOC, stackUsed: 'React + Vite (tool_use)', committed: true },
+          metadata: {
+            filesCreated: files.length,
+            totalLinesOfCode: totalLOC,
+            stackUsed: 'React + Vite (tool_use)',
+            committed: true,
+          },
         },
       };
     } catch (err) {
@@ -722,7 +802,10 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     }
   }
 
-  private async executeLegacy(input: ProtoInput, emit?: ReturnType<typeof createActivityEmitter>): Promise<ProtoResult> {
+  private async executeLegacy(
+    input: ProtoInput,
+    emit?: ReturnType<typeof createActivityEmitter>
+  ): Promise<ProtoResult> {
     // Re-enter the legacy flow from Step 1
     emit?.('ai_call', 'Claude AI ile MVP iskeleti oluşturuluyor (fallback)...', 20);
     const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
@@ -732,16 +815,20 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     }
 
     const { files, setupCommands, metadata } = scaffoldResult.data;
-    emit?.('parsing', `AI yanıtından dosya yapısı çıkarıldı: ${files.length} dosya`, 55);
+    // PR-T3 S3: aynı sebepten ötürü genel mesaj (yukarıdaki nota bakın);
+    // bu fallback yolu zaten enrichment yapmıyor ama format tutarlı kalsın.
+    emit?.('parsing', 'Dosya yapısı çıkarıldı, hazırlanıyor…', 55);
 
     if (input.dryRun) {
       return {
         type: 'output',
         data: {
-          ok: true, branch: 'dry-run',
+          ok: true,
+          branch: 'dry-run',
           repo: `${input.owner}/${input.repoName}`,
           repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
-          files, setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
+          files,
+          setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
           metadata: { ...metadata, committed: false },
         },
       };
@@ -751,7 +838,14 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     if (repoResult.type === 'error') return repoResult;
 
     const branchName = 'main';
-    emit?.('github_push', `${files.length} dosya GitHub'a yükleniyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
+    emit?.(
+      'github_push',
+      `${files.length} dosya GitHub'a yükleniyor...`,
+      75,
+      undefined,
+      undefined,
+      'pipeline.activity.proto.pushing_github'
+    );
     const pushResult = await this.pushFiles(input.owner, input.repoName, branchName, files, emit);
     if (pushResult.type === 'error') return pushResult;
 
@@ -760,10 +854,12 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     return {
       type: 'output',
       data: {
-        ok: true, branch: branchName,
+        ok: true,
+        branch: branchName,
         repo: `${input.owner}/${input.repoName}`,
         repoUrl: `https://github.com/${input.owner}/${input.repoName}`,
-        files, setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
+        files,
+        setupCommands: this.buildSetupCommands(input.owner, input.repoName, setupCommands),
         metadata: { ...metadata, committed: true },
       },
     };
@@ -773,9 +869,16 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
   private async generateScaffold(
     spec: StructuredSpec,
-    knowledgeContext?: string,
+    knowledgeContext?: string
   ): Promise<
-    | { type: 'output'; data: { files: ProtoOutput['files']; setupCommands: string[]; metadata: Omit<ProtoOutput['metadata'], 'committed'> } }
+    | {
+        type: 'output';
+        data: {
+          files: ProtoOutput['files'];
+          setupCommands: string[];
+          metadata: Omit<ProtoOutput['metadata'], 'committed'>;
+        };
+      }
     | { type: 'error'; error: PipelineError }
   > {
     const condensedSpec = {
@@ -804,7 +907,9 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           : scaffoldBase;
         responseText = await this.ai.generateText(protoSystemPrompt, userPrompt);
       } catch (err) {
-        logger.error(`[Proto] Attempt ${attempt + 1}: AI call error: ${err instanceof Error ? err.message : String(err)}`);
+        logger.error(
+          `[Proto] Attempt ${attempt + 1}: AI call error: ${err instanceof Error ? err.message : String(err)}`
+        );
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         return {
           type: 'error',
@@ -840,7 +945,9 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           logger.warn(`[Proto] Parsed after sanitizing control chars`);
         }
       } catch (parseErr) {
-        logger.warn(`[Proto] JSON parse failed (attempt ${attempt + 1}, len=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+        logger.warn(
+          `[Proto] JSON parse failed (attempt ${attempt + 1}, len=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
+        );
         const repaired = repairTruncatedJson(responseText);
         if (repaired) {
           try {
@@ -850,7 +957,9 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
             try {
               parsed = JSON.parse(sanitizeJsonControlChars(repaired));
               wasRepaired = true;
-            } catch { /* repair also failed */ }
+            } catch {
+              /* repair also failed */
+            }
           }
         }
         if (!parsed) {
@@ -876,7 +985,9 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
       // If repaired result has too few files, it's likely truncated — retry
       if (wasRepaired && fileCount < MIN_SCAFFOLD_FILES) {
-        logger.warn(`[Proto] Repaired JSON only has ${fileCount} files (min: ${MIN_SCAFFOLD_FILES}), retrying...`);
+        logger.warn(
+          `[Proto] Repaired JSON only has ${fileCount} files (min: ${MIN_SCAFFOLD_FILES}), retrying...`
+        );
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
       }
 
@@ -894,7 +1005,8 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       const normalizedFiles = files.map((f) => ({
         filePath: String(f.filePath),
         content: String(f.content),
-        linesOfCode: typeof f.linesOfCode === 'number' ? f.linesOfCode : String(f.content).split('\n').length,
+        linesOfCode:
+          typeof f.linesOfCode === 'number' ? f.linesOfCode : String(f.content).split('\n').length,
       }));
 
       const totalLines = normalizedFiles.reduce((sum, f) => sum + f.linesOfCode, 0);
@@ -916,7 +1028,10 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
     return {
       type: 'error',
-      error: createPipelineError(PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED, 'All retries exhausted'),
+      error: createPipelineError(
+        PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
+        'All retries exhausted'
+      ),
     };
   }
 
@@ -948,7 +1063,11 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
       const msg = err instanceof Error ? err.message : String(err);
 
-      if (msg.includes('already exists') || msg.includes('name already exists') || msg.includes('422')) {
+      if (
+        msg.includes('already exists') ||
+        msg.includes('name already exists') ||
+        msg.includes('422')
+      ) {
         // Repo already exists — this is fine, proceed to branch creation
         return { type: 'output' };
       }
@@ -1006,7 +1125,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     repo: string,
     branch: string,
     files: ProtoOutput['files'],
-    emit?: ReturnType<typeof createActivityEmitter>,
+    emit?: ReturnType<typeof createActivityEmitter>
   ): Promise<{ type: 'output' } | { type: 'error'; error: PipelineError }> {
     files = this.sanitizeFiles(files);
     const totalFiles = files.length;
@@ -1024,7 +1143,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
             repo,
             branch,
             files.map((f) => ({ path: f.filePath, content: f.content })),
-            `feat: initial scaffold (${files.length} files)`,
+            `feat: initial scaffold (${files.length} files)`
           );
           emit?.('github_push', 'Tüm dosyalar yüklendi', 90);
         } else {
@@ -1032,9 +1151,12 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           for (let i = 0; i < totalFiles; i++) {
             const file = files[i];
             await this.github.commitFile(
-              owner, repo, branch,
-              file.filePath, file.content,
-              `feat: add ${file.filePath}`,
+              owner,
+              repo,
+              branch,
+              file.filePath,
+              file.content,
+              `feat: add ${file.filePath}`
             );
             const pct = 75 + Math.round(((i + 1) / totalFiles) * 15);
             emit?.('file_created', `${file.filePath} oluşturuldu`, pct, file.filePath);
@@ -1087,12 +1209,19 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       stackUsed?: string;
       summary?: string;
       pipelineId?: string;
-    } = {},
+    } = {}
   ): Promise<ProtoResult> {
     const emit = options.pipelineId
       ? createActivityEmitter(options.pipelineId, 'proto')
       : undefined;
-    emit?.('github_push', 'GitHub deposu oluşturuluyor...', 20, undefined, undefined, 'pipeline.activity.proto.creating_repo');
+    emit?.(
+      'github_push',
+      'GitHub deposu oluşturuluyor...',
+      20,
+      undefined,
+      undefined,
+      'pipeline.activity.proto.creating_repo'
+    );
     // createRepo only reads owner / repoName / repoVisibility off ProtoInput.
     // The rest of the fields are unused on this code path, so the partial
     // cast keeps the call site honest without fabricating a full spec.
@@ -1107,7 +1236,14 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     }
 
     const branchName = 'main';
-    emit?.('github_push', `${files.length} dosya GitHub'a yükleniyor...`, 75, undefined, undefined, 'pipeline.activity.proto.pushing_github');
+    emit?.(
+      'github_push',
+      `${files.length} dosya GitHub'a yükleniyor...`,
+      75,
+      undefined,
+      undefined,
+      'pipeline.activity.proto.pushing_github'
+    );
     const pushResult = await this.pushFiles(owner, repoName, branchName, files, emit);
     if (pushResult.type === 'error') {
       emit?.('error', 'Dosyalar yüklenemedi', 0);
@@ -1116,7 +1252,13 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
     emit?.('verification', 'GitHub deposu içeriği doğrulanıyor...', 92);
     const pushedPaths = files.map((f) => f.filePath);
-    const verifyResult = await this.verifyRepoPushed(owner, repoName, branchName, files.length, pushedPaths);
+    const verifyResult = await this.verifyRepoPushed(
+      owner,
+      repoName,
+      branchName,
+      files.length,
+      pushedPaths
+    );
     if (verifyResult.type === 'error') {
       emit?.('error', 'GitHub doğrulaması başarısız', 0);
       return verifyResult;
@@ -1132,7 +1274,11 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
         repo: `${owner}/${repoName}`,
         repoUrl: `https://github.com/${owner}/${repoName}`,
         files,
-        setupCommands: this.buildSetupCommands(owner, repoName, options.setupCommands ?? ['npm install', 'npm run dev']),
+        setupCommands: this.buildSetupCommands(
+          owner,
+          repoName,
+          options.setupCommands ?? ['npm install', 'npm run dev']
+        ),
         ...(options.summary ? { summary: options.summary } : {}),
         metadata: {
           filesCreated: files.length,
@@ -1159,11 +1305,13 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     repo: string,
     branch: string,
     expectedFileCount: number,
-    pushedPaths?: string[],
+    pushedPaths?: string[]
   ): Promise<{ type: 'output' } | { type: 'error'; error: PipelineError }> {
     if (!this.github.listFiles) {
       // Adapter doesn't support listFiles — skip verification (legacy adapters in tests).
-      logger.warn('[Proto] verifyRepoPushed: listFiles not available on adapter, skipping verification');
+      logger.warn(
+        '[Proto] verifyRepoPushed: listFiles not available on adapter, skipping verification'
+      );
       return { type: 'output' };
     }
     try {
@@ -1179,7 +1327,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           actualFileCount: repoFiles.length,
           sampleFiles: repoFiles.slice(0, 5),
         },
-        '[Proto] verifyRepoPushed: listFiles result',
+        '[Proto] verifyRepoPushed: listFiles result'
       );
 
       // If we know which paths were pushed, require at least one *non-trivial*
@@ -1198,20 +1346,27 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           .filter((p) => repoFileSet.has(p)).length;
         if (matchedCount === 0) {
           logger.error(
-            { owner, repo, branch, expectedFileCount, actualFileCount: repoFiles.length, pushedPaths: pushedPaths.slice(0, 5) },
-            '[Proto] verifyRepoPushed: none of the pushed paths found in repo — push_files silently failed (auto_init false-positive)',
+            {
+              owner,
+              repo,
+              branch,
+              expectedFileCount,
+              actualFileCount: repoFiles.length,
+              pushedPaths: pushedPaths.slice(0, 5),
+            },
+            '[Proto] verifyRepoPushed: none of the pushed paths found in repo — push_files silently failed (auto_init false-positive)'
           );
           return {
             type: 'error',
             error: createPipelineError(
               PipelineErrorCode.PROTO_PUSH_FAILED,
-              `GitHub repo ${owner}/${repo} does not contain any of the ${expectedFileCount} scaffold files on branch "${branch}". The push_files step silently failed (repo may only have GitHub auto_init README).`,
+              `GitHub repo ${owner}/${repo} does not contain any of the ${expectedFileCount} scaffold files on branch "${branch}". The push_files step silently failed (repo may only have GitHub auto_init README).`
             ),
           };
         }
         logger.info(
           { owner, repo, branch, matchedCount, expectedFileCount },
-          '[Proto] verifyRepoPushed: OK — scaffold files confirmed in repo',
+          '[Proto] verifyRepoPushed: OK — scaffold files confirmed in repo'
         );
         return { type: 'output' };
       }
@@ -1221,18 +1376,21 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       if (repoFiles.length <= AUTO_INIT_FILE_COUNT) {
         logger.error(
           { owner, repo, branch, expectedFileCount, actualFileCount: repoFiles.length },
-          '[Proto] verifyRepoPushed: repo has only auto_init files — push_files silently failed',
+          '[Proto] verifyRepoPushed: repo has only auto_init files — push_files silently failed'
         );
         return {
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.PROTO_PUSH_FAILED,
-            `GitHub repo ${owner}/${repo} has only ${repoFiles.length} file(s) after push — ${expectedFileCount} scaffold files were expected on branch "${branch}". The push_files step silently failed.`,
+            `GitHub repo ${owner}/${repo} has only ${repoFiles.length} file(s) after push — ${expectedFileCount} scaffold files were expected on branch "${branch}". The push_files step silently failed.`
           ),
         };
       }
 
-      logger.info({ owner, repo, branch, fileCount: repoFiles.length }, '[Proto] verifyRepoPushed: OK');
+      logger.info(
+        { owner, repo, branch, fileCount: repoFiles.length },
+        '[Proto] verifyRepoPushed: OK'
+      );
       return { type: 'output' };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1243,7 +1401,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.PROTO_PUSH_FAILED,
-            `GitHub repo ${owner}/${repo} does not exist after scaffold push (404). The create_repository or push_files step silently failed.`,
+            `GitHub repo ${owner}/${repo} does not exist after scaffold push (404). The create_repository or push_files step silently failed.`
           ),
         };
       }
@@ -1264,7 +1422,10 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     ];
   }
 
-  private buildPRBody(spec: StructuredSpec, metadata: { filesCreated: number; totalLinesOfCode: number; stackUsed: string }): string {
+  private buildPRBody(
+    spec: StructuredSpec,
+    metadata: { filesCreated: number; totalLinesOfCode: number; stackUsed: string }
+  ): string {
     return [
       `## ${spec.title}`,
       '',

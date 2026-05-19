@@ -68,11 +68,24 @@ describe('ChatInput', () => {
     expect(screen.queryByRole('button', { name: 'Gönder' })).not.toBeInTheDocument();
   });
 
-  it('calls onCancel when cancel button is clicked', () => {
+  it('calls onCancel when cancel button is clicked AND user confirms', () => {
     const onCancel = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<ChatInput onSend={vi.fn()} onCancel={onCancel} showCancel />);
     fireEvent.click(screen.getByRole('button', { name: 'İptal et' }));
+    expect(confirmSpy).toHaveBeenCalledOnce();
     expect(onCancel).toHaveBeenCalledOnce();
+    confirmSpy.mockRestore();
+  });
+
+  it('does NOT call onCancel when user cancels the confirm dialog', () => {
+    const onCancel = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<ChatInput onSend={vi.fn()} onCancel={onCancel} showCancel />);
+    fireEvent.click(screen.getByRole('button', { name: 'İptal et' }));
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(onCancel).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 
   it('textarea has cursor-not-allowed class when disabled', () => {
@@ -85,9 +98,7 @@ describe('ChatInput', () => {
 
   it('renders keyboard helper row (Gönder, Yeni satır, Temizle)', () => {
     render(<ChatInput onSend={vi.fn()} />);
-    expect(
-      screen.getByText(/⏎ Gönder.*⇧⏎ Yeni satır.*Esc Temizle/s),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/⏎ Gönder.*⇧⏎ Yeni satır.*Esc Temizle/s)).toBeInTheDocument();
   });
 
   // ─── Escape key clears input ──────────────────────────────────────────────

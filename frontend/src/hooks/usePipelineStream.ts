@@ -102,19 +102,17 @@ export function usePipelineStream(
         // Non-fatal — the live stream still takes over
       });
 
-    // Skip the live SSE connection when the pipeline is not running. Buffered
-    // history above already populated the latest progress; nothing new will
-    // emit until the pipeline resumes (which causes a re-render with isActive=true).
-    if (!isActive) {
-      if (esRef.current) {
-        esRef.current.close();
-        esRef.current = null;
-        setIsConnected(false);
-      }
-      return () => {
-        cancelled = true;
-      };
-    }
+    // PR-T3 S1: previously we'd close the SSE stream whenever `isActive`
+    // (a.k.a. `isRunning`) flipped false — which happens the instant the
+    // pipeline lands on `awaiting_push_confirm` / `awaiting_critic_resolution`
+    // / `completed`. The frontend then missed any tail-end activities
+    // (e.g. the synthetic `gate_open` event that arrives right at the
+    // transition), leaving the UI on a stale placeholder until the user
+    // reloaded. Keep the stream open as long as we have a pipelineId; the
+    // backend manages connection lifecycle (heartbeat + 30-min max-age) so
+    // dangling connections are bounded. `isActive` is now informational
+    // only — we still hydrate buffered activities first.
+    void isActive;
 
     function connect() {
       if (cancelled) return;

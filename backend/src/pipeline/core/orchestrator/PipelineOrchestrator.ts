@@ -1652,8 +1652,8 @@ export class PipelineOrchestrator {
           // Persist criticCodeOutput so the UI sees the failing snapshot
           // until the next retry overwrites it.
           const stateBeforeDispatch = await this.store.getById(pipelineId);
-          const intermediateBeforeDispatch =
-            (stateBeforeDispatch?.intermediateState ?? {}) as Record<string, unknown>;
+          const intermediateBeforeDispatch = (stateBeforeDispatch?.intermediateState ??
+            {}) as Record<string, unknown>;
           await this.store.update(pipelineId, {
             protoOutput: protoResult.data,
             metrics: protoCompletedMetrics,
@@ -1711,6 +1711,16 @@ export class PipelineOrchestrator {
           },
         });
         this.emitEvent(pipelineId, 'stage_change', 'awaiting_critic_resolution');
+        // PR-T3 S1: aynı `gate_open` pattern'i — frontend SSE üzerinden
+        // bu transition'ı kaçırmasın diye sentetik bir activity yayınla.
+        emitActivity({
+          pipelineId,
+          stage: 'critic',
+          step: 'gate_open',
+          message: 'Critic kritik bulgu raporladı — kullanıcı kararı bekleniyor',
+          progress: 100,
+          timestamp: new Date().toISOString(),
+        });
         logger.info(
           {
             pipelineId,
@@ -2137,7 +2147,9 @@ export class PipelineOrchestrator {
     // PR-F2: Trace already ran in dryRun before the gate. We just need to
     // finalize the pipeline. `traceOutput` (if any) is preserved as-is; the
     // pushed branch metadata on `protoOutput` is what changes here.
-    const completionStage: PipelineStage = pipelineNow.traceOutput ? 'completed' : 'completed_partial';
+    const completionStage: PipelineStage = pipelineNow.traceOutput
+      ? 'completed'
+      : 'completed_partial';
     await this.store.update(pipelineId, {
       protoOutput: updatedProtoOutput,
       stage: completionStage,
@@ -3041,10 +3053,7 @@ export class PipelineOrchestrator {
       // Dispatch re-iterate and return — async re-run will land on
       // awaiting_push_confirm / completed when the loop terminates.
       void this.dispatchTraceIterate(pipelineId, iterateLoopDecision.feedback).catch((err) => {
-        logger.error(
-          { err, pipelineId },
-          '[Pipeline] PR-F Trace iterate-loop dispatch failed'
-        );
+        logger.error({ err, pipelineId }, '[Pipeline] PR-F Trace iterate-loop dispatch failed');
       });
       // We return the current pipeline state; the user-facing transition
       // (proto_building) lands inside dispatchTraceIterate.
@@ -3073,6 +3082,22 @@ export class PipelineOrchestrator {
     });
     if (postSuccessStage === 'awaiting_push_confirm') {
       this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
+      // PR-T3 S1: state desync fix — `emitEvent` yalnızca dahili event-bus'a
+      // gider, SSE stream'e gitmez. SSE yalnızca `pipelineBus` üzerindeki
+      // PipelineActivity event'lerini iletiyor. Push gate geçişinde
+      // frontend'in açık SSE bağlantısı varken bir activity görmesi
+      // gerekiyor — yoksa uiState `critic_running`/`trace_running` placeholder
+      // metninde kilitleniyor (manuel testte gözlemlenen bug). Net bir
+      // `gate_open` activity'i yayınlayarak ChatPage'in
+      // `stageChanged`/`isTerminal` detection'ı kesin tetiklensin.
+      emitActivity({
+        pipelineId,
+        stage: 'trace',
+        step: 'gate_open',
+        message: 'Push gate açıldı — inceleyin ve gönderin',
+        progress: 100,
+        timestamp: new Date().toISOString(),
+      });
       logger.info(
         {
           pipelineId,
@@ -3719,9 +3744,7 @@ export class PipelineOrchestrator {
       'Trace tamamlandı ama bazı kabul kriterleri test edilmedi.',
       '',
       `Eksik kabul kriterleri (${uncoveredCount}/${totalCount}):`,
-      ...(acDetails.length > 0
-        ? acDetails
-        : uncovered.map((id) => `- ${id}`)),
+      ...(acDetails.length > 0 ? acDetails : uncovered.map((id) => `- ${id}`)),
       '',
       'Bu kabul kriterlerini karşılayan ek kod üretmeni veya mevcut kodu güncellemeni istiyorum.',
     ];
@@ -3748,10 +3771,7 @@ export class PipelineOrchestrator {
    * Proto'ya plumb edilir, intermediateState'teki `traceIterateRetryCount`
    * artırılır.
    */
-  private async dispatchTraceIterate(
-    pipelineId: string,
-    feedback: string
-  ): Promise<void> {
+  private async dispatchTraceIterate(pipelineId: string, feedback: string): Promise<void> {
     const pipeline = await this.store.getById(pipelineId);
     if (!pipeline) return;
     if (!pipeline.approvedSpec || !pipeline.protoConfig) {
@@ -3850,9 +3870,7 @@ export class PipelineOrchestrator {
     };
     if (!pipeline) return noopResult;
 
-    const criticalFindings = (criticResult.findings ?? []).filter(
-      (f) => f.severity === 'critical'
-    );
+    const criticalFindings = (criticResult.findings ?? []).filter((f) => f.severity === 'critical');
     if (criticalFindings.length === 0) return noopResult;
 
     const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
@@ -3905,10 +3923,7 @@ export class PipelineOrchestrator {
    * runProtoAndTrace'i doğrudan yeniden başlatıyoruz. Pattern Trace iterate-
    * loop ile birebir aynı.
    */
-  private async dispatchCriticIterate(
-    pipelineId: string,
-    feedback: string
-  ): Promise<void> {
+  private async dispatchCriticIterate(pipelineId: string, feedback: string): Promise<void> {
     const pipeline = await this.store.getById(pipelineId);
     if (!pipeline) return;
     if (!pipeline.approvedSpec || !pipeline.protoConfig) {

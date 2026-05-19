@@ -6,7 +6,11 @@ import { I18nProvider } from './I18nProvider';
 import { useI18n } from './useI18n';
 
 describe('I18nProvider', () => {
-  it('loads default locale and switches to Turkish', async () => {
+  // PR-T1 follow-up: DEFAULT_LOCALE is now 'tr' (Turkish thesis project)
+  // and `resolveInitialLocale` skips navigator detection — the bootstrap
+  // path lands on TR immediately. Test flow flipped: assert TR by default,
+  // then switch to EN.
+  it('loads default Turkish locale and switches to English', async () => {
     const mountSpy = vi.fn();
 
     function TestConsumerWithMount() {
@@ -21,12 +25,12 @@ describe('I18nProvider', () => {
         <>
           <span data-testid="title">{t('app.title')}</span>
           <button
-            data-testid="switch-tr"
+            data-testid="switch-en"
             onClick={() => {
-              void setLocale('tr');
+              void setLocale('en');
             }}
           >
-            Switch to tr
+            Switch to en
           </button>
         </>
       );
@@ -38,15 +42,11 @@ describe('I18nProvider', () => {
       </I18nProvider>
     );
 
-    await waitFor(() =>
-      expect(screen.getByTestId('title').textContent).toBe('AKIS Platform')
-    );
+    await waitFor(() => expect(screen.getByTestId('title').textContent).toBe('AKIS Platformu'));
 
-    fireEvent.click(screen.getByTestId('switch-tr'));
+    fireEvent.click(screen.getByTestId('switch-en'));
 
-    await waitFor(() =>
-      expect(screen.getByTestId('title').textContent).toBe('AKIS Platformu')
-    );
+    await waitFor(() => expect(screen.getByTestId('title').textContent).toBe('AKIS Platform'));
 
     expect(mountSpy).toHaveBeenCalledTimes(1);
   });

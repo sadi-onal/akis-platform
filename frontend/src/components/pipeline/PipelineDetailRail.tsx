@@ -401,7 +401,16 @@ export function PipelineDetailRail({
     return null;
   })();
   const lastIdx = lastStage ? MINI_ORDER.indexOf(lastStage) : -1;
+  // PR-T3 S2: when the pipeline is past the Trace stage (push gate or done),
+  // every column should read "tamamlandı" — otherwise an empty `activities`
+  // buffer for Trace leaves the Trace dot stuck at "bekliyor" even though the
+  // Açıklama tab shows %100 confidence + 42 tests written.
+  const isPostTrace =
+    uiState === 'awaiting_push_confirm' ||
+    uiState === 'awaiting_critic_resolution' ||
+    (uiState === 'idle' && lastIdx >= 0);
   const stateOf = (idx: number): 'pending' | 'active' | 'complete' => {
+    if (isPostTrace) return 'complete';
     if (lastIdx === -1) return 'pending';
     if (idx < lastIdx) return 'complete';
     if (idx === lastIdx) {

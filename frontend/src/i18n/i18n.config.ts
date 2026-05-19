@@ -78,5 +78,11 @@ export const detectNavigatorLocale = (): Locale | null => {
   return null;
 };
 
-export const resolveInitialLocale = (): Locale =>
-  readPersistedLocale() ?? detectNavigatorLocale() ?? DEFAULT_LOCALE;
+// PR-T1 follow-up (manuel doğrulamada keşfedildi): default locale `tr` olsa
+// bile Playwright/Chrome çoğunlukla navigator.language=en-US raporladığı için
+// `detectNavigatorLocale()` her zaman 'en' döndürüyor ve DEFAULT_LOCALE'a
+// hiçbir zaman ulaşılamıyordu. Türkçe bir tez/savunma uygulaması için bu
+// yanlış default — bilinçli olarak persistedLocale > DEFAULT_LOCALE > navigator
+// sırasına geçiriyoruz. Kullanıcı dili seçtiyse o kazanır; aksi halde TR.
+// İngilizce-konuşan kullanıcı dil seçicisinden EN'e geçebilir (persistence).
+export const resolveInitialLocale = (): Locale => readPersistedLocale() ?? DEFAULT_LOCALE;

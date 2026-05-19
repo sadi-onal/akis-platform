@@ -35,7 +35,7 @@ export interface ScribeAIDeps {
   generateTextWithImages?(
     systemPrompt: string,
     userPrompt: string,
-    images: readonly AnthropicImageBlock[],
+    images: readonly AnthropicImageBlock[]
   ): Promise<string>;
 }
 
@@ -178,7 +178,7 @@ Respond ONLY with valid JSON matching this EXACT structure:
       {"id": "ac-2", "given": "Kullanıcı kayıtlı değilse", "when": "Kayıt formunu doldurduğunda", "then": "Hesap oluşturulur ve doğrulama emaili gönderilir"}
     ],
     "technicalConstraints": {
-      "stack": "React + Node.js",
+      "stack": "",
       "integrations": ["GitHub API", "OAuth 2.0"],
       "nonFunctional": ["Response time < 2s", "Mobile responsive"]
     },
@@ -191,7 +191,7 @@ Respond ONLY with valid JSON matching this EXACT structure:
       {"name": "Kullanıcı Girişi", "description": "Email ve şifre ile kimlik doğrulama"},
       {"name": "Dashboard", "description": "Ana sayfa istatistikleri ve hızlı erişim"}
     ],
-    "techChoices": ["React", "Node.js", "PostgreSQL"],
+    "techChoices": [],
     "estimatedFiles": 12,
     "requiresTests": true,
     "testRationale": "Yeni proje, iş mantığı içeren özellikler var"
@@ -230,6 +230,34 @@ IMPORTANT RULES:
 - Keep MVP scope tight
 - NEVER return string values where arrays are expected
 
+TECHNICAL CONSTRAINTS — DO NOT INVENT A STACK:
+The spec captures WHAT the system does and the user's stated CONSTRAINTS — not
+HOW it should be implemented. Picking a programming language, framework, or
+runtime is Proto's responsibility, not yours.
+
+- If the user EXPLICITLY named a tech (e.g. "React ile yap", "Python istiyorum",
+  "FastAPI kullan"), record it in technicalConstraints.stack as a short,
+  exact string (e.g. "React", "Python + FastAPI").
+- If the user gave a CONSTRAINT that implies a tech choice without naming it
+  (e.g. "tarayıcıda çalışsın, server yok", "tek tıkla deploy edilebilsin"),
+  put the constraint in technicalConstraints.nonFunctional — DO NOT translate
+  it into a concrete stack.
+- If the user said NOTHING about technology, leave technicalConstraints.stack
+  as an empty string ("") and plan.techChoices as an empty array ([]). Proto
+  will choose the most appropriate stack from the spec content itself. Never
+  default to React, Node, Vite, FastAPI, or any other framework on the user's
+  behalf — that pre-decision is what causes spec/code mismatches downstream.
+
+EXAMPLES — when stack should be empty:
+  user: "Bir görev listesi yap" → stack: ""
+  user: "QR kod üretici lazım" → stack: ""
+  user: "Döviz çevirici, USD ve TRY için" → stack: ""
+
+EXAMPLES — when stack should be filled (user-driven):
+  user: "React ile bir görev listesi yap" → stack: "React"
+  user: "Python ve FastAPI ile API yap" → stack: "Python + FastAPI"
+  user: "Next.js 14 + TypeScript blog" → stack: "Next.js + TypeScript"
+
 AFTER generating the StructuredSpec, perform a SPEC SELF-REVIEW:
 
 Checklist:
@@ -238,7 +266,10 @@ Checklist:
 - [ ] Given/When/Then steps are concrete and testable
 - [ ] No scope creep beyond the user's stated idea
 - [ ] Problem Statement is ≤3 sentences
-- [ ] Technical Constraints are specific (not "use modern framework" but "React 18 + Vite")
+- [ ] Technical Constraints contain ONLY user-stated constraints. If the user
+      did not specify a stack, the stack field is empty (""). Vague filler
+      ("use a modern framework", "modern best practices") is NEVER accepted;
+      either drop the constraint or quote what the user actually said.
 
 If any check fails, revise the spec before returning it.
 Record all revisions in "reviewNotes.revisionsApplied".
@@ -309,7 +340,7 @@ function normalizeSpecResponse(raw: Record<string, unknown>): Record<string, unk
         .map((s: string) => s.trim())
         .filter(Boolean);
       if ((spec.outOfScope as string[]).length === 0) {
-        spec.outOfScope = [(spec.outOfScope as string)];
+        spec.outOfScope = [spec.outOfScope as string];
       }
     }
   }
@@ -354,7 +385,12 @@ function normalizeSpecResponse(raw: Record<string, unknown>): Record<string, unk
       projectName: String(spec.title ?? 'Proje'),
       summary: String(spec.problemStatement ?? ''),
       features,
-      techChoices: stackStr ? stackStr.split(/[+,]/).map((s: string) => s.trim()).filter(Boolean) : [],
+      techChoices: stackStr
+        ? stackStr
+            .split(/[+,]/)
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : [],
       estimatedFiles: Math.max(features.length * 2 + 4, 6),
       requiresTests: true,
       testRationale: 'Yeni proje — iş mantığı testleri gerekli',
@@ -398,7 +434,7 @@ export class ScribeAgent {
   private async dispatchGenerate(
     state: ScribeState,
     systemPrompt: string,
-    userPrompt: string,
+    userPrompt: string
   ): Promise<string> {
     const hasImages = state.imageBlocks && state.imageBlocks.length > 0;
     if (hasImages && this.ai.generateTextWithImages) {
@@ -427,9 +463,7 @@ export class ScribeAgent {
   }
 
   async analyzIdea(state: ScribeState): Promise<ScribeResult> {
-    const emit = state.pipelineId
-      ? createActivityEmitter(state.pipelineId, 'scribe')
-      : undefined;
+    const emit = state.pipelineId ? createActivityEmitter(state.pipelineId, 'scribe') : undefined;
 
     if (state.clarificationRound >= MAX_CLARIFICATION_ROUNDS) {
       return this.generateSpec(state);
@@ -437,7 +471,14 @@ export class ScribeAgent {
 
     const userPrompt = this.buildClarificationUserPrompt(state);
 
-    emit?.('ai_call', 'Claude AI ile fikir analiz ediliyor...', 25, undefined, undefined, 'pipeline.activity.scribe.analyzing_questions');
+    emit?.(
+      'ai_call',
+      'Claude AI ile fikir analiz ediliyor...',
+      25,
+      undefined,
+      undefined,
+      'pipeline.activity.scribe.analyzing_questions'
+    );
     let responseText: string;
     try {
       const clarificationBase = this.enhance(CLARIFICATION_SYSTEM_PROMPT);
@@ -449,7 +490,10 @@ export class ScribeAgent {
       emit?.('error', 'AI çağrısı başarısız oldu', 0);
       return {
         type: 'error',
-        error: createPipelineError(PipelineErrorCode.AI_PROVIDER_ERROR, 'Clarification AI call failed'),
+        error: createPipelineError(
+          PipelineErrorCode.AI_PROVIDER_ERROR,
+          'Clarification AI call failed'
+        ),
       };
     }
 
@@ -461,7 +505,10 @@ export class ScribeAgent {
       emit?.('error', 'AI yanıtı geçersiz JSON', 0);
       return {
         type: 'error',
-        error: createPipelineError(PipelineErrorCode.AI_INVALID_RESPONSE, 'Invalid JSON from clarification'),
+        error: createPipelineError(
+          PipelineErrorCode.AI_INVALID_RESPONSE,
+          'Invalid JSON from clarification'
+        ),
       };
     }
 
@@ -514,13 +561,13 @@ export class ScribeAgent {
 
     // Check which question IDs are explicitly mentioned (e.g. "q1", "q2")
     const mentionedIds = state.pendingQuestionIds.filter((id) =>
-      new RegExp(`\\b${id}\\b`, 'i').test(answer),
+      new RegExp(`\\b${id}\\b`, 'i').test(answer)
     );
 
     if (mentionedIds.length > 0) {
       state.answeredQuestionIds.push(...mentionedIds);
       state.pendingQuestionIds = state.pendingQuestionIds.filter(
-        (id) => !mentionedIds.includes(id),
+        (id) => !mentionedIds.includes(id)
       );
     } else {
       // Default: mark all pending as answered (conservative — avoids re-asking)
@@ -534,13 +581,18 @@ export class ScribeAgent {
   }
 
   async generateSpec(state: ScribeState): Promise<ScribeResult> {
-    const emit = state.pipelineId
-      ? createActivityEmitter(state.pipelineId, 'scribe')
-      : undefined;
+    const emit = state.pipelineId ? createActivityEmitter(state.pipelineId, 'scribe') : undefined;
 
     state.phase = 'generating';
     const userPrompt = this.buildSpecGenerationUserPrompt(state);
-    emit?.('ai_call', 'Yapılandırılmış spec oluşturuluyor...', 30, undefined, undefined, 'pipeline.activity.scribe.writing_spec');
+    emit?.(
+      'ai_call',
+      'Yapılandırılmış spec oluşturuluyor...',
+      30,
+      undefined,
+      undefined,
+      'pipeline.activity.scribe.writing_spec'
+    );
 
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
@@ -555,7 +607,10 @@ export class ScribeAgent {
         emit?.('error', 'Spec üretimi AI çağrısı başarısız', 0);
         return {
           type: 'error',
-          error: createPipelineError(PipelineErrorCode.AI_PROVIDER_ERROR, 'Spec generation AI call failed'),
+          error: createPipelineError(
+            PipelineErrorCode.AI_PROVIDER_ERROR,
+            'Spec generation AI call failed'
+          ),
         };
       }
 
@@ -567,7 +622,10 @@ export class ScribeAgent {
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         return {
           type: 'error',
-          error: createPipelineError(PipelineErrorCode.AI_INVALID_RESPONSE, 'Invalid JSON from spec generation'),
+          error: createPipelineError(
+            PipelineErrorCode.AI_INVALID_RESPONSE,
+            'Invalid JSON from spec generation'
+          ),
         };
       }
 
@@ -603,7 +661,11 @@ export class ScribeAgent {
         };
       }
 
-      emit?.('validation', `Spec oluşturuldu: ${scribeOutput.spec.userStories?.length || 0} user story, ${scribeOutput.spec.acceptanceCriteria?.length || 0} kabul kriteri`, 90);
+      emit?.(
+        'validation',
+        `Spec oluşturuldu: ${scribeOutput.spec.userStories?.length || 0} user story, ${scribeOutput.spec.acceptanceCriteria?.length || 0} kabul kriteri`,
+        90
+      );
 
       state.phase = 'done';
       state.conversation.push({ type: 'spec_draft', content: scribeOutput });
@@ -613,7 +675,10 @@ export class ScribeAgent {
 
     return {
       type: 'error',
-      error: createPipelineError(PipelineErrorCode.SCRIBE_SPEC_VALIDATION_FAILED, 'All retries exhausted'),
+      error: createPipelineError(
+        PipelineErrorCode.SCRIBE_SPEC_VALIDATION_FAILED,
+        'All retries exhausted'
+      ),
     };
   }
 
@@ -626,12 +691,12 @@ export class ScribeAgent {
   // ─── Private Helpers ──────────────────────────────
 
   private buildClarificationUserPrompt(state: ScribeState): string {
-    const parts: string[] = [
-      `Kullanıcının fikri: "${state.idea}"`,
-    ];
+    const parts: string[] = [`Kullanıcının fikri: "${state.idea}"`];
 
     if (state.context) {
-      parts.push(`\nÖNCEKİ PROJE BAĞLAMI (kullanıcı daha önce tamamlanmış bir projeden devam ediyor):\n${state.context}\n\nKullanıcının yeni mesajını bu bağlam çerçevesinde değerlendir. Daha önce belirlenmiş kararları tekrar sormaktan kaçın.`); // allow:push
+      parts.push(
+        `\nÖNCEKİ PROJE BAĞLAMI (kullanıcı daha önce tamamlanmış bir projeden devam ediyor):\n${state.context}\n\nKullanıcının yeni mesajını bu bağlam çerçevesinde değerlendir. Daha önce belirlenmiş kararları tekrar sormaktan kaçın.`
+      ); // allow:push
     }
     if (state.targetStack) {
       parts.push(`Teknoloji tercihi: ${state.targetStack}`);
@@ -647,7 +712,7 @@ export class ScribeAgent {
     if (state.pendingQuestionIds.length > 0) {
       parts.push(
         `\nHenüz cevaplanmamış soru ID'leri: ${state.pendingQuestionIds.join(', ')}` +
-        `\nSADECE bu soruları tekrar sor, cevaplanmış olanları TEKRARLAMA.`,
+          `\nSADECE bu soruları tekrar sor, cevaplanmış olanları TEKRARLAMA.`
       );
     }
 
@@ -661,7 +726,9 @@ export class ScribeAgent {
     ];
 
     if (state.context) {
-      parts.push(`\nÖNCEKİ PROJE BAĞLAMI (kullanıcı daha önce tamamlanmış bir projeden devam ediyor):\n${state.context}\n\nBu yeni spec'i oluştururken önceki projenin bağlamını göz önünde bulundur. Kullanıcı mevcut projeyi geliştirmek veya değiştirmek istiyor olabilir.`); // allow:push,spec
+      parts.push(
+        `\nÖNCEKİ PROJE BAĞLAMI (kullanıcı daha önce tamamlanmış bir projeden devam ediyor):\n${state.context}\n\nBu yeni spec'i oluştururken önceki projenin bağlamını göz önünde bulundur. Kullanıcı mevcut projeyi geliştirmek veya değiştirmek istiyor olabilir.`
+      ); // allow:push,spec
     }
     if (state.targetStack) {
       parts.push(`Teknoloji tercihi: ${state.targetStack}`);
@@ -685,9 +752,10 @@ export class ScribeAgent {
       } else if (msg.type === 'user_answer') {
         lines.push(`C: ${msg.content}`);
       } else if (msg.type === 'spec_rejected') {
-        const feedback = typeof msg.content === 'object' && msg.content !== null
-          ? (msg.content as Record<string, unknown>).feedback
-          : msg.content;
+        const feedback =
+          typeof msg.content === 'object' && msg.content !== null
+            ? (msg.content as Record<string, unknown>).feedback
+            : msg.content;
         lines.push(`[KULLANICI REDDETTİ — Geri bildirim: ${feedback}]`); // allow:push
       }
     }

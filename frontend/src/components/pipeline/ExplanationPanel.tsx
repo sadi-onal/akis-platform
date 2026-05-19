@@ -285,9 +285,7 @@ export function CriticFindingsSection({
             data-testid="critic-findings-apply-button"
             className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-700 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-200"
           >
-            {busy
-              ? t('chat.criticFindings.applying')
-              : t('chat.criticFindings.applySelected')}
+            {busy ? t('chat.criticFindings.applying') : t('chat.criticFindings.applySelected')}
           </button>
         </div>
       )}
@@ -350,7 +348,15 @@ const AGENT_TEXT: Record<string, string> = {
   validator: 'text-ak-text-secondary',
 };
 
-function formatAgent(name: string): string {
+function formatAgent(name: string, stageKey?: string): string {
+  // PR-T3 S6: Critic agent runs twice per pipeline (spec → critic-spec, code →
+  // critic-code). Without the suffix the user sees two identical "Critic"
+  // cards in the Açıklama tab with no clue which one targets the spec vs
+  // the code. Backend already distinguishes via stageKey; surface it.
+  if (name === 'critic') {
+    if (stageKey === 'critic-spec') return 'Critic — Spec inceleme';
+    if (stageKey === 'critic-code') return 'Critic — Kod inceleme';
+  }
   return AGENT_LABEL[name] ?? name.charAt(0).toUpperCase() + name.slice(1);
 }
 
@@ -385,8 +391,7 @@ function ReasoningCard({
   acCoverage,
 }: ReasoningCardProps) {
   const hasStructuredFindings = !!stage.findings && stage.findings.length > 0;
-  const showAcChecklist =
-    stage.agentName === 'proto' && !!acCoverage && acCoverage.totalAcs > 0;
+  const showAcChecklist = stage.agentName === 'proto' && !!acCoverage && acCoverage.totalAcs > 0;
   const hasDetail =
     stage.assumptions.length > 0 ||
     (stage.alternatives && stage.alternatives.length > 0) ||
@@ -398,7 +403,7 @@ function ReasoningCard({
     >
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className={`text-sm font-semibold ${agentTextClass(stage.agentName)}`}>
-          {formatAgent(stage.agentName)}
+          {formatAgent(stage.agentName, stage.stageKey)}
         </h3>
         <ConfidenceBadge
           score={stage.confidence.score}
