@@ -201,15 +201,20 @@ function createMockProto(opts?: {
   } as unknown as ProtoAgent;
 }
 
-function createMockTrace(): TraceAgent {
+function createMockTrace(opts?: {
+  execute?: (input: unknown) => Promise<{ type: 'output'; data: TraceOutput }>;
+}): TraceAgent {
   return {
-    execute: async () => ({ type: 'output' as const, data: mockTraceOutput }),
+    execute:
+      opts?.execute ??
+      (async () => ({ type: 'output' as const, data: mockTraceOutput })),
   } as unknown as TraceAgent;
 }
 
 function createOrchestrator(overrides?: {
   store?: PipelineStore;
   proto?: ProtoAgent;
+  trace?: TraceAgent;
   emit?: (event: PipelineEvent) => void;
 }) {
   const store = overrides?.store ?? new InMemoryStore();
@@ -219,7 +224,7 @@ function createOrchestrator(overrides?: {
       store,
       createMockScribe(),
       overrides?.proto ?? createMockProto(),
-      createMockTrace(),
+      overrides?.trace ?? createMockTrace(),
       async () => 'testuser',
       async () => 'ghp_mock_token',
       () => ({
@@ -268,6 +273,55 @@ describe('B4 Preview Gate — gate ON (default)', () => {
     assert.equal(executeCalls[0]?.dryRun, true, 'Proto must be called with dryRun:true');
   });
 
+  // PR-F2 (2026-05-19) — Trace must run BEFORE awaiting_push_confirm.
+  it('runs Trace in dryRun mode BEFORE awaiting_push_confirm (PR-F2)', async () => {
+    process.env.AUTO_PUSH_AFTER_PROTO = 'false';
+    __clearEnvCacheForTests();
+
+    const traceCalls: Array<{
+      dryRun?: boolean;
+      inputFiles?: Array<{ filePath: string; content: string }>;
+      repo?: string;
+    }> = [];
+    const trace = createMockTrace({
+      execute: async (input: unknown) => {
+        const i = input as {
+          dryRun?: boolean;
+          inputFiles?: Array<{ filePath: string; content: string }>;
+          repo?: string;
+        };
+        traceCalls.push({ dryRun: i.dryRun, inputFiles: i.inputFiles, repo: i.repo });
+        return { type: 'output' as const, data: mockTraceOutput };
+      },
+    });
+    const { orchestrator, store } = createOrchestrator({ trace });
+
+    const started = await orchestrator.startPipeline(
+      'user-1',
+      { idea: 'React todo app' },
+      undefined, undefined, undefined, undefined, true /* traceEnabled */,
+    );
+    await waitForStage(store, started.id, ['awaiting_approval']);
+    await orchestrator.approveSpec(started.id, 'my-todo', 'private');
+
+    const gated = await waitForStage(store, started.id, ['awaiting_push_confirm']);
+    assert.equal(gated.stage, 'awaiting_push_confirm');
+    // Trace MUST have run exactly once, in dryRun mode, with Proto's
+    // local inputFiles (no GitHub fetch).
+    assert.equal(traceCalls.length, 1, 'Trace runs once BEFORE the push gate');
+    assert.equal(traceCalls[0]?.dryRun, true, 'Trace called with dryRun:true');
+    assert.ok(
+      traceCalls[0]?.inputFiles && traceCalls[0].inputFiles.length === 2,
+      'Trace receives Proto\'s in-memory files as inputFiles',
+    );
+    assert.ok(gated.traceOutput, 'traceOutput persisted at push gate');
+    assert.equal(
+      gated.traceOutput?.testSummary?.coveragePercentage,
+      100,
+      'AC coverage visible at gate stage',
+    );
+  });
+
   it('cancelPush → completed_partial; protoOutput stays for inspection', async () => {
     process.env.AUTO_PUSH_AFTER_PROTO = 'false';
     __clearEnvCacheForTests();
@@ -288,7 +342,7 @@ describe('B4 Preview Gate — gate ON (default)', () => {
     assert.equal(cancelled.protoOutput?.files.length, 2);
   });
 
-  it('confirmPush → pushScaffoldFiles + trace → completed', async () => {
+  it('confirmPush → pushScaffoldFiles → completed (Trace already ran pre-gate, PR-F2)', async () => {
     process.env.AUTO_PUSH_AFTER_PROTO = 'false';
     __clearEnvCacheForTests();
 
@@ -301,7 +355,16 @@ describe('B4 Preview Gate — gate ON (default)', () => {
         return { type: 'output' as const, data: pushedProtoOutput };
       },
     });
-    const { orchestrator, store } = createOrchestrator({ proto });
+    // PR-F2: count Trace calls so we can prove Trace runs ONCE (pre-gate)
+    // and is not invoked again after the user confirms the push.
+    const traceCalls: Array<{ dryRun?: boolean }> = [];
+    const trace = createMockTrace({
+      execute: async (input: unknown) => {
+        traceCalls.push(input as { dryRun?: boolean });
+        return { type: 'output' as const, data: mockTraceOutput };
+      },
+    });
+    const { orchestrator, store } = createOrchestrator({ proto, trace });
 
     const started = await orchestrator.startPipeline(
       'user-1',
@@ -312,6 +375,10 @@ describe('B4 Preview Gate — gate ON (default)', () => {
     await orchestrator.approveSpec(started.id, 'my-todo', 'private');
     await waitForStage(store, started.id, ['awaiting_push_confirm']);
 
+    // Sanity: Trace already ran in dryRun BEFORE the gate.
+    assert.equal(traceCalls.length, 1, 'Trace runs once pre-gate in dryRun mode');
+    assert.equal(traceCalls[0]?.dryRun, true);
+
     await orchestrator.confirmPush(started.id);
     const completed = await waitForStage(store, started.id, ['completed']);
     assert.equal(completed.stage, 'completed');
@@ -321,6 +388,10 @@ describe('B4 Preview Gate — gate ON (default)', () => {
     assert.equal(pushCalls[0]?.fileCount, 2);
     // After push, protoOutput.branch should be the real "main", not "dry-run"
     assert.equal(completed.protoOutput?.branch, 'main');
+    // PR-F2: Trace must NOT be invoked again on push confirmation.
+    assert.equal(traceCalls.length, 1, 'Trace does NOT run again on confirmPush');
+    // The pre-gate traceOutput stays intact.
+    assert.ok(completed.traceOutput, 'traceOutput from pre-gate dryRun preserved');
   });
 
   it('confirmPush is idempotent — second call returns current state', async () => {

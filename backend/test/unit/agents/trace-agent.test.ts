@@ -272,6 +272,85 @@ describe('TraceAgent — Dry Run', () => {
   });
 });
 
+// ─── PR-F2 — Local-files dryRun (pre-push gate) ──
+
+describe('TraceAgent — PR-F2 dryRun + inputFiles (local scaffold mode)', () => {
+  it('skips GitHub listFiles/getFileContent when inputFiles provided', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const inputFiles = [
+      { filePath: 'src/index.ts', content: 'export const x = 1;' },
+      { filePath: 'src/pages/Home.tsx', content: 'export default function Home() { return null; }' },
+    ];
+    const result = await agent.execute(baseInput({ dryRun: true, inputFiles }));
+    assert.equal(result.type, 'output');
+    assert.equal(github.calls.listFiles.length, 0, 'GitHub listFiles must NOT be called');
+    assert.equal(github.calls.getFileContent.length, 0, 'GitHub getFileContent must NOT be called');
+    assert.equal(github.calls.pushFiles.length, 0, 'No push in dryRun');
+  });
+
+  it('returns testFiles + coverageMatrix + testSummary from local input', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const inputFiles = [
+      { filePath: 'src/App.tsx', content: 'export default function App() { return null; }' },
+    ];
+    const result = await agent.execute(baseInput({ dryRun: true, inputFiles }));
+    assert.equal(result.type, 'output');
+    if (result.type !== 'output') return;
+    assert.ok(result.data.testFiles.length > 0, 'Should produce test files');
+    assert.ok(result.data.coverageMatrix, 'Should produce coverage matrix');
+    assert.ok(result.data.testSummary, 'Should produce test summary');
+  });
+
+  it('filters non-source inputFiles (e.g. README.md, .gitignore)', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    // Mix source + non-source — only source files should reach the AI prompt.
+    // We don't assert prompt content directly here, but the agent must still
+    // succeed (i.e. it doesn't fail because non-source files dominate).
+    const inputFiles = [
+      { filePath: 'src/App.tsx', content: 'export default function App() { return null; }' },
+      { filePath: 'README.md', content: '# title' },
+      { filePath: '.gitignore', content: 'node_modules' },
+    ];
+    const result = await agent.execute(baseInput({ dryRun: true, inputFiles }));
+    assert.equal(result.type, 'output');
+  });
+
+  it('returns error when inputFiles is empty after filtering', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    // No source files in input — non-source extensions only.
+    const inputFiles = [
+      { filePath: 'README.md', content: '# title' },
+    ];
+    const result = await agent.execute(baseInput({ dryRun: true, inputFiles }));
+    assert.equal(result.type, 'error', 'Empty source files set must error out');
+  });
+
+  it('legacy dryRun (no inputFiles) still falls back to GitHub fetch', async () => {
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    // dryRun=true but NO inputFiles → legacy behaviour: read from GitHub,
+    // skip push only.
+    const result = await agent.execute(baseInput({ dryRun: true }));
+    assert.equal(result.type, 'output');
+    assert.ok(github.calls.listFiles.length > 0, 'Legacy dryRun still reads from GitHub');
+    assert.equal(github.calls.pushFiles.length, 0, 'But still no push');
+  });
+});
+
 // ─── Error Handling ───────────────────────────────
 
 describe('TraceAgent — Error Recovery', () => {

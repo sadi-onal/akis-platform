@@ -452,3 +452,95 @@ describe('PR-F — Trace iterate-loop', () => {
     );
   });
 });
+
+// PR-F2 (2026-05-19): Trace iterate-loop with preview gate ON.
+// Trace now runs in dryRun BEFORE awaiting_push_confirm. The iterate-loop
+// must still trigger on uncovered AC pre-gate, and after retries terminate,
+// the pipeline lands on `awaiting_push_confirm` (NOT `completed`) so the
+// user reviews the scaffold + coverage matrix.
+describe('PR-F2 — Trace dryRun iterate-loop with preview gate', () => {
+  it('uncovered AC pre-gate → iterate-loop → terminates at awaiting_push_confirm', async () => {
+    // Flip preview gate ON for this scenario; restore afterwards.
+    const prevPushFlag = process.env.AUTO_PUSH_AFTER_PROTO;
+    process.env.AUTO_PUSH_AFTER_PROTO = 'false';
+    process.env.TRACE_MAX_ITERATE_RETRIES = '3';
+    try {
+      const { orchestrator, store, protoCounter, traceCounter } = createFixture({
+        // First trace dryRun: uncovered → iterate. Second: fully covered → stop.
+        traceOutputs: [makeUncoveredTrace(), makeFullyCoveredTrace()],
+      });
+      const started = await orchestrator.startPipeline(
+        'user-1',
+        { idea: 'Reminder app' },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+      await waitForStage(store, started.id, ['awaiting_approval']);
+      await orchestrator.approveSpec(started.id, 'reminder-app', 'private');
+      // Expect to land at the push gate (NOT completed) once iterate-loop
+      // terminates with full coverage.
+      const gated = await waitForStage(store, started.id, ['awaiting_push_confirm']);
+      assert.equal(gated.stage, 'awaiting_push_confirm');
+
+      const intermediate = (gated.intermediateState ?? {}) as Record<string, unknown>;
+      assert.equal(
+        intermediate.traceIterateRetryCount,
+        1,
+        'retry counter incremented exactly once',
+      );
+      assert.equal(protoCounter.value, 2, 'Proto re-ran once (initial + iterate)');
+      assert.equal(traceCounter.value, 2, 'Trace ran twice (initial dryRun + iterate dryRun)');
+      assert.ok(gated.traceOutput, 'traceOutput from final dryRun pass visible at push gate');
+      assert.equal(gated.traceOutput?.testSummary?.uncoveredCriteria?.length, 0);
+    } finally {
+      if (prevPushFlag === undefined) {
+        delete process.env.AUTO_PUSH_AFTER_PROTO;
+      } else {
+        process.env.AUTO_PUSH_AFTER_PROTO = prevPushFlag;
+      }
+    }
+  });
+
+  it('iterate retry exhausted pre-gate → still lands on awaiting_push_confirm', async () => {
+    const prevPushFlag = process.env.AUTO_PUSH_AFTER_PROTO;
+    process.env.AUTO_PUSH_AFTER_PROTO = 'false';
+    process.env.TRACE_MAX_ITERATE_RETRIES = '2';
+    try {
+      const { orchestrator, store, protoCounter } = createFixture({
+        // Always uncovered → iterate-loop hits max retry then hands off to push gate.
+        traceOutputs: [makeUncoveredTrace(), makeUncoveredTrace(), makeUncoveredTrace()],
+      });
+      const started = await orchestrator.startPipeline(
+        'user-1',
+        { idea: 'Reminder app' },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+      await waitForStage(store, started.id, ['awaiting_approval']);
+      await orchestrator.approveSpec(started.id, 'reminder-app', 'private');
+      const gated = await waitForStage(store, started.id, ['awaiting_push_confirm']);
+      assert.equal(gated.stage, 'awaiting_push_confirm');
+
+      const intermediate = (gated.intermediateState ?? {}) as Record<string, unknown>;
+      assert.equal(
+        intermediate.traceIterateRetryCount,
+        2,
+        'retry counter stops at TRACE_MAX_ITERATE_RETRIES',
+      );
+      assert.equal(protoCounter.value, 3, 'Proto runs initial + max retries');
+      assert.ok(gated.traceOutput, 'final (still-uncovered) traceOutput surfaces at gate');
+    } finally {
+      if (prevPushFlag === undefined) {
+        delete process.env.AUTO_PUSH_AFTER_PROTO;
+      } else {
+        process.env.AUTO_PUSH_AFTER_PROTO = prevPushFlag;
+      }
+    }
+  });
+});

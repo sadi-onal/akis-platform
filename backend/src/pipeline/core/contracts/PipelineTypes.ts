@@ -169,6 +169,16 @@ export interface TraceInput {
    * Issue #464 BUG-C.
    */
   imageBlocks?: readonly import('../../../services/ai/multimodalClient.js').AnthropicImageBlock[];
+  /**
+   * PR-F2 (2026-05-19) — Local-files dryRun mode. When `dryRun=true` AND
+   * `inputFiles` is provided, Trace skips the GitHub `listFiles`/`getFileContent`
+   * round-trip entirely and uses the supplied Proto-generated files as the
+   * codebase. Used by the orchestrator to run Trace BEFORE the
+   * `awaiting_push_confirm` gate, so the user sees test coverage on the same
+   * scaffold they're about to confirm. Test execution stays out of scope —
+   * Trace still only writes the test plan + coverage matrix.
+   */
+  inputFiles?: Array<{ filePath: string; content: string }>;
 }
 
 export interface TraceOutput {
