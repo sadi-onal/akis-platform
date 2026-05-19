@@ -3,7 +3,7 @@
  * Uses Pointer Events + setPointerCapture so mouseup over the Sandpack
  * iframe still reaches the handle element (PR-V1, 2026-05-19).
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 export interface UseSplitResizeOptions {
   setPreviewWidth: (next: number) => void;
@@ -50,6 +50,15 @@ export function useSplitResize(options: UseSplitResizeOptions) {
     isDraggingRef.current = false;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (isDraggingRef.current) {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
   }, []);
 
   return {

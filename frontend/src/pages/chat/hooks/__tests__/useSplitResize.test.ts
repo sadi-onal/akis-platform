@@ -33,4 +33,29 @@ describe('useSplitResize', () => {
     expect(result.current.handleDragMove).toBeTypeOf('function');
     expect(result.current.handleDragEnd).toBeTypeOf('function');
   });
+
+  it('clears body styles on unmount if drag is active', () => {
+    const setPreviewWidth = vi.fn();
+    const { result, unmount } = renderHook(() => useSplitResize({ setPreviewWidth }));
+
+    const target = {
+      setPointerCapture: vi.fn(),
+      releasePointerCapture: vi.fn(),
+    } as unknown as HTMLElement;
+
+    act(() => {
+      result.current.handleDragStart({
+        pointerId: 1,
+        currentTarget: target,
+        preventDefault: vi.fn(),
+      } as unknown as React.PointerEvent);
+    });
+
+    expect(document.body.style.cursor).toBe('col-resize');
+
+    unmount();
+
+    expect(document.body.style.cursor).toBe('');
+    expect(document.body.style.userSelect).toBe('');
+  });
 });
