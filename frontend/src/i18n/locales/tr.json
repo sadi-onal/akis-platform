@@ -1110,5 +1110,17 @@
   "docsPage.sections.settings.title": "Ayarlar",
   "docsPage.sections.settings.content": "## Ayarlar\n\n### API Key Yönetimi\n- Her sağlayıcı için ayrı key ekleyebilirsiniz\n- Key'ler AES-256-GCM ile şifrelenerek saklanır\n- Varsayılan sağlayıcınızı seçebilirsiniz\n- Key'leri istediğiniz zaman güncelleyebilir veya silebilirsiniz\n\n### GitHub Bağlantısı\n- OAuth ile giriş yaptıysanız otomatik bağlıdır\n- Bağlantı durumunu Ayarlar sayfasında görebilirsiniz",
   "docsPage.sections.faq.title": "SSS",
-  "docsPage.sections.faq.content": "## Sıkça Sorulan Sorular\n\n### Pipeline ne kadar sürer?\nTipik bir pipeline 2-5 dakika sürer. Karmaşık projeler daha uzun sürebilir.\n\n### Hangi dilleri destekliyor?\nSpec yazımı Türkçe veya İngilizce olabilir. Kod üretimi projenin teknoloji setine göre yapılır.\n\n### Hangi modeli kullanıyor?\nVarsayılan olarak Anthropic Claude Haiku 4.5. Sohbet açılışında Sonnet 4.6 veya Opus 4.7 seçebilirsiniz; sohbet boyunca aynı model kalır (modeli değiştirmek için yeni bir sohbet açın).\n\n### Spec'i düzenleyebilir miyim?\nEvet, Scribe spec ürettikten sonra \"Reddet\" ile düzenleme yapabilir ve tekrar gönderebilirsiniz.\n\n### Mevcut depoma gönderebilir mi?\nEvet, Proto agent mevcut bir depoya yeni dal açarak gönderebilir."
+  "docsPage.sections.faq.content": "## Sıkça Sorulan Sorular\n\n### Pipeline ne kadar sürer?\nTipik bir pipeline 2-5 dakika sürer. Karmaşık projeler daha uzun sürebilir.\n\n### Hangi dilleri destekliyor?\nSpec yazımı Türkçe veya İngilizce olabilir. Kod üretimi projenin teknoloji setine göre yapılır.\n\n### Hangi modeli kullanıyor?\nVarsayılan olarak Anthropic Claude Haiku 4.5. Sohbet açılışında Sonnet 4.6 veya Opus 4.7 seçebilirsiniz; sohbet boyunca aynı model kalır (modeli değiştirmek için yeni bir sohbet açın).\n\n### Spec'i düzenleyebilir miyim?\nEvet, Scribe spec ürettikten sonra \"Reddet\" ile düzenleme yapabilir ve tekrar gönderebilirsiniz.\n\n### Mevcut depoma gönderebilir mi?\nEvet, Proto agent mevcut bir depoya yeni dal açarak gönderebilir.",
+
+  "chat.modeBadge.label.ask": "Soru",
+  "chat.modeBadge.label.plan": "Plan",
+  "chat.modeBadge.label.act": "Yapım",
+  "chat.modeBadge.label.review": "İnceleme",
+  "chat.header.preview": "Önizleme",
+  "pipeline.miniState.pending": "bekliyor",
+  "pipeline.miniState.active": "çalışıyor",
+  "pipeline.miniState.complete": "tamamlandı",
+  "pipeline.cinema.title": "Pipeline akışı",
+  "pipeline.cinema.toggleCompact": "Kompakt görünüm",
+  "pipeline.cinema.toggleWide": "Geniş görünüm"
 }

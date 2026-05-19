@@ -7,9 +7,16 @@ vi.mock('../../../hooks/useReducedMotion', () => ({
 }));
 
 // ConfidenceBadge requires I18nProvider; stub here so the tree renders.
+// PR-T2: cinema header + toggle now read from i18n; mirror the TR strings so
+// the existing regex assertions keep matching real user-facing copy.
+const CINEMA_MESSAGES: Record<string, string> = {
+  'pipeline.cinema.title': 'Pipeline akışı',
+  'pipeline.cinema.toggleCompact': 'Kompakt görünüm',
+  'pipeline.cinema.toggleWide': 'Geniş görünüm',
+};
 vi.mock('../../../i18n/useI18n', () => ({
   useI18n: () => ({
-    t: (key: string) => key,
+    t: (key: string) => CINEMA_MESSAGES[key] ?? key,
     locale: 'tr',
     availableLocales: ['tr', 'en'],
     status: 'ready',
@@ -311,18 +318,14 @@ describe('PipelineCinema component (PR-F 3-column)', () => {
   it('switches button label when in compact mode', () => {
     const onToggle = vi.fn();
     render(
-      <PipelineCinema activities={[]} currentStep={null} compact onToggleCompact={onToggle} />,
+      <PipelineCinema activities={[]} currentStep={null} compact onToggleCompact={onToggle} />
     );
     expect(screen.getByRole('button', { name: /Geniş görünüm/ })).toBeInTheDocument();
   });
 
   it('renders approval slot when provided', () => {
     render(
-      <PipelineCinema
-        activities={[]}
-        currentStep={null}
-        approvalSlot={<button>Onayla</button>}
-      />,
+      <PipelineCinema activities={[]} currentStep={null} approvalSlot={<button>Onayla</button>} />
     );
     expect(screen.getByRole('button', { name: 'Onayla' })).toBeInTheDocument();
   });
@@ -355,9 +358,7 @@ describe('PipelineCinema component (PR-F 3-column)', () => {
 
   it('does NOT render Trace retry badge in steady-state', () => {
     const acts: PipelineActivity[] = [mk({ stage: 'trace', progress: 100 })];
-    const { queryByTestId } = render(
-      <PipelineCinema activities={acts} currentStep={acts[0]!} />,
-    );
+    const { queryByTestId } = render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
     expect(queryByTestId('trace-retry-badge')).toBeNull();
   });
 
@@ -385,12 +386,8 @@ describe('PipelineCinema component (PR-F 3-column)', () => {
   });
 
   it('does NOT render Critic retry badge when no critic iterate-loop activity', () => {
-    const acts: PipelineActivity[] = [
-      mk({ stage: 'proto', progress: 100, message: 'Kod hazır' }),
-    ];
-    const { queryByTestId } = render(
-      <PipelineCinema activities={acts} currentStep={acts[0]!} />,
-    );
+    const acts: PipelineActivity[] = [mk({ stage: 'proto', progress: 100, message: 'Kod hazır' })];
+    const { queryByTestId } = render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
     expect(queryByTestId('critic-retry-badge')).toBeNull();
   });
 
