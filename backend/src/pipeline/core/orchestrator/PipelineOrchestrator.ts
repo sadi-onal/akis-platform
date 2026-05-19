@@ -1711,6 +1711,16 @@ export class PipelineOrchestrator {
           },
         });
         this.emitEvent(pipelineId, 'stage_change', 'awaiting_critic_resolution');
+        // PR-T3 S1: aynı `gate_open` pattern'i — frontend SSE üzerinden
+        // bu transition'ı kaçırmasın diye sentetik bir activity yayınla.
+        emitActivity({
+          pipelineId,
+          stage: 'critic',
+          step: 'gate_open',
+          message: 'Critic kritik bulgu raporladı — kullanıcı kararı bekleniyor',
+          progress: 100,
+          timestamp: new Date().toISOString(),
+        });
         logger.info(
           {
             pipelineId,
