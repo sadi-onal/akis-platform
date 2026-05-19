@@ -69,11 +69,22 @@ export function DisambiguationModal({
   options = DEFAULT_OPTIONS,
 }: DisambiguationModalProps) {
   const firstButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  // PR-U4 H6: remember the element the user was on before the modal opened
+  // so focus returns there when the modal closes — without this the focus
+  // jumps to <body>, dropping screen reader / keyboard users out of the
+  // chat flow entirely.
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
     // Focus the first option when the modal opens (a11y: keyboard users
     // shouldn't have to tab into the dialog).
     firstButtonRef.current?.focus();
+    return () => {
+      // Restore focus on unmount.
+      previouslyFocusedRef.current?.focus?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -81,6 +92,30 @@ export function DisambiguationModal({
       if (e.key === 'Escape') {
         e.preventDefault();
         if (!busy) onCancel();
+        return;
+      }
+      // PR-U4 H6: focus trap — Tab / Shift+Tab cycle inside the dialog.
+      // Previously Tab would escape to the elements behind the backdrop
+      // (chat input, sidebar items, etc), defeating the modal mental model
+      // and leaving keyboard users with no obvious way back.
+      if (e.key !== 'Tab') return;
+      const root = dialogRef.current;
+      if (!root) return;
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute('aria-hidden'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
       }
     }
     window.addEventListener('keydown', onKeyDown);
@@ -102,10 +137,11 @@ export function DisambiguationModal({
         if (e.target === e.currentTarget && !busy) onCancel();
       }}
     >
-      <div className="relative w-full max-w-md rounded-2xl border border-ak-border bg-ak-surface p-5 shadow-2xl">
-        <h2 className="mb-2 text-base font-semibold text-ak-text-primary">
-          Bunu nasıl yapayım?
-        </h2>
+      <div
+        ref={dialogRef}
+        className="relative w-full max-w-md rounded-2xl border border-ak-border bg-ak-surface p-5 shadow-2xl"
+      >
+        <h2 className="mb-2 text-base font-semibold text-ak-text-primary">Bunu nasıl yapayım?</h2>
         <p className="mb-4 text-sm text-ak-text-secondary">
           <span className="italic">“{quoted}”</span> — birden fazla anlama gelebilir.
         </p>
@@ -125,12 +161,8 @@ export function DisambiguationModal({
                 {opt.icon}
               </span>
               <span className="flex flex-col">
-                <span className="text-sm font-medium text-ak-text-primary">
-                  {opt.label}
-                </span>
-                <span className="text-xs text-ak-text-secondary">
-                  {opt.description}
-                </span>
+                <span className="text-sm font-medium text-ak-text-primary">{opt.label}</span>
+                <span className="text-xs text-ak-text-secondary">{opt.description}</span>
               </span>
             </button>
           ))}

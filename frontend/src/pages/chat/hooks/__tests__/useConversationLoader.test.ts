@@ -54,7 +54,7 @@ interface HookProps {
 
 function renderLoader(
   props: HookProps,
-  extra?: { onWorkflowSnapshot?: (w: ReturnType<typeof buildWorkflow>) => void },
+  extra?: { onWorkflowSnapshot?: (w: ReturnType<typeof buildWorkflow>) => void }
 ) {
   const navigate = vi.fn();
   const syncFromStage = vi.fn();
@@ -70,7 +70,7 @@ function renderLoader(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         navigate: navigate as any,
       }),
-    { initialProps: props },
+    { initialProps: props }
   );
   return { rerender, result, unmount, navigate, syncFromStage, onWorkflowSnapshot };
 }
@@ -92,7 +92,8 @@ describe('useConversationLoader', () => {
       expect(result.current.activeWorkflow?.id).toBe('A');
     });
 
-    expect(mockedGet).toHaveBeenCalledWith('A');
+    // PR-U4 H2: workflowsApi.get now accepts an optional `{ signal }` 2nd arg.
+    expect(mockedGet).toHaveBeenCalledWith('A', expect.anything());
     expect(result.current.messages.length).toBeGreaterThan(0);
     expect(syncFromStage).toHaveBeenCalledWith('completed');
     // onWorkflowSnapshot is for the polling path only — initial load doesn't fire it
@@ -127,7 +128,7 @@ describe('useConversationLoader', () => {
 
     await waitFor(() => expect(result.current.activeWorkflow?.id).toBe('B'));
     expect(mockedGet).toHaveBeenCalledTimes(2);
-    expect(mockedGet).toHaveBeenNthCalledWith(2, 'B');
+    expect(mockedGet).toHaveBeenNthCalledWith(2, 'B', expect.anything());
   });
 
   // PR-E bulgu #1: prior behaviour was to keep the old conversation visible
@@ -148,7 +149,7 @@ describe('useConversationLoader', () => {
       () =>
         new Promise((res) => {
           resolveB = res as typeof resolveB;
-        }),
+        })
     );
 
     rerender({ conversationId: 'B' });
@@ -320,7 +321,7 @@ describe('useConversationLoader — polling', () => {
     id: string,
     convLen = 1,
     ts = '2026-05-09T12:00:00.000Z',
-    stage: 'scribe_clarifying' | 'proto_building' | 'trace_testing' = 'proto_building',
+    stage: 'scribe_clarifying' | 'proto_building' | 'trace_testing' = 'proto_building'
   ) {
     return {
       id,
@@ -371,7 +372,7 @@ describe('useConversationLoader — polling', () => {
     const onWorkflowSnapshot = vi.fn();
     const { result, syncFromStage } = renderLoader(
       { conversationId: 'P-1', isConnected: true },
-      { onWorkflowSnapshot },
+      { onWorkflowSnapshot }
     );
 
     // Initial-load promise resolves on next microtask.
@@ -451,7 +452,7 @@ describe('useConversationLoader — polling', () => {
     const onWorkflowSnapshot = vi.fn();
     const { result } = renderLoader(
       { conversationId: 'P-3b', isConnected: true },
-      { onWorkflowSnapshot },
+      { onWorkflowSnapshot }
     );
 
     await flushMicrotasks();
@@ -508,7 +509,7 @@ describe('useConversationLoader — polling', () => {
     mockedGet.mockRejectedValueOnce(new Error('flaky-4'));
     mockedGet.mockRejectedValueOnce(new Error('flaky-5'));
     mockedGet.mockResolvedValueOnce(
-      recovered as unknown as ReturnType<typeof buildRunningWorkflow>,
+      recovered as unknown as ReturnType<typeof buildRunningWorkflow>
     );
 
     const { result } = renderLoader({ conversationId: 'P-5', isConnected: true });

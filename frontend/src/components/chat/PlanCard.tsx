@@ -31,19 +31,46 @@ function PlanIcon({ isChangeRequest }: { isChangeRequest: boolean }) {
   return (
     <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-ak-primary/10 text-ak-primary">
       {isChangeRequest ? (
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+        <svg
+          className="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+          />
         </svg>
       ) : (
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+        <svg
+          className="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"
+          />
         </svg>
       )}
     </div>
   );
 }
 
-export function PlanCard({ plan, version, status, isChangeRequest, onApprove, onReject }: PlanCardProps) {
+export function PlanCard({
+  plan,
+  version,
+  status,
+  isChangeRequest,
+  onApprove,
+  onReject,
+}: PlanCardProps) {
   const [expanded, setExpanded] = useState(status === 'active');
   const isActive = status === 'active';
 
@@ -53,7 +80,7 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
         'relative overflow-hidden rounded-2xl border backdrop-blur-xl transition-all duration-300',
         isActive
           ? 'border-ak-primary/40 bg-gradient-to-br from-ak-surface/90 to-ak-surface-2/70 shadow-xl shadow-ak-primary/10 ring-1 ring-ak-primary/20'
-          : 'border-ak-border-subtle bg-ak-surface-2/40 opacity-75',
+          : 'border-ak-border-subtle bg-ak-surface-2/40 opacity-75'
       )}
     >
       {/* Header */}
@@ -77,7 +104,12 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
         </div>
         {!isActive && (
           <div className="flex flex-shrink-0 items-center gap-2">
-            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', STATUS_COLORS[status])}>
+            <span
+              className={cn(
+                'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                STATUS_COLORS[status]
+              )}
+            >
               {STATUS_LABELS[status]}
             </span>
             <button
@@ -110,18 +142,24 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
               </h4>
               <div className="grid gap-2 sm:grid-cols-2">
                 {(plan as UserFriendlyPlan).features.map((f, i) => (
+                  // PR-U4 M9: compound key for stable identity when features
+                  // are re-ordered (rare today but no extra cost).
                   <div
-                    key={i}
+                    key={`${i}-${f.name.slice(0, 30)}`}
                     className="rounded-lg border border-ak-border-subtle bg-ak-surface/60 p-3 backdrop-blur-sm transition-colors hover:border-ak-primary/30"
                   >
                     <div className="flex items-center gap-2">
                       <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-ak-primary/15 text-[11px] font-semibold text-ak-primary">
                         {i + 1}
                       </span>
-                      <span className="text-sm font-semibold leading-snug text-ak-text-primary">{f.name}</span>
+                      <span className="text-sm font-semibold leading-snug text-ak-text-primary">
+                        {f.name}
+                      </span>
                     </div>
                     {f.description && (
-                      <p className="mt-1.5 text-xs leading-relaxed text-ak-text-secondary">{f.description}</p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-ak-text-secondary">
+                        {f.description}
+                      </p>
                     )}
                   </div>
                 ))}
@@ -135,7 +173,10 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
                     Değişecek Dosyalar
                   </h4>
                   {(plan as ChangePlan).modifiedFiles.map((f, i) => (
-                    <div key={i} className="flex gap-1.5 text-xs text-ak-text-secondary">
+                    <div
+                      key={`${i}-${f.path}`}
+                      className="flex gap-1.5 text-xs text-ak-text-secondary"
+                    >
                       <span className="text-yellow-400">📝</span>
                       <span className="font-mono text-ak-text-primary">{f.path}</span>
                       <span className="text-ak-text-tertiary">— {f.description}</span>
@@ -149,7 +190,7 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
                     Yeni Dosyalar
                   </h4>
                   {(plan as ChangePlan).newFiles.map((f, i) => (
-                    <div key={i} className="flex gap-1.5 text-xs text-ak-text-secondary">
+                    <div key={`${i}-${f}`} className="flex gap-1.5 text-xs text-ak-text-secondary">
                       <span>📄</span>
                       <span className="font-mono text-ak-text-primary">{f}</span>
                     </div>
@@ -168,7 +209,7 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
               <div className="flex flex-wrap gap-1.5">
                 {(plan as UserFriendlyPlan).techChoices.map((t, i) => (
                   <span
-                    key={i}
+                    key={`${i}-${t}`}
                     className="rounded-full border border-ak-primary/20 bg-ak-primary/10 px-3 py-1 text-xs font-medium text-ak-primary"
                   >
                     {t}
@@ -182,8 +223,18 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
           <div className="flex flex-wrap items-center gap-2">
             {'estimatedFiles' in plan && (
               <div className="flex items-center gap-1.5 rounded-lg bg-ak-surface-2/40 px-2.5 py-1.5">
-                <svg className="h-3.5 w-3.5 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                <svg
+                  className="h-3.5 w-3.5 text-ak-text-tertiary"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                  />
                 </svg>
                 <span className="text-xs text-ak-text-secondary">
                   ~{(plan as UserFriendlyPlan).estimatedFiles} dosya
@@ -191,8 +242,18 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
               </div>
             )}
             <div className="flex items-center gap-1.5 rounded-lg bg-ak-surface-2/40 px-2.5 py-1.5">
-              <svg className="h-3.5 w-3.5 text-ak-trace" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="h-3.5 w-3.5 text-ak-trace"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               <span className="text-xs text-ak-text-secondary">
                 {plan.requiresTests ? 'Test yazılacak' : 'Test gerekmiyor'}
@@ -201,7 +262,9 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
           </div>
 
           {plan.testRationale && (
-            <p className="text-xs leading-relaxed italic text-ak-text-tertiary">{plan.testRationale}</p>
+            <p className="text-xs leading-relaxed italic text-ak-text-tertiary">
+              {plan.testRationale}
+            </p>
           )}
         </div>
       )}
@@ -215,10 +278,16 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
               'flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-ak-primary px-4 py-2 text-sm font-semibold text-[color:var(--ak-on-primary)]',
               'hover:brightness-110 hover:-translate-y-px hover:shadow-lg hover:shadow-ak-primary/20',
               'active:translate-y-0 active:brightness-95 transition-all duration-150',
-              'sm:flex-none',
+              'sm:flex-none'
             )}
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
             Onayla
@@ -229,10 +298,16 @@ export function PlanCard({ plan, version, status, isChangeRequest, onApprove, on
               'flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ak-border px-4 py-2 text-sm font-medium text-ak-text-secondary',
               'hover:border-red-400 hover:text-red-400 hover:-translate-y-px',
               'active:translate-y-0 transition-all duration-150',
-              'sm:flex-none',
+              'sm:flex-none'
             )}
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
             İptal
