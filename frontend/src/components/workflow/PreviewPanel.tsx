@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { SandpackProvider, SandpackLayout, SandpackPreview as SandpackPreviewEmbed } from '@codesandbox/sandpack-react';
+import {
+  SandpackProvider,
+  SandpackLayout,
+  SandpackPreview as SandpackPreviewEmbed,
+} from '@codesandbox/sandpack-react';
 import { cn } from '../../utils/cn';
 import { analyzePreviewCapability } from '../../utils/previewStrategy';
 import { akisSandpackTheme } from '../../utils/sandpackTheme';
@@ -54,9 +58,15 @@ interface PreviewPanelProps {
 
 function findMainFile(files: Record<string, string>): string {
   const priorities = [
-    '/src/App.tsx', '/src/App.jsx', '/src/App.js',
-    '/src/main.tsx', '/src/main.jsx', '/src/main.js',
-    '/src/index.tsx', '/src/index.jsx', '/src/index.js',
+    '/src/App.tsx',
+    '/src/App.jsx',
+    '/src/App.js',
+    '/src/main.tsx',
+    '/src/main.jsx',
+    '/src/main.js',
+    '/src/index.tsx',
+    '/src/index.jsx',
+    '/src/index.js',
     '/index.html',
   ];
   for (const p of priorities) {
@@ -113,11 +123,17 @@ function toSandpackFiles(raw: Record<string, string>): Record<string, string> {
   // 2. If no App.tsx in src/, search deeper patterns
   if (!appMapped) {
     const appCandidates = [
-      '/src/pages/index.tsx', '/src/pages/Index.tsx', '/src/pages/Home.tsx',
-      '/src/pages/index.jsx', '/src/pages/Home.jsx',
-      '/src/components/App.tsx', '/src/components/App.jsx',
-      '/app/page.tsx', '/app/page.jsx',
-      '/src/app/App.tsx', '/src/app/App.jsx',
+      '/src/pages/index.tsx',
+      '/src/pages/Index.tsx',
+      '/src/pages/Home.tsx',
+      '/src/pages/index.jsx',
+      '/src/pages/Home.jsx',
+      '/src/components/App.tsx',
+      '/src/components/App.jsx',
+      '/app/page.tsx',
+      '/app/page.jsx',
+      '/src/app/App.tsx',
+      '/src/app/App.jsx',
     ];
     for (const alt of appCandidates) {
       if (out[alt]) {
@@ -130,16 +146,18 @@ function toSandpackFiles(raw: Record<string, string>): Record<string, string> {
 
   // 3. Last resort: if still no /App.tsx, find ANY .tsx/.jsx that exports a component
   if (!appMapped && !out['/App.tsx'] && !out['/App.jsx']) {
-    const tsxFiles = Object.keys(out).filter(k =>
-      (k.endsWith('.tsx') || k.endsWith('.jsx')) &&
-      k !== '/index.tsx' && k !== '/index.jsx' &&
-      !k.includes('main.')
+    const tsxFiles = Object.keys(out).filter(
+      (k) =>
+        (k.endsWith('.tsx') || k.endsWith('.jsx')) &&
+        k !== '/index.tsx' &&
+        k !== '/index.jsx' &&
+        !k.includes('main.')
     );
     if (tsxFiles.length === 1) {
       out['/App.tsx'] = out[tsxFiles[0]];
     } else {
       // Multiple files — pick the one with 'App' or 'Home' or 'Page' in name
-      const best = tsxFiles.find(k => /\/(App|Home|Page|Main|Index)\./i.test(k));
+      const best = tsxFiles.find((k) => /\/(App|Home|Page|Main|Index)\./i.test(k));
       if (best) out['/App.tsx'] = out[best];
       else if (tsxFiles[0]) out['/App.tsx'] = out[tsxFiles[0]];
     }
@@ -163,7 +181,16 @@ function toSandpackFiles(raw: Record<string, string>): Record<string, string> {
   }
 
   // 6. Map src/** → /** for imports to work
-  const srcPrefixes = ['/src/components/', '/src/lib/', '/src/utils/', '/src/hooks/', '/src/types/', '/src/styles/', '/src/context/', '/src/services/'];
+  const srcPrefixes = [
+    '/src/components/',
+    '/src/lib/',
+    '/src/utils/',
+    '/src/hooks/',
+    '/src/types/',
+    '/src/styles/',
+    '/src/context/',
+    '/src/services/',
+  ];
   for (const [key, value] of Object.entries(out)) {
     for (const prefix of srcPrefixes) {
       if (key.startsWith(prefix) && !out[key.replace('/src/', '/')]) {
@@ -219,21 +246,45 @@ function countLines(content: string) {
 function ConsoleEntry({ activity }: { activity: PipelineActivity }) {
   const isError = activity.step === 'error';
   const isComplete = activity.step === 'complete';
-  const time = activity.timestamp ? new Date(activity.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+  const time = activity.timestamp
+    ? new Date(activity.timestamp).toLocaleTimeString('tr-TR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    : '';
 
   return (
-    <div className={cn(
-      'flex gap-2 px-3 py-1 font-mono text-xs leading-relaxed',
-      isError ? 'text-red-400 bg-red-500/5' : isComplete ? 'text-green-400' : 'text-ak-text-secondary',
-    )}>
+    <div
+      className={cn(
+        'flex gap-2 px-3 py-1 font-mono text-xs leading-relaxed',
+        isError
+          ? 'text-red-400 bg-red-500/5'
+          : isComplete
+            ? 'text-green-400'
+            : 'text-ak-text-secondary'
+      )}
+    >
       <span className="flex-shrink-0 text-ak-text-tertiary">{time}</span>
-      <span className={cn(
-        'flex-shrink-0 w-5 text-center',
-        activity.stage === 'scribe' ? 'text-blue-400' :
-        activity.stage === 'proto' ? 'text-orange-400' :
-        activity.stage === 'trace' ? 'text-purple-400' : 'text-ak-text-tertiary',
-      )}>
-        {activity.stage === 'scribe' ? 'S' : activity.stage === 'proto' ? 'P' : activity.stage === 'trace' ? 'T' : '-'}
+      <span
+        className={cn(
+          'flex-shrink-0 w-5 text-center',
+          activity.stage === 'scribe'
+            ? 'text-blue-400'
+            : activity.stage === 'proto'
+              ? 'text-orange-400'
+              : activity.stage === 'trace'
+                ? 'text-purple-400'
+                : 'text-ak-text-tertiary'
+        )}
+      >
+        {activity.stage === 'scribe'
+          ? 'S'
+          : activity.stage === 'proto'
+            ? 'P'
+            : activity.stage === 'trace'
+              ? 'T'
+              : '-'}
       </span>
       <span className="min-w-0 flex-1 break-words">{activity.message}</span>
     </div>
@@ -245,8 +296,18 @@ function NotPreviewable({ reason, repoUrl }: { reason: string; repoUrl?: string 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-ak-surface-2">
-        <svg className="h-7 w-7 text-ak-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
+        <svg
+          className="h-7 w-7 text-ak-text-tertiary"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.5}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25"
+          />
         </svg>
       </div>
       <p className="max-w-sm text-sm leading-relaxed text-ak-text-secondary">{reason}</p>
@@ -265,7 +326,15 @@ function NotPreviewable({ reason, repoUrl }: { reason: string; repoUrl?: string 
 }
 
 /* ── Main Component ───────────────────────── */
-export const PreviewPanel = memo(function PreviewPanel({ files, loading: externalLoading, branch, activities, createdFiles, repoUrl, pushGateProps }: PreviewPanelProps) {
+export const PreviewPanel = memo(function PreviewPanel({
+  files,
+  loading: externalLoading,
+  branch,
+  activities,
+  createdFiles,
+  repoUrl,
+  pushGateProps,
+}: PreviewPanelProps) {
   const [tab, setTab] = useState<PanelTab>('preview');
   const [view, setView] = useState<PreviewView>('web');
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -285,7 +354,7 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
     return analyzePreviewCapability(files);
   }, [files]);
 
-  const sandpackFiles = useMemo(() => files ? toSandpackFiles(files) : null, [files]);
+  const sandpackFiles = useMemo(() => (files ? toSandpackFiles(files) : null), [files]);
 
   // Build file tree structure
   type FileEntry = { path: string; content: string; lines: number };
@@ -311,17 +380,22 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
 
   const showConsole = isInternalUiVisible();
   const tabItems: { id: PanelTab; label: string; icon: string; count?: number }[] = [
-    { id: 'preview', label: 'Onizleme', icon: '▶' },
+    { id: 'preview', label: 'Önizleme', icon: '▶' },
     // Konsol hidden for end users (issue #393). Toggle via ?debug=1, localStorage
     // akis_debug=true, or VITE_SHOW_INTERNAL_UI env at build.
-    ...(showConsole ? [{ id: 'console' as const, label: 'Konsol', icon: '>', count: activities?.length }] : []),
+    ...(showConsole
+      ? [{ id: 'console' as const, label: 'Konsol', icon: '>', count: activities?.length }]
+      : []),
     { id: 'files', label: 'Dosyalar', icon: '📁', count: files ? Object.keys(files).length : 0 },
   ];
 
   // Sandpack template: provides runtime (React, bundler) — our files override its defaults
-  const template = analysis?.framework === 'react' ? 'react-ts' as const
-    : analysis?.framework === 'vue' ? 'vue-ts' as const
-    : 'vanilla-ts' as const;
+  const template =
+    analysis?.framework === 'react'
+      ? ('react-ts' as const)
+      : analysis?.framework === 'vue'
+        ? ('vue-ts' as const)
+        : ('vanilla-ts' as const);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-ak-surface">
@@ -336,16 +410,20 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
                 'relative flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors',
                 tab === t.id
                   ? 'text-ak-text-primary'
-                  : 'text-ak-text-tertiary hover:text-ak-text-secondary',
+                  : 'text-ak-text-tertiary hover:text-ak-text-secondary'
               )}
             >
               <span className="font-mono text-[10px]">{t.icon}</span>
               {t.label}
               {t.count != null && t.count > 0 && (
-                <span className={cn(
-                  'rounded-full px-1.5 py-0.5 text-[9px] font-bold',
-                  tab === t.id ? 'bg-ak-primary/20 text-ak-primary' : 'bg-ak-surface-2 text-ak-text-tertiary',
-                )}>
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 py-0.5 text-[9px] font-bold',
+                    tab === t.id
+                      ? 'bg-ak-primary/20 text-ak-primary'
+                      : 'bg-ak-surface-2 text-ak-text-tertiary'
+                  )}
+                >
                   {t.count}
                 </span>
               )}
@@ -365,23 +443,39 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
               title="Yenile"
               className="flex h-6 w-6 items-center justify-center rounded text-ak-text-tertiary hover:bg-ak-surface-2 hover:text-ak-text-secondary transition-colors"
             >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.8}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+                />
               </svg>
             </button>
             <div className="flex rounded-md border border-ak-border bg-ak-surface-2 p-0.5">
               <button
                 onClick={() => setView('web')}
-                className={cn('rounded px-2 py-0.5 text-[10px] font-medium transition-colors',
-                  view === 'web' ? 'bg-ak-primary/20 text-ak-primary' : 'text-ak-text-tertiary hover:text-ak-text-secondary',
+                className={cn(
+                  'rounded px-2 py-0.5 text-[10px] font-medium transition-colors',
+                  view === 'web'
+                    ? 'bg-ak-primary/20 text-ak-primary'
+                    : 'text-ak-text-tertiary hover:text-ak-text-secondary'
                 )}
               >
                 Web
               </button>
               <button
                 onClick={() => setView('mobile')}
-                className={cn('rounded px-2 py-0.5 text-[10px] font-medium transition-colors',
-                  view === 'mobile' ? 'bg-ak-primary/20 text-ak-primary' : 'text-ak-text-tertiary hover:text-ak-text-secondary',
+                className={cn(
+                  'rounded px-2 py-0.5 text-[10px] font-medium transition-colors',
+                  view === 'mobile'
+                    ? 'bg-ak-primary/20 text-ak-primary'
+                    : 'text-ak-text-tertiary hover:text-ak-text-secondary'
                 )}
               >
                 Mobile
@@ -398,18 +492,25 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-ak-surface gap-3">
               <div className="relative h-8 w-8">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-ak-primary border-t-transparent" />
-                <span className="absolute inset-0 flex items-center justify-center text-xs">⚡</span>
+                <span className="absolute inset-0 flex items-center justify-center text-xs">
+                  ⚡
+                </span>
               </div>
               <p className="text-sm font-medium text-ak-text-secondary">Dosyalar getiriliyor...</p>
               <div className="mt-1 h-1 w-32 overflow-hidden rounded-full bg-ak-border">
-                <div className="h-full rounded-full bg-ak-primary/50" style={{ width: '30%', animation: 'pulse 2s ease-in-out infinite' }} />
+                <div
+                  className="h-full rounded-full bg-ak-primary/50"
+                  style={{ width: '30%', animation: 'pulse 2s ease-in-out infinite' }}
+                />
               </div>
             </div>
           )}
 
           {!files && !externalLoading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-ak-surface gap-2 text-center">
-              <p className="text-xs text-ak-text-tertiary">Henüz dosya yok. Proto tamamlandığında preview burada görünecek.</p>
+              <p className="text-xs text-ak-text-tertiary">
+                Henüz dosya yok. Proto tamamlandığında preview burada görünecek.
+              </p>
             </div>
           )}
 
@@ -441,14 +542,19 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
               <div
                 className={cn(
                   'akis-sandpack-wrapper',
-                  view === 'mobile' ? 'mx-auto max-w-sm h-full p-3' : 'h-full w-full',
+                  view === 'mobile' ? 'mx-auto max-w-sm h-full p-3' : 'h-full w-full'
                 )}
               >
                 <div
                   className="h-full w-full overflow-hidden"
-                  style={view === 'mobile'
-                    ? { border: '4px solid var(--ak-border)', borderRadius: 24, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }
-                    : undefined
+                  style={
+                    view === 'mobile'
+                      ? {
+                          border: '4px solid var(--ak-border)',
+                          borderRadius: 24,
+                          boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+                        }
+                      : undefined
                   }
                 >
                   <SandpackProvider
@@ -484,9 +590,11 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
       {tab === 'console' && (
         <div className="flex flex-1 flex-col overflow-hidden bg-ak-bg">
           <div className="flex-1 overflow-y-auto py-2">
-            {(!activities || activities.length === 0) ? (
+            {!activities || activities.length === 0 ? (
               <div className="flex h-full items-center justify-center">
-                <p className="font-mono text-xs text-ak-text-tertiary">Pipeline başlatıldığında loglar burada görünecek...</p>
+                <p className="font-mono text-xs text-ak-text-tertiary">
+                  Pipeline başlatıldığında loglar burada görünecek...
+                </p>
               </div>
             ) : (
               <>
@@ -524,40 +632,59 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
                       onClick={() => setSelectedFile(f.path)}
                       className={cn(
                         'flex w-full items-center gap-2 px-3 py-1 text-left text-xs transition-colors',
-                        selectedFile === f.path ? 'bg-ak-primary/10 text-ak-primary' : 'text-ak-text-secondary hover:bg-ak-surface-2',
+                        selectedFile === f.path
+                          ? 'bg-ak-primary/10 text-ak-primary'
+                          : 'text-ak-text-secondary hover:bg-ak-surface-2'
                       )}
                     >
-                      <span className="flex-shrink-0 font-mono text-[9px] font-bold" style={{ color: icon.color }}>{icon.icon}</span>
+                      <span
+                        className="flex-shrink-0 font-mono text-[9px] font-bold"
+                        style={{ color: icon.color }}
+                      >
+                        {icon.icon}
+                      </span>
                       <span className="truncate font-mono">{f.path}</span>
-                      <span className="ml-auto flex-shrink-0 text-[10px] text-ak-text-tertiary">{f.lines}L</span>
+                      <span className="ml-auto flex-shrink-0 text-[10px] text-ak-text-tertiary">
+                        {f.lines}L
+                      </span>
                     </button>
                   );
                 })}
-                {fileTree.folders && [...fileTree.folders.entries()].map(([folder, folderFiles]) => (
-                  <div key={folder}>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-ak-text-tertiary">
-                      <span>📂</span> {folder}
+                {fileTree.folders &&
+                  [...fileTree.folders.entries()].map(([folder, folderFiles]) => (
+                    <div key={folder}>
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-ak-text-tertiary">
+                        <span>📂</span> {folder}
+                      </div>
+                      {folderFiles.map((f) => {
+                        const icon = getFileIcon(f.path);
+                        const fileName = f.path.split('/').pop();
+                        return (
+                          <button
+                            key={f.path}
+                            onClick={() => setSelectedFile(f.path)}
+                            className={cn(
+                              'flex w-full items-center gap-2 pl-6 pr-3 py-1 text-left text-xs transition-colors',
+                              selectedFile === f.path
+                                ? 'bg-ak-primary/10 text-ak-primary'
+                                : 'text-ak-text-secondary hover:bg-ak-surface-2'
+                            )}
+                          >
+                            <span
+                              className="flex-shrink-0 font-mono text-[9px] font-bold"
+                              style={{ color: icon.color }}
+                            >
+                              {icon.icon}
+                            </span>
+                            <span className="truncate font-mono">{fileName}</span>
+                            <span className="ml-auto flex-shrink-0 text-[10px] text-ak-text-tertiary">
+                              {f.lines}L
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    {folderFiles.map((f) => {
-                      const icon = getFileIcon(f.path);
-                      const fileName = f.path.split('/').pop();
-                      return (
-                        <button
-                          key={f.path}
-                          onClick={() => setSelectedFile(f.path)}
-                          className={cn(
-                            'flex w-full items-center gap-2 pl-6 pr-3 py-1 text-left text-xs transition-colors',
-                            selectedFile === f.path ? 'bg-ak-primary/10 text-ak-primary' : 'text-ak-text-secondary hover:bg-ak-surface-2',
-                          )}
-                        >
-                          <span className="flex-shrink-0 font-mono text-[9px] font-bold" style={{ color: icon.color }}>{icon.icon}</span>
-                          <span className="truncate font-mono">{fileName}</span>
-                          <span className="ml-auto flex-shrink-0 text-[10px] text-ak-text-tertiary">{f.lines}L</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
+                  ))}
               </>
             ) : (
               <div className="flex h-full items-center justify-center px-4">
@@ -570,17 +697,28 @@ export const PreviewPanel = memo(function PreviewPanel({ files, loading: externa
             {selectedFile && files?.[selectedFile] ? (
               <>
                 <div className="flex items-center gap-2 border-b border-ak-border bg-ak-surface px-3 py-1.5">
-                  <span className="font-mono text-[9px] font-bold" style={{ color: getFileIcon(selectedFile).color }}>
+                  <span
+                    className="font-mono text-[9px] font-bold"
+                    style={{ color: getFileIcon(selectedFile).color }}
+                  >
                     {getFileIcon(selectedFile).icon}
                   </span>
-                  <span className="truncate font-mono text-xs text-ak-text-primary">{selectedFile}</span>
-                  <span className="ml-auto text-[10px] text-ak-text-tertiary">{countLines(files[selectedFile])} satir</span>
+                  <span className="truncate font-mono text-xs text-ak-text-primary">
+                    {selectedFile}
+                  </span>
+                  <span className="ml-auto text-[10px] text-ak-text-tertiary">
+                    {countLines(files[selectedFile])} satir
+                  </span>
                 </div>
                 <pre className="flex-1 overflow-auto p-3 font-mono text-xs leading-relaxed text-ak-text-secondary">
                   {files[selectedFile].split('\n').map((line, i) => (
                     <div key={i} className="flex">
-                      <span className="mr-4 inline-block w-8 flex-shrink-0 text-right text-ak-text-tertiary select-none">{i + 1}</span>
-                      <span className="min-w-0 flex-1 whitespace-pre-wrap break-all">{line || ' '}</span>
+                      <span className="mr-4 inline-block w-8 flex-shrink-0 text-right text-ak-text-tertiary select-none">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 whitespace-pre-wrap break-all">
+                        {line || ' '}
+                      </span>
                     </div>
                   ))}
                 </pre>

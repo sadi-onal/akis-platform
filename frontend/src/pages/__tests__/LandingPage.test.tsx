@@ -28,15 +28,23 @@ vi.mock('../../theme/brand', () => ({
 // Mock framer-motion so animation props don't break jsdom rendering
 vi.mock('framer-motion', async () => {
   const ANIMATION_PROPS = new Set([
-    'initial', 'animate', 'whileInView', 'whileHover', 'whileTap',
-    'viewport', 'transition', 'variants', 'custom', 'exit',
-    'onAnimationComplete', 'layout', 'layoutId',
+    'initial',
+    'animate',
+    'whileInView',
+    'whileHover',
+    'whileTap',
+    'viewport',
+    'transition',
+    'variants',
+    'custom',
+    'exit',
+    'onAnimationComplete',
+    'layout',
+    'layoutId',
   ]);
 
   function filterProps(props: Record<string, unknown>) {
-    return Object.fromEntries(
-      Object.entries(props).filter(([k]) => !ANIMATION_PROPS.has(k)),
-    );
+    return Object.fromEntries(Object.entries(props).filter(([k]) => !ANIMATION_PROPS.has(k)));
   }
 
   const motionProxy = new Proxy(
@@ -46,13 +54,17 @@ vi.mock('framer-motion', async () => {
         const Component = React.forwardRef<HTMLElement, Record<string, unknown>>(
           ({ children, ...rest }, ref) => {
             const Tag = tag as keyof React.JSX.IntrinsicElements;
-            return React.createElement(Tag, { ...filterProps(rest), ref } as Record<string, unknown>, children as React.ReactNode);
-          },
+            return React.createElement(
+              Tag,
+              { ...filterProps(rest), ref } as Record<string, unknown>,
+              children as React.ReactNode
+            );
+          }
         );
         Component.displayName = `motion.${tag}`;
         return Component;
       },
-    },
+    }
   );
 
   return {
@@ -94,12 +106,12 @@ describe('LandingPage', () => {
     expect(logos.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders the "Giris Yap" button', () => {
+  it('renders the "Giriş Yap" button', () => {
     renderWithRouter(<LandingPage />);
-    expect(screen.getByText('Giris Yap')).toBeInTheDocument();
+    expect(screen.getByText('Giriş Yap')).toBeInTheDocument();
   });
 
-  it('renders the "Dokumantasyon" link in the nav', () => {
+  it('renders the "Dokümantasyon" link in the nav', () => {
     renderWithRouter(<LandingPage />);
     const docButtons = screen.getAllByText(/Dok[uü]mantasyon/);
     expect(docButtons.length).toBeGreaterThanOrEqual(1);
@@ -110,30 +122,30 @@ describe('LandingPage', () => {
     expect(screen.getByText('Hemen Deneyin')).toBeInTheDocument();
   });
 
-  it('renders the "Ucretsiz Basla" button', () => {
+  it('renders the "Ücretsiz Başla" button', () => {
     renderWithRouter(<LandingPage />);
-    expect(screen.getByText('Ucretsiz Basla')).toBeInTheDocument();
+    expect(screen.getByText('Ücretsiz Başla')).toBeInTheDocument();
   });
 
-  it('renders the footer with FSMVU text', () => {
+  it('renders the footer with FSMVÜ text', () => {
     renderWithRouter(<LandingPage />);
-    expect(screen.getByText(/FSMVU Bitirme Projesi/)).toBeInTheDocument();
+    expect(screen.getByText(/FSMVÜ Bitirme Projesi/)).toBeInTheDocument();
   });
 
   it('renders the footer author line', () => {
     renderWithRouter(<LandingPage />);
-    expect(screen.getByText(/Omer Yasir Onal/)).toBeInTheDocument();
+    expect(screen.getByText(/Ömer Yasir Önal/)).toBeInTheDocument();
   });
 
-  it('"Giris Yap" button calls navigate to /login', () => {
+  it('"Giriş Yap" button calls navigate to /login', () => {
     renderWithRouter(<LandingPage />);
-    screen.getByText('Giris Yap').click();
+    screen.getByText('Giriş Yap').click();
     expect(navigateMock).toHaveBeenCalledWith('/login');
   });
 
-  it('"Ucretsiz Basla" button calls navigate to /signup', () => {
+  it('"Ücretsiz Başla" button calls navigate to /signup', () => {
     renderWithRouter(<LandingPage />);
-    screen.getByText('Ucretsiz Basla').click();
+    screen.getByText('Ücretsiz Başla').click();
     expect(navigateMock).toHaveBeenCalledWith('/signup');
   });
 });
@@ -167,9 +179,7 @@ describe('HeroSection', () => {
 
   it('renders a subtitle that mentions Scribe, Proto, and Trace', () => {
     renderWithRouter(<HeroSection />);
-    expect(
-      screen.getByText(/Scribe, Proto, Trace/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Scribe, Proto, Trace/)).toBeInTheDocument();
   });
 
   it('renders Scribe, Proto, and Trace badges', () => {

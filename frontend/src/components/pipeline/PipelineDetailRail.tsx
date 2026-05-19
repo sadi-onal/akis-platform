@@ -231,8 +231,7 @@ export function PipelineDetailRail({
   // gate is immediately reachable — otherwise the user lands on Açıklama
   // (where we no longer surface the gates) and has to click around to find
   // the resolve button.
-  const autoTab: Tab =
-    isRunning(uiState) || pushGateActive || criticGateActive ? 'flow' : 'why';
+  const autoTab: Tab = isRunning(uiState) || pushGateActive || criticGateActive ? 'flow' : 'why';
   const effectiveCollapsed = collapsed ?? autoCollapsed;
   const effectiveTab = tab ?? autoTab;
 
@@ -413,11 +412,7 @@ export function PipelineDetailRail({
     const base = 'h-1.5 w-1.5 rounded-full';
     if (state === 'pending') return `${base} bg-ak-border opacity-60`;
     const colour =
-      stage === 'scribe'
-        ? 'bg-ak-scribe'
-        : stage === 'proto'
-          ? 'bg-ak-proto'
-          : 'bg-ak-trace';
+      stage === 'scribe' ? 'bg-ak-scribe' : stage === 'proto' ? 'bg-ak-proto' : 'bg-ak-trace';
     return `${base} ${colour} ${state === 'active' ? 'animate-pulse' : ''}`;
   };
 
@@ -504,17 +499,20 @@ export function PipelineDetailRail({
           )}
         </div>
         {!effectiveCollapsed && attentionPoints.length > 0 && (
-          <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${
+          <button
+            type="button"
+            onClick={() => setTab('flow')}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
               highSevCount > 0
-                ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
-                : 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 hover:bg-rose-500/20 dark:text-rose-300'
+                : 'border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300'
             }`}
-            aria-label={`${attentionPoints.length} dikkat noktası`}
+            aria-label={`${attentionPoints.length} dikkat noktası — Akış sekmesinde göster`}
+            title="Akış sekmesine geç ve dikkat noktalarını görüntüle"
           >
             <span aria-hidden="true">!</span>
             {attentionPoints.length} dikkat noktası
-          </span>
+          </button>
         )}
       </header>
       {!effectiveCollapsed && (
