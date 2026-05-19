@@ -6,7 +6,6 @@ import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ChatHeader } from './ChatHeader';
-import { ModelPicker } from './ModelPicker';
 import { EmptyState } from './EmptyState';
 import { ChatSkeleton } from './ChatSkeleton';
 import { ClarificationCard } from './ClarificationCard';
@@ -513,76 +512,9 @@ export const ChatPanel = memo(function ChatPanel({
       {/* Repo selector slot */}
       {repoSelectorSlot && <div className="px-4 py-2">{repoSelectorSlot}</div>}
 
-      {/* Trace toggle + model picker — width aligned with ChatInput's max-w container */}
-      {(onTraceToggle || onModelChange) && (
-        <div className="mx-auto w-full max-w-4xl px-3 pt-1 sm:px-6 md:max-w-5xl xl:max-w-6xl">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            {onTraceToggle && (
-              <div
-                className="flex items-center gap-2"
-                data-testid="trace-toggle"
-                title={
-                  traceEnabled
-                    ? 'Trace açık — Proto kodu üretildikten sonra Playwright testleri otomatik yazılacak'
-                    : 'Trace kapalı — sadece kod üretilecek, test yazılmayacak'
-                }
-              >
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={traceEnabled}
-                  aria-label={
-                    traceEnabled
-                      ? 'Trace açık — testler üretilecek'
-                      : 'Trace kapalı — sadece kod üretilecek'
-                  }
-                  onClick={() => onTraceToggle(!traceEnabled)}
-                  className={cn(
-                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ak-primary focus-visible:ring-offset-2',
-                    traceEnabled ? 'bg-ak-primary' : 'bg-ak-border'
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
-                      traceEnabled ? 'translate-x-4' : 'translate-x-0'
-                    )}
-                  />
-                </button>
-                <div className="flex flex-col">
-                  <span
-                    className={cn(
-                      'text-xs font-medium transition-colors',
-                      traceEnabled ? 'text-ak-primary' : 'text-ak-text-tertiary'
-                    )}
-                    data-testid="trace-toggle-label"
-                  >
-                    {traceEnabled ? 'Trace açık — testler üretilecek' : 'Trace kapalı — sadece kod'}
-                  </span>
-                  <span className="text-[10px] text-ak-text-tertiary">
-                    {traceEnabled
-                      ? 'Kod sonrası Playwright testleri otomatik yazılır'
-                      : 'Trace agent çalışmayacak'}
-                  </span>
-                </div>
-              </div>
-            )}
-            {onTraceToggle && onModelChange && (
-              <span aria-hidden="true" className="hidden h-6 w-px bg-ak-border-subtle sm:block" />
-            )}
-            {onModelChange && (
-              <ModelPicker
-                value={model}
-                onSelect={onModelChange}
-                providerHint={modelProviderHint}
-                locked={modelLocked}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Input */}
+      {/* Input — PR-V7: Trace toggle + model picker now render as compact chips
+          INSIDE the composer's bottom-left, reclaiming ~50px of vertical space
+          that the dedicated footer bar used to consume. */}
       {conversationId && (
         <ChatInput
           onSend={onSend}
@@ -591,6 +523,12 @@ export const ChatPanel = memo(function ChatPanel({
           isSending={isSending}
           showCancel={showCancelButton}
           placeholder={inputPlaceholder}
+          onTraceToggle={onTraceToggle}
+          traceEnabled={traceEnabled}
+          model={model}
+          onModelChange={onModelChange}
+          modelProviderHint={modelProviderHint}
+          modelLocked={modelLocked}
         />
       )}
     </div>
