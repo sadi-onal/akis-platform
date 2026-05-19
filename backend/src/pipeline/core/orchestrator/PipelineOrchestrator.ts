@@ -2915,7 +2915,8 @@ export class PipelineOrchestrator {
           pipelineId,
           stage: 'trace',
           step: 'gate_open',
-          message: 'Push gate açıldı — Trace üretimi başarısız oldu, gönderim öncesi onay gerekli',
+          message:
+            'Gönderim onayı bekleniyor — Trace üretimi başarısız oldu, yine de göndermek için onay verin',
           progress: 100,
           timestamp: new Date().toISOString(),
         });
@@ -3168,7 +3169,7 @@ export class PipelineOrchestrator {
         pipelineId,
         stage: 'trace',
         step: 'gate_open',
-        message: 'Push gate açıldı — inceleyin ve gönderin',
+        message: 'Gönderim onayı bekleniyor — inceleyin ve onaylayın',
         progress: 100,
         timestamp: new Date().toISOString(),
       });
@@ -3225,12 +3226,12 @@ export class PipelineOrchestrator {
       }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
     }
 
-    // Pipeline tamamlanma sinyali
+    // Akış tamamlanma sinyali (PR-U5: "Pipeline" → "Akış" user-visible)
     emitActivity({
       pipelineId,
       stage: 'trace',
       step: 'pipeline_complete',
-      message: 'Pipeline başarıyla tamamlandı',
+      message: 'Akış başarıyla tamamlandı',
       progress: 100,
       timestamp: new Date().toISOString(),
     });
