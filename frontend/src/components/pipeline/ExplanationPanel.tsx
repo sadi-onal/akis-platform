@@ -5,10 +5,12 @@ import type {
   ReasoningFinding,
   AcCoverageReport,
 } from '../../types/pipeline';
+import type { StructuredSpec } from '../../types/workflow';
 import { workflowsApi } from '../../services/api/workflows';
 import { useI18n } from '../../i18n/useI18n';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { AcCoverageChecklist } from './AcCoverageChecklist';
+import { ScribeOutputDisclosures } from './ScribeOutputDisclosures';
 
 // Hard ceiling enforced by the backend feedback schema (B5,
 // `IterateFeedbackRequestSchema.feedback.max(2000)`). We mirror it
@@ -370,6 +372,19 @@ export interface ExplanationPanelProps {
    * list. Sourced from `pipeline.intermediateState.acCoverage` by the host.
    */
   acCoverage?: AcCoverageReport;
+  /**
+   * PR-V6: when provided, the Scribe reasoning card renders disclosures for
+   * the full structured spec (problem statement, AC, user stories,
+   * out-of-scope) below the standard reasoning bullets. The host typically
+   * passes `workflow.stages.scribe.spec` here. Optional so older callers +
+   * pipelines without an approved spec keep working untouched.
+   */
+  scribeSpec?: StructuredSpec | null;
+  /**
+   * PR-V6: Scribe assumptions surfaced alongside `scribeSpec` through the
+   * same disclosure UI.
+   */
+  scribeAssumptions?: string[] | null;
 }
 
 const AGENT_LABEL: Record<string, string> = {
@@ -419,6 +434,13 @@ interface ReasoningCardProps {
    * bullets when omitted, so existing callers + tests stay green.
    */
   acCoverage?: AcCoverageReport;
+  /**
+   * PR-V6: rendered inside the Scribe card when supplied. Lets the user
+   * expand the full structured spec content (AC, user stories, etc.).
+   */
+  scribeSpec?: StructuredSpec | null;
+  /** PR-V6: assumptions surfaced through the same disclosure UI. */
+  scribeAssumptions?: string[] | null;
 }
 
 function ReasoningCard({
@@ -429,9 +451,15 @@ function ReasoningCard({
   onIterationStarted,
   iterateWithFeedback,
   acCoverage,
+  scribeSpec,
+  scribeAssumptions,
 }: ReasoningCardProps) {
   const hasStructuredFindings = !!stage.findings && stage.findings.length > 0;
   const showAcChecklist = stage.agentName === 'proto' && !!acCoverage && acCoverage.totalAcs > 0;
+  // PR-V6: only the Scribe card renders the structured-spec disclosures.
+  const showScribeOutputs =
+    stage.agentName === 'scribe' &&
+    (!!scribeSpec || (!!scribeAssumptions && scribeAssumptions.length > 0));
   const hasDetail =
     stage.assumptions.length > 0 ||
     (stage.alternatives && stage.alternatives.length > 0) ||
@@ -487,6 +515,17 @@ function ReasoningCard({
             ))}
           </ul>
         )
+      )}
+      {/* PR-V6: surface the full Scribe spec (problem, AC, user stories,
+          out-of-scope, assumptions) inside the Scribe stage card. The host
+          threads `workflow.stages.scribe.spec` through; for other agents
+          this block is dormant. */}
+      {showScribeOutputs && (
+        <ScribeOutputDisclosures
+          spec={scribeSpec}
+          assumptions={scribeAssumptions}
+          className="mt-2"
+        />
       )}
       {hasDetail && (
         <button
@@ -551,6 +590,8 @@ export function ExplanationPanel({
   onIterationStarted,
   iterateWithFeedback,
   acCoverage,
+  scribeSpec,
+  scribeAssumptions,
 }: ExplanationPanelProps) {
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(priming ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -655,6 +696,8 @@ export function ExplanationPanel({
             onIterationStarted={onIterationStarted}
             iterateWithFeedback={iterateWithFeedback}
             acCoverage={acCoverage}
+            scribeSpec={scribeSpec}
+            scribeAssumptions={scribeAssumptions}
           />
         ))}
       </div>

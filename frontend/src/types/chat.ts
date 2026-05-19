@@ -72,6 +72,12 @@ export type ChatMessage =
       version: number;
       status: 'active' | 'edited' | 'approved' | 'rejected' | 'cancelled';
       spec?: StructuredSpec;
+      /**
+       * PR-V6 — Scribe assumptions surfaced alongside the structured spec so
+       * the PlanCard can render them as a `<details>` disclosure. Optional
+       * since older conversation rows + change-plan messages don't carry it.
+       */
+      assumptions?: string[];
       timestamp: string;
     }
   | { type: 'file_created'; path: string; repo: string; timestamp: string }

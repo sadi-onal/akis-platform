@@ -98,6 +98,14 @@ export interface PipelineDetailRailProps {
    * gate can render in success/failed/pending mode.
    */
   traceDryRunStatus?: 'success' | 'failed' | 'pending';
+  /**
+   * PR-V6 — full Scribe structured spec from `workflow.stages.scribe.spec`.
+   * Forwarded to ExplanationPanel so the Scribe reasoning card surfaces
+   * AC / user stories / problem statement / out-of-scope as disclosures.
+   */
+  scribeSpec?: import('../../types/workflow').StructuredSpec | null;
+  /** PR-V6 — assumption list rendered alongside the spec disclosures. */
+  scribeAssumptions?: string[] | null;
   className?: string;
 }
 
@@ -197,6 +205,8 @@ export function PipelineDetailRail({
   onCriticResolved,
   acCoverage,
   traceDryRunStatus,
+  scribeSpec,
+  scribeAssumptions,
   className,
   // onPushResolved is accepted in the interface so callers can keep
   // passing it (it's still consumed by the T1 PushGateFooter render path,
@@ -707,6 +717,8 @@ export function PipelineDetailRail({
                   hideAttentionBanner
                   onIterationStarted={onCriticResolved}
                   acCoverage={acCoverage}
+                  scribeSpec={scribeSpec}
+                  scribeAssumptions={scribeAssumptions}
                 />
               )}
             </>

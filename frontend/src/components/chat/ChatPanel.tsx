@@ -104,6 +104,15 @@ interface ChatPanelProps {
    * can render success/failed/pending banners.
    */
   traceDryRunStatus?: 'success' | 'failed' | 'pending';
+  /**
+   * PR-V6: full Scribe structured spec from `workflow.stages.scribe.spec`.
+   * Threaded through to PipelineDetailRail → ExplanationPanel so the Scribe
+   * reasoning card surfaces AC, user stories, problem statement, and
+   * out-of-scope as `<details>` disclosures.
+   */
+  scribeSpec?: import('../../types/workflow').StructuredSpec | null;
+  /** PR-V6: assumption list shown alongside the spec disclosures. */
+  scribeAssumptions?: string[] | null;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -154,6 +163,8 @@ export const ChatPanel = memo(function ChatPanel({
   onCriticResolved,
   acCoverage,
   traceDryRunStatus,
+  scribeSpec,
+  scribeAssumptions,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -265,6 +276,8 @@ export const ChatPanel = memo(function ChatPanel({
           onCriticResolved={onCriticResolved}
           acCoverage={acCoverage}
           traceDryRunStatus={traceDryRunStatus}
+          scribeSpec={scribeSpec}
+          scribeAssumptions={scribeAssumptions}
         />
       )}
 
