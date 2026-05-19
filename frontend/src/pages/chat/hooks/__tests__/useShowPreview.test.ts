@@ -176,6 +176,30 @@ describe('useShowPreview', () => {
       result.current.handleDragEnd(pointerEvent(1, target, 950));
     });
   });
+
+  // ─── PR-V9 deferred-coverage notes (test sweep, 2026-05-19) ────────────
+  //
+  // The PR-V9 fix (session reset on sessionId change) lives on the
+  // `pr-v9-preview-session-leak` branch; the V9 happy-path tests there
+  // cover sessionId transitions. The two tests below pin the *current*
+  // hook contract on main so a future regression — or a botched rebase
+  // that loses the V9 logic — surfaces immediately.
+
+  it('setShowPreview is idempotent for repeated `true` calls (no extra renders observable)', () => {
+    const { result } = renderHook(() => useShowPreview());
+    act(() => result.current.setShowPreview(true));
+    expect(result.current.showPreview).toBe(true);
+    act(() => result.current.setShowPreview(true));
+    expect(result.current.showPreview).toBe(true);
+  });
+
+  it('previewWidth stays at initial value when no drag has occurred', () => {
+    const { result } = renderHook(() => useShowPreview({ initialPreviewWidth: 42 }));
+    expect(result.current.previewWidth).toBe(42);
+    // Just toggling showPreview must not perturb previewWidth.
+    act(() => result.current.setShowPreview(true));
+    expect(result.current.previewWidth).toBe(42);
+  });
 });
 
 describe('useShowPreview session leak fix (PR-V9)', () => {

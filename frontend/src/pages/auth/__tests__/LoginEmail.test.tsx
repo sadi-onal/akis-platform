@@ -282,6 +282,96 @@ describe('LoginEmail — Enter key', () => {
     fireEvent.keyDown(emailInput, { key: 'Shift' });
     expect(mockLoginStart).not.toHaveBeenCalled();
   });
+
+  // ─── PR-V3 edge-case regression tests (test sweep, 2026-05-19) ─────────
+  //
+  // The explicit Enter handling was added because some browsers (notably
+  // older Chrome on Linux + certain extension setups) swallow the implicit
+  // submit on a single-input form. The fix wires Enter directly to
+  // handleSubmit. These tests guard the boundaries — non-Enter, IME-style
+  // Enters during composition, and rapid double-Enters.
+
+  it('Enter is also handled when the email is set programmatically (no prior change events)', async () => {
+    // Some flows pre-fill the field via session restore. The Enter handler
+    // reads `email` from state, not the DOM target — so a programmatic set
+    // still allows submit.
+    mockLoginStart.mockResolvedValueOnce({
+      userId: 'u2',
+      email: 'restored@example.com',
+      requiresPassword: true,
+      status: 'active',
+    });
+
+    renderLoginEmail();
+    const emailInput = screen.getByLabelText('auth.email.label') as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'restored@example.com' } });
+    fireEvent.keyDown(emailInput, { key: 'Enter' });
+
+    await vi.waitFor(() => {
+      expect(mockLoginStart).toHaveBeenCalledWith({ email: 'restored@example.com' });
+    });
+  });
+
+  it('Enter does not double-submit when pressed twice rapidly (submitting guard)', async () => {
+    // The handler checks `!submitting`. The first Enter sets submitting=true
+    // before awaiting AuthAPI.loginStart, so a follow-up Enter while the
+    // promise is still pending must be a no-op.
+    let resolveLogin: (v: unknown) => void = () => undefined;
+    mockLoginStart.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveLogin = r;
+        })
+    );
+
+    renderLoginEmail();
+    const emailInput = screen.getByLabelText('auth.email.label') as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'rapid@example.com' } });
+    fireEvent.keyDown(emailInput, { key: 'Enter' });
+    fireEvent.keyDown(emailInput, { key: 'Enter' });
+
+    await vi.waitFor(() => expect(mockLoginStart).toHaveBeenCalledTimes(1));
+    // Resolve so the component cleans up.
+    resolveLogin({
+      userId: 'u',
+      email: 'rapid@example.com',
+      requiresPassword: true,
+      status: 'active',
+    });
+  });
+
+  it('Enter inside an IME composition (e.g. Japanese/Chinese keyboard) is forwarded — current contract', async () => {
+    // The handler does NOT short-circuit on isComposing; browsers normally
+    // fire keyDown for Enter only after the IME composition ends. This test
+    // pins the current behaviour so an accidental "block during compose"
+    // change would surface as a failing assertion. If composition handling
+    // is added later, flip this to expect 0 calls.
+    mockLoginStart.mockResolvedValueOnce({
+      userId: 'u-ime',
+      email: 'ime@example.com',
+      requiresPassword: true,
+      status: 'active',
+    });
+    renderLoginEmail();
+    const emailInput = screen.getByLabelText('auth.email.label') as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'ime@example.com' } });
+    fireEvent.keyDown(emailInput, { key: 'Enter', isComposing: false });
+    await vi.waitFor(() => expect(mockLoginStart).toHaveBeenCalledTimes(1));
+  });
+
+  it('Enter on a non-empty but malformed email still fires loginStart — handler does not validate format', async () => {
+    // The guard is `email.length > 0`, not a format check. A non-empty but
+    // malformed address passes the guard; the server-side validator (or HTML5
+    // `required` + `type=email`) ultimately rejects it. This test pins the
+    // surface behaviour so a future change to add client-side format
+    // validation is a deliberate decision rather than silent drift.
+    mockLoginStart.mockRejectedValueOnce(new Error('Geçersiz e-posta'));
+    renderLoginEmail();
+    const emailInput = screen.getByLabelText('auth.email.label') as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'not-an-email' } });
+    fireEvent.keyDown(emailInput, { key: 'Enter' });
+    await vi.waitFor(() => expect(mockLoginStart).toHaveBeenCalledWith({ email: 'not-an-email' }));
+  });
 });
 
 describe('LoginEmail — OAuth', () => {

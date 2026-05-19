@@ -392,6 +392,107 @@ describe('ExplanationPanel — PR-V4 apply toast', () => {
       vi.useRealTimers();
     }
   });
+
+  // ─── PR-V4 edge-case regression tests (test sweep, 2026-05-19) ────────
+
+  it('rapid double-click on apply only triggers a single iterateWithFeedback call (busy guard)', async () => {
+    // The button uses `disabled={selected.size === 0 || busy}` so the second
+    // click should be a no-op while the first promise is still pending.
+    const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+    let resolveIter: (v: unknown) => void = () => undefined;
+    const iterate = vi.fn().mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolveIter = r;
+        })
+    );
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={iterate}
+      />
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    const btn = screen.getByTestId('critic-findings-apply-button');
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(iterate).toHaveBeenCalledTimes(1);
+    resolveIter(undefined);
+  });
+
+  it('error path renders the toast when iterateWithFeedback rejects with a non-Error value', async () => {
+    // The handler computes `e instanceof Error ? e.message : t('applyError')`.
+    // Throwing a plain string (some HTTP wrappers do this) must still fall
+    // through to the toast — the catch branch sets the same applyError
+    // message in both inline banner + toast.
+    const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+    const iterate = vi.fn().mockRejectedValue('plain-string-rejection');
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={iterate}
+      />
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByTestId('critic-findings-apply-button'));
+
+    const toast = await screen.findByTestId('critic-apply-toast');
+    expect(toast).toHaveAttribute('data-toast-kind', 'error');
+    expect(toast).toHaveTextContent(/Düzeltme gönderilemedi/);
+  });
+
+  it('toast has role=status + aria-live=polite (screen-reader announcement)', async () => {
+    const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+    const iterate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ExplanationPanel
+        pipelineId="p-1"
+        explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+        iterateWithFeedback={iterate}
+      />
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByTestId('critic-findings-apply-button'));
+
+    const toast = await screen.findByTestId('critic-apply-toast');
+    // PR-V4 spec: a11y attributes for screen-reader users.
+    expect(toast).toHaveAttribute('role', 'status');
+    expect(toast).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('toast timer is cleared on unmount (no leaked setTimeout after success)', async () => {
+    // Guard: the useEffect cleanup must call clearTimeout so unmounting
+    // immediately after a successful apply doesn't fire a setState on an
+    // unmounted component (React 18 logs a warning if it happens).
+    vi.useFakeTimers();
+    try {
+      const findings = [mkFinding({ description: 'A', suggestion: 'fix A' })];
+      const iterate = vi.fn().mockResolvedValue(undefined);
+      const { unmount } = render(
+        <ExplanationPanel
+          pipelineId="p-1"
+          explanation={mkExplanation({ stages: [mkCriticStage(findings)] })}
+          iterateWithFeedback={iterate}
+        />
+      );
+      fireEvent.click(screen.getByRole('checkbox'));
+      fireEvent.click(screen.getByTestId('critic-findings-apply-button'));
+      await vi.waitFor(() => expect(screen.getByTestId('critic-apply-toast')).toBeInTheDocument());
+
+      // Unmount before the 4s window elapses; spy on console.error so a
+      // React "setState on unmounted component" warning surfaces as a fail.
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      unmount();
+      vi.advanceTimersByTime(5000);
+      expect(errSpy).not.toHaveBeenCalledWith(expect.stringMatching(/unmounted|memory leak/i));
+      errSpy.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // ─── PR-D: AC coverage integration ───────────────────────────

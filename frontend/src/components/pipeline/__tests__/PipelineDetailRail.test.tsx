@@ -587,3 +587,194 @@ describe('PipelineDetailRail — PR-B tab scoping', () => {
     expect(screen.queryByTestId('pipeline-rail-resize-handle')).toBeNull();
   });
 });
+
+// ─── PR-V2 — Critic findings dedup chip (Akış-tab summary) ─────────────
+//
+// V2 moved the full Critic-findings UI to the Açıklama tab and replaced it
+// on the Akış tab with a single summary chip ("N Critic bulgusu — Açıklama'da").
+// The chip is only meant to surface when there ARE findings AND no critic
+// gate is currently active (otherwise CriticResolutionGate already shows
+// the full panel — duplicate noise).
+describe('PipelineDetailRail — PR-V2 Critic findings summary chip', () => {
+  const baseFinding = {
+    severity: 'major' as const,
+    category: 'completeness',
+    description: 'AC-1 belirsiz',
+    suggestion: 'GWT formatına çevirin',
+  };
+
+  it('does NOT render the chip when criticReview is undefined', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+      />
+    );
+    expect(screen.queryByTestId('critic-findings-summary-chip')).toBeNull();
+  });
+
+  it('does NOT render the chip when criticReview.findings is an empty array', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        criticReview={{
+          approved: true,
+          overallScore: 95,
+          findings: [],
+          summary: 'Spec sağlam.',
+          reviewType: 'spec_review',
+          iteration: 1,
+        }}
+      />
+    );
+    expect(screen.queryByTestId('critic-findings-summary-chip')).toBeNull();
+  });
+
+  it('renders the chip with the exact finding count when findings.length is 1', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        criticReview={{
+          approved: false,
+          overallScore: 70,
+          findings: [baseFinding],
+          summary: '1 finding',
+          reviewType: 'spec_review',
+          iteration: 1,
+        }}
+      />
+    );
+    const chip = screen.getByTestId('critic-findings-summary-chip');
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveTextContent('1 Critic bulgusu');
+  });
+
+  it('renders the chip with a large count (10+) without truncating the number', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      ...baseFinding,
+      description: `Issue ${i + 1}`,
+    }));
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        criticReview={{
+          approved: false,
+          overallScore: 40,
+          findings: many,
+          summary: 'many findings',
+          reviewType: 'spec_review',
+          iteration: 1,
+        }}
+      />
+    );
+    const chip = screen.getByTestId('critic-findings-summary-chip');
+    expect(chip).toHaveTextContent('12 Critic bulgusu');
+  });
+
+  it('does NOT render the chip when criticGateActive (awaiting_critic_resolution) — avoids duplicate with CriticResolutionGate', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="awaiting_critic_resolution"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        criticReview={{
+          approved: false,
+          overallScore: 50,
+          findings: [baseFinding, baseFinding],
+          summary: 'critical block',
+          reviewType: 'code_review',
+          iteration: 1,
+        }}
+      />
+    );
+    // The full CriticResolutionGate already covers this case at the top
+    // of the Akış tab; rendering the chip below would be redundant noise.
+    expect(screen.queryByTestId('critic-findings-summary-chip')).toBeNull();
+  });
+
+  it('clicking the chip switches the active tab to Açıklama (why)', () => {
+    const fetcher = vi.fn().mockResolvedValue(mkExpl());
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        explanationFetcher={fetcher}
+        criticReview={{
+          approved: false,
+          overallScore: 65,
+          findings: [baseFinding],
+          summary: 'one finding',
+          reviewType: 'spec_review',
+          iteration: 1,
+        }}
+      />
+    );
+    expect(screen.getByLabelText('Pipeline detayı')).toHaveAttribute('data-active-tab', 'flow');
+    fireEvent.click(screen.getByTestId('critic-findings-summary-chip'));
+    expect(screen.getByLabelText('Pipeline detayı')).toHaveAttribute('data-active-tab', 'why');
+  });
+
+  it('chip is scoped to the Akış tab — switching to Açıklama unmounts it', async () => {
+    const fetcher = vi.fn().mockResolvedValue(mkExpl());
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        explanationFetcher={fetcher}
+        criticReview={{
+          approved: false,
+          overallScore: 65,
+          findings: [baseFinding],
+          summary: 'one finding',
+          reviewType: 'spec_review',
+          iteration: 1,
+        }}
+      />
+    );
+    expect(screen.getByTestId('critic-findings-summary-chip')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Açıklama' }));
+    // Once the user is on the Açıklama tab the full findings panel renders
+    // there — the summary chip is no longer needed and is unmounted.
+    expect(screen.queryByTestId('critic-findings-summary-chip')).toBeNull();
+  });
+
+  it('does NOT render the chip when criticReview.findings is undefined (legacy / partial output)', () => {
+    // Older pipelines or partial payloads might omit the findings array
+    // entirely. `(criticReview.findings?.length ?? 0) > 0` must coerce
+    // missing → 0 → no chip.
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        criticReview={
+          {
+            approved: true,
+            overallScore: 80,
+            summary: 'no findings field',
+            reviewType: 'spec_review',
+            iteration: 1,
+          } as unknown as import('../../../types/pipeline').CriticReviewOutput
+        }
+      />
+    );
+    expect(screen.queryByTestId('critic-findings-summary-chip')).toBeNull();
+  });
+});

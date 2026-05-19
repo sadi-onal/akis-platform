@@ -82,6 +82,52 @@ describe('Spec review prompt', () => {
       'prompt must explicitly forbid flagging empty stack as a missing field'
     );
   });
+
+  // ─── PR-V8 edge-case regression tests (test sweep, 2026-05-19) ─────────
+  //
+  // These pin the user-prompt boundary behaviour around the V8 fix.
+
+  it('user prompt embeds an empty-string artifact field as JSON (does not crash)', () => {
+    const artifact = {
+      title: 'App',
+      problemStatement: 'Problem',
+      technicalConstraints: { stack: '' },
+    };
+    const prompt = buildSpecReviewUserPrompt(artifact, 'idea', 1);
+    assert.ok(prompt.includes('"stack": ""'));
+    assert.ok(prompt.includes('technicalConstraints'));
+  });
+
+  it('user prompt embeds an empty-array stack as JSON', () => {
+    const artifact = {
+      technicalConstraints: { stack: [] },
+    };
+    const prompt = buildSpecReviewUserPrompt(artifact, 'idea', 1);
+    assert.ok(prompt.includes('"stack": []'));
+  });
+
+  it('user prompt serializes a fully missing technicalConstraints differently from an empty stack', () => {
+    const missingTC = buildSpecReviewUserPrompt({ title: 'X' }, 'idea', 1);
+    const emptyStack = buildSpecReviewUserPrompt(
+      { title: 'X', technicalConstraints: { stack: '' } },
+      'idea',
+      1
+    );
+    assert.ok(!missingTC.includes('technicalConstraints'));
+    assert.ok(emptyStack.includes('technicalConstraints'));
+    assert.notEqual(missingTC, emptyStack);
+  });
+
+  it('user prompt is deterministic for the same input (no Date.now/random)', () => {
+    const a = buildSpecReviewUserPrompt({ title: 'Deterministic' }, 'idea', 1);
+    const b = buildSpecReviewUserPrompt({ title: 'Deterministic' }, 'idea', 1);
+    assert.equal(a, b);
+  });
+
+  it('user prompt with iteration=0 is accepted (boundary)', () => {
+    const prompt = buildSpecReviewUserPrompt({ title: 'x' }, 'idea', 0);
+    assert.ok(prompt.includes('REVIEW ITERATION: 0'));
+  });
 });
 
 // ─── Code Review Prompt Tests ────────────────────

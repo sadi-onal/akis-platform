@@ -315,6 +315,89 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
     expect(views[1]!.meta?.retryCount).toBeUndefined();
     expect(views[1]!.meta?.retrySource).toBeUndefined();
   });
+
+  // ─── PR-V5 edge-case regression tests (test sweep, 2026-05-19) ─────────
+
+  it('PR-V5: duplicate stage_completed activities are idempotent (Set dedup)', () => {
+    // The orchestrator emits one completion per stage, but a buffer replay
+    // or double-flush could deliver two. The reducer must not double-count
+    // — it stores stages in a Set keyed by stage name.
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 30 }),
+    ];
+    const views = reduceStageViews(acts, acts[2]!, 'proto_running');
+    expect(views[0]!.state).toBe('complete');
+    expect(views[1]!.state).toBe('active');
+    expect(views[2]!.state).toBe('pending');
+  });
+
+  it('PR-V5: a "failed" status activity does NOT mark the stage complete', () => {
+    // Only `status === 'completed'` should drive the completion Set. A
+    // failure status (existing backend convention) must be ignored by the
+    // dedup logic — otherwise a failed Trace would show a check.
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'trace', progress: 80, status: 'failed' }),
+    ];
+    // uiState idle here would push everything to complete via the legacy
+    // back-compat branch. Use a running uiState so Trace's failure stays
+    // visible — pending, not complete.
+    const views = reduceStageViews(acts, acts[2]!, 'trace_running');
+    expect(views[0]!.state).toBe('complete');
+    expect(views[1]!.state).toBe('complete');
+    // Trace: explicit completion absent + uiState says it's live → active.
+    expect(views[2]!.state).toBe('active');
+  });
+
+  it('PR-V5: stage_completed for trace marks trace complete even when uiState is still trace_running (race)', () => {
+    // Race: SSE delivers stage_completed before the orchestrator persists
+    // the uiState transition. The explicit completion signal must win over
+    // the in-flight uiState — otherwise the user sees "running" while the
+    // stage really finished.
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'trace', progress: 100, status: 'completed', step: 'stage_completed' }),
+    ];
+    const views = reduceStageViews(acts, acts[0]!, 'trace_running');
+    // Explicit completion wins.
+    expect(views[2]!.state).toBe('complete');
+  });
+
+  it('PR-V5: out-of-order stage_completed (trace before proto) — both still register', () => {
+    // SSE in network-jittered environments can deliver later activities
+    // first. The Set-based collection must not depend on order.
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'trace', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+    ];
+    const views = reduceStageViews(acts, acts[2]!, 'idle');
+    expect(views[0]!.state).toBe('complete');
+    expect(views[1]!.state).toBe('complete');
+    expect(views[2]!.state).toBe('complete');
+  });
+
+  it('PR-V5: stage_completed for critic with criticPhase=spec folds into Scribe completion', () => {
+    // The critic-phase routing applies to completion events too — a
+    // critic_spec completion should mark the Scribe column complete
+    // (not create a phantom Critic column).
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'critic',
+        criticPhase: 'spec',
+        progress: 100,
+        status: 'completed',
+        step: 'stage_completed',
+      }),
+      mk({ stage: 'proto', progress: 30 }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!, 'proto_running');
+    expect(views[0]!.state).toBe('complete'); // scribe (via critic spec)
+    expect(views[1]!.state).toBe('active');
+    expect(views[2]!.state).toBe('pending');
+  });
 });
 
 describe('PipelineCinema component (PR-F 3-column)', () => {

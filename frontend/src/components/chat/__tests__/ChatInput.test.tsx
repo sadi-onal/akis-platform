@@ -265,5 +265,59 @@ describe('ChatInput', () => {
         screen.queryByRole('button', { name: /chat\.model\.ariaLabel/i })
       ).not.toBeInTheDocument();
     });
+
+    // ─── PR-V7 edge-case regression tests (test sweep, 2026-05-19) ─────
+    //
+    // The compact composer renders Trace + ModelPicker as inline chips
+    // inside the input. The contract: chips disappear cleanly when their
+    // callbacks aren't wired; they render side-by-side without clobbering
+    // each other; and they don't break the send button when isSending.
+
+    it('trace chip defaults to "kapalı" rendering when traceEnabled is undefined', () => {
+      // The component is rendered without `traceEnabled` (boolean is
+      // optional). The chip should still render via onTraceToggle alone and
+      // default to off state so the user sees a deterministic label.
+      render(<ChatInput onSend={vi.fn()} onTraceToggle={vi.fn()} />);
+      const chip = screen.getByTestId('trace-toggle');
+      // aria-checked should be a definite boolean, not 'mixed' or absent.
+      expect(chip).toHaveAttribute('aria-checked', 'false');
+      expect(screen.getByTestId('trace-toggle-label').textContent).toMatch(/Trace kapalı/);
+    });
+
+    it('renders both trace chip and ModelPicker chip when both callbacks are wired', () => {
+      // Co-existence guard — the two chips must not interfere or hide each
+      // other when the consumer wires both at once (typical for an
+      // authenticated chat session).
+      render(
+        <ChatInput onSend={vi.fn()} onTraceToggle={vi.fn()} traceEnabled onModelChange={vi.fn()} />
+      );
+      expect(screen.getByTestId('trace-toggle')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /chat\.model\.ariaLabel/i })).toBeInTheDocument();
+    });
+
+    it('trace chip remains enabled and clickable while isSending is true', () => {
+      // The composer textarea + send button disable on isSending. The
+      // trace chip is independent — the user might want to flip Trace off
+      // mid-send so the NEXT message picks up the new value. Pin the
+      // current behaviour.
+      const onTraceToggle = vi.fn();
+      render(
+        <ChatInput onSend={vi.fn()} onTraceToggle={onTraceToggle} traceEnabled={false} isSending />
+      );
+      const chip = screen.getByTestId('trace-toggle');
+      expect(chip).not.toBeDisabled();
+      fireEvent.click(chip);
+      expect(onTraceToggle).toHaveBeenCalledWith(true);
+    });
+
+    it('keyboard helper row is still present in the compact chip layout', () => {
+      // PR-V7 reclaimed vertical space by moving Trace + Model into chips,
+      // but the keyboard helper (⏎ / ⇧⏎ / Esc) is a usability anchor and
+      // must not get evicted in the process.
+      render(
+        <ChatInput onSend={vi.fn()} onTraceToggle={vi.fn()} traceEnabled onModelChange={vi.fn()} />
+      );
+      expect(screen.getByText(/⏎ Gönder.*⇧⏎ Yeni satır.*Esc Temizle/s)).toBeInTheDocument();
+    });
   });
 });
