@@ -1671,22 +1671,69 @@ export class PipelineOrchestrator {
     // intermediateState.acCoverage for the explanation rail to render.
     await this.persistAcCoverage(pipelineId, protoResult.data, pipeline.scribeOutput);
 
-    // PDP-3 B4: preview-confirm gate — Proto ran in dryRun, files are in
-    // protoOutput but nothing landed on GitHub yet. Persist the dryRun
-    // output (so the FE can render Sandpack from `protoOutput.files`) and
-    // halt at `awaiting_push_confirm`. Trace runs later from `confirmPush`,
-    // which calls `proto.pushScaffoldFiles` to actually commit the cached
-    // files and then transitions to `trace_testing`.
+    // PR-F2 (2026-05-19): preview-confirm gate flow — Trace BEFORE push gate.
+    //
+    // Önceki davranış (PR-F öncesi): preview gate ON ise pipeline direkt
+    // `awaiting_push_confirm`'a düşer, Trace ancak `confirmPush` sonrası
+    // çalışır. Bu sırada Trace fail olursa kullanıcı zaten push yapmış olur
+    // — iterate-loop dışında değişen bir şey yok ama "test sonucunu görmeden
+    // GitHub'a kod gönderdim" hissi yaratıyordu. Manuel test (2026-05-19)
+    // log'unda da:
+    //   Critic code approved (88) → B4 gate
+    //   ← Trace hiç çalışmadı.
+    //
+    // Yeni davranış: Proto'nun dryRun çıktısını TraceAgent'e `inputFiles`
+    // olarak besle, GitHub fetch olmadan testler + AC coverage hesaplansın.
+    // Trace iterate-loop (uncovered AC veya test fail → Proto re-iterate)
+    // bu noktada zaten çalışır; retry tükenince push gate'e devredilir.
     if (previewGateEnabled) {
+      // Persist Proto output + transition to trace_testing so the UI cinema
+      // column lights up. We deliberately stay short of the gate until Trace
+      // is done.
       await this.store.update(pipelineId, {
         protoOutput: protoResult.data,
-        stage: 'awaiting_push_confirm',
+        stage: 'trace_testing',
         metrics: protoCompletedMetrics,
       });
-      this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
+      this.emitEvent(pipelineId, 'stage_change', 'trace_testing');
+
+      // Jira hook: comment Proto result (non-blocking) — same wiring as the
+      // non-preview branch.
+      if (pipeline.jiraConfig?.epicKey) {
+        this.runJiraProtoComment(pipeline.userId, pipeline.jiraConfig.epicKey, {
+          branch: protoResult.data.branch,
+          repo: protoResult.data.repo,
+          prUrl: protoResult.data.prUrl,
+          filesCreated: protoResult.data.metadata.filesCreated,
+        }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
+      }
+
+      if (await this.isCancelled(pipelineId)) return;
+
       logger.info(
         { pipelineId, fileCount: protoResult.data.files.length },
-        '[Pipeline] B4 gate — waiting for user push confirmation'
+        '[Pipeline] PR-F2 Trace dryRun starting before push gate'
+      );
+
+      await this.runTrace(
+        pipelineId,
+        metrics,
+        owner,
+        repoName,
+        protoResult.data.branch,
+        spec,
+        model,
+        // PR-F2: post-Trace handoff → awaiting_push_confirm instead of completed,
+        // and feed Proto's in-memory files to Trace so it doesn't try to read
+        // a branch that doesn't exist yet.
+        {
+          dryRun: true,
+          inputFiles: protoResult.data.files.map((f) => ({
+            filePath: f.filePath,
+            content: f.content,
+          })),
+          postSuccess: 'awaiting_push_confirm',
+        }
       );
       return;
     }
@@ -1966,8 +2013,13 @@ export class PipelineOrchestrator {
   /**
    * Background helper for {@link confirmPush}: takes the cached scaffold
    * files, calls `proto.pushScaffoldFiles` (createRepo + pushFiles, no LLM),
-   * updates `protoOutput` with the real branch/url metadata, transitions to
-   * `trace_testing`, and kicks off Trace.
+   * updates `protoOutput` with the real branch/url metadata, and transitions
+   * the pipeline to `completed`.
+   *
+   * PR-F2 (2026-05-19): Trace no longer runs here — it already ran in dryRun
+   * mode BEFORE the push-confirm gate, so `traceOutput` (with coverage matrix
+   * + test plan) is already persisted on the pipeline by the time the user
+   * clicks "Gönder". We just push the cached files and finalize.
    */
   private async runConfirmedPush(
     pipelineId: string,
@@ -2007,18 +2059,7 @@ export class PipelineOrchestrator {
     }
 
     const updatedProtoOutput = pushResult.data;
-
-    // Mirror legacy runProtoAndTrace's transition to trace_testing.
     const pipelineNow = await this.getPipeline(pipelineId);
-    await this.store.update(pipelineId, {
-      protoOutput: updatedProtoOutput,
-      stage: 'trace_testing',
-      metrics: {
-        ...pipelineNow.metrics,
-        protoCompletedAt: pipelineNow.metrics.protoCompletedAt ?? new Date(),
-      },
-    });
-    this.emitEvent(pipelineId, 'stage_change', 'trace_testing');
 
     if (pipelineNow.jiraConfig?.epicKey) {
       this.runJiraProtoComment(pipelineNow.userId, pipelineNow.jiraConfig.epicKey, {
@@ -2031,29 +2072,28 @@ export class PipelineOrchestrator {
 
     if (await this.isCancelled(pipelineId)) return;
 
-    if (!pipelineNow.traceEnabled) {
-      // User opted out of Trace upstream — mark completed without testing.
-      await this.store.update(pipelineId, {
-        stage: 'completed',
-        metrics: {
-          ...pipelineNow.metrics,
-          protoCompletedAt: pipelineNow.metrics.protoCompletedAt ?? new Date(),
-          traceCompletedAt: new Date(),
-          totalDurationMs: Date.now() - toEpoch(pipelineNow.metrics.startedAt),
-        },
-      });
-      this.emitEvent(pipelineId, 'stage_change', 'completed');
-      return;
-    }
-
-    await this.runTrace(
-      pipelineId,
-      pipelineNow.metrics,
-      owner,
-      repoName,
-      updatedProtoOutput.branch,
-      pipelineNow.approvedSpec ?? pipeline.approvedSpec,
-      pipelineNow.model
+    // PR-F2: Trace already ran in dryRun before the gate. We just need to
+    // finalize the pipeline. `traceOutput` (if any) is preserved as-is; the
+    // pushed branch metadata on `protoOutput` is what changes here.
+    const completionStage: PipelineStage = pipelineNow.traceOutput ? 'completed' : 'completed_partial';
+    await this.store.update(pipelineId, {
+      protoOutput: updatedProtoOutput,
+      stage: completionStage,
+      metrics: {
+        ...pipelineNow.metrics,
+        protoCompletedAt: pipelineNow.metrics.protoCompletedAt ?? new Date(),
+        traceCompletedAt: pipelineNow.metrics.traceCompletedAt ?? new Date(),
+        totalDurationMs: Date.now() - toEpoch(pipelineNow.metrics.startedAt),
+      },
+    });
+    this.emitEvent(pipelineId, 'stage_change', completionStage);
+    logger.info(
+      {
+        pipelineId,
+        stage: completionStage,
+        hasTraceOutput: pipelineNow.traceOutput !== undefined,
+      },
+      '[Pipeline] PR-F2 confirmPush finalized — Trace already ran in dryRun pre-gate'
     );
   }
 
@@ -2622,8 +2662,30 @@ export class PipelineOrchestrator {
     repo: string,
     branch: string,
     spec?: StructuredSpec,
-    model?: string
+    model?: string,
+    /**
+     * PR-F2 (2026-05-19) — optional Trace execution overrides:
+     *   - `dryRun`: forward to TraceAgent so it skips GitHub push (and, when
+     *     combined with `inputFiles`, the codebase fetch).
+     *   - `inputFiles`: local scaffold files (Proto dryRun output) to use
+     *     instead of fetching from GitHub. Required for the pre-push-gate
+     *     flow where the branch doesn't exist yet.
+     *   - `postSuccess`: what stage to transition to after a fully successful
+     *     Trace run (or after the iterate-loop terminates without firing).
+     *     Default `'completed'` (legacy auto-push flow). When the orchestrator
+     *     wants the user to confirm the push next, it sets this to
+     *     `'awaiting_push_confirm'`.
+     */
+    options?: {
+      dryRun?: boolean;
+      inputFiles?: Array<{ filePath: string; content: string }>;
+      postSuccess?: 'completed' | 'awaiting_push_confirm';
+    }
   ): Promise<PipelineState> {
+    const traceDryRun = options?.dryRun === true;
+    const traceInputFiles = options?.inputFiles;
+    const postSuccessStage: 'completed' | 'awaiting_push_confirm' =
+      options?.postSuccess ?? 'completed';
     const traceEmit = createActivityEmitter(pipelineId, 'trace');
     traceEmit('start', 'Scaffold dosyaları analiz ediliyor...', 5);
 
@@ -2671,6 +2733,11 @@ export class PipelineOrchestrator {
             cucumberEnabled,
             knowledgeContext: traceKnowledge,
             imageBlocks: traceImageBlocks,
+            // PR-F2: pre-push-gate dryRun mode. When dryRun=true + inputFiles
+            // present, TraceAgent skips GitHub fetch (branch doesn't exist
+            // yet) and skips push (we only need the plan + coverage matrix).
+            dryRun: traceDryRun,
+            inputFiles: traceInputFiles,
           }),
           TRACE_TIMEOUT,
           'Trace'
@@ -2704,6 +2771,28 @@ export class PipelineOrchestrator {
           : `Test üretimi başarısız: ${traceResult.error.message}`,
         0
       );
+
+      // PR-F2: pre-push-gate dryRun mode — skip FixLoop (which would push to
+      // GitHub before the user has confirmed). Hand off to push gate so the
+      // user can still inspect/push the un-tested scaffold or cancel.
+      if (traceDryRun && postSuccessStage === 'awaiting_push_confirm') {
+        const updated = await this.store.update(pipelineId, {
+          stage: 'awaiting_push_confirm',
+          metrics: {
+            ...metrics,
+            protoCompletedAt: metrics.protoCompletedAt ?? new Date(),
+          },
+          // We intentionally do NOT persist the error onto the pipeline — it's
+          // a soft failure for the dryRun pass. The push gate UI already
+          // surfaces "no tests generated" through the absence of traceOutput.
+        });
+        this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
+        logger.warn(
+          { pipelineId, errorCode: traceResult.error.code },
+          '[Pipeline] PR-F2 Trace dryRun failed — handing off to push gate without tests'
+        );
+        return updated;
+      }
 
       // ─── Level 3: FixLoop auto-trigger on Trace failure ───
       const currentPipelineForFix = await this.store.getById(pipelineId);
@@ -2900,17 +2989,39 @@ export class PipelineOrchestrator {
       return (await this.store.getById(pipelineId)) as PipelineState;
     }
 
+    // PR-F2: post-Trace handoff target. Default flow → `completed`; preview
+    // gate flow (Trace dryRun before push) → `awaiting_push_confirm` so the
+    // user reviews scaffold + coverage matrix before pushing to GitHub.
     const updated = await this.store.update(pipelineId, {
-      stage: 'completed',
+      stage: postSuccessStage,
       traceOutput: traceResult.data,
       metrics: {
         ...metrics,
         protoCompletedAt: metrics.protoCompletedAt ?? new Date(),
+        // Trace completion timestamp only when this is the terminal Trace pass
+        // (post-push). On a pre-push dryRun we'll re-stamp once Trace re-runs
+        // post-push — but currently confirmPush doesn't re-run Trace, so we
+        // stamp here regardless; coverage data is already final.
         traceCompletedAt: new Date(),
-        totalDurationMs: Date.now() - toEpoch(metrics.startedAt),
+        totalDurationMs:
+          postSuccessStage === 'completed'
+            ? Date.now() - toEpoch(metrics.startedAt)
+            : metrics.totalDurationMs,
       },
     });
-    this.emitEvent(pipelineId, 'completed', 'completed');
+    if (postSuccessStage === 'awaiting_push_confirm') {
+      this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
+      logger.info(
+        {
+          pipelineId,
+          fileCount: traceResult.data.testFiles?.length ?? 0,
+          coverage: traceResult.data.testSummary?.coveragePercentage,
+        },
+        '[Pipeline] PR-F2 Trace dryRun completed — handing off to push gate'
+      );
+    } else {
+      this.emitEvent(pipelineId, 'completed', 'completed');
+    }
 
     // Log Trace activity for integrity metrics
     const ts = traceResult.data.testSummary;

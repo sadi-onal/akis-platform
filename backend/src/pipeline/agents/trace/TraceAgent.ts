@@ -257,7 +257,16 @@ export class TraceAgent {
       ? createActivityEmitter(input.pipelineId, 'trace')
       : undefined;
 
-    // Agentic path: if tool_use deps available and not dryRun, use Claude with tools
+    // PR-F2 (2026-05-19): when running pre-push-gate, the orchestrator passes
+    // dryRun=true PLUS Proto's in-memory files as `inputFiles`. We must skip
+    // both the agentic GitHub tool-use loop AND the legacy listFiles fetch —
+    // the scaffold isn't on GitHub yet. Test execution is also skipped (we
+    // only generate the test plan + coverage matrix).
+    const useLocalFiles = input.dryRun === true && Array.isArray(input.inputFiles) && input.inputFiles.length > 0;
+
+    // Agentic path: if tool_use deps available and not dryRun, use Claude with tools.
+    // dryRun (with or without inputFiles) always takes the legacy path so we can
+    // bypass GitHub I/O.
     if (this.agenticDeps && !input.dryRun && this.github.pushFiles) {
       try {
         return await this.executeWithTools(input, emit);
@@ -266,22 +275,40 @@ export class TraceAgent {
       }
     }
 
-    // Legacy path: Step 1: Read codebase from GitHub
-    emit?.('fetching', 'İskelet dalından kaynak dosyalar alınıyor...', 15, undefined, undefined, 'pipeline.activity.trace.reading_repo');
-    const codebaseResult = await this.readCodebase(input.repoOwner, input.repo, input.branch, emit);
-    if (codebaseResult.type === 'error') {
-      emit?.('error', 'Kod tabanı okunamadı', 0);
-      return codebaseResult;
+    // Legacy path: Step 1: Read codebase — either local inputFiles or GitHub.
+    let files: Array<{ filePath: string; content: string }>;
+    if (useLocalFiles) {
+      emit?.(
+        'fetching',
+        `Lokal scaffold dosyaları okunuyor (${input.inputFiles!.length} dosya)...`,
+        15,
+        undefined,
+        undefined,
+        'pipeline.activity.trace.reading_repo'
+      );
+      // Filter to source-like files only (mirrors readCodebase's filter) but
+      // keep the budget loose — Proto outputs are bounded by their own caps.
+      files = input.inputFiles!
+        .filter((f) => this.isSourceFile(f.filePath) && f.content.length <= MAX_FILE_SIZE_BYTES)
+        .slice(0, MAX_SOURCE_FILES)
+        .map((f) => ({ filePath: f.filePath, content: f.content }));
+    } else {
+      emit?.('fetching', 'İskelet dalından kaynak dosyalar alınıyor...', 15, undefined, undefined, 'pipeline.activity.trace.reading_repo');
+      const codebaseResult = await this.readCodebase(input.repoOwner, input.repo, input.branch, emit);
+      if (codebaseResult.type === 'error') {
+        emit?.('error', 'Kod tabanı okunamadı', 0);
+        return codebaseResult;
+      }
+      files = codebaseResult.data;
     }
 
-    const files = codebaseResult.data;
     if (files.length === 0) {
-      emit?.('error', 'Depoda kaynak dosya bulunamadı', 0);
+      emit?.('error', useLocalFiles ? 'Lokal scaffold dosyası bulunamadı' : 'Depoda kaynak dosya bulunamadı', 0);
       return {
         type: 'error',
         error: createPipelineError(
           PipelineErrorCode.TRACE_EMPTY_CODEBASE,
-          'No source files found in repository'
+          useLocalFiles ? 'No source files in supplied inputFiles' : 'No source files found in repository'
         ),
       };
     }
