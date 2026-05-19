@@ -691,11 +691,29 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         // Clear state cookie
         reply.clearCookie('atlassian_oauth_state', { path: '/' });
 
-        // Exchange code for tokens
-        const tokens = await atlassianOAuthService.exchangeCodeForTokens(code);
+        // Exchange code for tokens — failure here is the OAuth provider's
+        // response (bad code, mismatched redirect_uri, network blip).
+        let tokens;
+        try {
+          tokens = await atlassianOAuthService.exchangeCodeForTokens(code);
+        } catch (exchangeErr) {
+          logger.error(`[integrations] Atlassian token exchange failed: ${exchangeErr}`);
+          const errorUrl = `${frontendUrl}/dashboard/settings?tab=github&atlassian=error&reason=token_exchange_failed`;
+          return reply.code(302).header('Location', errorUrl).send();
+        }
 
-        // Get accessible resources (sites)
-        const resources = await atlassianOAuthService.getAccessibleResources(tokens.access_token);
+        // Get accessible resources (sites) — if this fails the tokens are
+        // valid but the user can't reach any site (rare).
+        let resources;
+        try {
+          resources = await atlassianOAuthService.getAccessibleResources(tokens.access_token);
+        } catch (resourcesErr) {
+          logger.error(
+            `[integrations] Atlassian accessible-resources fetch failed: ${resourcesErr}`
+          );
+          const errorUrl = `${frontendUrl}/dashboard/settings?tab=github&atlassian=error&reason=resources_fetch_failed`;
+          return reply.code(302).header('Location', errorUrl).send();
+        }
 
         if (resources.length === 0) {
           const errorUrl = `${frontendUrl}/dashboard/settings?tab=github&atlassian=error&reason=no_accessible_resources`;
@@ -705,8 +723,16 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
         // Use first accessible resource
         const primaryResource = resources[0];
 
-        // Store tokens (encrypted)
-        await atlassianOAuthService.storeTokens(user.id, tokens, primaryResource);
+        // Store tokens (encrypted) — failure here means encryption key is
+        // missing/broken or DB write failed. Surface separately so we can
+        // tell users to retry vs. report a configuration bug.
+        try {
+          await atlassianOAuthService.storeTokens(user.id, tokens, primaryResource);
+        } catch (storeErr) {
+          logger.error(`[integrations] Atlassian token storage failed: ${storeErr}`);
+          const errorUrl = `${frontendUrl}/dashboard/settings?tab=github&atlassian=error&reason=token_storage_failed`;
+          return reply.code(302).header('Location', errorUrl).send();
+        }
 
         // Redirect back to integrations with success
         const successUrl = `${frontendUrl}/dashboard/settings?tab=github&atlassian=connected`;
