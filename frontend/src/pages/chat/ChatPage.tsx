@@ -152,6 +152,42 @@ export default function ChatPage() {
     setIsConnectedHint(isConnected);
   }, [isConnected]);
 
+  // PR-H bug-3 (2026-05-19): SSE-driven workflow refresh on stage transitions.
+  //
+  // Before this fix the SSE stream only fed the activity rail; workflow state
+  // (currentStage, traceOutput, intermediate gate flags) was refreshed by the
+  // 8-20s polling loop in `useConversationLoader`. So when a pipeline moved
+  // proto_building → trace_testing → awaiting_push_confirm in <30s, the chat
+  // sat on stale stage data and the user had to manually refresh.
+  //
+  // Strategy: watch `pipelineActivities` for two signals that demand an
+  // immediate workflow snapshot:
+  //   1. The activity's `stage` differs from the last activity we saw —
+  //      means the orchestrator just transitioned to a new pipeline stage.
+  //   2. The activity's `step` is `pipeline_complete` — terminal signal,
+  //      ensures the chat lands on `completed`/`awaiting_push_confirm` even
+  //      if polling teared down already (isRunning flips false).
+  //
+  // We debounce with a 250ms timer so a stage that emits several activities
+  // back-to-back only triggers one refresh.
+  const lastStageRef = useRef<string | undefined>(undefined);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    if (pipelineActivities.length === 0) return;
+    const latest = pipelineActivities[pipelineActivities.length - 1];
+    const stageChanged = lastStageRef.current !== undefined && lastStageRef.current !== latest.stage;
+    const isTerminal = latest.step === 'pipeline_complete';
+    lastStageRef.current = latest.stage;
+    if (!stageChanged && !isTerminal) return;
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      void refreshWorkflow();
+    }, 250);
+    return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    };
+  }, [pipelineActivities, refreshWorkflow]);
+
   // Sidebar conversations: real + pending
   const sidebarConversations = useMemo(() => {
     const list = [...conversations];

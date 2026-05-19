@@ -35,9 +35,30 @@ export function extractJsonSafe(text: string): string {
     return trimmed;
   }
 
-  // Strategy 2: fenced code block — require opening brace inside block
+  // Strategy 2: fenced code block (full block — opening + closing fence present)
   const fenced = text.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
   if (fenced) return fenced[1].trim();
+
+  // Strategy 2b (PR-H 2026-05-19): truncated fenced JSON — model started with
+  // ```json fence but ran out of `max_tokens` before emitting the closing fence.
+  // Strip the leading fence (and the trailing partial fence if present) so the
+  // downstream brace/repair logic has a clean candidate.
+  // Bug observed with Trace responses where output_tokens hit the 32 768 cap
+  // mid-test-file content (responseLen 33-45K, no closing fence).
+  const leadingFence = trimmed.match(/^```(?:json)?\s*\n?/);
+  if (leadingFence) {
+    let stripped = trimmed.slice(leadingFence[0].length);
+    // Drop any trailing "```" or partial fence remnant ("``" / "`") if the model
+    // managed to start the closer before truncation.
+    stripped = stripped.replace(/```\s*$/, '').replace(/``\s*$/, '').replace(/`\s*$/, '');
+    if (stripped.startsWith('{')) {
+      const braceEnd = stripped.lastIndexOf('}');
+      // When `}` is missing (deep truncation), return as-is so
+      // `repairTruncatedJson` can close the structure.
+      if (braceEnd > 0) return stripped.slice(0, braceEnd + 1);
+      return stripped;
+    }
+  }
 
   // Strategy 3: brace extraction
   const braceStart = text.indexOf('{');
@@ -150,6 +171,14 @@ export function parseAIJson<T = unknown>(text: string): T {
   if (repaired) {
     try {
       return JSON.parse(repaired) as T;
+    } catch { /* continue */ }
+    // Attempt 3b (PR-H 2026-05-19): sanitize control chars on the repaired
+    // string. When the model emits literal newlines inside a string value
+    // before truncation, `repairTruncatedJson` only closes brackets — the
+    // control chars still break `JSON.parse`. Running the sanitizer afterwards
+    // covers both failure modes in one pass.
+    try {
+      return JSON.parse(sanitizeJsonControlChars(repaired)) as T;
     } catch { /* continue */ }
   }
 

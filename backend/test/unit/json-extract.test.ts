@@ -241,6 +241,48 @@ describe('parseAIJson', () => {
     assert.deepEqual(result.items, [1, 2, 3]);
   });
 
+  // PR-H regression (2026-05-19): Trace failed three times in production
+  // because the AI response was wrapped in ```json fences, hit the 32 768
+  // max_tokens cap mid-`content` string of the last testFile, and never
+  // emitted the closing brace or fence. extractJsonSafe's strategy 3
+  // brace-extraction picked up a stray `}` inside the truncated `content`
+  // string, producing invalid JSON. Strategy 2b now strips the leading fence
+  // and lets repairTruncatedJson close the structure cleanly.
+  it('parses ```json fence truncated mid-string with multi-line content', () => {
+    // Simulates a Trace response truncated mid testFile content where the
+    // last open string contains literal newlines from the source code.
+    const truncated =
+      '```json\n' +
+      '{\n' +
+      '  "testFiles": [\n' +
+      '    {\n' +
+      '      "filePath": "tests/e2e/app.spec.ts",\n' +
+      '      "content": "import { test, expect } from \'@playwright/test\';\\n\\ntest(\'works\', async ({ page }) => {\\n  await page.goto(\'/\');\\n  await expect(page.getByRole(\'heading\')).toBeVisible();\\n});",\n' +
+      '      "testCount": 1\n' +
+      '    },\n' +
+      '    {\n' +
+      '      "filePath": "tests/e2e/crud.spec.ts",\n' +
+      '      "content": "import { test, expect } from \'@playwright/test\';\\n\\ntest(\'creates\', async ({ page';
+    const result = parseAIJson<{ testFiles: Array<{ filePath: string; testCount?: number }> }>(
+      truncated,
+    );
+    assert.ok(Array.isArray(result.testFiles), 'testFiles should be an array');
+    assert.ok(result.testFiles.length >= 1, 'at least one testFile recovered');
+    assert.equal(result.testFiles[0].filePath, 'tests/e2e/app.spec.ts');
+  });
+
+  it('parses ```json fence truncated with literal newlines (no escape)', () => {
+    // Some models emit raw newlines inside string values when streaming —
+    // sanitizeJsonControlChars handles them, but only when the repair path
+    // also runs them through the sanitizer. PR-H Attempt 3b regression.
+    const truncated =
+      '```json\n' +
+      '{"testFiles": [{"filePath": "a.ts", "content": "line1\nline2\nline3"}], "ok": true}';
+    const result = parseAIJson<{ testFiles: Array<{ filePath: string }>; ok: boolean }>(truncated);
+    assert.equal(result.ok, true);
+    assert.equal(result.testFiles[0].filePath, 'a.ts');
+  });
+
   it('handles deeply nested JSON', () => {
     const input = '{"a": {"b": {"c": {"d": [1, 2, 3]}}}}';
     const result = parseAIJson<{ a: { b: { c: { d: number[] } } } }>(input);

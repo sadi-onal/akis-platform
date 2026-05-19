@@ -162,6 +162,93 @@ describe('mapPipelineToWorkflow', () => {
       expect(w.stages.scribe.status).toBe('completed');
     });
   });
+
+  // PR-H bug-2 (2026-05-19): when Trace dryRun fails before the push gate,
+  // the orchestrator parks the pipeline at `awaiting_push_confirm` without
+  // persisting `traceOutput` or `error`. Before this fix the chat timeline
+  // ended at "Proto Scaffold oluşturuldu" and the user thought the pipeline
+  // had stalled. The mapper now emits a synthetic info row narrating the
+  // missing tests so the user knows what to do next.
+  describe('Trace failure narrator (PR-H bug-2)', () => {
+    function makeProtoOutput() {
+      return {
+        ok: true,
+        branch: 'main',
+        repo: 'owner/repo',
+        repoUrl: 'https://github.com/owner/repo',
+        files: [],
+        setupCommands: [],
+        metadata: {
+          filesCreated: 3,
+          totalLinesOfCode: 120,
+          committed: false,
+        },
+      } as unknown as Pipeline['protoOutput'];
+    }
+
+    it('emits an info row when awaiting_push_confirm has no traceOutput', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'awaiting_push_confirm',
+          protoOutput: makeProtoOutput(),
+        })
+      );
+      const conv = w.conversation ?? [];
+      const traceFailure = conv.find(
+        (m) =>
+          m.role === 'system' &&
+          typeof m.content === 'string' &&
+          m.content.includes('Trace test üretimi tamamlanamadı')
+      );
+      expect(traceFailure).toBeDefined();
+    });
+
+    it('does NOT emit the info row when traceOutput is present', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'awaiting_push_confirm',
+          protoOutput: makeProtoOutput(),
+          traceOutput: {
+            ok: true,
+            testFiles: [{ filePath: 'tests/e2e/app.spec.ts', content: '', testCount: 3 }],
+            coverageMatrix: {},
+            testSummary: {
+              totalTests: 3,
+              coveragePercentage: 80,
+              coveredCriteria: [],
+              uncoveredCriteria: [],
+            },
+          } as unknown as Pipeline['traceOutput'],
+        })
+      );
+      const conv = w.conversation ?? [];
+      const traceFailure = conv.find(
+        (m) =>
+          m.role === 'system' &&
+          typeof m.content === 'string' &&
+          m.content.includes('Trace test üretimi tamamlanamadı')
+      );
+      expect(traceFailure).toBeUndefined();
+      const traceResult = conv.find((m) => m.role === 'trace' && m.type === 'trace_result');
+      expect(traceResult).toBeDefined();
+    });
+
+    it('does NOT emit the info row when scaffold is not ready (no protoOutput)', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'proto_building',
+        })
+      );
+      const conv = w.conversation ?? [];
+      const traceFailure = conv.find(
+        (m) =>
+          m.role === 'system' &&
+          typeof m.content === 'string' &&
+          m.content.includes('Trace test üretimi tamamlanamadı')
+      );
+      expect(traceFailure).toBeUndefined();
+    });
+  });
 });
 
 // ── API methods ───────────────────────────────────
