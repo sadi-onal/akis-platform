@@ -49,7 +49,7 @@ export interface UsePipelineControlsResult {
 }
 
 export function usePipelineControls(
-  options: UsePipelineControlsOptions,
+  options: UsePipelineControlsOptions
 ): UsePipelineControlsResult {
   const { conversationId, activeWorkflow, refreshWorkflow } = options;
 
@@ -79,10 +79,10 @@ export function usePipelineControls(
         conversationId,
         sanitizeRepoName(activeWorkflow.title ?? 'project'),
         'private',
-        { cucumberEnabled },
+        { cucumberEnabled }
       );
       await refreshWorkflow();
-      toast('Spec onaylandi, Proto baslatiliyor...', 'success');
+      toast('Spec onaylandı, Proto başlatılıyor…', 'success');
     } catch (e) {
       toast(localizeError(e), 'error');
     } finally {
@@ -151,4 +151,3 @@ export function usePipelineControls(
     isRetrying: retryingError !== null,
   };
 }
-

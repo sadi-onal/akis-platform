@@ -1,7 +1,7 @@
 import type { Locale } from './i18n.types';
 
 export const SUPPORTED_LOCALES: readonly Locale[] = ['en', 'tr'];
-export const DEFAULT_LOCALE: Locale = 'en';
+export const DEFAULT_LOCALE: Locale = 'tr';
 export const LOCALE_STORAGE_KEY = 'akis.locale';
 
 const isSupportedLocale = (value: string): value is Locale =>
@@ -80,4 +80,3 @@ export const detectNavigatorLocale = (): Locale | null => {
 
 export const resolveInitialLocale = (): Locale =>
   readPersistedLocale() ?? detectNavigatorLocale() ?? DEFAULT_LOCALE;
-

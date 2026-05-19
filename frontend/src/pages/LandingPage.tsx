@@ -45,19 +45,19 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/docs')}
-              aria-label="Dokumantasyon sayfasina git"
+              aria-label="Dokümantasyon sayfasına git"
               className="text-sm text-ak-text-secondary hover:text-ak-text-primary transition-colors"
             >
-              Dokumantasyon
+              Dokümantasyon
             </button>
             <motion.button
               onClick={() => navigate('/login')}
-              aria-label="Giris yap sayfasina git"
+              aria-label="Giriş yap sayfasına git"
               className="rounded-lg bg-[#07D1AF] px-4 py-2 text-sm font-semibold text-[#0A1215]"
               whileHover={reduced ? {} : { scale: 1.05 }}
               whileTap={{ scale: 0.97 }}
             >
-              Giris Yap
+              Giriş Yap
             </motion.button>
           </div>
         </motion.nav>
@@ -79,16 +79,18 @@ export default function LandingPage() {
             >
               <h2 className="text-2xl font-bold mb-3">Hemen Deneyin</h2>
               <p className="text-sm text-ak-text-secondary mb-6">
-                Hesap olusturun ve ilk pipeline'inizi dakikalar icinde baslatin.
+                Hesap oluşturun ve ilk pipeline'ınızı dakikalar içinde başlatın.
               </p>
               <motion.button
                 onClick={() => navigate('/signup')}
-                aria-label="Ucretsiz hesap olustur"
+                aria-label="Ücretsiz hesap oluştur"
                 className="rounded-xl bg-[#07D1AF] px-10 py-4 text-sm font-bold text-[#0A1215] shadow-lg shadow-[#07D1AF]/20"
-                whileHover={reduced ? {} : { scale: 1.05, boxShadow: '0 0 40px rgba(7,209,175,0.3)' }}
+                whileHover={
+                  reduced ? {} : { scale: 1.05, boxShadow: '0 0 40px rgba(7,209,175,0.3)' }
+                }
                 whileTap={{ scale: 0.97 }}
               >
-                Ucretsiz Basla
+                Ücretsiz Başla
               </motion.button>
             </motion.div>
           </section>
@@ -97,10 +99,10 @@ export default function LandingPage() {
         {/* Footer */}
         <footer className="border-t border-ak-border px-4 py-8 text-center">
           <p className="text-xs text-ak-text-secondary">
-            AKIS Platform — FSMVU Bitirme Projesi &copy; 2026
+            AKIS Platform — FSMVÜ Bitirme Projesi &copy; 2026
           </p>
           <p className="mt-1 text-xs text-ak-text-secondary/60">
-            Omer Yasir Onal — Dr. Ogr. Uyesi Nazli Dogan
+            Ömer Yasir Önal — Dr. Öğr. Üyesi Nazlı Doğan
           </p>
         </footer>
       </div>
