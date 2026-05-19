@@ -55,8 +55,15 @@ export default function ChatPage() {
   const [pendingConv, setPendingConv] = useState<{ displayName: string } | null>(null);
   const { traceEnabled, setTraceEnabled } = useTraceToggle();
   const [selectedRepo, setSelectedRepo] = useState<SelectedRepo | null>(null);
-  const { showPreview, setShowPreview, previewWidth, splitContainerRef, handleDragStart } =
-    useShowPreview();
+  const {
+    showPreview,
+    setShowPreview,
+    previewWidth,
+    splitContainerRef,
+    handleDragStart,
+    handleDragMove,
+    handleDragEnd,
+  } = useShowPreview();
   const { hasGitHub, loading: profileLoading } = useProfileCompleteness();
 
   // Close mobile sidebar overlay when navigating to a conversation
@@ -462,6 +469,8 @@ export default function ChatPage() {
     setShowPreview,
     splitContainerRef,
     handleDragStart,
+    handleDragMove,
+    handleDragEnd,
     onSend: handleSend,
     onAsk: handleIntentAsk,
     onFeedback: handleIntentFeedback,

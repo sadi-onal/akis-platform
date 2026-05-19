@@ -17,7 +17,7 @@
  *   - `handleDragStart` — wire to the drag handle's `onMouseDown`.
  */
 import { useState } from 'react';
-import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
+import type { PointerEvent as ReactPointerEvent, RefObject } from 'react';
 
 import { useSplitResize } from './useSplitResize';
 
@@ -37,7 +37,9 @@ export interface UseShowPreviewResult {
   setShowPreview: (next: boolean | ((prev: boolean) => boolean)) => void;
   previewWidth: number;
   splitContainerRef: RefObject<HTMLDivElement | null>;
-  handleDragStart: (e: ReactMouseEvent) => void;
+  handleDragStart: (e: ReactPointerEvent) => void;
+  handleDragMove: (e: ReactPointerEvent) => void;
+  handleDragEnd: (e: ReactPointerEvent) => void;
 }
 
 export function useShowPreview(options: UseShowPreviewOptions = {}): UseShowPreviewResult {
@@ -51,7 +53,7 @@ export function useShowPreview(options: UseShowPreviewOptions = {}): UseShowPrev
   const [showPreview, setShowPreview] = useState<boolean>(initialShowPreview);
   const [previewWidth, setPreviewWidth] = useState<number>(initialPreviewWidth);
 
-  const { splitContainerRef, handleDragStart } = useSplitResize({
+  const { splitContainerRef, handleDragStart, handleDragMove, handleDragEnd } = useSplitResize({
     setPreviewWidth,
     minPercent,
     maxPercent,
@@ -63,5 +65,7 @@ export function useShowPreview(options: UseShowPreviewOptions = {}): UseShowPrev
     previewWidth,
     splitContainerRef,
     handleDragStart,
+    handleDragMove,
+    handleDragEnd,
   };
 }
