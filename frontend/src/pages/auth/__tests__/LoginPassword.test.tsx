@@ -271,4 +271,51 @@ describe('LoginPassword — Enter key', () => {
     fireEvent.keyDown(pwInput, { key: 'Tab' });
     expect(mockLoginComplete).not.toHaveBeenCalled();
   });
+
+  // ─── PR-V3 edge-case regression tests (test sweep, 2026-05-19) ─────────
+
+  it('does NOT submit on Enter when password length is exactly 7 (boundary off-by-one)', async () => {
+    renderLoginPassword();
+    const pwInput = document.getElementById('password') as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: '1234567' } }); // 7 chars
+    fireEvent.keyDown(pwInput, { key: 'Enter' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mockLoginComplete).not.toHaveBeenCalled();
+  });
+
+  it('submits on Enter when password length is exactly 8 (boundary)', async () => {
+    mockGetReturnTo.mockReturnValue(null);
+    mockLoginComplete.mockResolvedValueOnce({
+      user: { id: 'u1', name: 'Test', email: 'user@example.com' },
+    });
+    renderLoginPassword();
+    const pwInput = document.getElementById('password') as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: '12345678' } }); // 8 chars exactly
+    fireEvent.keyDown(pwInput, { key: 'Enter' });
+
+    await vi.waitFor(() => {
+      expect(mockLoginComplete).toHaveBeenCalledWith({
+        userId: 'u1',
+        password: '12345678',
+      });
+    });
+  });
+
+  it('Enter does not double-submit during in-flight loginComplete (submitting guard)', async () => {
+    let resolveLogin: (v: unknown) => void = () => undefined;
+    mockLoginComplete.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveLogin = r;
+        })
+    );
+    renderLoginPassword();
+    const pwInput = document.getElementById('password') as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: 'longenoughpass' } });
+    fireEvent.keyDown(pwInput, { key: 'Enter' });
+    fireEvent.keyDown(pwInput, { key: 'Enter' });
+
+    await vi.waitFor(() => expect(mockLoginComplete).toHaveBeenCalledTimes(1));
+    resolveLogin({ user: { id: 'u1', name: 'Test', email: 'user@example.com' } });
+  });
 });
