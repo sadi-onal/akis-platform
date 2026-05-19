@@ -1,14 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  SPEC_REVIEW_SYSTEM_PROMPT,
-  buildSpecReviewUserPrompt,
-} from '../prompts/spec-review.js';
-import {
-  CODE_REVIEW_SYSTEM_PROMPT,
-  buildCodeReviewUserPrompt,
-} from '../prompts/code-review.js';
+import { SPEC_REVIEW_SYSTEM_PROMPT, buildSpecReviewUserPrompt } from '../prompts/spec-review.js';
+import { CODE_REVIEW_SYSTEM_PROMPT, buildCodeReviewUserPrompt } from '../prompts/code-review.js';
 
 // ─── Spec Review Prompt Tests ────────────────────
 
@@ -59,6 +53,34 @@ describe('Spec review prompt', () => {
     const prompt = buildSpecReviewUserPrompt(artifact, 'idea', 1);
     assert.ok(prompt.includes('Test App'));
     assert.ok(prompt.includes('Test problem'));
+  });
+
+  // PR-V8: empty technicalConstraints.stack is an AKIS convention meaning
+  // "Proto will choose technologies" — not a missing-field violation.
+  // The Critic prompt must teach the LLM this rule so it stops flagging
+  // empty stack as a critical Completeness gap.
+  it('system prompt teaches AKIS convention: empty stack means Proto decides', () => {
+    // Must reference the field by its exact path so the LLM can pattern-match.
+    assert.ok(
+      SPEC_REVIEW_SYSTEM_PROMPT.includes('technicalConstraints.stack'),
+      'prompt must name the technicalConstraints.stack field explicitly'
+    );
+    // Must say empty stack is normal / not a missing field.
+    assert.ok(
+      /empty stack|stack.*empty|boş.*stack|stack.*boş/i.test(SPEC_REVIEW_SYSTEM_PROMPT),
+      'prompt must say empty stack is allowed'
+    );
+    // Must mention Proto as the resolver so the LLM understands the
+    // downstream contract.
+    assert.ok(
+      /Proto/i.test(SPEC_REVIEW_SYSTEM_PROMPT),
+      'prompt must explain that Proto chooses the stack when it is empty'
+    );
+    // Negative phrasing — explicitly forbid flagging empty stack.
+    assert.ok(
+      /do NOT flag|don't flag|flagleme|flag.*empty.*stack/i.test(SPEC_REVIEW_SYSTEM_PROMPT),
+      'prompt must explicitly forbid flagging empty stack as a missing field'
+    );
   });
 });
 
