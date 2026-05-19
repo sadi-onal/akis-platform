@@ -179,3 +179,79 @@ export function buildCriticReasoning(
     })),
   };
 }
+
+// ─── PR-U3 M8: ReasoningFactory registry ─────────────────────────
+//
+// Previously the orchestrator hard-coded which builder maps to which agent
+// (`buildScribeReasoning`, `buildProtoReasoning`, ...). Adding a new agent
+// required hunting through orchestrator code; calling an unknown agent
+// silently produced no reasoning row. The registry below decouples the
+// dispatch — `recordReasoningGeneric(pipelineId, agentName, output)` can
+// be called from any agent runner; unknown agents log a warning and fall
+// back to a minimal placeholder so the Açıklama tab still shows the agent
+// even before its dedicated builder lands.
+//
+// The orchestrator's typed helpers (`recordScribeReasoning`, etc.) stay as
+// thin wrappers — direct callers with structured outputs still get full
+// type safety, the registry is only the escape hatch.
+
+export type ReasoningBuilder<T = unknown> = (
+  output: T,
+  opts?: Record<string, unknown>
+) => AgentReasoning;
+
+/**
+ * Default registry shipped with the orchestrator. New agents register their
+ * builder here; consumers (the orchestrator, tests, internal tools) read
+ * via `lookupReasoningBuilder()` so unknown agents get a documented fallback
+ * instead of `undefined`.
+ */
+const DEFAULT_REASONING_BUILDERS: Record<string, ReasoningBuilder<unknown>> = {
+  scribe: buildScribeReasoning as ReasoningBuilder<unknown>,
+  proto: buildProtoReasoning as ReasoningBuilder<unknown>,
+  trace: buildTraceReasoning as ReasoningBuilder<unknown>,
+  critic: buildCriticReasoning as ReasoningBuilder<unknown>,
+};
+
+const reasoningRegistry: Map<string, ReasoningBuilder<unknown>> = new Map(
+  Object.entries(DEFAULT_REASONING_BUILDERS)
+);
+
+export function registerReasoningBuilder(
+  agentName: string,
+  builder: ReasoningBuilder<unknown>
+): void {
+  reasoningRegistry.set(agentName, builder);
+}
+
+export function lookupReasoningBuilder(agentName: string): ReasoningBuilder<unknown> | undefined {
+  return reasoningRegistry.get(agentName);
+}
+
+/**
+ * Generic fallback record for an agent that has no registered builder.
+ * Returned by `lookupReasoningBuilderOrFallback()` so the explainability
+ * surface always renders something instead of silently dropping the row.
+ */
+export function buildFallbackReasoning(
+  agentName: string,
+  output: unknown,
+  opts: { now?: Date; decision?: string } = {}
+): AgentReasoning {
+  return {
+    agentName,
+    timestamp: opts.now ?? new Date(),
+    decision: opts.decision ?? `${agentName} adımı tamamlandı`,
+    reasoning: [
+      `Bu ajan (${agentName}) için özel bir açıklama oluşturucusu kayıtlı değil — varsayılan kayıt kullanıldı.`,
+    ],
+    assumptions: [],
+    confidence: { score: 0, factors: ['Yapılandırılmış ölçüm yok'] },
+    // Stash raw output so a future builder can re-process it without
+    // re-running the agent. JSON-safe shape relies on `output` being
+    // serializable, which is enforced by ExplainabilityService.
+    ...(output && typeof output === 'object'
+      ? { reasoningRaw: output as Record<string, unknown> }
+      : {}),
+  };
+}
