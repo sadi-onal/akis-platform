@@ -56,8 +56,9 @@ export default function LoginPassword() {
       clearReturnTo();
       navigate(returnTo || POST_AUTH_PATH, { replace: true });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Yanlış şifre. Lütfen tekrar deneyin.';
-      
+      const errorMessage =
+        err instanceof Error ? err.message : 'Yanlış şifre. Lütfen tekrar deneyin.';
+
       // Try to parse error JSON for better messages
       try {
         const errorData = JSON.parse(errorMessage);
@@ -118,6 +119,12 @@ export default function LoginPassword() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !submitting && password.length >= 8) {
+                    e.preventDefault();
+                    handleSubmit(e as unknown as React.FormEvent<HTMLFormElement>);
+                  }
+                }}
                 required
                 minLength={8}
                 autoComplete="current-password"
@@ -135,10 +142,7 @@ export default function LoginPassword() {
           </div>
 
           <div className="flex justify-end">
-            <Link
-              to="/forgot-password"
-              className="text-sm text-ak-primary hover:underline"
-            >
+            <Link to="/forgot-password" className="text-sm text-ak-primary hover:underline">
               Şifremi unuttum
             </Link>
           </div>
@@ -153,4 +157,3 @@ export default function LoginPassword() {
     </main>
   );
 }
-

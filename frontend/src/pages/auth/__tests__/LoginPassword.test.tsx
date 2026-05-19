@@ -34,8 +34,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
 const mockLoginComplete = vi.fn();
 vi.mock('../../../services/api/auth', () => ({
   AuthAPI: {
-    loginComplete: (data: { userId: string; password: string }) =>
-      mockLoginComplete(data),
+    loginComplete: (data: { userId: string; password: string }) => mockLoginComplete(data),
   },
 }));
 
@@ -59,7 +58,7 @@ function renderLoginPassword() {
       <Routes>
         <Route path="/login/password" element={<LoginPassword />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
@@ -205,7 +204,7 @@ describe('LoginPassword — form submission', () => {
 
   it('parses JSON error.message when AuthAPI throws structured JSON', async () => {
     mockLoginComplete.mockRejectedValueOnce(
-      new Error(JSON.stringify({ message: 'Bilgileriniz hatalı' })),
+      new Error(JSON.stringify({ message: 'Bilgileriniz hatalı' }))
     );
     renderLoginPassword();
 
@@ -226,9 +225,50 @@ describe('LoginPassword — form submission', () => {
     fireEvent.submit(pwInput.closest('form')!);
 
     await vi.waitFor(() => {
-      expect(
-        screen.getByText('Yanlış şifre. Lütfen tekrar deneyin.'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Yanlış şifre. Lütfen tekrar deneyin.')).toBeInTheDocument();
     });
+  });
+});
+
+describe('LoginPassword — Enter key', () => {
+  beforeEach(() => {
+    sessionStorage.setItem('akis_login_data', VALID_STORAGE);
+  });
+
+  it('submits when Enter is pressed and password length >= 8', async () => {
+    mockGetReturnTo.mockReturnValue(null);
+    mockLoginComplete.mockResolvedValueOnce({
+      user: { id: 'u1', name: 'Test', email: 'user@example.com' },
+    });
+    renderLoginPassword();
+
+    const pwInput = document.getElementById('password') as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: 'longenoughpass' } });
+    fireEvent.keyDown(pwInput, { key: 'Enter' });
+
+    await vi.waitFor(() => {
+      expect(mockLoginComplete).toHaveBeenCalledWith({
+        userId: 'u1',
+        password: 'longenoughpass',
+      });
+    });
+  });
+
+  it('does NOT submit on Enter when password is shorter than 8 characters', async () => {
+    renderLoginPassword();
+    const pwInput = document.getElementById('password') as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: 'short' } });
+    fireEvent.keyDown(pwInput, { key: 'Enter' });
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockLoginComplete).not.toHaveBeenCalled();
+  });
+
+  it('does not submit on non-Enter keys (e.g. Tab)', () => {
+    renderLoginPassword();
+    const pwInput = document.getElementById('password') as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: 'longenoughpass' } });
+    fireEvent.keyDown(pwInput, { key: 'Tab' });
+    expect(mockLoginComplete).not.toHaveBeenCalled();
   });
 });
