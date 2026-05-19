@@ -1627,6 +1627,68 @@ export class PipelineOrchestrator {
         // still wants to see which kabul kriteri the (rejected) scaffold
         // does/doesn't address while deciding to iterate vs override.
         await this.persistAcCoverage(pipelineId, protoResult.data, pipeline.scribeOutput);
+
+        // ─── PR-F3: Critic critical-finding iterate-loop ──────────────
+        // Mimari karar (2026-05-19): Kullanıcıyı hard-block etmeden önce
+        // Proto'yu kritik bulgular feedback olarak verilerek otomatik
+        // re-iterate ediyoruz. Max retry sayısı CRITIC_CRITICAL_MAX_ITERATE_RETRIES
+        // env var ile parametrik (default 3). Retry tükenince mevcut
+        // hard-block davranışı (awaiting_critic_resolution) devreye girer.
+        // Pattern Trace iterate-loop ile birebir aynı.
+        const criticIterateDecision = await this.evaluateCriticIterateLoop(
+          pipelineId,
+          criticResult
+        );
+        if (criticIterateDecision.shouldIterate) {
+          logger.info(
+            {
+              pipelineId,
+              retry: criticIterateDecision.nextRetry,
+              maxRetries: criticIterateDecision.maxRetries,
+              criticalCount: criticIterateDecision.criticalCount,
+            },
+            '[Pipeline] PR-F3 Critic iterate-loop — re-iterating Proto with critical findings'
+          );
+          // Persist criticCodeOutput so the UI sees the failing snapshot
+          // until the next retry overwrites it.
+          const stateBeforeDispatch = await this.store.getById(pipelineId);
+          const intermediateBeforeDispatch =
+            (stateBeforeDispatch?.intermediateState ?? {}) as Record<string, unknown>;
+          await this.store.update(pipelineId, {
+            protoOutput: protoResult.data,
+            metrics: protoCompletedMetrics,
+            intermediateState: {
+              ...intermediateBeforeDispatch,
+              criticCodeOutput: criticResult,
+            },
+          });
+          // Activity emit — Critic retry-trigger surfaces on Proto column
+          // ("Critic düzeltiyor (n/max)" badge).
+          const criticIterateEmit = createActivityEmitter(pipelineId, 'critic', {
+            criticPhase: 'code',
+          });
+          criticIterateEmit(
+            'retry-trigger',
+            `Critic kritik bulgu raporladı — Proto yeniden çalışıyor (${criticIterateDecision.nextRetry}/${criticIterateDecision.maxRetries})`,
+            80,
+            criticIterateDecision.feedback,
+            criticIterateDecision.nextRetry,
+            'pipeline.critic.iterate.retry'
+          );
+          // Fire-and-forget dispatch. Critic review yine kendi içinde
+          // sarmalanır; sonraki run da kritik bulgu raporlarsa loop devam
+          // eder. Max retry sonrası fallback hard-block tetiklenir.
+          void this.dispatchCriticIterate(pipelineId, criticIterateDecision.feedback).catch(
+            (err) => {
+              logger.error(
+                { err, pipelineId },
+                '[Pipeline] PR-F3 Critic iterate-loop dispatch failed'
+              );
+            }
+          );
+          return;
+        }
+
         const currentStateForBlock = await this.store.getById(pipelineId);
         const existingIntermediateBlock = (currentStateForBlock?.intermediateState ?? {}) as Record<
           string,
@@ -3739,6 +3801,167 @@ export class PipelineOrchestrator {
       logger.error(
         { err, pipelineId },
         '[Pipeline] PR-F Trace iterate-loop runProtoAndTrace failed'
+      );
+    });
+  }
+
+  // ─── PR-F3: Critic critical-finding iterate-loop helpers ────────
+
+  /**
+   * PR-F3 (2026-05-19) — Critic kod review'unda severity=critical bulgu
+   * varsa kullanıcıyı `awaiting_critic_resolution` ile hard-block etmeden
+   * önce Proto'yu otomatik re-iterate eder. Trace iterate-loop pattern'inin
+   * birebir kopyası.
+   *
+   * Kurallar:
+   *   - findings içinde severity=critical bulgu yoksa hiçbir şey yapma.
+   *   - `intermediateState.criticIterateRetryCount` `CRITIC_CRITICAL_MAX_ITERATE_RETRIES`
+   *     'a ulaştıysa iterate'i durdur, fallback olarak mevcut hard-block
+   *     davranışı devreye girer (awaiting_critic_resolution).
+   *   - Aksi halde kritik bulguların `suggestion` alanlarından feedback
+   *     metni üret, `shouldIterate=true` ile dön.
+   *
+   * Feedback formatı `iterateProtoFromFeedback` ile uyumlu — Proto'nun
+   * `feedbackContext` parametresi olarak plumb edilir.
+   */
+  private async evaluateCriticIterateLoop(
+    pipelineId: string,
+    criticResult: CriticReviewOutput
+  ): Promise<{
+    shouldIterate: boolean;
+    nextRetry: number;
+    maxRetries: number;
+    criticalCount: number;
+    feedback: string;
+  }> {
+    // Read env directly (same rationale as Trace iterate-loop / preview gate).
+    const maxRetriesRaw = parseInt(process.env.CRITIC_CRITICAL_MAX_ITERATE_RETRIES ?? '3', 10);
+    const maxRetries = Number.isFinite(maxRetriesRaw)
+      ? Math.max(0, Math.min(10, maxRetriesRaw))
+      : 3;
+
+    const pipeline = await this.store.getById(pipelineId);
+    const noopResult = {
+      shouldIterate: false,
+      nextRetry: 0,
+      maxRetries,
+      criticalCount: 0,
+      feedback: '',
+    };
+    if (!pipeline) return noopResult;
+
+    const criticalFindings = (criticResult.findings ?? []).filter(
+      (f) => f.severity === 'critical'
+    );
+    if (criticalFindings.length === 0) return noopResult;
+
+    const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
+    const currentRetry =
+      typeof intermediate.criticIterateRetryCount === 'number'
+        ? (intermediate.criticIterateRetryCount as number)
+        : 0;
+
+    if (currentRetry >= maxRetries) {
+      logger.info(
+        {
+          pipelineId,
+          currentRetry,
+          maxRetries,
+          criticalCount: criticalFindings.length,
+        },
+        '[Pipeline] PR-F3 Critic iterate-loop max retries reached — handing off to awaiting_critic_resolution'
+      );
+      return { ...noopResult, criticalCount: criticalFindings.length };
+    }
+
+    const nextRetry = currentRetry + 1;
+    // Feedback metni — Proto'ya kritik bulguların `suggestion` (öneri)
+    // alanlarını gönderiyoruz. `description` da bağlam olarak ekleniyor.
+    const feedbackLines = [
+      'Aşağıdaki kritik bulgular önceki Proto çıktısında tespit edildi. Kodu bu doğrultuda düzelt:',
+      '',
+      ...criticalFindings.map(
+        (f, idx) =>
+          `${idx + 1}. ${f.description}\n   Öneri: ${f.suggestion}${f.location ? `\n   Konum: ${f.location}` : ''}`
+      ),
+      '',
+      'Lütfen bu bulguları çözen güncellenmiş kodu üret.',
+    ];
+    const feedback = feedbackLines.join('\n');
+    return {
+      shouldIterate: true,
+      nextRetry,
+      maxRetries,
+      criticalCount: criticalFindings.length,
+      feedback,
+    };
+  }
+
+  /**
+   * PR-F3 (2026-05-19) — Critic iterate-loop dispatch. `iterateProtoFromFeedback`
+   * stage guard'ları (awaiting_push_confirm / awaiting_critic_resolution)
+   * bu otomatik trigger için uygun değil; iterate dispatch Critic review'dan
+   * sonra `critic_reviewing_code` stage'inde tetikleniyor. Bu yüzden
+   * runProtoAndTrace'i doğrudan yeniden başlatıyoruz. Pattern Trace iterate-
+   * loop ile birebir aynı.
+   */
+  private async dispatchCriticIterate(
+    pipelineId: string,
+    feedback: string
+  ): Promise<void> {
+    const pipeline = await this.store.getById(pipelineId);
+    if (!pipeline) return;
+    if (!pipeline.approvedSpec || !pipeline.protoConfig) {
+      logger.warn(
+        { pipelineId },
+        '[Pipeline] PR-F3 Critic iterate-loop: missing approvedSpec/protoConfig'
+      );
+      return;
+    }
+    // Owner re-resolve (DOGFOOD_MODE'ta stub döner).
+    let owner: string;
+    try {
+      const gh = await this.validateGitHubAccess(pipeline.userId);
+      owner = gh.owner;
+    } catch (err) {
+      logger.warn(
+        { err, pipelineId },
+        '[Pipeline] PR-F3 Critic iterate dispatch: GitHub owner failed'
+      );
+      return;
+    }
+    const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
+    const currentRetry =
+      typeof intermediate.criticIterateRetryCount === 'number'
+        ? (intermediate.criticIterateRetryCount as number)
+        : 0;
+    // proto_building'a geç + retry counter'ı kaydet.
+    await this.store.update(pipelineId, {
+      stage: 'proto_building',
+      intermediateState: {
+        ...intermediate,
+        criticIterateRetryCount: currentRetry + 1,
+        criticIterateLastFeedback: feedback,
+        criticIterateLastAt: new Date().toISOString(),
+      },
+    });
+    this.emitEvent(pipelineId, 'stage_change', 'proto_building');
+    // Fire-and-forget. Critic review yine kendi içinde sarmalanır; sonraki
+    // run da yine kritik bulgu raporlarsa loop devam eder (maxRetries'a kadar).
+    this.runProtoAndTrace(
+      pipelineId,
+      pipeline.metrics,
+      pipeline.approvedSpec,
+      pipeline.protoConfig.repoName,
+      pipeline.protoConfig.repoVisibility,
+      owner,
+      pipeline.model,
+      undefined,
+      feedback
+    ).catch((err) => {
+      logger.error(
+        { err, pipelineId },
+        '[Pipeline] PR-F3 Critic iterate-loop runProtoAndTrace failed'
       );
     });
   }

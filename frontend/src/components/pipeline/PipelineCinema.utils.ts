@@ -25,9 +25,14 @@ export interface StageView {
 // PR-F: Trace retry badge için stage view'a opsiyonel meta ekleniyor.
 // `retryCount` ve `maxRetries` Trace iterate-loop'tan (`step: 'retry-trigger'`)
 // emit edilen activity'lerden çıkarılır.
+// PR-F3 (2026-05-19): Critic critical-finding iterate-loop için de aynı meta
+// kullanılır; ancak Critic retry'ı Proto column'unda görünür ("Critic
+// düzeltiyor (n/max)" badge). `source` ile hangi tip retry olduğunu UI ayırt
+// edebilir; absent ise Trace olarak varsayılır (geriye dönük uyum).
 export interface StageMeta {
   retryCount?: number;
   maxRetries?: number;
+  retrySource?: 'trace' | 'critic';
 }
 
 // Map the orchestrator-level UI state to the cinema column that should
@@ -119,11 +124,32 @@ export function reduceStageViews(
     // bunu Trace column'unda küçük bir rozet olarak gösterir.
     if (a.stage === 'trace' && a.step === 'retry-trigger') {
       const existing = metaFor.get('trace') ?? {};
-      const max = parseTraceMaxRetries(a.message);
+      const max = parseRetryMaxFromMessage(a.message);
       metaFor.set('trace', {
         ...existing,
         retryCount: a.retryCount ?? existing.retryCount,
         maxRetries: max ?? existing.maxRetries,
+        retrySource: 'trace',
+      });
+    }
+    // PR-F3 (2026-05-19): Critic critical-finding iterate-loop retry — Critic
+    // `criticPhase=code` + `step=retry-trigger` activity'si Proto column'unda
+    // "Critic düzeltiyor (n/max)" badge olarak gösterilir. Trace badge'i ile
+    // aynı meta shape; Proto column'unda aynı anda iki retry birden olmaz
+    // (Critic iterate aktifken Trace henüz çalışmıyor; Trace iterate Trace
+    // column'unda görünür).
+    if (
+      a.stage === 'critic' &&
+      a.criticPhase === 'code' &&
+      a.step === 'retry-trigger'
+    ) {
+      const existing = metaFor.get('proto') ?? {};
+      const max = parseRetryMaxFromMessage(a.message);
+      metaFor.set('proto', {
+        ...existing,
+        retryCount: a.retryCount ?? existing.retryCount,
+        maxRetries: max ?? existing.maxRetries,
+        retrySource: 'critic',
       });
     }
     if (a.stage === 'proto' || a.stage === 'fix-loop') protoSeenSoFar = true;
@@ -194,11 +220,12 @@ export function reduceStageViews(
 }
 
 /**
- * PR-F — Trace iterate-loop retry mesajından maxRetries değerini çıkarır.
- * Backend emit'i `... (2/3)` formatında message yazar; rejex onu yakalar.
+ * PR-F / PR-F3 — iterate-loop retry mesajından maxRetries değerini çıkarır.
+ * Backend emit'i `... (2/3)` formatında message yazar; regex onu yakalar.
  * Yakalanamazsa undefined döner (eski activity'lerle backward-compat).
+ * Hem Trace hem Critic iterate-loop için aynı format kullanılır.
  */
-function parseTraceMaxRetries(message: string): number | undefined {
+function parseRetryMaxFromMessage(message: string): number | undefined {
   const match = /\((\d+)\/(\d+)\)/.exec(message);
   if (!match) return undefined;
   const max = parseInt(match[2] ?? '', 10);
