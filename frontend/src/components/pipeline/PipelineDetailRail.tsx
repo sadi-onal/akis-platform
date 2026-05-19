@@ -14,7 +14,6 @@ import { AttentionBanner } from './AttentionBanner';
 import { RegressionPanel } from './RegressionPanel';
 import { PushConfirmGate } from './PushConfirmGate';
 import { CriticResolutionGate } from './CriticResolutionGate';
-import { CriticFindingsInline } from './CriticFindingsInline';
 import { AiCallsPanel } from './AiCallsPanel';
 import type { AiCallEntry } from '../../types/pipeline';
 
@@ -629,16 +628,19 @@ export function PipelineDetailRail({
               !criticGateActive durumunda gösterilir. */}
           {effectiveTab === 'flow' &&
             !criticGateActive &&
-            pipelineId &&
             criticReview &&
             (criticReview.findings?.length ?? 0) > 0 && (
-              <div className="mt-3">
-                <CriticFindingsInline
-                  pipelineId={pipelineId}
-                  criticReview={criticReview}
-                  onIterationStarted={onCriticResolved}
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setTab('why')}
+                className="mt-3 inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/10 px-2.5 py-0.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-500/20 dark:text-rose-300"
+                aria-label={`${criticReview.findings!.length} Critic bulgusu — Açıklama sekmesinde göster`}
+                title="Açıklama sekmesine geç ve Critic bulgularını gör"
+                data-testid="critic-findings-summary-chip"
+              >
+                <span aria-hidden="true">⚠</span>
+                {criticReview.findings!.length} Critic bulgusu — Açıklama'da
+              </button>
             )}
           {effectiveTab === 'why' && (
             <>
