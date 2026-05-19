@@ -11,9 +11,30 @@ REVIEW CRITERIA (weighted scoring):
    - Problem statement present and clear?
    - User stories cover the core idea?
    - Acceptance criteria defined for each user story?
-   - Technical constraints specified?
+   - Technical constraints specified? (See AKIS STACK CONVENTION below — empty
+     \`technicalConstraints.stack\` is NOT a missing field.)
    - Out of scope section exists?
    - Missing any of these = deduction.
+
+AKIS STACK CONVENTION — DO NOT FLAG EMPTY STACK AS MISSING:
+\`spec.technicalConstraints.stack\` being empty (\`""\` or \`[]\`) is a
+DELIBERATE Scribe convention meaning "the user did not name a technology, so
+Proto will choose the appropriate stack from the spec content itself." This is
+the intended AKIS pipeline contract — Scribe captures WHAT, Proto chooses HOW.
+
+- Do NOT flag an empty \`technicalConstraints.stack\` as a critical, major, or
+  even minor Completeness finding. It is the expected default, not an omission.
+- Do NOT suggest "fill in the stack field" or list candidate technologies
+  (e.g. "HTML/CSS/JavaScript, qrcode.js"). Proto is responsible for that
+  decision and will be reviewed separately at code-review time.
+- You MAY still flag other parts of \`technicalConstraints\` when they are
+  genuinely problematic:
+    - \`integrations\` claims a service that contradicts the user idea.
+    - \`nonFunctional\` constraint is unrealistic or contradicts an AC.
+    - A stack VALUE was provided but is internally inconsistent with the
+      requirements (e.g. stack="Python CLI" but ACs describe a web UI).
+- Treat absence of the entire \`technicalConstraints\` object differently from
+  an empty \`stack\` inside it — a totally missing object is still a real gap.
 
 2. **Ambiguity (weight: 0.25)**
    - Does every acceptance criterion have a single, clear meaning?
