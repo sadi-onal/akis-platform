@@ -13,9 +13,9 @@ export interface PushConfirmGateProps {
    * the 3-mode rendering:
    *   - 'success' (default): normal "Review the code" presentation
    *   - 'failed': amber warning banner — test üretimi başarısız, override
-   *     gerekir; consumer (PushGateFooter) okur ve push butonunu yalnız
+   *     gerekir; consumer (PushGateFooter) okur ve gönderim butonunu yalnız
    *     `onOverrideAck=true` durumunda enable eder
-   *   - 'pending': spinner banner, push devre dışı
+   *   - 'pending': spinner banner, gönderim butonu devre dışı
    */
   traceDryRunStatus?: 'success' | 'failed' | 'pending';
 }

@@ -20,7 +20,10 @@ export class InvalidStageError extends Error {
 
 export class GitHubAPIError extends Error {
   readonly code = 'GITHUB_API_ERROR';
-  constructor(message: string, public readonly statusCode?: number) {
+  constructor(
+    message: string,
+    public readonly statusCode?: number
+  ) {
     super(message);
     this.name = 'GitHubAPIError';
   }
@@ -77,8 +80,7 @@ export const PipelineErrorCode = {
   NETWORK_ERROR: 'NETWORK_ERROR',
 } as const;
 
-export type PipelineErrorCodeType =
-  (typeof PipelineErrorCode)[keyof typeof PipelineErrorCode];
+export type PipelineErrorCodeType = (typeof PipelineErrorCode)[keyof typeof PipelineErrorCode];
 
 const ERROR_DEFINITIONS: Record<
   PipelineErrorCodeType,
@@ -111,8 +113,7 @@ const ERROR_DEFINITIONS: Record<
     recoveryAction: 'retry',
   },
   [PipelineErrorCode.GITHUB_NOT_CONNECTED]: {
-    message:
-      'GitHub hesabınız bağlı değil. Devam etmek için GitHub hesabınızı bağlayın.',
+    message: 'GitHub hesabınız bağlı değil. Devam etmek için GitHub hesabınızı bağlayın.',
     retryable: false,
     recoveryAction: 'reconnect_github',
   },
@@ -129,37 +130,32 @@ const ERROR_DEFINITIONS: Record<
   },
   [PipelineErrorCode.GITHUB_TOKEN_INVALID]: {
     message:
-      "GitHub bağlantınızın süresi dolmuş veya geçersiz. Devam etmek için GitHub hesabınızı yeniden bağlayın.",
+      'GitHub bağlantınızın süresi dolmuş veya geçersiz. Devam etmek için GitHub hesabınızı yeniden bağlayın.',
     retryable: false,
     recoveryAction: 'reconnect_github',
   },
   [PipelineErrorCode.GITHUB_API_ERROR]: {
-    message:
-      "GitHub'a bağlanırken bir sorun oluştu. Lütfen birkaç dakika sonra tekrar deneyin.",
+    message: "GitHub'a bağlanırken bir sorun oluştu. Lütfen birkaç dakika sonra tekrar deneyin.",
     retryable: true,
     recoveryAction: 'retry',
   },
   [PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED]: {
-    message:
-      "Kod üretilirken bir sorun oluştu. Spec'i basitleştirmeyi deneyebilirsiniz.",
+    message: "Kod üretilirken bir sorun oluştu. Spec'i basitleştirmeyi deneyebilirsiniz.",
     retryable: true,
     recoveryAction: 'retry',
   },
   [PipelineErrorCode.PROTO_PUSH_FAILED]: {
-    message:
-      "Kod başarıyla üretildi ama GitHub'a yüklenirken sorun oluştu.",
+    message: "Kod başarıyla üretildi ama GitHub'a yüklenirken sorun oluştu.",
     retryable: true,
     recoveryAction: 'retry',
   },
   [PipelineErrorCode.TRACE_CODE_READ_FAILED]: {
-    message:
-      "Üretilen kod GitHub'dan okunamadı. Tekrar deneniyor...",
+    message: "Üretilen kod GitHub'dan okunamadı. Tekrar deneniyor...",
     retryable: true,
     recoveryAction: 'retry',
   },
   [PipelineErrorCode.TRACE_EMPTY_CODEBASE]: {
-    message:
-      'Üretilen projede test yazılabilecek kaynak kod bulunamadı.',
+    message: 'Üretilen projede test yazılabilecek kaynak kod bulunamadı.',
     retryable: false,
     recoveryAction: 'edit_spec',
   },
@@ -175,22 +171,21 @@ const ERROR_DEFINITIONS: Record<
   },
   [PipelineErrorCode.AI_KEY_MISSING]: {
     message:
-      'Pipeline calistirmak icin AI API anahtariniz gerekli. Lutfen Ayarlar > AI Anahtarlarindan ekleyin.',
+      'Akış çalıştırmak için AI API anahtarınız gerekli. Lütfen Ayarlar > AI Anahtarlarından ekleyin.',
     retryable: false,
     recoveryAction: 'configure_ai_key',
   },
   [PipelineErrorCode.PIPELINE_TIMEOUT]: {
-    message: 'İşlem beklenenden uzun sürdü. Pipeline duraklatıldı.',
+    message: 'İşlem beklenenden uzun sürdü. Akış duraklatıldı.',
     retryable: true,
     recoveryAction: 'retry',
   },
   [PipelineErrorCode.PIPELINE_CANCELLED]: {
-    message: 'Pipeline iptal edildi.',
+    message: 'Akış iptal edildi.',
     retryable: false,
   },
   [PipelineErrorCode.NETWORK_ERROR]: {
-    message:
-      'Bağlantı kesildi. Bağlantı geri geldiğinde otomatik olarak devam edilecek.',
+    message: 'Bağlantı kesildi. Bağlantı geri geldiğinde otomatik olarak devam edilecek.',
     retryable: true,
     recoveryAction: 'retry',
   },
