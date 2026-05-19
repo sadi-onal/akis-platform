@@ -1,7 +1,22 @@
 import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useI18n } from '../i18n/useI18n';
 import { POST_AUTH_PATH } from './routes';
+
+// PR-U2 M12: small helper so all three route guards share the same i18n'd
+// loading view without duplicating the markup.
+function GuardLoading() {
+  const { t } = useI18n();
+  return (
+    <div
+      role="status"
+      className="flex min-h-[50vh] items-center justify-center text-sm text-ak-text-secondary"
+    >
+      {t('app.loading')}
+    </div>
+  );
+}
 
 type Role = 'admin' | 'member';
 
@@ -15,11 +30,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const isAuthenticated = Boolean(user);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center text-sm text-ak-text-secondary">
-        Yükleniyor...
-      </div>
-    );
+    return <GuardLoading />;
   }
 
   if (!isAuthenticated) {
@@ -51,11 +62,7 @@ export function RedirectIfAuthenticated({ children }: RedirectIfAuthenticatedPro
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center text-sm text-ak-text-secondary">
-        Yükleniyor...
-      </div>
-    );
+    return <GuardLoading />;
   }
 
   if (user) {
@@ -77,11 +84,7 @@ export function RequireRole({ roles, fallbackPath = POST_AUTH_PATH, children }: 
   const isAuthenticated = Boolean(user);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center text-sm text-ak-text-secondary">
-        Yükleniyor...
-      </div>
-    );
+    return <GuardLoading />;
   }
 
   if (!isAuthenticated || !user) {

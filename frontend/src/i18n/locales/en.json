@@ -1122,5 +1122,12 @@
   "pipeline.miniState.complete": "complete",
   "pipeline.cinema.title": "Pipeline flow",
   "pipeline.cinema.toggleCompact": "Compact view",
-  "pipeline.cinema.toggleWide": "Wide view"
+  "pipeline.cinema.toggleWide": "Wide view",
+
+  "sidebar.group.today": "Today",
+  "sidebar.group.yesterday": "Yesterday",
+  "sidebar.group.thisWeek": "This Week",
+  "sidebar.group.older": "Older",
+
+  "app.loading": "Loading…"
 }

@@ -76,8 +76,7 @@ export function PipelineErrorBanner({
   // When we matched the code, the backend's raw message lives on a second
   // line as a (smaller) technical detail. When unmatched, the raw message
   // already lives in `friendly.detail` (regression-safe fallback path).
-  const showTechnicalLine =
-    friendly.matched && error.message && error.message !== friendly.detail;
+  const showTechnicalLine = friendly.matched && error.message && error.message !== friendly.detail;
 
   return (
     <div
@@ -87,7 +86,7 @@ export function PipelineErrorBanner({
         'flex flex-col gap-2 border-b px-4 py-3 text-sm',
         palette.border,
         palette.bg,
-        className,
+        className
       )}
       data-testid="pipeline-error-banner"
       data-error-severity={friendly.severity}
@@ -109,17 +108,12 @@ export function PipelineErrorBanner({
           />
         </svg>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className={cn('font-semibold', palette.title)}>
-            {friendly.title}
-          </span>
+          <span className={cn('font-semibold', palette.title)}>{friendly.title}</span>
           <span className="text-ak-text-secondary" data-testid="banner-detail">
             {friendly.detail}
           </span>
           {showTechnicalLine && (
-            <span
-              className="text-[11px] text-ak-text-muted"
-              data-testid="banner-technical-detail"
-            >
+            <span className="text-[11px] text-ak-text-muted" data-testid="banner-technical-detail">
               {error.message}
             </span>
           )}
@@ -130,7 +124,7 @@ export function PipelineErrorBanner({
             'flex-shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]',
             palette.chipBorder,
             palette.chipBg,
-            palette.chipText,
+            palette.chipText
           )}
         >
           {error.code}
@@ -149,7 +143,7 @@ export function PipelineErrorBanner({
                 'rounded-md border px-3 py-1 text-[12px] font-medium transition-colors',
                 isRetrying
                   ? 'cursor-wait border-amber-500/30 bg-amber-500/10 text-amber-200'
-                  : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 hover:text-red-200',
+                  : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 hover:text-red-200'
               )}
               data-testid="retry-button"
             >
@@ -161,7 +155,14 @@ export function PipelineErrorBanner({
                     fill="none"
                     aria-hidden="true"
                   >
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      opacity="0.25"
+                    />
                     <path
                       d="M22 12a10 10 0 0 1-10 10"
                       stroke="currentColor"
@@ -181,6 +182,11 @@ export function PipelineErrorBanner({
               onClick={onSkipTrace}
               className="rounded-md border border-ak-border bg-ak-surface-2 px-3 py-1 text-[12px] font-medium text-ak-text-secondary transition-colors hover:text-ak-text-primary"
               data-testid="skip-trace-button"
+              // PR-U2 #9: buton state-aware (`showSkipTrace = error.recoveryAction === 'skip-trace'`)
+              // ama kullanıcı "pipeline'ı iptal mi ediyorum?" diye düşünüyor.
+              // Net bir tooltip + aria-description ekledik.
+              title="Sadece test üretim adımını (Trace) atla — kod ve iskelet korunur, gönderim ekranına geçer."
+              aria-label="Trace adımını atla. Akış iptal edilmez; kod hazır, sadece testler oluşturulmadan devam edilir."
             >
               Trace'i Atla
             </button>

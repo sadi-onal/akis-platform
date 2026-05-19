@@ -1237,6 +1237,15 @@ export const MESSAGE_KEYS = [
   'pipeline.cinema.title',
   'pipeline.cinema.toggleCompact',
   'pipeline.cinema.toggleWide',
+
+  // PR-U2 #11: sidebar conversation-list date group headers.
+  'sidebar.group.today',
+  'sidebar.group.yesterday',
+  'sidebar.group.thisWeek',
+  'sidebar.group.older',
+
+  // PR-U2 M12: generic loading label for route guards / suspense fallbacks.
+  'app.loading',
 ] as const;
 
 // Keep strong autocomplete for known keys while allowing incremental key rollout.

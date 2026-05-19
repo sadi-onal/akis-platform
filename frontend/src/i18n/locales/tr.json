@@ -288,7 +288,7 @@
   "chat.suggestion.sending": "Gonderiliyor...",
   "chat.toast.completed": "Tamamlandı",
   "chat.toast.dismiss": "Kapat",
-  "chat.toast.pipelineCompleted": "Pipeline tamamlandı",
+  "chat.toast.pipelineCompleted": "Akış tamamlandı",
   "chat.toast.running": "Çalışıyor...",
   "chat.modeBadge.ask": "Sorularını yanıtlıyoruz",
   "chat.modeBadge.plan": "Yapılacakları planlıyoruz",
@@ -491,7 +491,7 @@
   "docs.webhooks.title": "Webhooks",
   "error.action.editSpec": "Spec'i Duzenle",
   "error.action.reconnectGithub": "GitHub'i Yeniden Bağla",
-  "error.action.startOver": "Yeni Pipeline Baslat",
+  "error.action.startOver": "Yeni Akış Başlat",
   "error.permanent": "Tekrar denenemez",
   "error.retryCount": "Deneme {{current}}/{{max}}",
   "error.retryable": "Tekrar denenebilir",
@@ -1122,5 +1122,12 @@
   "pipeline.miniState.complete": "tamamlandı",
   "pipeline.cinema.title": "Pipeline akışı",
   "pipeline.cinema.toggleCompact": "Kompakt görünüm",
-  "pipeline.cinema.toggleWide": "Geniş görünüm"
+  "pipeline.cinema.toggleWide": "Geniş görünüm",
+
+  "sidebar.group.today": "Bugün",
+  "sidebar.group.yesterday": "Dün",
+  "sidebar.group.thisWeek": "Bu Hafta",
+  "sidebar.group.older": "Daha Eski",
+
+  "app.loading": "Yükleniyor…"
 }

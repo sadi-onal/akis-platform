@@ -100,6 +100,12 @@ export function mapStageToConversationStatus(stage: PipelineStage): Conversation
       // the same — both push-confirm and critic-resolution show as
       // awaiting_approval in the sidebar status pill.
       return 'awaiting_approval';
+    case 'completed_partial':
+      // PR-U2 #2: surface partial completion distinctly — user cancelled
+      // mid-flight or Trace soft-failed; the pipeline produced something
+      // but not the full deliverable. Yellow warning dot, "Kısmen
+      // tamamlandı" label.
+      return 'partial';
     case 'failed':
       return 'error';
     default:

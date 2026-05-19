@@ -327,8 +327,11 @@ describe('mapStageToConversationStatus', () => {
     expect(mapStageToConversationStatus('completed')).toBe('idle');
   });
 
-  it('maps completed_partial to idle', () => {
-    expect(mapStageToConversationStatus('completed_partial')).toBe('idle');
+  it('maps completed_partial to partial (PR-U2 #2)', () => {
+    // Sidebar previously showed a green "Hazır" pill for partial pipelines,
+    // identical to a clean success. Now surfaced distinctly so the user can
+    // tell at a glance that the pipeline did not produce its full deliverable.
+    expect(mapStageToConversationStatus('completed_partial')).toBe('partial');
   });
 
   it('maps cancelled to idle', () => {
@@ -650,7 +653,12 @@ describe('mapPipelineToChatMessages', () => {
           type: 'clarification',
           content: {
             questions: [
-              { id: 'q1', question: 'Which framework?', reason: 'tech stack', suggestions: ['Next', 'Remix'] },
+              {
+                id: 'q1',
+                question: 'Which framework?',
+                reason: 'tech stack',
+                suggestions: ['Next', 'Remix'],
+              },
             ],
           },
         },
@@ -660,9 +668,7 @@ describe('mapPipelineToChatMessages', () => {
     expect(messages[0]).toMatchObject({
       type: 'clarification',
       role: 'scribe',
-      questions: [
-        expect.objectContaining({ id: 'q1', question: 'Which framework?' }),
-      ],
+      questions: [expect.objectContaining({ id: 'q1', question: 'Which framework?' })],
     });
   });
 
@@ -764,7 +770,9 @@ describe('mapPipelineToChatMessages', () => {
     const critic: CriticReviewOutput = {
       approved: true,
       overallScore: 85,
-      findings: [{ severity: 'minor', category: 'completeness', description: 'd', suggestion: 's' }],
+      findings: [
+        { severity: 'minor', category: 'completeness', description: 'd', suggestion: 's' },
+      ],
       summary: 'Good',
       reviewType: 'spec_review',
       iteration: 1,
@@ -949,7 +957,8 @@ describe('mapPipelineToChatMessages', () => {
       branch: 'main',
       fileCount: 1,
       lineCount: 1,
-      cloneCommand: 'git clone https://github.com/omer/my-app.git && cd my-app && npm install && npm run dev',
+      cloneCommand:
+        'git clone https://github.com/omer/my-app.git && cd my-app && npm install && npm run dev',
       setupCommands: ['npm install'],
     });
   });

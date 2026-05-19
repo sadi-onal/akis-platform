@@ -20,6 +20,10 @@ const STATUS_DOT: Record<ConversationStatus, string> = {
   idle: 'bg-green-400',
   running: 'bg-yellow-400 animate-pulse',
   awaiting_approval: 'bg-orange-400',
+  // PR-U2 #2: partial completion gets an amber dot (between green=clean
+  // and red=error) so the user can tell at a glance that the pipeline
+  // produced something but not the full deliverable.
+  partial: 'bg-amber-500',
   error: 'bg-red-400',
 };
 
@@ -27,6 +31,7 @@ const STATUS_LABELS: Record<ConversationStatus, string> = {
   idle: 'Hazır',
   running: 'Çalışıyor…',
   awaiting_approval: 'Onayınızı bekliyor',
+  partial: 'Kısmen tamamlandı',
   error: 'Hata oluştu',
 };
 

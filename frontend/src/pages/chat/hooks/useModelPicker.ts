@@ -45,7 +45,21 @@ const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
 
 export function useModelPicker(options: UseModelPickerOptions): UseModelPickerResult {
   const { conversationId, refreshWorkflow, initialModel = DEFAULT_MODEL } = options;
-  const [pendingModel, setPendingModel] = useState<string>(initialModel);
+  const [pendingModel, setPendingModelRaw] = useState<string>(initialModel);
+
+  // PR-U2 #3: pre-pipeline pendingModel ghost state — user picks a model
+  // before a conversation exists, state was set silently; on send the
+  // value was consumed but the user got no acknowledgement and might
+  // think their pick "disappeared" after navigation. Wrap setter to
+  // surface a clear toast on actual model changes (skip initial mount).
+  const setPendingModel = useCallback((next: string) => {
+    setPendingModelRaw((prev) => {
+      if (prev !== next) {
+        toast(`Model ${next} seçildi — yeni sohbette geçerli olacak.`, 'info');
+      }
+      return next;
+    });
+  }, []);
 
   const handleModelChange = useCallback(
     async (modelId: string) => {
@@ -60,7 +74,7 @@ export function useModelPicker(options: UseModelPickerOptions): UseModelPickerRe
         toast(localizeError(e), 'error');
       }
     },
-    [conversationId, refreshWorkflow],
+    [conversationId, refreshWorkflow]
   );
 
   return { pendingModel, setPendingModel, handleModelChange };
