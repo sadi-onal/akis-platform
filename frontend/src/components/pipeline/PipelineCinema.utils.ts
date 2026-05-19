@@ -86,6 +86,12 @@ export function reduceStageViews(
     }
   };
 
+  // PR-F1 (2026-05-19 manuel test): Display text (`latest.message`) artık sadece
+  // column'un kendi native stage'inden geliyor — Critic activity'leri column'a
+  // map'leniyor ama Scribe kartında "Spesifikasyon inceleniyor (adversarial
+  // review)..." yazısı çıkmıyor. Critic event'leri progress / complete state
+  // hesabına dahil; sadece kullanıcıya gösterilen mesaj native kalır.
+  const nativeLastFor = new Map<CinemaStage, PipelineActivity>();
   const lastFor = new Map<CinemaStage, PipelineActivity>();
   const progressFor = new Map<CinemaStage, number>();
   const reasoningFor = new Map<CinemaStage, PipelineActivity['reasoning']>();
@@ -95,6 +101,16 @@ export function reduceStageViews(
     const s = stageOf(a);
     if (!s) continue;
     lastFor.set(s, a);
+    // Native = column'un kendi stage'inden gelen activity (Scribe column için
+    // `scribe`, Proto column için `proto`/`fix-loop`, Trace column için
+    // `trace`). Critic activity'leri hiçbir column'un native'i değil — Scribe
+    // column'a map'lense bile display'e ('latest.message') girmez.
+    // PR-F1 (2026-05-19): manuel testte Scribe kartı Critic'in mesajını
+    // gösteriyordu ("Spesifikasyon inceleniyor (adversarial review)..."),
+    // yanıltıcıydı. Artık display sadece native'den gelir.
+    if (a.stage !== 'critic') {
+      nativeLastFor.set(s, a);
+    }
     if (a.progress !== undefined) progressFor.set(s, a.progress);
     if (a.reasoning) reasoningFor.set(s, a.reasoning);
     // PR-F: Trace retry badge — `retry-trigger` step'inde retryCount alanı
@@ -151,13 +167,21 @@ export function reduceStageViews(
   const activeIdx = activeStage ? STAGE_ORDER.indexOf(activeStage) : -1;
 
   return STAGE_ORDER.map((stage, idx) => {
-    const latest = lastFor.get(stage) ?? null;
+    // PR-F1: `latest` (display) = native stage activity'sinin sonu. Combined
+    // `lastFor` hâlâ state hesaplaması için fallback olarak kullanılır — eğer
+    // hiç native activity yoksa column "complete" yerine "pending" görünmemeli.
+    const native = nativeLastFor.get(stage);
+    const combined = lastFor.get(stage);
+    const latest = native ?? null;
     const progress = progressFor.get(stage) ?? 0;
     const reasoning = reasoningFor.get(stage);
     const meta = metaFor.get(stage);
     let state: StageView['state'] = 'pending';
     if (activeIdx === -1) {
-      state = latest ? 'complete' : 'pending';
+      // Column complete olarak görünmesi için en az bir activity yeterli
+      // (native veya mapped — Critic-only senaryolar mantıken çalışmıyor
+      // ama defensive: pending kalmasın).
+      state = combined ? 'complete' : 'pending';
     } else if (idx < activeIdx) {
       state = 'complete';
     } else if (idx === activeIdx) {

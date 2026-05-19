@@ -261,10 +261,13 @@ export const ChatPanel = memo(function ChatPanel({
         />
       )}
 
-      {/* Stage glow — shows colored gradient when an agent is running */}
+      {/* Stage glow — shows colored gradient when an agent is running.
+          PR-F1 (2026-05-19): Critic guardrail arka planda; chat akışında
+          glow + "Critic ... inceleniyor (adversarial review)" satırı
+          gösterilmez. Bulgular CriticFindingsInline + ExplanationPanel'de
+          görünür kalıyor. */}
       {(uiState === 'scribe_running' ||
         uiState === 'scribe_revise' ||
-        uiState === 'critic_running' ||
         uiState === 'proto_running' ||
         uiState === 'trace_running') && (
         <div
@@ -272,11 +275,9 @@ export const ChatPanel = memo(function ChatPanel({
           style={{
             background: uiState.includes('scribe')
               ? 'linear-gradient(90deg, transparent, #38bdf8, transparent)'
-              : uiState === 'critic_running'
-                ? 'linear-gradient(90deg, transparent, #f43f5e, transparent)'
-                : uiState === 'proto_running'
-                  ? 'linear-gradient(90deg, transparent, #f59e0b, transparent)'
-                  : 'linear-gradient(90deg, transparent, #a78bfa, transparent)',
+              : uiState === 'proto_running'
+                ? 'linear-gradient(90deg, transparent, #f59e0b, transparent)'
+                : 'linear-gradient(90deg, transparent, #a78bfa, transparent)',
           }}
         />
       )}
@@ -334,10 +335,16 @@ export const ChatPanel = memo(function ChatPanel({
               </div>
             ))}
 
-            {/* Activity indicator for running agents */}
+            {/* Activity indicator for running agents.
+                PR-F1 (2026-05-19): critic_running uiState'i kasıtlı olarak
+                listenin DIŞINDA — Critic guardrail chat akışında satır
+                üretmiyor. Manuel test bulgusu (image #40): backend
+                'Spesifikasyon inceleniyor (adversarial review)...' mesajı
+                eskiden burada 'Critic …' olarak görünüyordu. Modern stack
+                pattern: Critic invisible, bulgular CriticFindingsInline
+                + ExplanationPanel'de açık kalır. */}
             {(uiState === 'scribe_running' ||
               uiState === 'scribe_revise' ||
-              uiState === 'critic_running' ||
               uiState === 'proto_running' ||
               uiState === 'trace_running' ||
               uiState === 'ci_running') &&
@@ -357,13 +364,11 @@ export const ChatPanel = memo(function ChatPanel({
                         'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition-colors duration-300',
                         uiState.includes('scribe')
                           ? 'border-ak-scribe/30 bg-ak-scribe/10'
-                          : uiState === 'critic_running'
-                            ? 'border-rose-500/30 bg-rose-500/10'
-                            : uiState === 'proto_running'
-                              ? 'border-ak-proto/30 bg-ak-proto/10'
-                              : uiState === 'ci_running'
-                                ? 'border-yellow-400/30 bg-yellow-400/10'
-                                : 'border-ak-trace/30 bg-ak-trace/10'
+                          : uiState === 'proto_running'
+                            ? 'border-ak-proto/30 bg-ak-proto/10'
+                            : uiState === 'ci_running'
+                              ? 'border-yellow-400/30 bg-yellow-400/10'
+                              : 'border-ak-trace/30 bg-ak-trace/10'
                       )}
                     >
                       <span

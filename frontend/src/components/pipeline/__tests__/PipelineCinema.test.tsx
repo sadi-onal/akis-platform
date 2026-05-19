@@ -108,7 +108,11 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
   });
 
   // PR-F: Critic activities map to Scribe/Proto columns silently.
-  it('routes critic activity with criticPhase=spec into Scribe column', () => {
+  // PR-F1 (2026-05-19): Display text (`latest.message`) artık native stage'den
+  // geliyor — Critic activity progress/reasoning'i devralabilir ama Scribe
+  // kartının yazısı "Spec yazılıyor" (Scribe) olarak kalır, Critic'in mesajı
+  // değil. Manuel test bulgusu (image #41).
+  it('routes critic criticPhase=spec into Scribe column but keeps native display message', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 60, message: 'Spec yazılıyor' }),
       mk({
@@ -120,16 +124,19 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
       }),
     ];
     const views = reduceStageViews(acts, acts[1]!);
-    // Critic activities fold into Scribe column — the latest scribe message
-    // is the critic event itself.
-    expect(views[0]!.latest?.message).toBe('Spec inceleme bitti');
+    // PR-F1: latest.message is the Scribe native activity, NOT the Critic event.
+    expect(views[0]!.latest?.message).toBe('Spec yazılıyor');
+    expect(views[0]!.latest?.stage).toBe('scribe');
+    // Reasoning + progress still take the Critic event into account so the
+    // overall column status (complete/active) reflects guardrail outcome.
     expect(views[0]!.reasoning?.decision).toBe('Spec onaylandi');
+    expect(views[0]!.progress).toBe(100);
     // Proto/Trace stay untouched.
     expect(views[1]!.latest).toBeNull();
     expect(views[2]!.latest).toBeNull();
   });
 
-  it('routes critic activity with criticPhase=code into Proto column', () => {
+  it('routes critic criticPhase=code into Proto column without overwriting display', () => {
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100 }),
       mk({ stage: 'proto', progress: 100, message: 'Kod hazır' }),
@@ -142,14 +149,16 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
       }),
     ];
     const views = reduceStageViews(acts, acts[2]!);
-    expect(views[1]!.latest?.message).toBe('Kod inceleme bitti');
+    // PR-F1: Proto kartı kendi mesajını gösterir, Critic'in mesajı değil.
+    expect(views[1]!.latest?.message).toBe('Kod hazır');
+    expect(views[1]!.latest?.stage).toBe('proto');
     expect(views[1]!.reasoning?.confidence).toBe(75);
   });
 
-  it('falls back to chronology when criticPhase is missing (DB-replay)', () => {
+  it('keeps native display message when criticPhase is missing (DB-replay)', () => {
     // Replay scenario: backend restart, pipeline_activities replay without
-    // criticPhase field. Cinema routes by position: before proto → scribe,
-    // after proto → proto column.
+    // criticPhase field. Cinema routes by position for progress/state, but
+    // display text remains the native (non-critic) activity.
     const acts: PipelineActivity[] = [
       mk({ stage: 'scribe', progress: 100, message: 'spec done' }),
       mk({ stage: 'critic', progress: 100, message: 'spec review' }),
@@ -157,10 +166,27 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
       mk({ stage: 'critic', progress: 100, message: 'code review' }),
     ];
     const views = reduceStageViews(acts, acts[3]!);
-    // Latest event landing on scribe column is the critic spec review.
-    expect(views[0]!.latest?.message).toBe('spec review');
-    // Latest event landing on proto column is the critic code review.
-    expect(views[1]!.latest?.message).toBe('code review');
+    // Native scribe activity → display.
+    expect(views[0]!.latest?.message).toBe('spec done');
+    // Native proto activity → display.
+    expect(views[1]!.latest?.message).toBe('proto done');
+  });
+
+  // PR-F1: Specifically guard against the manuel test 2026-05-19 regression —
+  // Scribe column never renders Critic's "(adversarial review)" message.
+  it('PR-F1: Scribe column NEVER displays critic message even when critic is last', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, message: 'Spec inceleme için hazır' }),
+      mk({
+        stage: 'critic',
+        criticPhase: 'spec',
+        progress: 100,
+        message: 'Spesifikasyon inceleniyor (adversarial review)...',
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!);
+    expect(views[0]!.latest?.message).toBe('Spec inceleme için hazır');
+    expect(views[0]!.latest?.message).not.toContain('adversarial');
   });
 
   // PR-F: Trace iterate-loop retry badge meta exposure

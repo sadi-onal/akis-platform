@@ -563,6 +563,13 @@ export function ChatMessage({ message, onApprove, onReject, onRetry, onSkip, onS
       );
 
     case 'agent_started':
+      // PR-F1 (2026-05-19 manuel test): Critic guardrail arka planda çalışır,
+      // kullanıcı chat akışında "Critic …" satırı görmez. Modern stack
+      // pattern: bulgular CriticFindingsInline + ExplanationPanel ile
+      // gösterilir; chat sadece Scribe/Proto/Trace narrator'larını gösterir.
+      // AgentName tipi zaten Critic'i hariç tutuyor ama defensive guard ile
+      // ileride genişletilirse de leak olmasın.
+      if ((message.agent as string) === 'critic') return null;
       return (
         <div className="animate-in fade-in slide-in-from-left-1 duration-200">
           <AgentStartedLine
