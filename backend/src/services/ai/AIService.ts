@@ -1,6 +1,6 @@
 /**
  * AIService - LLM-backed AI service for planning, generation, reflection, and validation
- * 
+ *
  * Supports multiple providers (OpenRouter, OpenAI) with ENV-based configuration.
  * Uses different models for different tasks based on cost/capability trade-offs:
  * - Planner: AI_MODEL_PLANNER (can be same as default or specialized)
@@ -19,8 +19,8 @@ import { z } from 'zod';
  * Pipeline/UI uses short names; the API needs dated model IDs.
  */
 const ANTHROPIC_MODEL_MAP: Record<string, string> = {
-  'claude-haiku-4-5':           'claude-haiku-4-5-20251001',
-  'claude-sonnet-4-6':          'claude-sonnet-4-20250514',
+  'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-6': 'claude-sonnet-4-20250514',
 };
 
 function resolveAnthropicModel(model: string): string {
@@ -69,9 +69,7 @@ export interface AnthropicSystemBlock {
  *
  * Exported so the multimodal + tool-calling paths can apply the same logic.
  */
-export function buildCacheableSystemBlocks(
-  systemText: string,
-): string | AnthropicSystemBlock[] {
+export function buildCacheableSystemBlocks(systemText: string): string | AnthropicSystemBlock[] {
   if (!isCachingEnabled()) return systemText;
   if (!systemText || systemText.length < getCacheMinChars()) return systemText;
   return [{ type: 'text', text: systemText, cache_control: { type: 'ephemeral' } }];
@@ -99,11 +97,15 @@ import {
  * Schema for Plan response from AI
  */
 const PlanSchema = z.object({
-  steps: z.array(z.object({
-    id: z.string(),
-    title: z.string(),
-    detail: z.string().optional(),
-  })).min(1),
+  steps: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        detail: z.string().optional(),
+      })
+    )
+    .min(1),
   rationale: z.string().optional(),
 });
 
@@ -220,8 +222,8 @@ export interface Planner {
  * (Kept for backward compatibility with existing orchestrator)
  */
 export interface Reflector {
-  critique(input: { 
-    artifact: unknown; 
+  critique(input: {
+    artifact: unknown;
     context?: unknown;
     checkResults?: ReflectionInput['checkResults'];
   }): Promise<Critique>;
@@ -250,8 +252,8 @@ export interface AIService {
   validateWithStrongModel(input: ValidationInput): Promise<ValidationResult>;
 
   /** Get current configuration (for debugging/logging, never expose secrets) */
-  getConfigSummary(): { 
-    provider: string; 
+  getConfigSummary(): {
+    provider: string;
     models: { default: string; planner: string; validation: string };
     baseUrl: string;
     hasApiKey: boolean;
@@ -351,7 +353,7 @@ class RealAIService implements AIService {
   public reflector: Reflector;
   private observer?: AIServiceObserver;
   private runtimeOptions: AIServiceRuntimeOptions;
-  
+
   // Retry configuration - can be overridden via environment
   private readonly maxRetries: number;
   private readonly baseRetryDelay: number;
@@ -373,11 +375,15 @@ class RealAIService implements AIService {
     return process.env.AI_FORCE_DETERMINISTIC_PLAN !== 'false';
   }
 
-  constructor(config: AIConfig, observer?: AIServiceObserver, runtimeOptions: AIServiceRuntimeOptions = {}) {
+  constructor(
+    config: AIConfig,
+    observer?: AIServiceObserver,
+    runtimeOptions: AIServiceRuntimeOptions = {}
+  ) {
     this.config = config;
     this.observer = observer;
     this.runtimeOptions = runtimeOptions;
-    
+
     // Configure retry behavior from environment or use defaults
     this.maxRetries = parseInt(process.env.AI_PLANNER_MAX_RETRIES || '3', 10);
     this.baseRetryDelay = parseInt(process.env.AI_RETRY_BASE_DELAY_MS || '1000', 10);
@@ -388,8 +394,16 @@ class RealAIService implements AIService {
     };
 
     this.reflector = {
-      critique: (input: { artifact: unknown; context?: unknown; checkResults?: ReflectionInput['checkResults'] }) =>
-        this.reflectOnArtifact({ artifact: input.artifact, context: input.context, checkResults: input.checkResults }),
+      critique: (input: {
+        artifact: unknown;
+        context?: unknown;
+        checkResults?: ReflectionInput['checkResults'];
+      }) =>
+        this.reflectOnArtifact({
+          artifact: input.artifact,
+          context: input.context,
+          checkResults: input.checkResults,
+        }),
     };
   }
 
@@ -403,9 +417,10 @@ class RealAIService implements AIService {
     }
     if (profile === 'custom') {
       const raw = this.runtimeOptions.temperatureValue;
-      const base = typeof raw === 'number' && Number.isFinite(raw)
-        ? Math.min(1, Math.max(0, raw))
-        : DETERMINISTIC_TEMPERATURES.generate;
+      const base =
+        typeof raw === 'number' && Number.isFinite(raw)
+          ? Math.min(1, Math.max(0, raw))
+          : DETERMINISTIC_TEMPERATURES.generate;
       return {
         plan: Math.min(1, Math.max(0, base * 0.85)),
         generate: base,
@@ -443,18 +458,18 @@ class RealAIService implements AIService {
   private parseRetryAfter(response: Response): number | undefined {
     const retryAfter = response.headers.get('retry-after');
     if (!retryAfter) return undefined;
-    
+
     // Could be seconds (integer) or HTTP-date
     const seconds = parseInt(retryAfter, 10);
     if (!isNaN(seconds)) return seconds * 1000; // Convert to ms
-    
+
     // Try parsing as date
     const date = Date.parse(retryAfter);
     if (!isNaN(date)) {
       const delayMs = date - Date.now();
       return delayMs > 0 ? delayMs : undefined;
     }
-    
+
     return undefined;
   }
 
@@ -478,7 +493,7 @@ class RealAIService implements AIService {
   private buildAnthropicRequest(
     messages: ChatMessage[],
     model: string,
-    options: { temperature?: number; maxTokens?: number },
+    options: { temperature?: number; maxTokens?: number }
   ): { endpoint: string; headers: Record<string, string>; body: Record<string, unknown> } {
     const endpoint = `${this.config.baseUrl}/v1/messages`;
 
@@ -524,7 +539,7 @@ class RealAIService implements AIService {
   private buildGoogleRequest(
     messages: ChatMessage[],
     model: string,
-    options: { temperature?: number; maxTokens?: number },
+    options: { temperature?: number; maxTokens?: number }
   ): { endpoint: string; headers: Record<string, string>; body: Record<string, unknown> } {
     const apiKey = this.config.apiKey!;
     const endpoint =
@@ -567,7 +582,7 @@ class RealAIService implements AIService {
   private buildOpenAIRequest(
     messages: ChatMessage[],
     model: string,
-    options: { temperature?: number; maxTokens?: number; seed?: number | null },
+    options: { temperature?: number; maxTokens?: number; seed?: number | null }
   ): { endpoint: string; headers: Record<string, string>; body: Record<string, unknown> } {
     const endpoint = `${this.config.baseUrl}/chat/completions`;
     const resolvedSeed = options.seed === null ? undefined : (options.seed ?? DETERMINISTIC_SEED);
@@ -613,7 +628,7 @@ class RealAIService implements AIService {
     // We only forward the blocks themselves; the persistence layer decides
     // whether to keep, truncate, or drop them.
     const thinkingBlocks = contentArray.filter(
-      (b) => b.type === 'thinking' || b.type === 'redacted_thinking',
+      (b) => b.type === 'thinking' || b.type === 'redacted_thinking'
     );
     const toolCalls = contentArray.filter((b) => b.type === 'tool_use');
 
@@ -668,7 +683,7 @@ class RealAIService implements AIService {
       throw new AIProviderError(
         'AI_INVALID_RESPONSE',
         'Gemini API returned no candidates',
-        this.config.provider,
+        this.config.provider
       );
     }
 
@@ -708,7 +723,11 @@ class RealAIService implements AIService {
     toolCalls?: unknown[];
   } {
     if (!data.choices || data.choices.length === 0) {
-      throw new AIProviderError('AI_INVALID_RESPONSE', 'AI API returned no choices', this.config.provider);
+      throw new AIProviderError(
+        'AI_INVALID_RESPONSE',
+        'AI API returned no choices',
+        this.config.provider
+      );
     }
 
     const usage: AIUsage | undefined = data.usage
@@ -722,9 +741,10 @@ class RealAIService implements AIService {
     // P5a: OpenAI exposes tool calls via `choices[0].message.tool_calls`.
     // Thinking blocks are Anthropic-specific so OpenAI returns none.
     const message = data.choices[0].message as { content: string; tool_calls?: unknown[] };
-    const toolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0
-      ? message.tool_calls
-      : undefined;
+    const toolCalls =
+      Array.isArray(message.tool_calls) && message.tool_calls.length > 0
+        ? message.tool_calls
+        : undefined;
 
     return { content: message.content, usage, toolCalls };
   }
@@ -787,14 +807,15 @@ class RealAIService implements AIService {
 
         // Handle rate limiting (429)
         if (response.status === 429) {
-          const retryAfterMs = this.parseRetryAfter(response) || this.baseRetryDelay * Math.pow(2, attempt);
+          const retryAfterMs =
+            this.parseRetryAfter(response) || this.baseRetryDelay * Math.pow(2, attempt);
           const errorText = await response.text().catch(() => 'Rate limited');
-          
+
           logger.warn(
             `[AIService] Rate limited by ${this.config.provider} (attempt ${attempt + 1}/${this.maxRetries + 1}), ` +
-            `retrying in ${retryAfterMs}ms: ${errorText.substring(0, 200)}`
+              `retrying in ${retryAfterMs}ms: ${errorText.substring(0, 200)}`
           );
-          
+
           // If this is the last attempt, throw the error
           if (attempt >= this.maxRetries) {
             const rateError = new AIRateLimitedError(
@@ -812,7 +833,7 @@ class RealAIService implements AIService {
             });
             throw rateError;
           }
-          
+
           // Wait and retry
           await this.delay(Math.min(retryAfterMs, 30000)); // Cap at 30s
           continue;
@@ -821,7 +842,7 @@ class RealAIService implements AIService {
         // Handle other errors
         if (!response.ok) {
           const errorText = await response.text().catch(() => 'Unknown error');
-          
+
           // Auth errors (401, 403) - provide clear, actionable message.
           // Gemini returns 400 with code PERMISSION_DENIED when the key is bad,
           // but it also returns 401/403 for legitimate auth issues — mapping all
@@ -836,10 +857,12 @@ class RealAIService implements AIService {
             } else {
               friendlyMessage = `${providerLabel} API access denied. Your API key may lack required permissions.`;
             }
-            
+
             // Log raw error for debugging but don't expose to user
-            logger.error(`[AIService] Auth error from ${this.config.provider}: ${errorText.substring(0, 300)}`);
-            
+            logger.error(
+              `[AIService] Auth error from ${this.config.provider}: ${errorText.substring(0, 300)}`
+            );
+
             const authError = new AIProviderError(
               'AI_AUTH_ERROR',
               friendlyMessage,
@@ -856,7 +879,7 @@ class RealAIService implements AIService {
             });
             throw authError;
           }
-          
+
           // Model not found errors (404) - provide actionable message
           if (response.status === 404) {
             const providerLabel = this.getProviderLabel();
@@ -866,7 +889,9 @@ class RealAIService implements AIService {
               this.config.provider,
               response.status
             );
-            logger.error(`[AIService] Model not found on ${this.config.provider}: ${model}. Raw error: ${errorText.substring(0, 200)}`);
+            logger.error(
+              `[AIService] Model not found on ${this.config.provider}: ${model}. Raw error: ${errorText.substring(0, 200)}`
+            );
             this.observer?.onAiCall({
               purpose,
               provider: this.config.provider,
@@ -877,32 +902,44 @@ class RealAIService implements AIService {
             });
             throw modelNotFoundError;
           }
-          
+
           // Server errors (5xx) - retry
           if (response.status >= 500 && attempt < this.maxRetries) {
             logger.warn(
               `[AIService] Server error from ${this.config.provider} (${response.status}), ` +
-              `retrying in ${this.baseRetryDelay * Math.pow(2, attempt)}ms`
+                `retrying in ${this.baseRetryDelay * Math.pow(2, attempt)}ms`
             );
             await this.delay(this.baseRetryDelay * Math.pow(2, attempt));
             continue;
           }
-          
+
           // Generic error - provide friendly message
           const providerLabel = this.getProviderLabel();
           let friendlyMessage = `${providerLabel} returned an error (${response.status}).`;
-          
+
           // Add context based on error content
-          if (errorText.toLowerCase().includes('credit') || errorText.toLowerCase().includes('billing') || errorText.toLowerCase().includes('balance')) {
+          if (
+            errorText.toLowerCase().includes('credit') ||
+            errorText.toLowerCase().includes('billing') ||
+            errorText.toLowerCase().includes('balance')
+          ) {
             friendlyMessage = `${providerLabel} account has insufficient credits. Please add credits or update your API key.`;
-          } else if (errorText.toLowerCase().includes('rate') || errorText.toLowerCase().includes('limit')) {
+          } else if (
+            errorText.toLowerCase().includes('rate') ||
+            errorText.toLowerCase().includes('limit')
+          ) {
             friendlyMessage = `${providerLabel} rate limit exceeded. Please try again in a few moments.`;
-          } else if (errorText.toLowerCase().includes('model') || errorText.toLowerCase().includes('route')) {
+          } else if (
+            errorText.toLowerCase().includes('model') ||
+            errorText.toLowerCase().includes('route')
+          ) {
             friendlyMessage = `Model "${model}" may not be available on ${providerLabel}. Please try a different model.`;
           }
-          
-          logger.error(`[AIService] Provider error from ${this.config.provider}: ${errorText.substring(0, 300)}`);
-          
+
+          logger.error(
+            `[AIService] Provider error from ${this.config.provider}: ${errorText.substring(0, 300)}`
+          );
+
           const providerError = new AIProviderError(
             'AI_PROVIDER_ERROR',
             friendlyMessage,
@@ -935,7 +972,7 @@ class RealAIService implements AIService {
               parsed.usage.inputTokens,
               parsed.usage.outputTokens,
               parsed.usage.cacheCreationInputTokens,
-              parsed.usage.cacheReadInputTokens,
+              parsed.usage.cacheReadInputTokens
             )
           : null;
 
@@ -951,8 +988,7 @@ class RealAIService implements AIService {
           .filter((m) => m.role === 'user')
           .map((m) => m.content)
           .join('\n\n');
-        const anthropicThinking =
-          'thinkingBlocks' in parsed ? parsed.thinkingBlocks : undefined;
+        const anthropicThinking = 'thinkingBlocks' in parsed ? parsed.thinkingBlocks : undefined;
         const parsedToolCalls = 'toolCalls' in parsed ? parsed.toolCalls : undefined;
 
         this.observer?.onAiCall({
@@ -982,10 +1018,10 @@ class RealAIService implements AIService {
         if (error instanceof AIProviderError) {
           throw error;
         }
-        
+
         // Network errors - retry
         lastError = error instanceof Error ? error : new Error(String(error));
-        
+
         if (attempt < this.maxRetries) {
           logger.warn(
             `[AIService] Network error (attempt ${attempt + 1}/${this.maxRetries + 1}): ${lastError.message}`
@@ -1021,18 +1057,18 @@ class RealAIService implements AIService {
     if (codeBlockMatch) {
       return codeBlockMatch[1].trim();
     }
-    
+
     // Try to find JSON object/array in the response
     const jsonObjectMatch = response.match(/\{[\s\S]*\}/);
     const jsonArrayMatch = response.match(/\[[\s\S]*\]/);
-    
+
     if (jsonObjectMatch) {
       return jsonObjectMatch[0];
     }
     if (jsonArrayMatch) {
       return jsonArrayMatch[0];
     }
-    
+
     return response.trim();
   }
 
@@ -1050,27 +1086,25 @@ class RealAIService implements AIService {
     context: string
   ): Promise<T> {
     const jsonStr = this.extractJsonString(response);
-    
+
     // First attempt: parse and validate
     try {
       const parsed = JSON.parse(jsonStr);
       const validated = schema.parse(parsed);
       return validated;
     } catch (firstError) {
-      logger.warn(`[AIService] First parse attempt failed for ${context}: ${firstError instanceof Error ? firstError.message : 'unknown'}`);
-      
+      logger.warn(
+        `[AIService] First parse attempt failed for ${context}: ${firstError instanceof Error ? firstError.message : 'unknown'}`
+      );
+
       // Log raw response (redacted) for debugging
-      const redactedResponse = response.length > 500 
-        ? response.substring(0, 500) + '...(truncated)'
-        : response;
+      const redactedResponse =
+        response.length > 500 ? response.substring(0, 500) + '...(truncated)' : response;
       logger.warn(`[AIService] Raw response (redacted): ${redactedResponse}`);
-      
+
       // Repair attempt: ask AI to fix the JSON
       try {
-        const repairPromptText = buildRepairPrompt(
-          JSON.stringify(schema._def),
-          response
-        );
+        const repairPromptText = buildRepairPrompt(JSON.stringify(schema._def), response);
 
         const repairedResponse = await this.chatCompletion(
           [{ role: 'user', content: repairPromptText }],
@@ -1078,11 +1112,11 @@ class RealAIService implements AIService {
           { temperature: DETERMINISTIC_TEMPERATURES.repair, maxTokens: 2048 },
           `repair:${context}`
         );
-        
+
         const repairedJsonStr = this.extractJsonString(repairedResponse.content);
         const reparsed = JSON.parse(repairedJsonStr);
         const revalidated = schema.parse(reparsed);
-        
+
         logger.info(`[AIService] Successfully repaired JSON for ${context}`);
         return revalidated;
       } catch (repairError) {
@@ -1090,12 +1124,12 @@ class RealAIService implements AIService {
         const errorMessage = repairError instanceof Error ? repairError.message : 'unknown';
         logger.error(`[AIService] JSON repair failed for ${context}: ${errorMessage}`);
         logger.error(`[AIService] Model: ${this.config.modelDefault}`);
-        
+
         throw new AIProviderError(
           'AI_INVALID_RESPONSE',
           `Failed to parse AI response for ${context} after repair attempt. ` +
-          `Error: ${errorMessage}. ` +
-          `Raw response saved in logs.`,
+            `Error: ${errorMessage}. ` +
+            `Raw response saved in logs.`,
           this.config.provider
         );
       }
@@ -1145,6 +1179,20 @@ class RealAIService implements AIService {
       'generate'
     );
 
+    // Surface the per-call USD cost on `metadata.estimatedCostUsd` so the
+    // pipeline factory's TokenUsageCallback can accumulate it and the
+    // orchestrator can write `pipelines.metrics.estimatedCost` — which is
+    // what the Settings → Usage SQL aggregates (PR-V settings/usage fix).
+    const estimatedCostUsd = response.usage
+      ? estimateCostUsd(
+          model,
+          response.usage.inputTokens,
+          response.usage.outputTokens,
+          response.usage.cacheCreationInputTokens,
+          response.usage.cacheReadInputTokens
+        )
+      : null;
+
     return {
       content: response.content,
       metadata: {
@@ -1153,6 +1201,7 @@ class RealAIService implements AIService {
         provider: this.config.provider,
         usage: response.usage,
         durationMs: response.durationMs,
+        estimatedCostUsd,
       },
     };
   }
@@ -1177,13 +1226,13 @@ class RealAIService implements AIService {
     if (this.config.provider !== 'anthropic') {
       throw new (await import('./multimodalClient.js')).AnthropicMultimodalError(
         `Provider "${this.config.provider}" does not support image input`,
-        'IMAGE_MODEL_UNSUPPORTED',
+        'IMAGE_MODEL_UNSUPPORTED'
       );
     }
     if (!this.config.apiKey) {
       throw new (await import('./multimodalClient.js')).AnthropicMultimodalError(
         'Anthropic API key is not configured',
-        'IMAGE_API_ERROR',
+        'IMAGE_API_ERROR'
       );
     }
 
@@ -1205,6 +1254,17 @@ class RealAIService implements AIService {
     });
 
     const durationMs = Date.now() - start;
+    // Same per-call cost surface as text-only generateWorkArtifact, so
+    // multimodal stages also contribute to pipelines.metrics.estimatedCost.
+    const estimatedCostUsd = result.usage
+      ? estimateCostUsd(
+          resolvedModel,
+          result.usage.inputTokens,
+          result.usage.outputTokens,
+          result.usage.cacheCreationInputTokens,
+          result.usage.cacheReadInputTokens
+        )
+      : null;
     return {
       content: result.content,
       metadata: {
@@ -1216,6 +1276,7 @@ class RealAIService implements AIService {
         stopReason: result.stopReason,
         multimodal: true,
         imageCount: input.images.length,
+        estimatedCostUsd,
       },
     };
   }
@@ -1249,9 +1310,8 @@ class RealAIService implements AIService {
       }
     }
 
-    const artifactStr = typeof input.artifact === 'string' 
-      ? input.artifact 
-      : JSON.stringify(input.artifact, null, 2);
+    const artifactStr =
+      typeof input.artifact === 'string' ? input.artifact : JSON.stringify(input.artifact, null, 2);
 
     const userPrompt = `Review the following artifact and provide feedback:
 
@@ -1279,16 +1339,15 @@ Respond with ONLY the JSON critique object.`;
   async validateWithStrongModel(input: ValidationInput): Promise<ValidationResult> {
     const temps = this.getTemperatures();
 
-    const artifactStr = typeof input.artifact === 'string'
-      ? input.artifact
-      : JSON.stringify(input.artifact, null, 2);
+    const artifactStr =
+      typeof input.artifact === 'string' ? input.artifact : JSON.stringify(input.artifact, null, 2);
 
     const contextParts: string[] = [];
-    
+
     if (input.plan) {
-      contextParts.push(`Plan: ${input.plan.steps.map(s => s.title).join(' -> ')}`);
+      contextParts.push(`Plan: ${input.plan.steps.map((s) => s.title).join(' -> ')}`);
     }
-    
+
     if (input.reflection) {
       contextParts.push(`Prior Reflection Issues: ${input.reflection.issues.join('; ')}`);
     }
@@ -1341,8 +1400,16 @@ class MockAIService implements AIService {
     };
 
     this.reflector = {
-      critique: (input: { artifact: unknown; context?: unknown; checkResults?: ReflectionInput['checkResults'] }) =>
-        this.reflectOnArtifact({ artifact: input.artifact, context: input.context, checkResults: input.checkResults }),
+      critique: (input: {
+        artifact: unknown;
+        context?: unknown;
+        checkResults?: ReflectionInput['checkResults'];
+      }) =>
+        this.reflectOnArtifact({
+          artifact: input.artifact,
+          context: input.context,
+          checkResults: input.checkResults,
+        }),
     };
   }
 
@@ -1362,7 +1429,11 @@ class MockAIService implements AIService {
   async planTask(input: PlanInput): Promise<Plan> {
     const plan = {
       steps: [
-        { id: 'step-1', title: `Analyze ${input.agent} requirements`, detail: `Goal: ${input.goal}` },
+        {
+          id: 'step-1',
+          title: `Analyze ${input.agent} requirements`,
+          detail: `Goal: ${input.goal}`,
+        },
         { id: 'step-2', title: 'Design solution architecture', detail: 'Mock design phase' },
         { id: 'step-3', title: 'Execute implementation', detail: 'Mock execution phase' },
         { id: 'step-4', title: 'Validate output', detail: 'Mock validation phase' },
@@ -1384,7 +1455,6 @@ class MockAIService implements AIService {
   }
 
   async generateWorkArtifact(input: WorkerInput): Promise<WorkerResult> {
-
     // Pipeline-aware mock responses based on system prompt keywords
     const sys = (input.systemPrompt ?? '').toLowerCase();
     let content: string;
@@ -1394,27 +1464,67 @@ class MockAIService implements AIService {
         projectName: 'Mock Project',
         description: 'A mock project generated for testing',
         userStories: [
-          { id: 'US-1', title: 'Basic UI', description: 'User can view the main page', acceptanceCriteria: ['Page loads', 'Title visible'] },
-          { id: 'US-2', title: 'Data Display', description: 'User can see data list', acceptanceCriteria: ['List renders', 'Items clickable'] },
+          {
+            id: 'US-1',
+            title: 'Basic UI',
+            description: 'User can view the main page',
+            acceptanceCriteria: ['Page loads', 'Title visible'],
+          },
+          {
+            id: 'US-2',
+            title: 'Data Display',
+            description: 'User can see data list',
+            acceptanceCriteria: ['List renders', 'Items clickable'],
+          },
         ],
-        acceptanceCriteria: ['App loads without errors', 'Navigation works', 'Data displays correctly'],
+        acceptanceCriteria: [
+          'App loads without errors',
+          'Navigation works',
+          'Data displays correctly',
+        ],
         technicalConstraints: { stack: 'React + Vite + TypeScript' },
         outOfScope: ['Authentication', 'Payment processing'],
         confidence: 0.9,
       });
     } else if (sys.includes('clarification') || sys.includes('soru')) {
       content = JSON.stringify({ ready: true });
-    } else if (sys.includes('proto') || sys.includes('scaffold') || sys.includes('code generation')) {
+    } else if (
+      sys.includes('proto') ||
+      sys.includes('scaffold') ||
+      sys.includes('code generation')
+    ) {
       content = JSON.stringify([
-        { filePath: 'src/App.tsx', content: 'export default function App() { return <div>Hello AKIS</div>; }' },
-        { filePath: 'src/main.tsx', content: 'import App from "./App"; import { createRoot } from "react-dom/client"; createRoot(document.getElementById("root")!).render(<App />);' },
-        { filePath: 'package.json', content: '{"name":"mock-project","version":"0.1.0","scripts":{"dev":"vite"}}' },
-        { filePath: 'index.html', content: '<!DOCTYPE html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>' },
+        {
+          filePath: 'src/App.tsx',
+          content: 'export default function App() { return <div>Hello AKIS</div>; }',
+        },
+        {
+          filePath: 'src/main.tsx',
+          content:
+            'import App from "./App"; import { createRoot } from "react-dom/client"; createRoot(document.getElementById("root")!).render(<App />);',
+        },
+        {
+          filePath: 'package.json',
+          content: '{"name":"mock-project","version":"0.1.0","scripts":{"dev":"vite"}}',
+        },
+        {
+          filePath: 'index.html',
+          content:
+            '<!DOCTYPE html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+        },
       ]);
     } else if (sys.includes('trace') || sys.includes('playwright') || sys.includes('test')) {
       content = JSON.stringify([
-        { filePath: 'tests/app.spec.ts', content: 'import { test, expect } from "@playwright/test"; test("app loads", async ({ page }) => { await page.goto("/"); await expect(page.locator("div")).toBeVisible(); });' },
-        { filePath: 'playwright.config.ts', content: 'import { defineConfig } from "@playwright/test"; export default defineConfig({ testDir: "./tests" });' },
+        {
+          filePath: 'tests/app.spec.ts',
+          content:
+            'import { test, expect } from "@playwright/test"; test("app loads", async ({ page }) => { await page.goto("/"); await expect(page.locator("div")).toBeVisible(); });',
+        },
+        {
+          filePath: 'playwright.config.ts',
+          content:
+            'import { defineConfig } from "@playwright/test"; export default defineConfig({ testDir: "./tests" });',
+        },
       ]);
     } else {
       content = `Mock generated content for task: ${input.task}`;
@@ -1462,9 +1572,7 @@ class MockAIService implements AIService {
       content: {
         systemPrompt: '[mock] reflect system prompt',
         userPrompt:
-          typeof input.artifact === 'string'
-            ? input.artifact
-            : JSON.stringify(input.artifact),
+          typeof input.artifact === 'string' ? input.artifact : JSON.stringify(input.artifact),
         responseText: JSON.stringify(critique),
       },
     });
@@ -1487,9 +1595,7 @@ class MockAIService implements AIService {
       content: {
         systemPrompt: '[mock] validate system prompt',
         userPrompt:
-          typeof input.artifact === 'string'
-            ? input.artifact
-            : JSON.stringify(input.artifact),
+          typeof input.artifact === 'string' ? input.artifact : JSON.stringify(input.artifact),
         responseText: JSON.stringify(result),
       },
     });
@@ -1505,11 +1611,7 @@ class MockAIService implements AIService {
 // Tool-Calling Client (for AgenticLoop)
 // =============================================================================
 
-import type {
-  ToolDefinition,
-  AnthropicMessage,
-  AnthropicResponse,
-} from './tool-schemas.js';
+import type { ToolDefinition, AnthropicMessage, AnthropicResponse } from './tool-schemas.js';
 import { toAnthropicTools } from './tool-schemas.js';
 
 /**
@@ -1517,11 +1619,11 @@ import { toAnthropicTools } from './tool-schemas.js';
  * Uses the same Anthropic API credentials as AIService but calls with tools.
  */
 export function createToolCallingClient(
-  config?: AIConfig,
+  config?: AIConfig
 ): (
   messages: AnthropicMessage[],
   tools: ToolDefinition[],
-  options?: { model?: string; maxTokens?: number; temperature?: number; system?: string },
+  options?: { model?: string; maxTokens?: number; temperature?: number; system?: string }
 ) => Promise<AnthropicResponse> {
   const resolvedConfig = config || getAIConfig(getEnv());
 
@@ -1543,9 +1645,7 @@ export function createToolCallingClient(
     // AgenticLoop also benefits from the 5-min Anthropic prompt cache TTL.
     // Static tool schemas + system prompt form the stable prefix on every
     // iteration of the same agent; user/tool results stay uncached.
-    const systemForBody = options.system
-      ? buildCacheableSystemBlocks(options.system)
-      : undefined;
+    const systemForBody = options.system ? buildCacheableSystemBlocks(options.system) : undefined;
 
     const body: Record<string, unknown> = {
       model,
@@ -1572,7 +1672,7 @@ export function createToolCallingClient(
         'AI_PROVIDER_ERROR',
         `Tool-calling API error (${response.status}): ${errorText.substring(0, 200)}`,
         resolvedConfig.provider,
-        response.status,
+        response.status
       );
     }
 
@@ -1615,7 +1715,9 @@ export function createAIService(
   }
 
   logger.info(`[AIService] Using ${resolvedConfig.provider} provider`);
-  logger.info(`[AIService] Models: default=${resolvedConfig.modelDefault}, planner=${resolvedConfig.modelPlanner}, validation=${resolvedConfig.modelValidation}`);
+  logger.info(
+    `[AIService] Models: default=${resolvedConfig.modelDefault}, planner=${resolvedConfig.modelPlanner}, validation=${resolvedConfig.modelValidation}`
+  );
 
   return new RealAIService(resolvedConfig, observer, runtimeOptions);
 }

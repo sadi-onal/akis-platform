@@ -63,8 +63,36 @@ export interface AIServiceLike {
   }): Promise<{ content: string; metadata?: Record<string, unknown> }>;
 }
 
-/** Callback type for accumulating token usage per AI call. */
-export type TokenUsageCallback = (usage: { inputTokens: number; outputTokens: number }) => void;
+/**
+ * Callback type for accumulating per-AI-call usage.
+ *
+ * `estimatedCostUsd` is optional because:
+ *   - Mock providers / unknown models can't price a call (returns `null` in
+ *     `services/ai/pricing.ts`).
+ *   - Older `AIService` paths that haven't been updated yet just omit it.
+ *
+ * When present, the orchestrator accumulates it into
+ * `pipelines.metrics.estimatedCost` so the Settings → Usage tab shows real
+ * spend instead of $0.00 (PR-V settings/usage fix).
+ */
+export type TokenUsageCallback = (usage: {
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd?: number;
+}) => void;
+
+/**
+ * Extract the `estimatedCostUsd` value (if any) from a `WorkerResult.metadata`
+ * payload. We accept a couple of shapes because `AIService.generateWorkArtifact`
+ * stores it as a top-level metadata field, but historical callers / mock
+ * providers may not include it at all.
+ */
+function readEstimatedCost(metadata: Record<string, unknown> | undefined): number | undefined {
+  if (!metadata) return undefined;
+  const raw = metadata.estimatedCostUsd;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw;
+  return undefined;
+}
 
 /**
  * Wraps generateWorkArtifact: returns content and optionally reports token usage via callback.
@@ -73,7 +101,7 @@ function makeGenerateText(
   aiService: AIServiceLike,
   maxTokens: number,
   model?: string,
-  onTokenUsage?: TokenUsageCallback,
+  onTokenUsage?: TokenUsageCallback
 ): (systemPrompt: string, userPrompt: string) => Promise<string> {
   return async (systemPrompt: string, userPrompt: string): Promise<string> => {
     const result = await aiService.generateWorkArtifact({
@@ -84,18 +112,31 @@ function makeGenerateText(
     });
     // Report token usage if callback provided and metadata has usage info
     if (onTokenUsage && result.metadata?.usage) {
-      const u = result.metadata.usage as { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number };
+      const u = result.metadata.usage as {
+        inputTokens?: number;
+        outputTokens?: number;
+        input_tokens?: number;
+        output_tokens?: number;
+      };
       const inp = u.inputTokens ?? u.input_tokens ?? 0;
       const out = u.outputTokens ?? u.output_tokens ?? 0;
       if (inp > 0 || out > 0) {
-        onTokenUsage({ inputTokens: inp, outputTokens: out });
+        onTokenUsage({
+          inputTokens: inp,
+          outputTokens: out,
+          estimatedCostUsd: readEstimatedCost(result.metadata),
+        });
       }
     }
     return result.content;
   };
 }
 
-function createScribeAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): ScribeAIDeps {
+function createScribeAIDeps(
+  aiService: AIServiceLike,
+  model?: string,
+  onTokenUsage?: TokenUsageCallback
+): ScribeAIDeps {
   const deps: ScribeAIDeps = {
     generateText: makeGenerateText(aiService, 8192, model, onTokenUsage),
   };
@@ -113,10 +154,21 @@ function createScribeAIDeps(aiService: AIServiceLike, model?: string, onTokenUsa
         modelOverride: model,
       });
       if (onTokenUsage && result.metadata?.usage) {
-        const u = result.metadata.usage as { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number };
+        const u = result.metadata.usage as {
+          inputTokens?: number;
+          outputTokens?: number;
+          input_tokens?: number;
+          output_tokens?: number;
+        };
         const inp = u.inputTokens ?? u.input_tokens ?? 0;
         const out = u.outputTokens ?? u.output_tokens ?? 0;
-        if (inp > 0 || out > 0) onTokenUsage({ inputTokens: inp, outputTokens: out });
+        if (inp > 0 || out > 0) {
+          onTokenUsage({
+            inputTokens: inp,
+            outputTokens: out,
+            estimatedCostUsd: readEstimatedCost(result.metadata),
+          });
+        }
       }
       return result.content;
     };
@@ -124,7 +176,11 @@ function createScribeAIDeps(aiService: AIServiceLike, model?: string, onTokenUsa
   return deps;
 }
 
-function createProtoAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): ProtoAIDeps {
+function createProtoAIDeps(
+  aiService: AIServiceLike,
+  model?: string,
+  onTokenUsage?: TokenUsageCallback
+): ProtoAIDeps {
   const deps: ProtoAIDeps = {
     generateText: makeGenerateText(aiService, 16384, model, onTokenUsage),
   };
@@ -142,10 +198,21 @@ function createProtoAIDeps(aiService: AIServiceLike, model?: string, onTokenUsag
         modelOverride: model,
       });
       if (onTokenUsage && result.metadata?.usage) {
-        const u = result.metadata.usage as { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number };
+        const u = result.metadata.usage as {
+          inputTokens?: number;
+          outputTokens?: number;
+          input_tokens?: number;
+          output_tokens?: number;
+        };
         const inp = u.inputTokens ?? u.input_tokens ?? 0;
         const out = u.outputTokens ?? u.output_tokens ?? 0;
-        if (inp > 0 || out > 0) onTokenUsage({ inputTokens: inp, outputTokens: out });
+        if (inp > 0 || out > 0) {
+          onTokenUsage({
+            inputTokens: inp,
+            outputTokens: out,
+            estimatedCostUsd: readEstimatedCost(result.metadata),
+          });
+        }
       }
       return result.content;
     };
@@ -153,7 +220,11 @@ function createProtoAIDeps(aiService: AIServiceLike, model?: string, onTokenUsag
   return deps;
 }
 
-function createTraceAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): TraceAIDeps {
+function createTraceAIDeps(
+  aiService: AIServiceLike,
+  model?: string,
+  onTokenUsage?: TokenUsageCallback
+): TraceAIDeps {
   // PR-H (2026-05-19): bumped from 32 768 → 64 000 because manual-test logs on
   // 2026-05-19 showed Trace responses hitting the cap (responseLen 33-45K) and
   // truncating the JSON closing fence — three retries all failed JSON parse.
@@ -176,10 +247,21 @@ function createTraceAIDeps(aiService: AIServiceLike, model?: string, onTokenUsag
         modelOverride: model,
       });
       if (onTokenUsage && result.metadata?.usage) {
-        const u = result.metadata.usage as { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number };
+        const u = result.metadata.usage as {
+          inputTokens?: number;
+          outputTokens?: number;
+          input_tokens?: number;
+          output_tokens?: number;
+        };
         const inp = u.inputTokens ?? u.input_tokens ?? 0;
         const out = u.outputTokens ?? u.output_tokens ?? 0;
-        if (inp > 0 || out > 0) onTokenUsage({ inputTokens: inp, outputTokens: out });
+        if (inp > 0 || out > 0) {
+          onTokenUsage({
+            inputTokens: inp,
+            outputTokens: out,
+            estimatedCostUsd: readEstimatedCost(result.metadata),
+          });
+        }
       }
       return result.content;
     };
@@ -187,7 +269,11 @@ function createTraceAIDeps(aiService: AIServiceLike, model?: string, onTokenUsag
   return deps;
 }
 
-function createCriticAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): CriticAIDeps {
+function createCriticAIDeps(
+  aiService: AIServiceLike,
+  model?: string,
+  onTokenUsage?: TokenUsageCallback
+): CriticAIDeps {
   return { generateText: makeGenerateText(aiService, 8192, model, onTokenUsage) };
 }
 
@@ -211,9 +297,29 @@ function createRepoContextAIDeps(aiService: AIServiceLike, model?: string) {
 export interface GitHubServiceLike {
   createRepository(owner: string, name: string, isPrivate: boolean): Promise<{ url: string }>;
   createBranch(owner: string, repo: string, branch: string, fromBranch?: string): Promise<void>;
-  commitFile(owner: string, repo: string, branch: string, filePath: string, content: string, message: string): Promise<void>;
-  pushFiles?(owner: string, repo: string, branch: string, files: Array<{ path: string; content: string }>, message: string): Promise<void>;
-  createPR(owner: string, repo: string, title: string, body: string, head: string, base: string): Promise<{ url: string }>;
+  commitFile(
+    owner: string,
+    repo: string,
+    branch: string,
+    filePath: string,
+    content: string,
+    message: string
+  ): Promise<void>;
+  pushFiles?(
+    owner: string,
+    repo: string,
+    branch: string,
+    files: Array<{ path: string; content: string }>,
+    message: string
+  ): Promise<void>;
+  createPR(
+    owner: string,
+    repo: string,
+    title: string,
+    body: string,
+    head: string,
+    base: string
+  ): Promise<{ url: string }>;
   listFiles(owner: string, repo: string, branch: string): Promise<string[]>;
   getFileContent(owner: string, repo: string, branch: string, filePath: string): Promise<string>;
 }
@@ -221,11 +327,13 @@ export interface GitHubServiceLike {
 function createProtoGitHubDeps(github: GitHubServiceLike): ProtoGitHubDeps {
   return {
     createRepository: (owner, name, isPrivate) => github.createRepository(owner, name, isPrivate),
-    createBranch: (owner, repo, branch, fromBranch) => github.createBranch(owner, repo, branch, fromBranch),
+    createBranch: (owner, repo, branch, fromBranch) =>
+      github.createBranch(owner, repo, branch, fromBranch),
     commitFile: (owner, repo, branch, filePath, content, message) =>
       github.commitFile(owner, repo, branch, filePath, content, message),
     pushFiles: github.pushFiles
-      ? (owner, repo, branch, files, message) => github.pushFiles!(owner, repo, branch, files, message)
+      ? (owner, repo, branch, files, message) =>
+          github.pushFiles!(owner, repo, branch, files, message)
       : undefined,
     createPR: (owner, repo, title, body, head, base) =>
       github.createPR(owner, repo, title, body, head, base),
@@ -235,13 +343,16 @@ function createProtoGitHubDeps(github: GitHubServiceLike): ProtoGitHubDeps {
 function createTraceGitHubDeps(github: GitHubServiceLike): TraceGitHubDeps {
   return {
     listFiles: (owner, repo, branch) => github.listFiles(owner, repo, branch),
-    getFileContent: (owner, repo, branch, filePath) => github.getFileContent(owner, repo, branch, filePath),
+    getFileContent: (owner, repo, branch, filePath) =>
+      github.getFileContent(owner, repo, branch, filePath),
     commitFile: (owner, repo, branch, filePath, content, message) =>
       github.commitFile(owner, repo, branch, filePath, content, message),
     pushFiles: github.pushFiles
-      ? (owner, repo, branch, files, message) => github.pushFiles!(owner, repo, branch, files, message)
+      ? (owner, repo, branch, files, message) =>
+          github.pushFiles!(owner, repo, branch, files, message)
       : undefined,
-    createBranch: (owner, repo, branch, fromBranch) => github.createBranch(owner, repo, branch, fromBranch),
+    createBranch: (owner, repo, branch, fromBranch) =>
+      github.createBranch(owner, repo, branch, fromBranch),
     createPR: (owner, repo, title, body, head, base) =>
       github.createPR(owner, repo, title, body, head, base),
   };
@@ -271,7 +382,7 @@ export function createAgentsForModel(
   model?: string,
   agenticDeps?: AgenticLoopDeps,
   onTokenUsage?: TokenUsageCallback,
-  skillRegistry?: SkillRegistry,
+  skillRegistry?: SkillRegistry
 ) {
   const scribeAI = createScribeAIDeps(aiService, model, onTokenUsage);
   const protoAI = createProtoAIDeps(aiService, model, onTokenUsage);
@@ -291,11 +402,12 @@ export function createAgentsForModel(
 export function createRepoContextAgent(
   aiService: AIServiceLike,
   githubService: GitHubServiceLike,
-  model?: string,
+  model?: string
 ): RepoContextAgent {
   const ai = createRepoContextAIDeps(aiService, model);
   const github = {
-    listFiles: (owner: string, repo: string, branch: string) => githubService.listFiles(owner, repo, branch),
+    listFiles: (owner: string, repo: string, branch: string) =>
+      githubService.listFiles(owner, repo, branch),
     getFileContent: (owner: string, repo: string, branch: string, filePath: string) =>
       githubService.getFileContent(owner, repo, branch, filePath),
   };
@@ -307,7 +419,9 @@ export interface PipelineSystem {
   reconciler: PipelineReconciler;
 }
 
-export function createPipelineOrchestrator(opts: CreatePipelineOrchestratorOptions): PipelineOrchestrator {
+export function createPipelineOrchestrator(
+  opts: CreatePipelineOrchestratorOptions
+): PipelineOrchestrator {
   return createPipelineSystem(opts).orchestrator;
 }
 
@@ -323,7 +437,7 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
     undefined,
     opts.agenticDeps,
     undefined,
-    opts.skillRegistry,
+    opts.skillRegistry
   );
 
   const orchestrator = new PipelineOrchestrator(
@@ -342,8 +456,8 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
         model,
         opts.agenticDeps,
         onTokenUsage,
-        opts.skillRegistry,
-      ),
+        opts.skillRegistry
+      )
   );
 
   // Wire agent activity logging for integrity metrics
@@ -353,7 +467,7 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
   // Wire Level 3: CriticAgent for adversarial review
   const criticAI = createCriticAIDeps(opts.aiService);
   orchestrator.setCriticAgent(
-    new CriticAgent(criticAI, opts.skillRegistry, resolveCriticApprovalThreshold()),
+    new CriticAgent(criticAI, opts.skillRegistry, resolveCriticApprovalThreshold())
   );
 
   // Wire AI service for RepoContextAgent
