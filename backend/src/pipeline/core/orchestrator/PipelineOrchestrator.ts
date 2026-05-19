@@ -189,15 +189,35 @@ export class PipelineOrchestrator {
   private activityLogger?: { record(entry: Record<string, unknown>): Promise<void> };
 
   // ─── Token Usage Tracking ─────────────────────────
-  /** Accumulated token usage per pipeline (flushed to DB when stage completes). */
-  private tokenAccumulators = new Map<string, { inputTokens: number; outputTokens: number }>();
+  /**
+   * Accumulated AI usage per pipeline (flushed to DB when each stage finalizes).
+   *
+   * `estimatedCostUsd` is summed alongside the token counts so the Settings →
+   * Usage tab can show real spend. Each AI call's cost may be 0 (mock provider
+   * or unknown model) — those are simply additive zeros and don't leak into
+   * `pipelines.metrics.estimatedCost` when nothing real was charged
+   * (`hasCost` gates the write).
+   */
+  private tokenAccumulators = new Map<
+    string,
+    { inputTokens: number; outputTokens: number; estimatedCostUsd: number; hasCost: boolean }
+  >();
 
-  /** Create a callback that accumulates token usage for a specific pipeline. */
+  /** Create a callback that accumulates token + cost usage for a specific pipeline. */
   createTokenCallback(pipelineId: string): import('../pipeline-factory.js').TokenUsageCallback {
     return (usage) => {
-      const acc = this.tokenAccumulators.get(pipelineId) ?? { inputTokens: 0, outputTokens: 0 };
+      const acc = this.tokenAccumulators.get(pipelineId) ?? {
+        inputTokens: 0,
+        outputTokens: 0,
+        estimatedCostUsd: 0,
+        hasCost: false,
+      };
       acc.inputTokens += usage.inputTokens;
       acc.outputTokens += usage.outputTokens;
+      if (typeof usage.estimatedCostUsd === 'number' && Number.isFinite(usage.estimatedCostUsd)) {
+        acc.estimatedCostUsd += usage.estimatedCostUsd;
+        acc.hasCost = true;
+      }
       this.tokenAccumulators.set(pipelineId, acc);
     };
   }
@@ -211,12 +231,23 @@ export class PipelineOrchestrator {
       const pipeline = await this.store.getById(pipelineId);
       if (!pipeline) return;
       const metrics = pipeline.metrics;
-      const updatedMetrics = {
+      // Build the updated metrics blob. `estimatedCost` is only added when at
+      // least one real per-call cost was reported in this run — keeps the
+      // JSONB field absent for mock-provider pipelines so the usage endpoint's
+      // per-token fallback still kicks in instead of pinning the value to 0.
+      const updatedMetrics: PipelineMetrics = {
         ...metrics,
         inputTokens: (metrics.inputTokens ?? 0) + acc.inputTokens,
         outputTokens: (metrics.outputTokens ?? 0) + acc.outputTokens,
         totalTokens: (metrics.totalTokens ?? 0) + acc.inputTokens + acc.outputTokens,
       };
+      const persistedCost = metrics.estimatedCost ?? 0;
+      if (acc.hasCost || persistedCost > 0) {
+        const sum = persistedCost + acc.estimatedCostUsd;
+        // 6-decimal rounding matches `pricing.estimateCostUsd` and the
+        // numeric(12,6) column on `job_ai_calls` so reads/writes stay stable.
+        updatedMetrics.estimatedCost = Number(sum.toFixed(6));
+      }
       await this.store.update(pipelineId, { metrics: updatedMetrics });
       this.tokenAccumulators.delete(pipelineId);
     } catch (err) {
@@ -236,9 +267,11 @@ export class PipelineOrchestrator {
     persistedMetrics?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }
   ): { inputTokens: number; outputTokens: number; totalTokens: number } {
     const persisted = persistedMetrics ?? {};
-    const acc = this.tokenAccumulators.get(pipelineId) ?? { inputTokens: 0, outputTokens: 0 };
-    const inputTokens = (persisted.inputTokens ?? 0) + acc.inputTokens;
-    const outputTokens = (persisted.outputTokens ?? 0) + acc.outputTokens;
+    const acc = this.tokenAccumulators.get(pipelineId);
+    const accInput = acc?.inputTokens ?? 0;
+    const accOutput = acc?.outputTokens ?? 0;
+    const inputTokens = (persisted.inputTokens ?? 0) + accInput;
+    const outputTokens = (persisted.outputTokens ?? 0) + accOutput;
     return {
       inputTokens,
       outputTokens,
