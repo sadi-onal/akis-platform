@@ -418,6 +418,25 @@ export function mapPipelineToWorkflow(
   // having to traverse intermediateState itself.
   const acCoverage = pipeline.intermediateState?.acCoverage;
 
+  // PR-U3 M3: surface the Trace dryRun outcome so PushConfirmGate can
+  // render in one of three modes (success / failed / pending) instead of
+  // always showing the enabled confirm button. Backend sets one of
+  // `'success' | 'failed'` on the success/failure handoffs; when the gate
+  // opens before Trace has finished we fall through to `'pending'`.
+  const rawDryRun = pipeline.intermediateState?.traceDryRunStatus as
+    | 'success'
+    | 'failed'
+    | undefined;
+  const traceDryRunStatus: 'success' | 'failed' | 'pending' =
+    rawDryRun ?? (pipeline.stage === 'awaiting_push_confirm' ? 'pending' : 'success');
+  const traceDryRunErrorCode = pipeline.intermediateState?.traceDryRunErrorCode as
+    | string
+    | undefined;
+
+  // PR-U3 M7: explainability degraded flag — surfaces a banner when the
+  // reasoning persistence layer failed after retries.
+  const explainabilityDegraded = Boolean(pipeline.intermediateState?.explainabilityDegraded);
+
   return {
     id: pipeline.id,
     traceEnabled: pipeline.traceEnabled ?? false,
@@ -435,6 +454,9 @@ export function mapPipelineToWorkflow(
     criticReview,
     criticBlock,
     acCoverage,
+    traceDryRunStatus,
+    ...(traceDryRunErrorCode ? { traceDryRunErrorCode } : {}),
+    explainabilityDegraded,
   };
 }
 

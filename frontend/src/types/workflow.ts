@@ -33,7 +33,9 @@ export interface StructuredSpec {
     when: string;
     then: string;
   }>;
-  technicalConstraints?: { stack?: string; integrations?: string[]; nonFunctional?: string[] } | string[];
+  technicalConstraints?:
+    | { stack?: string; integrations?: string[]; nonFunctional?: string[] }
+    | string[];
   outOfScope?: string[];
 }
 
@@ -79,11 +81,13 @@ export interface ConversationMessage {
   // Spec
   spec?: StructuredSpec;
   confidence?: number;
-  reviewNotes?: string | {
-    selfReviewPassed?: boolean;
-    revisionsApplied?: string[];
-    assumptionsMade?: string[];
-  };
+  reviewNotes?:
+    | string
+    | {
+        selfReviewPassed?: boolean;
+        revisionsApplied?: string[];
+        assumptionsMade?: string[];
+      };
   assumptions?: string[];
   // Proto result
   protoResult?: {
@@ -193,6 +197,22 @@ export interface Workflow {
    * renders the checklist instead of the legacy bullet list.
    */
   acCoverage?: import('./pipeline').AcCoverageReport;
+  /**
+   * PR-U3 M3 — outcome of the Trace dryRun that precedes the push gate.
+   * Drives PushConfirmGate's 3-mode rendering:
+   *   - `success`: gate behaves normally
+   *   - `failed`: warning banner + explicit override checkbox before push
+   *   - `pending`: spinner + push button disabled
+   */
+  traceDryRunStatus?: 'success' | 'failed' | 'pending';
+  /** Error code from a failed Trace dryRun (only present when status='failed'). */
+  traceDryRunErrorCode?: string;
+  /**
+   * PR-U3 M7 — true when the orchestrator failed to persist explainability
+   * reasoning after retries. The Açıklama panel uses this to show a
+   * graceful banner instead of an empty card.
+   */
+  explainabilityDegraded?: boolean;
 }
 
 export interface WorkflowStats {

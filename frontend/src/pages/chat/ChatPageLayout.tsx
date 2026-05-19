@@ -310,6 +310,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       onPushResolved={onPushResolved}
                       criticReview={activeWorkflow?.criticReview}
                       acCoverage={activeWorkflow?.acCoverage}
+                      traceDryRunStatus={activeWorkflow?.traceDryRunStatus}
                       onCriticResolved={
                         onPushResolved
                           ? () => {

@@ -94,6 +94,11 @@ export interface PipelineDetailRailProps {
    * checklist in place of the confidence-bullet list.
    */
   acCoverage?: import('../../types/pipeline').AcCoverageReport;
+  /**
+   * PR-U3 M3 — Trace dryRun outcome surfaced to PushConfirmGate so the
+   * gate can render in success/failed/pending mode.
+   */
+  traceDryRunStatus?: 'success' | 'failed' | 'pending';
   className?: string;
 }
 
@@ -192,6 +197,7 @@ export function PipelineDetailRail({
   criticApprovalThreshold,
   onCriticResolved,
   acCoverage,
+  traceDryRunStatus,
   className,
   // onPushResolved is accepted in the interface so callers can keep
   // passing it (it's still consumed by the T1 PushGateFooter render path,
@@ -593,6 +599,7 @@ export function PipelineDetailRail({
                 fileCount={protoFiles ? Object.keys(protoFiles).length : 0}
                 previewOpen={showPreview ?? false}
                 onOpenPreview={() => onTogglePreview?.()}
+                traceDryRunStatus={traceDryRunStatus}
               />
             </div>
           )}

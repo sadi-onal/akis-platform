@@ -426,17 +426,53 @@ export class PipelineOrchestrator {
    * are inside long-running stage transitions where adding ~5ms of DB latency
    * sequentially would compound; we fire-and-forget and surface failures via
    * the logger instead.
+   *
+   * PR-U3 M7: previously the write was a single fire-and-forget call — a
+   * transient DB blip would silently drop reasoning, leaving the user with
+   * an empty Açıklama tab and no signal anything went wrong. Three retries
+   * with exponential backoff (50/200/600ms) cover the common transient
+   * cases (connection saturation, brief lock contention) before we fall
+   * back to logging + flagging the pipeline as "explainability degraded"
+   * so the UI can surface a banner instead of an empty card.
    */
   private persistReasoning(
     pipelineId: string,
     reasoning: import('../explainability/ExplainabilityTypes.js').AgentReasoning
   ): void {
-    this.explainability.addReasoning(pipelineId, reasoning).catch((err) => {
-      logger.warn(
-        { err, pipelineId, agent: reasoning.agentName },
-        '[Pipeline] Failed to persist reasoning (cache still hot)'
-      );
-    });
+    const attempt = async (n: number): Promise<void> => {
+      try {
+        await this.explainability.addReasoning(pipelineId, reasoning);
+      } catch (err) {
+        if (n < 3) {
+          const delay = 50 * 4 ** n; // 50, 200, 800 — caps under 1s for the 3rd retry
+          await new Promise((r) => setTimeout(r, delay));
+          return attempt(n + 1);
+        }
+        logger.warn(
+          { err, pipelineId, agent: reasoning.agentName, retries: n },
+          '[Pipeline] PR-U3 M7: failed to persist reasoning after retries; flagging pipeline as explainability-degraded'
+        );
+        // Best-effort flag so the UI can show a banner. Same error
+        // tolerance — we never fail the pipeline on an explainability issue.
+        try {
+          const pipeline = await this.store.getById(pipelineId);
+          const intermediate = (pipeline?.intermediateState ?? {}) as Record<string, unknown>;
+          await this.store.update(pipelineId, {
+            intermediateState: {
+              ...intermediate,
+              explainabilityDegraded: true,
+              explainabilityDegradedAt: new Date().toISOString(),
+            },
+          });
+        } catch (flagErr) {
+          logger.warn(
+            { flagErr, pipelineId },
+            '[Pipeline] PR-U3 M7: also failed to set explainabilityDegraded flag — UI will see empty Açıklama'
+          );
+        }
+      }
+    };
+    void attempt(0);
   }
 
   /** Level 4: Explainability — Scribe reasoning after spec generation. */
@@ -2850,17 +2886,39 @@ export class PipelineOrchestrator {
       // GitHub before the user has confirmed). Hand off to push gate so the
       // user can still inspect/push the un-tested scaffold or cancel.
       if (traceDryRun && postSuccessStage === 'awaiting_push_confirm') {
+        // PR-U3 M3: previously the push gate showed nothing distinct on a
+        // dryRun failure — the button was enabled, the user could push
+        // "tested" code that never had tests. Persist a flag in
+        // intermediateState so the frontend can render a warning + force
+        // an explicit override checkbox before the push button enables.
+        const pipelineNow = await this.store.getById(pipelineId);
+        const intermediate = (pipelineNow?.intermediateState ?? {}) as Record<string, unknown>;
         const updated = await this.store.update(pipelineId, {
           stage: 'awaiting_push_confirm',
           metrics: {
             ...metrics,
             protoCompletedAt: metrics.protoCompletedAt ?? new Date(),
           },
+          intermediateState: {
+            ...intermediate,
+            traceDryRunStatus: 'failed',
+            traceDryRunErrorCode: traceResult.error.code,
+            traceDryRunErrorAt: new Date().toISOString(),
+          },
           // We intentionally do NOT persist the error onto the pipeline — it's
-          // a soft failure for the dryRun pass. The push gate UI already
-          // surfaces "no tests generated" through the absence of traceOutput.
+          // a soft failure for the dryRun pass. The flag above tells the UI.
         });
         this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
+        // PR-T3 S1 + PR-U3: explicit gate_open activity so SSE-driven
+        // refresh on the frontend catches the transition.
+        emitActivity({
+          pipelineId,
+          stage: 'trace',
+          step: 'gate_open',
+          message: 'Push gate açıldı — Trace üretimi başarısız oldu, gönderim öncesi onay gerekli',
+          progress: 100,
+          timestamp: new Date().toISOString(),
+        });
         logger.warn(
           { pipelineId, errorCode: traceResult.error.code },
           '[Pipeline] PR-F2 Trace dryRun failed — handing off to push gate without tests'
@@ -3063,6 +3121,13 @@ export class PipelineOrchestrator {
     // PR-F2: post-Trace handoff target. Default flow → `completed`; preview
     // gate flow (Trace dryRun before push) → `awaiting_push_confirm` so the
     // user reviews scaffold + coverage matrix before pushing to GitHub.
+    // PR-U3 M3: mirror the failure-path flag in the success branch so the
+    // frontend can render the gate in `success` mode without inferring from
+    // the absence of `traceDryRunStatus`.
+    const pipelineForFlag = traceDryRun ? await this.store.getById(pipelineId) : undefined;
+    const intermediateForFlag = traceDryRun
+      ? ((pipelineForFlag?.intermediateState ?? {}) as Record<string, unknown>)
+      : undefined;
     const updated = await this.store.update(pipelineId, {
       stage: postSuccessStage,
       traceOutput: traceResult.data,
@@ -3079,6 +3144,15 @@ export class PipelineOrchestrator {
             ? Date.now() - toEpoch(metrics.startedAt)
             : metrics.totalDurationMs,
       },
+      ...(traceDryRun
+        ? {
+            intermediateState: {
+              ...(intermediateForFlag ?? {}),
+              traceDryRunStatus: 'success' as const,
+              traceDryRunCompletedAt: new Date().toISOString(),
+            },
+          }
+        : {}),
     });
     if (postSuccessStage === 'awaiting_push_confirm') {
       this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');

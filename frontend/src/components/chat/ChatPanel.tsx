@@ -99,6 +99,11 @@ interface ChatPanelProps {
    * reasoning card can render the per-AC binary checklist.
    */
   acCoverage?: import('../../types/pipeline').AcCoverageReport;
+  /**
+   * PR-U3 M3: Trace dryRun outcome surfaced to PushConfirmGate so the gate
+   * can render success/failed/pending banners.
+   */
+  traceDryRunStatus?: 'success' | 'failed' | 'pending';
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -148,6 +153,7 @@ export const ChatPanel = memo(function ChatPanel({
   criticApprovalThreshold,
   onCriticResolved,
   acCoverage,
+  traceDryRunStatus,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -258,6 +264,7 @@ export const ChatPanel = memo(function ChatPanel({
           criticApprovalThreshold={criticApprovalThreshold}
           onCriticResolved={onCriticResolved}
           acCoverage={acCoverage}
+          traceDryRunStatus={traceDryRunStatus}
         />
       )}
 
@@ -289,17 +296,15 @@ export const ChatPanel = memo(function ChatPanel({
       {conversationId &&
         traceEnabled === true &&
         (uiState === 'proto_running' || uiState === 'awaiting_approval') && (
-          <div
-            data-testid="trace-pending-hint"
-            className="mx-auto w-full max-w-3xl px-4 sm:px-6"
-          >
+          <div data-testid="trace-pending-hint" className="mx-auto w-full max-w-3xl px-4 sm:px-6">
             <div className="mt-2 flex items-center gap-2 rounded-md border border-ak-trace/30 bg-ak-trace/5 px-3 py-1.5 text-xs text-ak-text-secondary">
               <span
                 className="inline-block h-1.5 w-1.5 rounded-full"
                 style={{ backgroundColor: 'var(--ak-trace, #8b5cf6)' }}
               />
               <span>
-                Bu pipeline&apos;da Trace çalışacak — Proto kodu üretildikten sonra Playwright testleri otomatik yazılır.
+                Bu pipeline&apos;da Trace çalışacak — Proto kodu üretildikten sonra Playwright
+                testleri otomatik yazılır.
               </span>
             </div>
           </div>
@@ -539,9 +544,7 @@ export const ChatPanel = memo(function ChatPanel({
                     )}
                     data-testid="trace-toggle-label"
                   >
-                    {traceEnabled
-                      ? 'Trace açık — testler üretilecek'
-                      : 'Trace kapalı — sadece kod'}
+                    {traceEnabled ? 'Trace açık — testler üretilecek' : 'Trace kapalı — sadece kod'}
                   </span>
                   <span className="text-[10px] text-ak-text-tertiary">
                     {traceEnabled
