@@ -1,5 +1,26 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+// PR-V7: ChatInput now renders ModelPicker as a chip when onModelChange is
+// provided. ModelPicker pulls translations via useI18n and fetches model lists
+// over the network — mock both so the chip is visible without an I18nProvider
+// or a real API.
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
+
+vi.mock('../../../services/api/workflows', () => ({
+  workflowsApi: {
+    listSupportedModels: vi.fn(() => Promise.resolve({ provider: 'anthropic', models: [] })),
+  },
+}));
+
 import { ChatInput } from '../ChatInput';
 
 describe('ChatInput', () => {
@@ -198,5 +219,51 @@ describe('ChatInput', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Büyük yaz' }));
     const expandedMax = parseFloat(textarea.style.maxHeight);
     expect(expandedMax).toBeGreaterThan(collapsedMax);
+  });
+
+  // ─── PR-V7: Trace + Model chips inside composer ───────────────────────────
+
+  describe('PR-V7 chip cluster', () => {
+    it('renders trace chip when onTraceToggle is provided', () => {
+      render(<ChatInput onSend={vi.fn()} onTraceToggle={vi.fn()} traceEnabled={false} />);
+      expect(screen.getByTestId('trace-toggle')).toBeInTheDocument();
+      expect(screen.getByTestId('trace-toggle-label').textContent).toMatch(/Trace kapalı/);
+    });
+
+    it('does NOT render trace chip when onTraceToggle is undefined', () => {
+      render(<ChatInput onSend={vi.fn()} />);
+      expect(screen.queryByTestId('trace-toggle')).not.toBeInTheDocument();
+    });
+
+    it('trace chip reflects aria-checked=true when traceEnabled is true', () => {
+      render(<ChatInput onSend={vi.fn()} onTraceToggle={vi.fn()} traceEnabled={true} />);
+      const chip = screen.getByTestId('trace-toggle');
+      expect(chip).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByTestId('trace-toggle-label').textContent).toMatch(
+        /Trace açık — testler üretilecek/
+      );
+    });
+
+    it('trace chip click flips the value via onTraceToggle', () => {
+      const onTraceToggle = vi.fn();
+      render(<ChatInput onSend={vi.fn()} onTraceToggle={onTraceToggle} traceEnabled={true} />);
+      fireEvent.click(screen.getByTestId('trace-toggle'));
+      expect(onTraceToggle).toHaveBeenCalledWith(false);
+    });
+
+    it('renders ModelPicker chip when onModelChange is provided', () => {
+      render(<ChatInput onSend={vi.fn()} onModelChange={vi.fn()} />);
+      // ModelPicker renders an accessible "model" button via its aria-label
+      // (chat.model.ariaLabel). Just assert that some button beyond the
+      // default Gönder / Büyük yaz exists by checking the picker's chevron.
+      expect(screen.getByRole('button', { name: /chat\.model\.ariaLabel/i })).toBeInTheDocument();
+    });
+
+    it('does NOT render ModelPicker chip when onModelChange is undefined', () => {
+      render(<ChatInput onSend={vi.fn()} />);
+      expect(
+        screen.queryByRole('button', { name: /chat\.model\.ariaLabel/i })
+      ).not.toBeInTheDocument();
+    });
   });
 });
