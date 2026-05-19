@@ -6,7 +6,7 @@
  * independently. The F-06 finding describes this as `<ChatPageShell>`.
  */
 import { Suspense, lazy } from 'react';
-import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 
 import { ChatPanel } from '../../components/chat/ChatPanel';
 import { ChatRouter } from '../../components/chat/ChatRouter';
@@ -78,7 +78,9 @@ export interface ChatPageLayoutProps {
   onTogglePreview: () => void;
   setShowPreview: (open: boolean) => void;
   splitContainerRef: RefObject<HTMLDivElement | null>;
-  handleDragStart: (e: ReactMouseEvent) => void;
+  handleDragStart: (e: ReactPointerEvent) => void;
+  handleDragMove: (e: ReactPointerEvent) => void;
+  handleDragEnd: (e: ReactPointerEvent) => void;
 
   // ── chat panel actions ──────────────────────────
   onSend: (content: string, attachments?: ChatAttachment[]) => Promise<void> | void;
@@ -152,6 +154,8 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
     setShowPreview,
     splitContainerRef,
     handleDragStart,
+    handleDragMove,
+    handleDragEnd,
     onSend,
     onAsk,
     onFeedback,
@@ -334,8 +338,14 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
             {showPreview && (
               <>
                 <div
-                  onMouseDown={handleDragStart}
-                  className="group hidden w-1 flex-shrink-0 cursor-col-resize bg-ak-border transition-colors hover:bg-ak-primary/50 active:bg-ak-primary lg:block"
+                  onPointerDown={handleDragStart}
+                  onPointerMove={handleDragMove}
+                  onPointerUp={handleDragEnd}
+                  onPointerCancel={handleDragEnd}
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Önizleme paneli genişliğini ayarla"
+                  className="group hidden w-1 flex-shrink-0 cursor-col-resize touch-none bg-ak-border transition-colors hover:bg-ak-primary/50 active:bg-ak-primary lg:block"
                   title="Sürükleyerek boyutlandır"
                 >
                   <div className="flex h-full items-center justify-center">
