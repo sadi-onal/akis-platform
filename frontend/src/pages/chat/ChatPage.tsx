@@ -175,8 +175,14 @@ export default function ChatPage() {
   useEffect(() => {
     if (pipelineActivities.length === 0) return;
     const latest = pipelineActivities[pipelineActivities.length - 1];
-    const stageChanged = lastStageRef.current !== undefined && lastStageRef.current !== latest.stage;
-    const isTerminal = latest.step === 'pipeline_complete';
+    const stageChanged =
+      lastStageRef.current !== undefined && lastStageRef.current !== latest.stage;
+    // PR-T3 S1: `gate_open` is the new explicit signal emitted by the
+    // orchestrator when the pipeline lands on `awaiting_push_confirm`. We
+    // treat it as terminal-equivalent so the chat refreshes the workflow
+    // even when no stage label changed (Trace stayed `trace`, only the
+    // pipeline-level state moved).
+    const isTerminal = latest.step === 'pipeline_complete' || latest.step === 'gate_open';
     lastStageRef.current = latest.stage;
     if (!stageChanged && !isTerminal) return;
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);

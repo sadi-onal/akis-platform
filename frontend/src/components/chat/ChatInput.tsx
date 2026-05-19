@@ -174,7 +174,15 @@ export function ChatInput({
 
         {showCancel ? (
           <button
-            onClick={onCancel}
+            onClick={() => {
+              // PR-T3 S8: çalışan pipeline'ın iptali geri alınamaz —
+              // önce kullanıcıya teyit ettiriyoruz. Native dialog yeterli
+              // (hover-discovery yok, klavyeden de erişilebilir).
+              const ok = window.confirm(
+                'Pipeline çalışıyor. İptal edersen şu ana kadarki ilerleme silinir. Devam edilsin mi?'
+              );
+              if (ok) onCancel?.();
+            }}
             aria-label="İptal et"
             className={cn(
               'h-8 w-8 rounded-lg flex items-center justify-center transition-colors shrink-0',

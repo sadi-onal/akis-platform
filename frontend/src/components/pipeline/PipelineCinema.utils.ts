@@ -117,7 +117,21 @@ export function reduceStageViews(
       nativeLastFor.set(s, a);
     }
     if (a.progress !== undefined) progressFor.set(s, a.progress);
-    if (a.reasoning) reasoningFor.set(s, a.reasoning);
+    // PR-T3 S5: cinema'daki güven rozeti **kolonun kendi ajanının** öz-güveni
+    // olmalı. Critic events stage olarak Scribe/Proto'ya katlanıyor ama Critic
+    // review-skoru ile Scribe öz-güveni iki ayrı metrik — önceden Critic
+    // sonradan gelirse Scribe öz-güvenini yerine geçiyordu (manuel testte
+    // Açıklama %92 ↔ Akış %82 tutarsızlığı). Yeni kural: native (non-critic)
+    // reasoning her zaman kazanır; Critic reasoning sadece native yoksa
+    // yedek olarak girer (DB-replay sırasında criticPhase eksik kalsa bile
+    // overall outcome görünür kalsın diye).
+    if (a.reasoning) {
+      if (a.stage !== 'critic') {
+        reasoningFor.set(s, a.reasoning);
+      } else if (!reasoningFor.has(s)) {
+        reasoningFor.set(s, a.reasoning);
+      }
+    }
     // PR-F: Trace retry badge — `retry-trigger` step'inde retryCount alanı
     // doludur ve message metni `... (n/m)` formatında. Aktif retry sayısını
     // ve maxRetries'i parse edip stage meta'sına yazıyoruz; PipelineCinema
@@ -138,11 +152,7 @@ export function reduceStageViews(
     // aynı meta shape; Proto column'unda aynı anda iki retry birden olmaz
     // (Critic iterate aktifken Trace henüz çalışmıyor; Trace iterate Trace
     // column'unda görünür).
-    if (
-      a.stage === 'critic' &&
-      a.criticPhase === 'code' &&
-      a.step === 'retry-trigger'
-    ) {
+    if (a.stage === 'critic' && a.criticPhase === 'code' && a.step === 'retry-trigger') {
       const existing = metaFor.get('proto') ?? {};
       const max = parseRetryMaxFromMessage(a.message);
       metaFor.set('proto', {
