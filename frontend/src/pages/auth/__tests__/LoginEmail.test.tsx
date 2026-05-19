@@ -103,7 +103,7 @@ function renderLoginEmail() {
       <Routes>
         <Route path="/login" element={<LoginEmail />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
@@ -197,7 +197,7 @@ describe('LoginEmail — form submission', () => {
 
   it('parses JSON error.message field when AuthAPI throws structured JSON', async () => {
     mockLoginStart.mockRejectedValueOnce(
-      new Error(JSON.stringify({ error: 'Kullanıcı bulunamadı' })),
+      new Error(JSON.stringify({ error: 'Kullanıcı bulunamadı' }))
     );
 
     renderLoginEmail();
@@ -212,9 +212,7 @@ describe('LoginEmail — form submission', () => {
 
   it('redirects to /signup/verify-email when API returns EMAIL_NOT_VERIFIED', async () => {
     mockLoginStart.mockRejectedValueOnce(
-      new Error(
-        JSON.stringify({ code: 'EMAIL_NOT_VERIFIED', userId: 'u9', message: 'verify' }),
-      ),
+      new Error(JSON.stringify({ code: 'EMAIL_NOT_VERIFIED', userId: 'u9', message: 'verify' }))
     );
 
     renderLoginEmail();
@@ -223,9 +221,7 @@ describe('LoginEmail — form submission', () => {
     fireEvent.submit(emailInput.closest('form')!);
 
     await vi.waitFor(() => {
-      expect(
-        screen.getByText(/E-posta doğrulanmadı/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/E-posta doğrulanmadı/)).toBeInTheDocument();
     });
 
     // sessionStorage should contain signup data for the redirect step
@@ -247,10 +243,44 @@ describe('LoginEmail — form submission', () => {
     fireEvent.submit(emailInput.closest('form')!);
 
     await vi.waitFor(() => {
-      expect(
-        screen.getByText('Devam edilemiyor. Lütfen tekrar deneyin.'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Devam edilemiyor. Lütfen tekrar deneyin.')).toBeInTheDocument();
     });
+  });
+});
+
+describe('LoginEmail — Enter key', () => {
+  it('submits the form when Enter is pressed in the email input', async () => {
+    mockLoginStart.mockResolvedValueOnce({
+      userId: 'u1',
+      email: 'enter@example.com',
+      requiresPassword: true,
+      status: 'active',
+    });
+
+    renderLoginEmail();
+
+    const emailInput = screen.getByLabelText('auth.email.label') as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'enter@example.com' } });
+    fireEvent.keyDown(emailInput, { key: 'Enter' });
+
+    await vi.waitFor(() => {
+      expect(mockLoginStart).toHaveBeenCalledWith({ email: 'enter@example.com' });
+    });
+  });
+
+  it('does not submit on Enter when the email field is empty', () => {
+    renderLoginEmail();
+    const emailInput = screen.getByLabelText('auth.email.label') as HTMLInputElement;
+    fireEvent.keyDown(emailInput, { key: 'Enter' });
+    expect(mockLoginStart).not.toHaveBeenCalled();
+  });
+
+  it('does not submit on non-Enter keys (e.g. Shift)', () => {
+    renderLoginEmail();
+    const emailInput = screen.getByLabelText('auth.email.label') as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'x@y.z' } });
+    fireEvent.keyDown(emailInput, { key: 'Shift' });
+    expect(mockLoginStart).not.toHaveBeenCalled();
   });
 });
 
