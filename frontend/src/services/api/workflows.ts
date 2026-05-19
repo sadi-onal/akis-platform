@@ -299,6 +299,26 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
         traceability: pipeline.traceOutput.traceability,
       },
     });
+  } else if (
+    // PR-H bug-2 (2026-05-19): Trace dryRun failed → orchestrator parks the
+    // pipeline at `awaiting_push_confirm` without persisting `traceOutput` or
+    // `error` (soft failure — user still has a scaffold to push). Without a
+    // synthetic chat message, the timeline ends at "Proto Scaffold oluşturuldu"
+    // and the user thinks the pipeline is stuck. Add an info row so the chat
+    // narrates the missing tests instead of going silent. Same handling for
+    // post-Proto stages where Trace would have run but didn't produce output.
+    pipeline.protoOutput?.ok &&
+    (pipeline.stage === 'awaiting_push_confirm' ||
+      pipeline.stage === 'completed' ||
+      pipeline.stage === 'completed_partial')
+  ) {
+    messages.push({
+      role: 'system',
+      type: 'message',
+      content:
+        'Trace test üretimi tamamlanamadı (modelin çıktısı bütünleşmedi). Önizleme + scaffold hazır — testsiz devam edebilir veya iyileştirme isteyebilirsin.',
+      timestamp: pipeline.metrics?.protoCompletedAt || new Date().toISOString(),
+    });
   }
 
   return messages;
