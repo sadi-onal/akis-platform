@@ -154,8 +154,13 @@ function createProtoAIDeps(aiService: AIServiceLike, model?: string, onTokenUsag
 }
 
 function createTraceAIDeps(aiService: AIServiceLike, model?: string, onTokenUsage?: TokenUsageCallback): TraceAIDeps {
+  // PR-H (2026-05-19): bumped from 32 768 → 64 000 because manual-test logs on
+  // 2026-05-19 showed Trace responses hitting the cap (responseLen 33-45K) and
+  // truncating the JSON closing fence — three retries all failed JSON parse.
+  // 64K is the documented Anthropic max for Sonnet/Haiku 4-class models.
+  const TRACE_MAX_TOKENS = 64_000;
   const deps: TraceAIDeps = {
-    generateText: makeGenerateText(aiService, 32768, model, onTokenUsage),
+    generateText: makeGenerateText(aiService, TRACE_MAX_TOKENS, model, onTokenUsage),
   };
   // Wire the multimodal path only when the AIService actually supports it.
   // Mock stores and non-Anthropic providers leave `generateMultimodalArtifact`
@@ -167,7 +172,7 @@ function createTraceAIDeps(aiService: AIServiceLike, model?: string, onTokenUsag
         systemPrompt,
         task: userPrompt,
         images,
-        maxTokens: 32768,
+        maxTokens: TRACE_MAX_TOKENS,
         modelOverride: model,
       });
       if (onTokenUsage && result.metadata?.usage) {
