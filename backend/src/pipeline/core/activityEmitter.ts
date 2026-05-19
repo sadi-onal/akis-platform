@@ -28,6 +28,16 @@ export interface PipelineActivity {
   message: string;
   detail?: string;
   progress?: number; // 0-100
+  /**
+   * PR-V5: explicit lifecycle signal for a stage. When set to `'completed'`
+   * (with progress 100), it marks the stage as fully done so the frontend
+   * does NOT have to infer completion from "this stage is no longer the
+   * latest activity" — a heuristic that caused premature checkmarks at
+   * Scribe→Proto / Proto→Trace transitions. `undefined` for older or
+   * intermediate events; new code emits exactly one `'completed'` per
+   * stage success (before the stage transition is recorded).
+   */
+  status?: 'completed';
   retryCount?: number; // >0 when agent is retrying a transient failure
   /**
    * Stable i18n key for the activity message (e.g. `pipeline.activity.proto.writing_files`).
@@ -76,8 +86,7 @@ const activityBuffers = new Map<string, PipelineActivity[]>();
 // DATABASE_URL is unreachable. Integration tests opt back in by calling
 // `resetActivityDb()` (or by setActivityDb(realDb)).
 type ActivityDb = Pick<typeof defaultDb, 'insert' | 'select'>;
-const IS_TEST_ENV =
-  process.env.NODE_ENV === 'test' || process.env.SKIP_DB_TESTS === 'true';
+const IS_TEST_ENV = process.env.NODE_ENV === 'test' || process.env.SKIP_DB_TESTS === 'true';
 let _db: ActivityDb | null = IS_TEST_ENV ? null : defaultDb;
 
 /** Override the DB used for activity persistence. `null` = cache-only (tests). */
@@ -205,6 +214,11 @@ function rowToActivity(r: ActivityRow): PipelineActivity {
   if (r.progress !== null) activity.progress = r.progress;
   if (r.retryCount !== null && r.retryCount > 0) activity.retryCount = r.retryCount;
   if (r.reasoningSnippet) activity.reasoning = r.reasoningSnippet;
+  // PR-V5: rehydrate the explicit stage-completed lifecycle signal on
+  // replay. We piggyback on `step === 'stage_completed'` because the DB
+  // schema has no dedicated status column — keeping the contract
+  // backwards-compatible and migration-free.
+  if (r.step === 'stage_completed') activity.status = 'completed';
   return activity;
 }
 
