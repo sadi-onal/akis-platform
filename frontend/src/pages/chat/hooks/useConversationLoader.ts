@@ -89,7 +89,7 @@ export interface UseConversationLoaderReturn {
  *   reject/retry/skip) can invoke after a mutation.
  */
 export function useConversationLoader(
-  options: UseConversationLoaderOptions,
+  options: UseConversationLoaderOptions
 ): UseConversationLoaderReturn {
   const { conversationId, isConnected, syncFromStage, onWorkflowSnapshot, navigate } = options;
 
@@ -152,10 +152,17 @@ export function useConversationLoader(
     const targetId = conversationId;
     loadedIdRef.current = targetId;
 
+    // PR-U4 H2: cancel the in-flight fetch on rapid navigation so an old
+    // conversation's response never lands in the new conversation's surface.
+    // The existing `loadedIdRef.current !== targetId` guards stay as belt-and-
+    // suspenders for the case where a stale response somehow slips through
+    // (e.g. fetch promise resolves between abort signal and microtask flush).
+    const controller = new AbortController();
+
     workflowsApi
-      .get(targetId)
+      .get(targetId, { signal: controller.signal })
       .then((w) => {
-        // Stale response guard: skip if user navigated away during fetch
+        if (controller.signal.aborted) return;
         if (loadedIdRef.current !== targetId) return;
         setActiveWorkflow(w);
         const convLen = w.conversation?.length ?? 0;
@@ -167,7 +174,13 @@ export function useConversationLoader(
         }
         syncFromStageRef.current(w.currentStage ?? 'completed');
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        // AbortError surfaces as DOMException with name 'AbortError' or
+        // as TypeError in some fetch impls; in both cases we want to be
+        // silent — the navigation away already cleared state.
+        if (controller.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
+          return;
+        }
         if (loadedIdRef.current !== targetId) return;
         // F-01: reset the message-key cache on the error redirect — without it
         // the next conversation load can hit a stale matching key and skip
@@ -175,6 +188,10 @@ export function useConversationLoader(
         lastMessagesKeyRef.current = '';
         navigate('/chat', { replace: true });
       });
+
+    return () => {
+      controller.abort();
+    };
     // syncFromStage + onWorkflowSnapshot accessed via refs above to keep the
     // load effect stable across parent re-renders.
   }, [conversationId, navigate]);

@@ -296,7 +296,8 @@ describe('ChatPage — F-01 lastMessagesKeyRef reset on Yeni Sohbet', () => {
     await waitFor(() => {
       expect(screen.getByText(/F-01 fixture/)).toBeInTheDocument();
     });
-    expect(api.get).toHaveBeenCalledWith('chat-A');
+    // PR-U4 H2: workflowsApi.get now accepts an optional `{ signal }` 2nd arg.
+    expect(api.get).toHaveBeenCalledWith('chat-A', expect.anything());
 
     // Click Yeni Sohbet — drives handleNewConversation which (post-fix) resets
     // lastMessagesKeyRef. The chat surface flips to the pending-conversation view.

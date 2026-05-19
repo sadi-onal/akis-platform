@@ -286,7 +286,9 @@ describe('workflowsApi', () => {
 
       const workflow = await workflowsApi.get('p-123');
 
-      expect(mockGet).toHaveBeenCalledWith('/api/pipelines/p-123');
+      // PR-U4 H2: workflowsApi.get always passes a 2nd `RequestOptions` arg
+      // (empty object when caller omits `signal`). Match on URL only.
+      expect(mockGet).toHaveBeenCalledWith('/api/pipelines/p-123', expect.anything());
       expect(workflow.id).toBe('p-123');
     });
   });

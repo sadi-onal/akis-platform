@@ -436,9 +436,14 @@ function ReasoningCard({
         </div>
       ) : (
         stage.reasoning.length > 0 && (
+          // PR-U4 M9: compound key from content + index. The bullet lists are
+          // append-only in production (a finished stage's output doesn't
+          // re-order) but a stable key avoids React diffing surprises when
+          // the parent reuses the same stage object across renders with a
+          // mutated slice.
           <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-ak-text-secondary">
             {stage.reasoning.map((r, i) => (
-              <li key={i}>{r}</li>
+              <li key={`${i}-${r.slice(0, 40)}`}>{r}</li>
             ))}
           </ul>
         )
@@ -460,7 +465,7 @@ function ReasoningCard({
               <h4 className="font-semibold text-ak-text-primary">Varsayımlar</h4>
               <ul className="list-disc pl-5 text-ak-text-secondary">
                 {stage.assumptions.map((a, i) => (
-                  <li key={i}>{a}</li>
+                  <li key={`${i}-${a.slice(0, 40)}`}>{a}</li>
                 ))}
               </ul>
             </section>
@@ -470,7 +475,7 @@ function ReasoningCard({
               <h4 className="font-semibold text-ak-text-primary">Değerlendirilen alternatifler</h4>
               <ul className="list-disc pl-5 text-ak-text-secondary">
                 {stage.alternatives.map((a, i) => (
-                  <li key={i}>{a}</li>
+                  <li key={`${i}-${a.slice(0, 40)}`}>{a}</li>
                 ))}
               </ul>
             </section>
@@ -480,7 +485,7 @@ function ReasoningCard({
               <h4 className="font-semibold text-rose-600 dark:text-rose-300">Riskler</h4>
               <ul className="list-disc pl-5 text-rose-700 dark:text-rose-200/80">
                 {stage.risks.map((r, i) => (
-                  <li key={i}>{r}</li>
+                  <li key={`${i}-${r.slice(0, 40)}`}>{r}</li>
                 ))}
               </ul>
             </section>

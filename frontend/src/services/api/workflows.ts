@@ -490,8 +490,14 @@ export const workflowsApi = {
     return (Array.isArray(pipelines) ? pipelines : []).map((p) => mapPipelineToWorkflow(p));
   },
 
-  get: async (id: string): Promise<Workflow> => {
-    const res = await http.get<PipelineResponse>(`/api/pipelines/${id}`);
+  get: async (id: string, opts?: { signal?: AbortSignal }): Promise<Workflow> => {
+    // PR-U4 H2: accept an AbortSignal so callers (e.g. useConversationLoader
+    // on rapid sidebar navigation) can cancel an in-flight fetch instead of
+    // just discarding its result. Existing call sites that omit `opts` keep
+    // their previous behavior.
+    const res = await http.get<PipelineResponse>(`/api/pipelines/${id}`, {
+      ...(opts?.signal ? { signal: opts.signal } : {}),
+    });
     return mapPipelineToWorkflow(res.pipeline, res.tokenUsage);
   },
 
