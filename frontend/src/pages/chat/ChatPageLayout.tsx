@@ -323,6 +323,13 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
               </ErrorBoundary>
             </div>
 
+            {/* PR-U2 #5: PreviewPanel is kept mounted whenever it has been
+                opened at least once so that scroll position, file-tree
+                selection, and the Sandpack iframe state persist across
+                rail auto-collapses (e.g. pipeline → idle). Conditional
+                `display: none` hides it from layout without unmounting.
+                The drag-resizer and mobile backdrop only render when
+                visible (no offscreen interaction surfaces). */}
             {showPreview && (
               <>
                 <div
@@ -339,9 +346,19 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                   className="fixed inset-0 z-50 bg-black/50 lg:hidden"
                   onClick={() => setShowPreview(false)}
                 />
+              </>
+            )}
+            {/* Panel container: always mounted once preview has been used,
+                so internal state (scroll, file selection, Sandpack iframe)
+                survives an auto-collapse on idle. `hidden` hides without
+                unmounting; the parent `protoFiles` empty check guards the
+                first-ever render. */}
+            {protoFiles && Object.keys(protoFiles).length > 0 && (
+              <>
                 <div
                   className={cn(
-                    'fixed inset-0 z-50 overflow-hidden lg:relative lg:inset-auto lg:z-auto'
+                    'fixed inset-0 z-50 overflow-hidden lg:relative lg:inset-auto lg:z-auto',
+                    !showPreview && 'hidden'
                   )}
                   style={{ flexBasis: `${previewWidth}%`, flexGrow: 0, flexShrink: 0 }}
                 >

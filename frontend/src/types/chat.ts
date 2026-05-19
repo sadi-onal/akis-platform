@@ -188,7 +188,10 @@ export interface TestFailure {
 
 /* ─── Conversation List Item ────────────────────── */
 
-export type ConversationStatus = 'idle' | 'running' | 'awaiting_approval' | 'error';
+// PR-U2 #2: `partial` added so the sidebar can surface `completed_partial`
+// pipelines distinctly from `idle` (success). Pre-fix users saw a green
+// "Hazır" pill for partial runs — looked identical to a clean success.
+export type ConversationStatus = 'idle' | 'running' | 'awaiting_approval' | 'partial' | 'error';
 
 export interface ConversationListItem {
   id: string;

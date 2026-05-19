@@ -9,8 +9,18 @@ const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
   useLocation: () => ({ pathname: '/chat' }),
-  Link: ({ to, children, ...props }: { to: string; children: React.ReactNode; [key: string]: unknown }) => (
-    <a href={to} {...props}>{children}</a>
+  Link: ({
+    to,
+    children,
+    ...props
+  }: {
+    to: string;
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
   ),
 }));
 
@@ -29,8 +39,37 @@ vi.mock('../../../theme/brand', () => ({
   LOGO_MARK_SVG: '/logo.svg',
 }));
 
+// PR-U2 #11: sidebar group labels now come from i18n. Identity stub so the
+// assertions on visible labels (Bugün/Dün/Bu Hafta/Daha Eski) keep matching
+// the user-facing copy.
+vi.mock('../../../i18n/useI18n', () => {
+  const map: Record<string, string> = {
+    'sidebar.group.today': 'Bugün',
+    'sidebar.group.yesterday': 'Dün',
+    'sidebar.group.thisWeek': 'Bu Hafta',
+    'sidebar.group.older': 'Daha Eski',
+  };
+  return {
+    useI18n: () => ({
+      t: (key: string) => map[key] ?? key,
+      locale: 'tr',
+      availableLocales: ['tr', 'en'],
+      status: 'ready',
+      setLocale: vi.fn(),
+    }),
+  };
+});
+
 vi.mock('../ConversationItem', () => ({
-  ConversationItem: ({ title, isActive, onClick }: { title: string; isActive: boolean; onClick: () => void }) => (
+  ConversationItem: ({
+    title,
+    isActive,
+    onClick,
+  }: {
+    title: string;
+    isActive: boolean;
+    onClick: () => void;
+  }) => (
     <button data-testid={`conv-${title}`} data-active={isActive} onClick={onClick}>
       {title}
     </button>
@@ -39,7 +78,9 @@ vi.mock('../ConversationItem', () => ({
 
 // ─── Helpers ──────────────────────────────────────
 
-function makeConv(overrides: Partial<ConversationListItem> & { id: string; title: string }): ConversationListItem {
+function makeConv(
+  overrides: Partial<ConversationListItem> & { id: string; title: string }
+): ConversationListItem {
   return {
     repoFullName: 'user/repo',
     repoShortName: 'repo',
@@ -68,12 +109,7 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('ConversationSidebar', () => {
   it('renders conversation list', () => {
-    render(
-      <ConversationSidebar
-        conversations={conversations}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={conversations} onNewConversation={vi.fn()} />);
     expect(screen.getByTestId('conv-Todo App')).toBeInTheDocument();
     expect(screen.getByTestId('conv-Blog Platform')).toBeInTheDocument();
     expect(screen.getByTestId('conv-E-commerce')).toBeInTheDocument();
@@ -81,42 +117,31 @@ describe('ConversationSidebar', () => {
   });
 
   it('shows empty state when no conversations', () => {
-    render(
-      <ConversationSidebar
-        conversations={[]}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={[]} onNewConversation={vi.fn()} />);
     expect(screen.getByText('Henüz sohbet yok.')).toBeInTheDocument();
     expect(screen.getByText('Yeni Sohbet Başlat')).toBeInTheDocument();
   });
 
   it('shows "Sonuç bulunamadı." when search has no results', () => {
     vi.useFakeTimers();
-    render(
-      <ConversationSidebar
-        conversations={conversations}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={conversations} onNewConversation={vi.fn()} />);
     const searchInput = screen.getByLabelText('Sohbet ara');
     fireEvent.change(searchInput, { target: { value: 'nonexistent query' } });
-    act(() => { vi.advanceTimersByTime(300); });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
     expect(screen.getByText('Sonuç bulunamadı.')).toBeInTheDocument();
     vi.useRealTimers();
   });
 
   it('filters conversations by search', () => {
     vi.useFakeTimers();
-    render(
-      <ConversationSidebar
-        conversations={conversations}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={conversations} onNewConversation={vi.fn()} />);
     const searchInput = screen.getByLabelText('Sohbet ara');
     fireEvent.change(searchInput, { target: { value: 'Todo' } });
-    act(() => { vi.advanceTimersByTime(300); });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
     expect(screen.getByTestId('conv-Todo App')).toBeInTheDocument();
     expect(screen.queryByTestId('conv-Blog Platform')).not.toBeInTheDocument();
     vi.useRealTimers();
@@ -124,109 +149,59 @@ describe('ConversationSidebar', () => {
 
   it('calls onNewConversation on button click', () => {
     const onNew = vi.fn();
-    render(
-      <ConversationSidebar
-        conversations={conversations}
-        onNewConversation={onNew}
-      />,
-    );
+    render(<ConversationSidebar conversations={conversations} onNewConversation={onNew} />);
     fireEvent.click(screen.getByText('Yeni Sohbet'));
     expect(onNew).toHaveBeenCalledOnce();
   });
 
   it('highlights active conversation', () => {
     render(
-      <ConversationSidebar
-        conversations={conversations}
-        activeId="2"
-        onNewConversation={vi.fn()}
-      />,
+      <ConversationSidebar conversations={conversations} activeId="2" onNewConversation={vi.fn()} />
     );
     const active = screen.getByTestId('conv-Blog Platform');
     expect(active.dataset.active).toBe('true');
   });
 
   it('navigates to conversation on click', () => {
-    render(
-      <ConversationSidebar
-        conversations={conversations}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={conversations} onNewConversation={vi.fn()} />);
     fireEvent.click(screen.getByTestId('conv-Todo App'));
     expect(mockNavigate).toHaveBeenCalledWith('/chat/1');
   });
 
   it('renders date group labels', () => {
-    render(
-      <ConversationSidebar
-        conversations={conversations}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={conversations} onNewConversation={vi.fn()} />);
     expect(screen.getByText('Bugün')).toBeInTheDocument();
     expect(screen.getByText('Dün')).toBeInTheDocument();
     expect(screen.getByText('Daha Eski')).toBeInTheDocument();
   });
 
   it('shows AKIS logo', () => {
-    render(
-      <ConversationSidebar
-        conversations={[]}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={[]} onNewConversation={vi.fn()} />);
     expect(screen.getByAltText('AKIS')).toBeInTheDocument();
   });
 
   it('shows version text', () => {
-    render(
-      <ConversationSidebar
-        conversations={[]}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={[]} onNewConversation={vi.fn()} />);
     expect(screen.getByText(/AKIS v\d+\.\d+\.\d+/)).toBeInTheDocument();
   });
 
   it('shows theme toggle button', () => {
-    render(
-      <ConversationSidebar
-        conversations={[]}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={[]} onNewConversation={vi.fn()} />);
     expect(screen.getByLabelText('Aydınlık mod')).toBeInTheDocument();
   });
 
   it('shows settings button', () => {
-    render(
-      <ConversationSidebar
-        conversations={[]}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={[]} onNewConversation={vi.fn()} />);
     expect(screen.getByLabelText('Ayarlar')).toBeInTheDocument();
   });
 
   it('shows user info when user is logged in', () => {
-    render(
-      <ConversationSidebar
-        conversations={[]}
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={[]} onNewConversation={vi.fn()} />);
     expect(screen.getByText('Test User')).toBeInTheDocument();
   });
 
   it('renders new conversation button in collapsed mode', () => {
-    render(
-      <ConversationSidebar
-        conversations={[]}
-        collapsed
-        onNewConversation={vi.fn()}
-      />,
-    );
+    render(<ConversationSidebar conversations={[]} collapsed onNewConversation={vi.fn()} />);
     expect(screen.getByLabelText('Yeni Sohbet')).toBeInTheDocument();
   });
 });

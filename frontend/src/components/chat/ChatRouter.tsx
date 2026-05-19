@@ -36,8 +36,21 @@ export interface ChatRouterProps {
    * scaffold) rather than BUILD (which would restart the entire pipeline
    * and toss the user's work-in-progress preview).
    * Spec: docs/superpowers/specs/2026-05-14-preview-unify-chat-iterate-design.md § T3
+   *
+   * @deprecated PR-U2 #14: ChatRouter no longer reads pipeline state — the
+   * caller computes the desired fallback intent and passes it via
+   * `defaultFallbackIntent`. Kept here only to preserve the existing call
+   * site signature; remove on next breaking refactor.
    */
   pipelineUiState?: string;
+  /**
+   * PR-U2 #14: explicit fallback intent for the network-failure path.
+   * Defaults to `'BUILD'`. Parent decides ("user is on the push gate →
+   * FEEDBACK") rather than ChatRouter inferring from pipeline state.
+   * This keeps the intent classifier purely semantic and removes the
+   * coupling the audit flagged.
+   */
+  defaultFallbackIntent?: 'BUILD' | 'FEEDBACK' | 'ASK' | 'CHAT';
   /** Last N messages from the chat scrollback (oldest → newest), max 20. */
   recentMessages?: string[];
   /**
@@ -64,7 +77,10 @@ export interface ChatRouterProps {
    * the ChatInput's onSend prop. This keeps ChatRouter headless — it doesn't
    * own the input UI itself, only the routing decision.
    */
-  children: (renderProps: { send: (message: string, attachments?: ChatAttachment[]) => Promise<void>; busy: boolean }) => React.ReactNode;
+  children: (renderProps: {
+    send: (message: string, attachments?: ChatAttachment[]) => Promise<void>;
+    busy: boolean;
+  }) => React.ReactNode;
 }
 
 interface PendingDecision {
@@ -76,6 +92,7 @@ interface PendingDecision {
 export function ChatRouter({
   pipelineId,
   pipelineUiState,
+  defaultFallbackIntent,
   recentMessages,
   onBuild,
   onAsk,
@@ -93,10 +110,12 @@ export function ChatRouter({
   const apiRef = useRef(api ?? chatIntentApi);
   apiRef.current = api ?? chatIntentApi;
 
-  // Latest pipeline state in a ref so the classify-error fallback inside
-  // the async `send` callback reads the current value without a re-create.
-  const pipelineUiStateRef = useRef(pipelineUiState);
-  pipelineUiStateRef.current = pipelineUiState;
+  // PR-U2 #14: fallback intent resolved at call time. Preferred path is
+  // `defaultFallbackIntent` (parent decides); legacy `pipelineUiState`
+  // kept as a soft fallback so existing call sites don't break before
+  // they migrate. New callers should ignore pipelineUiState entirely.
+  const fallbackRef = useRef<{ explicit?: IntentLabel; legacyState?: string }>({});
+  fallbackRef.current = { explicit: defaultFallbackIntent, legacyState: pipelineUiState };
 
   const dispatch = useCallback(
     async (intent: IntentLabel, message: string, attachments?: ChatAttachment[]) => {
@@ -116,7 +135,7 @@ export function ChatRouter({
           break;
       }
     },
-    [],
+    []
   );
 
   const send = useCallback(
@@ -133,15 +152,19 @@ export function ChatRouter({
             recentMessages,
           });
         } catch {
-          // Network or auth failure — state-aware fallback so a classifier
-          // hiccup never strands the user. At `awaiting_push_confirm` and
-          // P8's `awaiting_critic_resolution` we prefer FEEDBACK (iterate
-          // the existing scaffold) so the user doesn't accidentally restart
-          // the whole pipeline; everywhere else BUILD remains the safer
-          // default (primary action).
+          // Network or auth failure — fallback resolution:
+          //  1. If parent passed `defaultFallbackIntent`, use it (PR-U2 #14
+          //     — explicit injection, ChatRouter stays state-agnostic).
+          //  2. Else, legacy `pipelineUiState` heuristic: gate-active →
+          //     FEEDBACK (iterate scaffold), else BUILD. Kept so callers
+          //     that haven't migrated still get the safer behavior.
+          if (fallbackRef.current.explicit) {
+            await dispatch(fallbackRef.current.explicit, message, attachments);
+            return;
+          }
           const gateActive =
-            pipelineUiStateRef.current === 'awaiting_push_confirm' ||
-            pipelineUiStateRef.current === 'awaiting_critic_resolution';
+            fallbackRef.current.legacyState === 'awaiting_push_confirm' ||
+            fallbackRef.current.legacyState === 'awaiting_critic_resolution';
           const fallback: IntentLabel = gateActive ? 'FEEDBACK' : 'BUILD';
           await dispatch(fallback, message, attachments);
           return;
@@ -158,7 +181,7 @@ export function ChatRouter({
         setBusy(false);
       }
     },
-    [dispatch, pipelineId, recentMessages],
+    [dispatch, pipelineId, recentMessages]
   );
 
   const handleModalSelect = useCallback(
@@ -179,7 +202,7 @@ export function ChatRouter({
         setBusy(false);
       }
     },
-    [dispatch, pending],
+    [dispatch, pending]
   );
 
   const handleModalCancel = useCallback(() => {

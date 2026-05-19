@@ -203,6 +203,12 @@ export function PipelineDetailRail({
   const [tab, setTab] = useState<Tab | null>(null);
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(null);
   const [explanationError, setExplanationError] = useState<string | null>(null);
+  // PR-U2 #15: distinct loading flag so the panel can render a persistent
+  // skeleton instead of flicker'ing between empty / loading / error states.
+  // Previously the panel re-fetched on every `currentStep` tick and the user
+  // saw a brief "no data" flash on slow networks.
+  const [explanationLoading, setExplanationLoading] = useState(false);
+  const [explanationRetryToken, setExplanationRetryToken] = useState(0);
   // PR-B (user feedback 2026-05-15 ek #2): user-controllable rail body
   // height. `null` → fall back to the `max-h-[55vh]/[60vh]` Tailwind
   // tokens (the original sizing). A number means the user dragged the
@@ -242,23 +248,42 @@ export function PipelineDetailRail({
     if (effectiveCollapsed) return;
     if (effectiveTab !== 'why') return;
     let cancelled = false;
+    // PR-U2 #15: only show the skeleton when we have NO cached data —
+    // re-fetches from activity ticks update silently in the background so
+    // the user never sees a flicker between cached content and reload.
+    if (!explanation) setExplanationLoading(true);
     const fetcher = explanationFetcher ?? workflowsApi.getExplanation;
     fetcher(pipelineId)
       .then((data) => {
         if (!cancelled) {
           setExplanation(data);
           setExplanationError(null);
+          setExplanationLoading(false);
         }
       })
       .catch((err) => {
         if (!cancelled) {
           setExplanationError(err instanceof Error ? err.message : 'Açıklama yüklenemedi');
+          setExplanationLoading(false);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [pipelineId, effectiveCollapsed, effectiveTab, currentStep, explanationFetcher]);
+    // `explanationRetryToken` lets the error-banner retry button kick off
+    // a fresh fetch without touching pipelineId/tab. `explanation` is
+    // intentionally omitted — including it would cause an infinite loop
+    // after each successful fetch. The skeleton-suppression check above
+    // reads the latest value at effect-run time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    pipelineId,
+    effectiveCollapsed,
+    effectiveTab,
+    currentStep,
+    explanationFetcher,
+    explanationRetryToken,
+  ]);
 
   // Note: the regression report is fetched lazily by the embedded
   // `RegressionPanel` itself (via `regressionFetcher`). The rail does
@@ -610,15 +635,39 @@ export function PipelineDetailRail({
             )}
           {effectiveTab === 'why' && (
             <>
+              {/* PR-U2 #15: persistent error surface with retry — the user
+                  previously saw the raw error text and had to switch tabs
+                  to retry. The retry button bumps `explanationRetryToken`
+                  which re-runs the fetch effect. */}
               {explanationError && (
                 <div
                   role="alert"
-                  className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-200"
+                  className="flex items-start justify-between gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-200"
                 >
-                  {explanationError}
+                  <span>{explanationError}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExplanationError(null);
+                      setExplanationRetryToken((t) => t + 1);
+                    }}
+                    className="shrink-0 rounded border border-rose-500/50 px-2 py-0.5 text-xs font-medium hover:bg-rose-500/15"
+                  >
+                    Yeniden dene
+                  </button>
                 </div>
               )}
-              {!explanationError && (
+              {/* PR-U2 #15: skeleton only when there is no cached data and
+                  the fetch is in flight. Subsequent re-fetches (activity
+                  ticks) refresh silently in the background. */}
+              {!explanationError && !explanation && explanationLoading && (
+                <div role="status" aria-label="Açıklama yükleniyor" className="space-y-2">
+                  <div className="h-4 w-1/3 animate-pulse rounded bg-ak-surface-2" />
+                  <div className="h-20 animate-pulse rounded bg-ak-surface-2" />
+                  <div className="h-12 animate-pulse rounded bg-ak-surface-2" />
+                </div>
+              )}
+              {!explanationError && (explanation || !explanationLoading) && (
                 <ExplanationPanel
                   pipelineId={pipelineId}
                   explanation={explanation ?? undefined}
