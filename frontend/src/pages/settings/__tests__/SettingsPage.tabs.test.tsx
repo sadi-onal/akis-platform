@@ -65,9 +65,7 @@ vi.mock('../../../components/settings/AvatarCropModal', () => ({
     onCancel: () => void;
   }) => (
     <div data-testid="avatar-crop-modal">
-      <button onClick={() => onConfirm('data:image/jpeg;base64,FAKE')}>
-        mock-confirm
-      </button>
+      <button onClick={() => onConfirm('data:image/jpeg;base64,FAKE')}>mock-confirm</button>
       <button onClick={onCancel}>mock-cancel</button>
     </div>
   ),
@@ -120,7 +118,7 @@ function makeFetch(opts: MakeFetchOpts = {}) {
               emailVerified: true,
               status: 'active',
               createdAt: '2026-01-15T10:00:00.000Z',
-            },
+            }
           ),
       });
     }
@@ -172,7 +170,7 @@ function makeFetch(opts: MakeFetchOpts = {}) {
               },
               keySource: 'akis',
               canUseOwnKey: true,
-            },
+            }
           ),
       });
     }
@@ -245,7 +243,7 @@ function makeFetch(opts: MakeFetchOpts = {}) {
                 { stage: 'proto_building', retries: 2 },
                 { stage: 'trace_testing', retries: 5 },
               ],
-            },
+            }
           ),
       });
     }
@@ -257,7 +255,7 @@ function makeFetch(opts: MakeFetchOpts = {}) {
           Promise.resolve(
             opts.githubConnected
               ? { connected: true, login: 'octocat', avatarUrl: null }
-              : { connected: false },
+              : { connected: false }
           ),
       });
     }
@@ -271,8 +269,13 @@ function makeFetch(opts: MakeFetchOpts = {}) {
         json: () =>
           Promise.resolve(
             opts.atlassianConnected
-              ? { connected: true, configured: true, jiraAvailable: true, confluenceAvailable: true }
-              : { connected: false, configured: false },
+              ? {
+                  connected: true,
+                  configured: true,
+                  jiraAvailable: true,
+                  confluenceAvailable: true,
+                }
+              : { connected: false, configured: false }
           ),
       });
     }
@@ -283,17 +286,14 @@ function makeFetch(opts: MakeFetchOpts = {}) {
           Promise.resolve(
             opts.jiraPatConnected
               ? { connected: true, siteUrl: 'https://acme.atlassian.net' }
-              : { connected: false },
+              : { connected: false }
           ),
       });
     }
     if (url === '/api/integrations/jira/test') {
       return Promise.resolve({
         ok: opts.jiraTestOk !== false,
-        json: () =>
-          Promise.resolve(
-            opts.jiraTestOk === false ? { message: 'invalid-creds' } : {},
-          ),
+        json: () => Promise.resolve(opts.jiraTestOk === false ? { message: 'invalid-creds' } : {}),
       });
     }
     if (url === '/api/settings/integrations/jira/connect') {
@@ -393,7 +393,7 @@ describe('AIKeysTab', () => {
   it('shows AKIS built-in card as active by default', async () => {
     render(<SettingsPage />);
     await waitFor(() => {
-      expect(screen.getByText('AKIS Yerlesik Anahtar')).toBeInTheDocument();
+      expect(screen.getByText('settings.ai.akisBuiltinKey')).toBeInTheDocument();
     });
   });
 
@@ -412,13 +412,10 @@ describe('AIKeysTab', () => {
     }) as unknown as typeof fetch;
     render(<SettingsPage />);
     await waitFor(() => {
-      expect(screen.getByText('AKIS Yerlesik Anahtar')).toBeInTheDocument();
+      expect(screen.getByText('settings.ai.akisBuiltinKey')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('AKIS Yerlesik Anahtar'));
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.stringContaining('Kendi anahtarinizi silerek'),
-      'info',
-    );
+    fireEvent.click(screen.getByText('settings.ai.akisBuiltinKey'));
+    expect(mockToast).toHaveBeenCalledWith('settings.ai.toast.switchToAkisHint', 'info');
   });
 
   it('"Ekle" button opens the editor, then Cancel collapses it', async () => {
@@ -452,18 +449,14 @@ describe('AIKeysTab', () => {
 
     await waitFor(() => {
       const putCall = fetchSpy.mock.calls.find(
-        (c: [string, RequestInit?]) =>
-          c[0] === '/api/settings/ai-keys' && c[1]?.method === 'PUT',
+        (c: [string, RequestInit?]) => c[0] === '/api/settings/ai-keys' && c[1]?.method === 'PUT'
       );
       expect(putCall).toBeDefined();
       const body = JSON.parse(putCall![1]!.body as string);
       expect(body.provider).toBe('anthropic');
       expect(body.apiKey).toBe('sk-ant-abc');
     });
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.stringContaining('basariyla'),
-      'success',
-    );
+    expect(mockToast).toHaveBeenCalledWith('settings.ai.toast.saved', 'success');
   });
 
   it('surfaces an error toast when save fails', async () => {
@@ -508,8 +501,7 @@ describe('AIKeysTab', () => {
     fireEvent.click(screen.getByText('settings.ai.delete'));
     await waitFor(() => {
       const del = fetchSpy.mock.calls.find(
-        (c: [string, RequestInit?]) =>
-          c[0] === '/api/settings/ai-keys' && c[1]?.method === 'DELETE',
+        (c: [string, RequestInit?]) => c[0] === '/api/settings/ai-keys' && c[1]?.method === 'DELETE'
       );
       expect(del).toBeDefined();
     });
@@ -541,8 +533,7 @@ describe('AIKeysTab', () => {
     fireEvent.click(screen.getByText('settings.ai.delete'));
     // No DELETE call should appear.
     const del = fetchSpy.mock.calls.find(
-      (c: [string, RequestInit?]) =>
-        c[0] === '/api/settings/ai-keys' && c[1]?.method === 'DELETE',
+      (c: [string, RequestInit?]) => c[0] === '/api/settings/ai-keys' && c[1]?.method === 'DELETE'
     );
     expect(del).toBeUndefined();
 
@@ -572,7 +563,7 @@ describe('AIKeysTab', () => {
     await waitFor(() => {
       const put = fetchSpy.mock.calls.find(
         (c: [string, RequestInit?]) =>
-          c[0] === '/api/settings/ai-provider/active' && c[1]?.method === 'PUT',
+          c[0] === '/api/settings/ai-provider/active' && c[1]?.method === 'PUT'
       );
       expect(put).toBeDefined();
     });
@@ -798,12 +789,12 @@ describe('JiraSection — PAT fallback', () => {
 
     await waitFor(() => {
       const test = fetchSpy.mock.calls.find(
-        (c: [string, RequestInit?]) => c[0] === '/api/integrations/jira/test',
+        (c: [string, RequestInit?]) => c[0] === '/api/integrations/jira/test'
       );
       expect(test).toBeDefined();
       const connect = fetchSpy.mock.calls.find(
         (c: [string, RequestInit?]) =>
-          c[0] === '/api/settings/integrations/jira/connect' && c[1]?.method === 'POST',
+          c[0] === '/api/settings/integrations/jira/connect' && c[1]?.method === 'POST'
       );
       expect(connect).toBeDefined();
     });
@@ -847,7 +838,7 @@ describe('JiraSection — PAT fallback', () => {
     await waitFor(() => {
       const dc = fetchSpy.mock.calls.find(
         (c: [string, RequestInit?]) =>
-          c[0] === '/api/settings/integrations/jira/disconnect' && c[1]?.method === 'POST',
+          c[0] === '/api/settings/integrations/jira/disconnect' && c[1]?.method === 'POST'
       );
       expect(dc).toBeDefined();
     });
@@ -898,10 +889,7 @@ describe('ProfileTab — additional error paths', () => {
     fireEvent.click(screen.getByText('settings.profile.changePassword'));
 
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        'settings.profile.passwordChanged',
-        'success',
-      );
+      expect(mockToast).toHaveBeenCalledWith('settings.profile.passwordChanged', 'success');
     });
     // Inputs should be cleared on success.
     await waitFor(() => {
@@ -964,10 +952,7 @@ describe('ProfileTab — additional error paths', () => {
 
     fireEvent.click(screen.getByText('settings.profile.changePassword'));
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        'settings.profile.passwordError',
-        'error',
-      );
+      expect(mockToast).toHaveBeenCalledWith('settings.profile.passwordError', 'error');
     });
   });
 });
@@ -1012,10 +997,7 @@ describe('ProfileTab — avatar pick / crop flow', () => {
 
     fireEvent.change(fileInput, { target: { files: [bigFile] } });
 
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.stringContaining('8MB'),
-      'error',
-    );
+    expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('8MB'), 'error');
     expect(screen.queryByTestId('avatar-crop-modal')).toBeNull();
   });
 
@@ -1027,10 +1009,7 @@ describe('ProfileTab — avatar pick / crop flow', () => {
     const fileInput = findHiddenAvatarInput(container);
     const f = new File(['hi'], 'bad.bmp', { type: 'image/bmp' });
     fireEvent.change(fileInput, { target: { files: [f] } });
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.stringContaining('JPG, PNG'),
-      'error',
-    );
+    expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('JPG, PNG'), 'error');
   });
 
   it('valid file opens crop modal; confirming uploads via AuthAPI', async () => {
@@ -1060,10 +1039,7 @@ describe('ProfileTab — avatar pick / crop flow', () => {
       expect(mockUpdateAvatar).toHaveBeenCalledWith('data:image/jpeg;base64,FAKE');
     });
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        'settings.profile.avatarUpdated',
-        'success',
-      );
+      expect(mockToast).toHaveBeenCalledWith('settings.profile.avatarUpdated', 'success');
     });
     // Modal closes after success.
     await waitFor(() => {
@@ -1103,10 +1079,7 @@ describe('ProfileTab — avatar pick / crop flow', () => {
     });
     fireEvent.click(screen.getByText('mock-confirm'));
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        'settings.profile.avatarUploadFailed',
-        'error',
-      );
+      expect(mockToast).toHaveBeenCalledWith('settings.profile.avatarUploadFailed', 'error');
     });
     // Modal stays open so the user can retry.
     expect(screen.getByTestId('avatar-crop-modal')).toBeInTheDocument();
