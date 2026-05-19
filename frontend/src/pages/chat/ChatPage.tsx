@@ -63,7 +63,7 @@ export default function ChatPage() {
     handleDragStart,
     handleDragMove,
     handleDragEnd,
-  } = useShowPreview();
+  } = useShowPreview({ sessionId: conversationId });
   const { hasGitHub, loading: profileLoading } = useProfileCompleteness();
 
   // Close mobile sidebar overlay when navigating to a conversation

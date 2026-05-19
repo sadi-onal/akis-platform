@@ -177,3 +177,68 @@ describe('useShowPreview', () => {
     });
   });
 });
+
+describe('useShowPreview session leak fix (PR-V9)', () => {
+  it('resets showPreview when sessionId changes', () => {
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string | undefined }) => useShowPreview({ sessionId: id }),
+      { initialProps: { id: 'sess-A' as string | undefined } }
+    );
+
+    act(() => {
+      result.current.setShowPreview(true);
+    });
+    expect(result.current.showPreview).toBe(true);
+
+    // Navigate to a different session — sticky-open preview should reset.
+    rerender({ id: 'sess-B' });
+
+    expect(result.current.showPreview).toBe(false);
+  });
+
+  it('does NOT reset when sessionId stays the same', () => {
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string | undefined }) => useShowPreview({ sessionId: id }),
+      { initialProps: { id: 'sess-A' as string | undefined } }
+    );
+
+    act(() => {
+      result.current.setShowPreview(true);
+    });
+    expect(result.current.showPreview).toBe(true);
+
+    // Re-render with the same id — must NOT clobber user's toggle.
+    rerender({ id: 'sess-A' });
+    expect(result.current.showPreview).toBe(true);
+  });
+
+  it('resets when sessionId transitions from undefined → defined (new chat navigation)', () => {
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string | undefined }) => useShowPreview({ sessionId: id }),
+      { initialProps: { id: undefined as string | undefined } }
+    );
+
+    act(() => {
+      result.current.setShowPreview(true);
+    });
+    expect(result.current.showPreview).toBe(true);
+
+    rerender({ id: 'sess-A' });
+    expect(result.current.showPreview).toBe(false);
+  });
+
+  it('resets when sessionId transitions from defined → undefined (back to /chat root)', () => {
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string | undefined }) => useShowPreview({ sessionId: id }),
+      { initialProps: { id: 'sess-A' as string | undefined } }
+    );
+
+    act(() => {
+      result.current.setShowPreview(true);
+    });
+    expect(result.current.showPreview).toBe(true);
+
+    rerender({ id: undefined });
+    expect(result.current.showPreview).toBe(false);
+  });
+});
