@@ -48,6 +48,7 @@ import { SecurityGate } from '../security-gate/SecurityGate.js';
 import { ExplainabilityService } from '../explainability/ExplainabilityService.js';
 import { RegressionService } from '../regression/RegressionService.js';
 import { AiCallsService } from '../ai-calls/AiCallsService.js';
+import { pipelineCallContext } from '../ai-calls/pipelineCallContext.js';
 import {
   buildScribeReasoning,
   buildProtoReasoning,
@@ -848,6 +849,7 @@ export class PipelineOrchestrator {
     conversation: ScribeMessageType[],
     model?: string
   ): Promise<void> {
+    pipelineCallContext.enterWith({ pipelineId });
     const emit = createActivityEmitter(pipelineId, 'scribe');
     emit('start', 'Kullanıcı fikri analiz ediliyor...', 5);
 
@@ -1066,6 +1068,7 @@ export class PipelineOrchestrator {
     conversation: ScribeMessageType[],
     model?: string
   ): Promise<void> {
+    pipelineCallContext.enterWith({ pipelineId });
     const emit = createActivityEmitter(pipelineId, 'scribe');
     emit('start', 'Kullanıcı yanıtıyla devam ediliyor...', 10);
     scribeState.pipelineId = pipelineId;
@@ -1257,6 +1260,7 @@ export class PipelineOrchestrator {
     model?: string,
     imageBlocks?: readonly import('../../../services/ai/multimodalClient.js').AnthropicImageBlock[]
   ): Promise<void> {
+    pipelineCallContext.enterWith({ pipelineId });
     const protoEmit = createActivityEmitter(pipelineId, 'proto');
     protoEmit('start', 'Mevcut kod okunuyor...', 5);
     logger.info(
@@ -1494,6 +1498,7 @@ export class PipelineOrchestrator {
      */
     feedbackContext?: string
   ): Promise<void> {
+    pipelineCallContext.enterWith({ pipelineId });
     const protoEmit = createActivityEmitter(pipelineId, 'proto');
     protoEmit('start', 'Onaylanan spec okunuyor...', 5);
 
@@ -3020,6 +3025,7 @@ export class PipelineOrchestrator {
       postSuccess?: 'completed' | 'awaiting_push_confirm';
     }
   ): Promise<PipelineState> {
+    pipelineCallContext.enterWith({ pipelineId });
     const traceDryRun = options?.dryRun === true;
     const traceInputFiles = options?.inputFiles;
     const postSuccessStage: 'completed' | 'awaiting_push_confirm' =
@@ -4128,6 +4134,7 @@ export class PipelineOrchestrator {
   }
 
   private async dispatchTraceIterate(pipelineId: string, feedback: string): Promise<void> {
+    pipelineCallContext.enterWith({ pipelineId });
     const pipeline = await this.store.getById(pipelineId);
     if (!pipeline) return;
     if (!pipeline.approvedSpec || !pipeline.protoConfig) {
@@ -4292,6 +4299,7 @@ export class PipelineOrchestrator {
    * loop ile birebir aynı.
    */
   private async dispatchCriticIterate(pipelineId: string, feedback: string): Promise<void> {
+    pipelineCallContext.enterWith({ pipelineId });
     const pipeline = await this.store.getById(pipelineId);
     if (!pipeline) return;
     if (!pipeline.approvedSpec || !pipeline.protoConfig) {

@@ -55,6 +55,7 @@ import { isDevMode } from './config/devMode.js';
 import { initPiriRAGService } from './services/rag/PiriRAGService.js';
 import { AgentOrchestrator } from './core/orchestrator/AgentOrchestrator.js';
 import { createAIService, createToolCallingClient } from './services/ai/AIService.js';
+import { PipelineAiCallRecorder } from './pipeline/core/ai-calls/PipelineAiCallRecorder.js';
 import type { MCPTools } from './services/mcp/adapters/index.js';
 import { GitHubMCPService } from './services/mcp/adapters/GitHubMCPService.js';
 import { StaleJobWatchdog } from './core/watchdog/StaleJobWatchdog.js';
@@ -101,8 +102,15 @@ export async function buildApp() {
 
   // Phase 10: Create AIService with resolved configuration
   // Uses getAIConfig() which handles legacy OPENROUTER_*/OPENAI_* variable fallbacks
+  //
+  // T1: attach PipelineAiCallRecorder so every AI call the pipeline makes
+  // lands in `job_ai_calls` with `pipeline_id` set. The recorder reads the
+  // pipelineId out of AsyncLocalStorage (set by PipelineOrchestrator.run*),
+  // so calls outside a pipeline scope (legacy single-agent, smoke scripts)
+  // silently no-op here — those flows have their own writer in TraceRecorder.
   const aiConfig = getAIConfig(env);
-  const aiService = createAIService(aiConfig);
+  const pipelineAiCallRecorder = new PipelineAiCallRecorder();
+  const aiService = createAIService(aiConfig, pipelineAiCallRecorder);
 
   // Log AI service configuration (without secrets)
   const configSummary = aiService.getConfigSummary();

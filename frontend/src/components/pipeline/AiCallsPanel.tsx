@@ -2,16 +2,14 @@ import { useEffect, useState } from 'react';
 import type { AiCallEntry } from '../../types/pipeline';
 import { workflowsApi } from '../../services/api/workflows';
 
-// P5b: AI request log viewer panel.
+// P5b + T1: AI request log viewer panel.
 //
 // Renders each `job_ai_calls` row as a collapsable card so the demo can show
 // "what we asked the model, and what it answered" — system prompt, user
 // prompt, response text, optional Anthropic thinking blocks and tool calls.
 //
-// Mounting is gated by the parent (`PipelineDetailRail`) behind
-// `isInternalUiVisible()` so the tab only appears for `?debug=1` /
-// localStorage `akis_debug=true` / `VITE_SHOW_INTERNAL_UI=true`. Normal
-// users never see it.
+// T1 dropped the debug gate; the tab is now visible to every user via
+// `PipelineDetailRail`.
 
 export interface AiCallsPanelProps {
   pipelineId: string;
@@ -146,12 +144,11 @@ function CallCard({ call, index }: { call: AiCallEntry; index: number }) {
             <Section title="Cevap" body={<PreText value={call.responseText!} />} defaultOpen />
           )}
           {hasThinking && (
-            <Section
-              title="Düşünce notları"
-              body={<JsonBlock value={call.thinkingBlocks} />}
-            />
+            <Section title="Düşünce notları" body={<JsonBlock value={call.thinkingBlocks} />} />
           )}
-          {hasTools && <Section title="Araç çağrıları" body={<JsonBlock value={call.toolCalls} />} />}
+          {hasTools && (
+            <Section title="Araç çağrıları" body={<JsonBlock value={call.toolCalls} />} />
+          )}
           {!hasSystem && !hasUser && !hasResponse && !hasThinking && !hasTools && (
             <p className="text-xs text-ak-text-tertiary">
               Bu çağrı için içerik kaydı yok (P5a öncesi veya truncate edilmiş).
