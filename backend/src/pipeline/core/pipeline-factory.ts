@@ -296,6 +296,19 @@ function createRepoContextAIDeps(aiService: AIServiceLike, model?: string) {
 
 export interface GitHubServiceLike {
   createRepository(owner: string, name: string, isPrivate: boolean): Promise<{ url: string }>;
+  /**
+   * Returns true if `<owner>/<name>` already exists on GitHub, false otherwise.
+   *
+   * Used by Proto's repo-name uniqueness guard (PR-V-duplicate-repo): when a
+   * user re-runs the same idea, Scribe's spec title can collide with an
+   * existing repo. We probe with this method and append a numeric suffix
+   * (`-2`, `-3`, ...) until we find a free name, instead of silently pushing
+   * to (or failing on) the existing repo.
+   *
+   * Optional because legacy adapters / test mocks may not implement it; when
+   * absent, callers fall back to a "best-effort" path (attempt create + catch).
+   */
+  repoExists?(owner: string, name: string): Promise<boolean>;
   createBranch(owner: string, repo: string, branch: string, fromBranch?: string): Promise<void>;
   commitFile(
     owner: string,
@@ -327,6 +340,7 @@ export interface GitHubServiceLike {
 function createProtoGitHubDeps(github: GitHubServiceLike): ProtoGitHubDeps {
   return {
     createRepository: (owner, name, isPrivate) => github.createRepository(owner, name, isPrivate),
+    repoExists: github.repoExists ? (owner, name) => github.repoExists!(owner, name) : undefined,
     createBranch: (owner, repo, branch, fromBranch) =>
       github.createBranch(owner, repo, branch, fromBranch),
     commitFile: (owner, repo, branch, filePath, content, message) =>

@@ -6,7 +6,10 @@ import {
   type ProtoAIDeps,
   type ProtoGitHubDeps,
 } from '../../src/pipeline/agents/proto/ProtoAgent.js';
-import type { ProtoInput, StructuredSpec } from '../../src/pipeline/core/contracts/PipelineTypes.js';
+import type {
+  ProtoInput,
+  StructuredSpec,
+} from '../../src/pipeline/core/contracts/PipelineTypes.js';
 import { GitHubTokenInvalidError } from '../../src/pipeline/core/contracts/PipelineErrors.js';
 
 // ─── Test Fixtures ────────────────────────────────
@@ -15,19 +18,36 @@ const validSpec: StructuredSpec = {
   title: 'Todo App with Google Auth',
   problemStatement: 'Kullanıcıların günlük görevlerini takip edebilecekleri basit bir uygulama.',
   userStories: [
-    { persona: 'Kayıtlı kullanıcı', action: 'Yeni görev oluşturma', benefit: 'Görevlerimi takip etmek' },
+    {
+      persona: 'Kayıtlı kullanıcı',
+      action: 'Yeni görev oluşturma',
+      benefit: 'Görevlerimi takip etmek',
+    },
   ],
   acceptanceCriteria: [
-    { id: 'ac-1', given: 'Giriş yapmış kullanıcı', when: 'Görev ekle butonuna tıklarsa', then: 'Yeni görev oluşur' },
+    {
+      id: 'ac-1',
+      given: 'Giriş yapmış kullanıcı',
+      when: 'Görev ekle butonuna tıklarsa',
+      then: 'Yeni görev oluşur',
+    },
   ],
-  technicalConstraints: { stack: 'React + Vite + TypeScript', integrations: ['Google OAuth'], nonFunctional: [] },
+  technicalConstraints: {
+    stack: 'React + Vite + TypeScript',
+    integrations: ['Google OAuth'],
+    nonFunctional: [],
+  },
   outOfScope: ['Admin paneli'],
 };
 
 const scaffoldResponse = JSON.stringify({
   files: [
     { filePath: 'package.json', content: '{"name":"todo-app"}', linesOfCode: 1 },
-    { filePath: 'src/App.tsx', content: 'export default function App() { return <div>Hello</div>; }', linesOfCode: 1 },
+    {
+      filePath: 'src/App.tsx',
+      content: 'export default function App() { return <div>Hello</div>; }',
+      linesOfCode: 1,
+    },
     { filePath: 'README.md', content: '# Todo App', linesOfCode: 1 },
   ],
   setupCommands: ['npm install', 'npm run dev'],
@@ -173,17 +193,58 @@ describe('Proto — Dry run mode', () => {
 // ─── GitHub Error Handling ────────────────────────
 
 describe('Proto — GitHub error handling', () => {
-  it('continues when repo already exists', async () => {
+  it('PR-V-duplicate-repo: tries suffixed names when the base name is taken (attempt-create fallback)', async () => {
+    // PR-V-duplicate-repo (2026-05-20): the previous behavior silently
+    // continued on "already exists" and pushed to the EXISTING repo,
+    // potentially overwriting the user's previous output. The new behavior
+    // appends `-2` and retries; only if all suffix attempts fail do we
+    // surface an error.
     const ai = createMockAI(scaffoldResponse);
+    const attemptedNames: string[] = [];
     const github = createMockGitHub({
-      async createRepository() {
-        throw new Error('Repository name already exists on this account');
+      async createRepository(_owner: string, name: string) {
+        attemptedNames.push(name);
+        // "base" + "base-2".."base-5" all collide → expect surfaced error
+        throw new Error('Repository name already exists on this account (422)');
+      },
+    });
+    const agent = new ProtoAgent(ai, github);
+
+    const result = await agent.execute(baseInput());
+    // Should NOT silently continue — the legacy "ok on 422" path was
+    // actively dangerous (silent overwrite). Verify the suffix retries
+    // actually happened, then confirm we surface a clean error.
+    assert.ok(attemptedNames.length >= 2, 'should retry with at least one suffix');
+    assert.equal(attemptedNames[0], 'my-todo-app');
+    assert.equal(attemptedNames[1], 'my-todo-app-2');
+    assert.equal(result.type, 'error');
+  });
+
+  it('PR-V-duplicate-repo: succeeds on suffixed name when base is taken (attempt-create fallback)', async () => {
+    const ai = createMockAI(scaffoldResponse);
+    const attemptedNames: string[] = [];
+    const github = createMockGitHub({
+      async createRepository(_owner: string, name: string) {
+        attemptedNames.push(name);
+        if (name === 'my-todo-app') {
+          throw new Error('Repository name already exists on this account (422)');
+        }
+        // suffixed name succeeds
+        return { url: `https://github.com/test/${name}` };
       },
     });
     const agent = new ProtoAgent(ai, github);
 
     const result = await agent.execute(baseInput());
     assert.equal(result.type, 'output');
+    assert.deepEqual(attemptedNames, ['my-todo-app', 'my-todo-app-2']);
+    if (result.type === 'output') {
+      // The resolved name flows through to the output's repo URL.
+      assert.ok(
+        result.data.repo.endsWith('/my-todo-app-2'),
+        `expected repo to end with /my-todo-app-2, got ${result.data.repo}`
+      );
+    }
   });
 
   it('returns GITHUB_PERMISSION_DENIED on 403', async () => {
@@ -244,7 +305,7 @@ describe('Proto — GitHub error handling', () => {
     const github = createMockGitHub({
       async createRepository() {
         throw new GitHubTokenInvalidError(
-          'POST /user/repos returned 404 — OAuth token is invalid or expired',
+          'POST /user/repos returned 404 — OAuth token is invalid or expired'
         );
       },
     });
@@ -330,11 +391,13 @@ describe('Proto — AI error handling', () => {
   });
 
   it('returns error when AI returns empty files array', async () => {
-    const ai = createMockAI(JSON.stringify({
-      files: [],
-      setupCommands: [],
-      metadata: { filesCreated: 0, totalLinesOfCode: 0, stackUsed: 'None' },
-    }));
+    const ai = createMockAI(
+      JSON.stringify({
+        files: [],
+        setupCommands: [],
+        metadata: { filesCreated: 0, totalLinesOfCode: 0, stackUsed: 'None' },
+      })
+    );
     const github = createMockGitHub();
     const agent = new ProtoAgent(ai, github);
 

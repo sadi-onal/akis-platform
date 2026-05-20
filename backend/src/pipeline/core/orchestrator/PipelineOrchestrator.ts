@@ -1995,8 +1995,29 @@ export class PipelineOrchestrator {
     // Abort if pipeline was cancelled before Trace starts
     if (await this.isCancelled(pipelineId)) return;
 
-    // Run Trace
-    await this.runTrace(pipelineId, metrics, owner, repoName, protoResult.data.branch, spec, model);
+    // PR-V-duplicate-repo (2026-05-20): the legacy auto-push path actually
+    // creates the repo inside Proto.execute, so a suffix conflict here is
+    // realized on GitHub. `protoResult.data.repo` carries the resolved
+    // "<owner>/<name>" — pull the name half and feed it to Trace, otherwise
+    // Trace would read from a stale `repoName` that no longer exists.
+    const resolvedRepoName = protoResult.data.repo.split('/').pop() ?? repoName;
+    if (resolvedRepoName !== repoName) {
+      const pipelineForConfig = await this.getPipeline(pipelineId);
+      if (pipelineForConfig.protoConfig) {
+        await this.store.update(pipelineId, {
+          protoConfig: { ...pipelineForConfig.protoConfig, repoName: resolvedRepoName },
+        });
+      }
+    }
+    await this.runTrace(
+      pipelineId,
+      metrics,
+      owner,
+      resolvedRepoName,
+      protoResult.data.branch,
+      spec,
+      model
+    );
   }
 
   // ─── Reject Spec ─────────────────────────────
@@ -2315,11 +2336,23 @@ export class PipelineOrchestrator {
     // PR-F2: Trace already ran in dryRun before the gate. We just need to
     // finalize the pipeline. `traceOutput` (if any) is preserved as-is; the
     // pushed branch metadata on `protoOutput` is what changes here.
+    //
+    // PR-V-duplicate-repo (2026-05-20): if the repo name was suffixed on
+    // conflict (`qr-kod-uretici` → `qr-kod-uretici-2`), `protoOutput.repo`
+    // carries the resolved name. Sync `protoConfig.repoName` so any future
+    // iteration or push retry against this pipeline uses the real repo.
     const completionStage: PipelineStage = pipelineNow.traceOutput
       ? 'completed'
       : 'completed_partial';
+    // protoOutput.repo is "<owner>/<name>" — extract the name half.
+    const resolvedRepoName = updatedProtoOutput.repo.split('/').pop() ?? repoName;
+    const protoConfigUpdate =
+      pipelineNow.protoConfig && resolvedRepoName !== pipelineNow.protoConfig.repoName
+        ? { ...pipelineNow.protoConfig, repoName: resolvedRepoName }
+        : pipelineNow.protoConfig;
     await this.store.update(pipelineId, {
       protoOutput: updatedProtoOutput,
+      ...(protoConfigUpdate ? { protoConfig: protoConfigUpdate } : {}),
       stage: completionStage,
       metrics: {
         ...pipelineNow.metrics,

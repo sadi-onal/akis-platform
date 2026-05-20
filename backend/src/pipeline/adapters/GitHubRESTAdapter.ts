@@ -12,7 +12,11 @@
  *   POST   /repos/{owner}/{repo}/pulls                → createPR
  */
 import type { GitHubServiceLike } from '../core/pipeline-factory.js';
-import { GitHubRateLimitError, GitHubAPIError, GitHubTokenInvalidError } from '../core/contracts/PipelineErrors.js';
+import {
+  GitHubRateLimitError,
+  GitHubAPIError,
+  GitHubTokenInvalidError,
+} from '../core/contracts/PipelineErrors.js';
 import { logger } from '../../lib/logger.js';
 
 const GITHUB_API = 'https://api.github.com';
@@ -34,13 +38,15 @@ async function waitForBranch(
   token: string,
   owner: string,
   repo: string,
-  branch: string,
+  branch: string
 ): Promise<void> {
   const delays = [500, 1000, 1500, 1500, 1500];
   for (let attempt = 0; attempt < delays.length; attempt++) {
     try {
       await ghFetch<{ object: { sha: string } }>(
-        token, 'GET', `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+        token,
+        'GET',
+        `/repos/${owner}/${repo}/git/ref/heads/${branch}`
       );
       return; // branch is ready
     } catch (err) {
@@ -49,19 +55,14 @@ async function waitForBranch(
       logger.info(
         { repo: `${owner}/${repo}`, branch, attempt: attempt + 1 },
         '[github_rest_request] waitForBranch: 404 on ref — retrying after %dms',
-        delays[attempt],
+        delays[attempt]
       );
       await new Promise((r) => setTimeout(r, delays[attempt]));
     }
   }
 }
 
-async function ghFetch<T>(
-  token: string,
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<T> {
+async function ghFetch<T>(token: string, method: string, path: string, body?: unknown): Promise<T> {
   const url = `${GITHUB_API}${path}`;
 
   logger.debug({ method, path }, 'github_rest_request');
@@ -92,7 +93,10 @@ async function ghFetch<T>(
       if (res.status === 429 || remaining === '0') {
         if (attempt < MAX_RATE_LIMIT_RETRIES) {
           const waitSec = retryAfter ? Math.min(parseInt(retryAfter, 10), 60) : 10 * (attempt + 1);
-          logger.warn({ method, path, status: res.status, attempt: attempt + 1, waitSec }, 'github_rest_rate_limited');
+          logger.warn(
+            { method, path, status: res.status, attempt: attempt + 1, waitSec },
+            'github_rest_rate_limited'
+          );
           await new Promise((r) => setTimeout(r, waitSec * 1000));
           continue;
         }
@@ -109,8 +113,14 @@ async function ghFetch<T>(
       } catch {
         detail = text;
       }
-      logger.error({ method, path, status: res.status, body: bodySnippet }, 'github_rest_error_response');
-      throw new GitHubAPIError(`GitHub API ${method} ${path} → ${res.status}: ${detail}`, res.status);
+      logger.error(
+        { method, path, status: res.status, body: bodySnippet },
+        'github_rest_error_response'
+      );
+      throw new GitHubAPIError(
+        `GitHub API ${method} ${path} → ${res.status}: ${detail}`,
+        res.status
+      );
     }
 
     if (res.status === 204) return {} as T;
@@ -120,11 +130,11 @@ async function ghFetch<T>(
       const responseBody = await res.text().catch(() => '');
       logger.error(
         { method, path, status: res.status, contentType, body: responseBody.slice(0, 500) },
-        'github_rest_unexpected_content_type',
+        'github_rest_unexpected_content_type'
       );
       throw new GitHubAPIError(
         `GitHub API ${method} ${path} → ${res.status}: Expected JSON, got Content-Type "${contentType}". Body: ${responseBody.slice(0, 200)}`,
-        res.status,
+        res.status
       );
     }
 
@@ -133,23 +143,25 @@ async function ghFetch<T>(
   }
 
   // Rate limit exhausted — non-retryable so outer withRetry doesn't compound retries
-  logger.error({ method, path, attempts: MAX_RATE_LIMIT_RETRIES + 1 }, 'github_rest_rate_limit_exhausted');
-  throw new GitHubRateLimitError(`GitHub API ${method} ${path} → rate limited after ${MAX_RATE_LIMIT_RETRIES + 1} attempts`);
+  logger.error(
+    { method, path, attempts: MAX_RATE_LIMIT_RETRIES + 1 },
+    'github_rest_rate_limit_exhausted'
+  );
+  throw new GitHubRateLimitError(
+    `GitHub API ${method} ${path} → rate limited after ${MAX_RATE_LIMIT_RETRIES + 1} attempts`
+  );
 }
 
 // ─── AKIS Platform Repo Guard ────────────────────
-const BLOCKED_PLATFORM_REPOS = [
-  'akis-platform',
-  'akis-platform-development',
-];
+const BLOCKED_PLATFORM_REPOS = ['akis-platform', 'akis-platform-development'];
 
 function validateTargetRepo(repoFullName: string): void {
   const repoName = repoFullName.split('/').pop()?.toLowerCase() || '';
   if (BLOCKED_PLATFORM_REPOS.some((pattern) => repoName.includes(pattern))) {
     throw new Error(
       `Target repository "${repoFullName}" is the AKIS platform repo. ` +
-      `Pipeline outputs must be pushed to a separate repository. ` +
-      `Please specify a different target repository.`,
+        `Pipeline outputs must be pushed to a separate repository. ` +
+        `Please specify a different target repository.`
     );
   }
 }
@@ -158,16 +170,40 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
   const { token } = opts;
 
   return {
-    async createRepository(owner: string, name: string, isPrivate: boolean): Promise<{ url: string }> {
+    async repoExists(owner: string, name: string): Promise<boolean> {
+      // GET /repos/{owner}/{repo} → 200 means exists, 404 means free.
+      // Anything else (5xx, rate-limit) is surfaced so the caller can decide
+      // whether to retry or fail open (treat as "exists" to be safe).
+      try {
+        await ghFetch<{ id: number }>(token, 'GET', `/repos/${owner}/${name}`);
+        return true;
+      } catch (err) {
+        if (err instanceof GitHubAPIError && err.statusCode === 404) {
+          return false;
+        }
+        throw err;
+      }
+    },
+
+    async createRepository(
+      owner: string,
+      name: string,
+      isPrivate: boolean
+    ): Promise<{ url: string }> {
       validateTargetRepo(name);
       let result: { html_url: string; full_name: string; owner?: { login: string } };
       try {
-        result = await ghFetch<{ html_url: string; full_name: string; owner?: { login: string } }>(token, 'POST', '/user/repos', {
-          name,
-          description: `AKIS Pipeline scaffold — ${name}`,
-          private: isPrivate,
-          auto_init: true,
-        });
+        result = await ghFetch<{ html_url: string; full_name: string; owner?: { login: string } }>(
+          token,
+          'POST',
+          '/user/repos',
+          {
+            name,
+            description: `AKIS Pipeline scaffold — ${name}`,
+            private: isPrivate,
+            auto_init: true,
+          }
+        );
       } catch (err) {
         // GitHub returns 404 on POST /user/repos when the OAuth token is
         // invalid or expired (the endpoint doesn't exist for that credential).
@@ -175,10 +211,10 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
         if (err instanceof GitHubAPIError && err.statusCode === 404) {
           logger.warn(
             { owner, name, statusCode: 404 },
-            '[GitHubRESTAdapter] createRepository: 404 on POST /user/repos — token likely invalid/expired',
+            '[GitHubRESTAdapter] createRepository: 404 on POST /user/repos — token likely invalid/expired'
           );
           throw new GitHubTokenInvalidError(
-            'POST /user/repos returned 404 — OAuth token is invalid or expired',
+            'POST /user/repos returned 404 — OAuth token is invalid or expired'
           );
         }
         throw err;
@@ -186,15 +222,15 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       // Layer A — Read-back verification (PR #477): confirm the repo is accessible
       // before declaring success. Protects against silent-failure cases where the POST
       // returns 201 but the repo is not yet visible (eventual consistency).
-      const resolvedOwner = result.owner?.login ?? (result.full_name?.split('/')[0]) ?? owner;
+      const resolvedOwner = result.owner?.login ?? result.full_name?.split('/')[0] ?? owner;
       logger.info(
         { repo: result.full_name ?? `${resolvedOwner}/${name}`, url: result.html_url },
-        '[GitHubRESTAdapter] createRepository: POST succeeded, verifying read-back',
+        '[GitHubRESTAdapter] createRepository: POST succeeded, verifying read-back'
       );
       await ghFetch<{ id: number }>(token, 'GET', `/repos/${resolvedOwner}/${name}`);
       logger.info(
         { repo: result.full_name ?? `${resolvedOwner}/${name}` },
-        '[GitHubRESTAdapter] createRepository: read-back OK',
+        '[GitHubRESTAdapter] createRepository: read-back OK'
       );
       // Layer B — Wait for GitHub to provision the initial commit / main branch (#478).
       // Read-back above confirms the repo exists; this confirms the branch ref is usable
@@ -203,13 +239,18 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       return { url: result.html_url };
     },
 
-    async createBranch(owner: string, repo: string, branch: string, fromBranch?: string): Promise<void> {
+    async createBranch(
+      owner: string,
+      repo: string,
+      branch: string,
+      fromBranch?: string
+    ): Promise<void> {
       const base = fromBranch || 'main';
       // Get the SHA of the base branch
       const ref = await ghFetch<{ object: { sha: string } }>(
         token,
         'GET',
-        `/repos/${owner}/${repo}/git/ref/heads/${base}`,
+        `/repos/${owner}/${repo}/git/ref/heads/${base}`
       );
       // Create the new branch
       await ghFetch(token, 'POST', `/repos/${owner}/${repo}/git/refs`, {
@@ -224,7 +265,7 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       branch: string,
       filePath: string,
       content: string,
-      message: string,
+      message: string
     ): Promise<void> {
       // Check if file exists to get its SHA (needed for updates)
       let existingSha: string | undefined;
@@ -232,7 +273,7 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
         const existing = await ghFetch<{ sha: string }>(
           token,
           'GET',
-          `/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`,
+          `/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`
         );
         existingSha = existing.sha;
       } catch {
@@ -253,13 +294,13 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       title: string,
       body: string,
       head: string,
-      base: string,
+      base: string
     ): Promise<{ url: string }> {
       const result = await ghFetch<{ html_url: string }>(
         token,
         'POST',
         `/repos/${owner}/${repo}/pulls`,
-        { title, body, head, base, draft: true },
+        { title, body, head, base, draft: true }
       );
       return { url: result.html_url };
     },
@@ -274,14 +315,25 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       return tree.tree
         .filter((item) => item.type === 'blob')
         .map((item) => item.path)
-        .filter((p) => !p.includes('node_modules/') && !p.includes('.git/') && !p.includes('dist/') && !p.includes('build/'));
+        .filter(
+          (p) =>
+            !p.includes('node_modules/') &&
+            !p.includes('.git/') &&
+            !p.includes('dist/') &&
+            !p.includes('build/')
+        );
     },
 
-    async getFileContent(owner: string, repo: string, branch: string, filePath: string): Promise<string> {
+    async getFileContent(
+      owner: string,
+      repo: string,
+      branch: string,
+      filePath: string
+    ): Promise<string> {
       const result = await ghFetch<{ content?: string; encoding?: string }>(
         token,
         'GET',
-        `/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`,
+        `/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`
       );
 
       if (result.content && result.encoding === 'base64') {
@@ -296,7 +348,7 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       repo: string,
       branch: string,
       files: Array<{ path: string; content: string }>,
-      message: string,
+      message: string
     ): Promise<void> {
       validateTargetRepo(`${owner}/${repo}`);
 
@@ -308,7 +360,9 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       for (let attempt = 0; attempt < PUSH_REF_DELAYS.length; attempt++) {
         try {
           ref = await ghFetch<{ object: { sha: string } }>(
-            token, 'GET', `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+            token,
+            'GET',
+            `/repos/${owner}/${repo}/git/ref/heads/${branch}`
           );
           break;
         } catch (err) {
@@ -317,7 +371,7 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
           logger.info(
             { repo: `${owner}/${repo}`, branch, attempt: attempt + 1 },
             '[github_rest_request] pushFiles: 404 on ref — retrying after %dms',
-            PUSH_REF_DELAYS[attempt],
+            PUSH_REF_DELAYS[attempt]
           );
           await new Promise((r) => setTimeout(r, PUSH_REF_DELAYS[attempt]));
         }
@@ -326,7 +380,9 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
 
       // 2. Get the tree SHA of that commit
       const commit = await ghFetch<{ tree: { sha: string } }>(
-        token, 'GET', `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`,
+        token,
+        'GET',
+        `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`
       );
       const baseTreeSha = commit.tree.sha;
 
@@ -334,48 +390,55 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
       const tree: Array<{ path: string; mode: string; type: string; sha: string }> = [];
       for (const file of files) {
         const blob = await ghFetch<{ sha: string }>(
-          token, 'POST', `/repos/${owner}/${repo}/git/blobs`,
-          { content: file.content, encoding: 'utf-8' },
+          token,
+          'POST',
+          `/repos/${owner}/${repo}/git/blobs`,
+          { content: file.content, encoding: 'utf-8' }
         );
         tree.push({ path: file.path, mode: '100644', type: 'blob', sha: blob.sha });
       }
 
       // 4. Create tree
       const newTree = await ghFetch<{ sha: string }>(
-        token, 'POST', `/repos/${owner}/${repo}/git/trees`,
-        { base_tree: baseTreeSha, tree },
+        token,
+        'POST',
+        `/repos/${owner}/${repo}/git/trees`,
+        { base_tree: baseTreeSha, tree }
       );
 
       // 5. Create commit
       const newCommit = await ghFetch<{ sha: string }>(
-        token, 'POST', `/repos/${owner}/${repo}/git/commits`,
-        { message, tree: newTree.sha, parents: [latestCommitSha] },
+        token,
+        'POST',
+        `/repos/${owner}/${repo}/git/commits`,
+        { message, tree: newTree.sha, parents: [latestCommitSha] }
       );
 
       // 6. Update branch ref
-      await ghFetch(
-        token, 'PATCH', `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
-        { sha: newCommit.sha },
-      );
+      await ghFetch(token, 'PATCH', `/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+        sha: newCommit.sha,
+      });
 
       // 7. Post-push read-back: verify the commit SHA is now the branch tip.
       // This catches silent failures where the PATCH silently dropped due to
       // a transient 5xx that ghFetch retried past without surfacing the error.
       const updatedRef = await ghFetch<{ object: { sha: string } }>(
-        token, 'GET', `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+        token,
+        'GET',
+        `/repos/${owner}/${repo}/git/ref/heads/${branch}`
       );
       if (updatedRef.object.sha !== newCommit.sha) {
         logger.error(
           { owner, repo, branch, expectedSha: newCommit.sha, actualSha: updatedRef.object.sha },
-          '[GitHubRESTAdapter] pushFiles: branch tip SHA mismatch after push — commit did not land',
+          '[GitHubRESTAdapter] pushFiles: branch tip SHA mismatch after push — commit did not land'
         );
         throw new GitHubAPIError(
-          `pushFiles: branch "${branch}" tip is ${updatedRef.object.sha} but expected ${newCommit.sha} — files were not committed`,
+          `pushFiles: branch "${branch}" tip is ${updatedRef.object.sha} but expected ${newCommit.sha} — files were not committed`
         );
       }
       logger.info(
         { owner, repo, branch, commitSha: newCommit.sha, fileCount: files.length },
-        '[GitHubRESTAdapter] pushFiles: push verified OK',
+        '[GitHubRESTAdapter] pushFiles: push verified OK'
       );
     },
   };
@@ -400,7 +463,7 @@ export async function getFileTreeViaREST(
   token: string,
   owner: string,
   repo: string,
-  branch: string,
+  branch: string
 ): Promise<FileTreeNode[]> {
   const tree = await ghFetch<{
     tree: Array<{ path: string; type: string; size?: number }>;
@@ -409,7 +472,12 @@ export async function getFileTreeViaREST(
 
   const flatFiles: Array<{ path: string; size?: number }> = tree.tree
     .filter((item) => item.type === 'blob')
-    .filter((item) => !item.path.includes('node_modules/') && !item.path.includes('.git/') && !item.path.includes('dist/'))
+    .filter(
+      (item) =>
+        !item.path.includes('node_modules/') &&
+        !item.path.includes('.git/') &&
+        !item.path.includes('dist/')
+    )
     .map((item) => ({ path: item.path, size: item.size }));
 
   return buildTreeStructure(flatFiles);
@@ -457,19 +525,23 @@ export async function pushChangesViaREST(
   repo: string,
   branch: string,
   changes: FileChange[],
-  commitMessage: string,
+  commitMessage: string
 ): Promise<string> {
   validateTargetRepo(`${owner}/${repo}`);
 
   // 1. Get latest commit SHA on branch
   const refData = await ghFetch<{ object: { sha: string } }>(
-    token, 'GET', `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+    token,
+    'GET',
+    `/repos/${owner}/${repo}/git/ref/heads/${branch}`
   );
   const latestCommitSha = refData.object.sha;
 
   // 2. Get the tree SHA from that commit
   const commitData = await ghFetch<{ tree: { sha: string } }>(
-    token, 'GET', `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`,
+    token,
+    'GET',
+    `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`
   );
   const baseTreeSha = commitData.tree.sha;
 
@@ -481,8 +553,10 @@ export async function pushChangesViaREST(
       treeItems.push({ path: change.path, mode: '100644', type: 'blob', sha: null });
     } else {
       const blob = await ghFetch<{ sha: string }>(
-        token, 'POST', `/repos/${owner}/${repo}/git/blobs`,
-        { content: change.content || '', encoding: 'utf-8' },
+        token,
+        'POST',
+        `/repos/${owner}/${repo}/git/blobs`,
+        { content: change.content || '', encoding: 'utf-8' }
       );
       treeItems.push({ path: change.path, mode: '100644', type: 'blob', sha: blob.sha });
     }
@@ -490,21 +564,24 @@ export async function pushChangesViaREST(
 
   // 4. Create new tree
   const newTree = await ghFetch<{ sha: string }>(
-    token, 'POST', `/repos/${owner}/${repo}/git/trees`,
-    { base_tree: baseTreeSha, tree: treeItems },
+    token,
+    'POST',
+    `/repos/${owner}/${repo}/git/trees`,
+    { base_tree: baseTreeSha, tree: treeItems }
   );
 
   // 5. Create commit
   const newCommit = await ghFetch<{ sha: string }>(
-    token, 'POST', `/repos/${owner}/${repo}/git/commits`,
-    { message: commitMessage, tree: newTree.sha, parents: [latestCommitSha] },
+    token,
+    'POST',
+    `/repos/${owner}/${repo}/git/commits`,
+    { message: commitMessage, tree: newTree.sha, parents: [latestCommitSha] }
   );
 
   // 6. Update branch ref
-  await ghFetch(
-    token, 'PATCH', `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
-    { sha: newCommit.sha },
-  );
+  await ghFetch(token, 'PATCH', `/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+    sha: newCommit.sha,
+  });
 
   return newCommit.sha;
 }

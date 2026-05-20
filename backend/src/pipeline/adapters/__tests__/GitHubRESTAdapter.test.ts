@@ -10,7 +10,7 @@ import { GitHubTokenInvalidError, GitHubAPIError } from '../../core/contracts/Pi
  */
 async function withFetchStub(
   stub: typeof globalThis.fetch,
-  fn: () => Promise<void>,
+  fn: () => Promise<void>
 ): Promise<void> {
   const original = globalThis.fetch;
   globalThis.fetch = stub;
@@ -41,28 +41,62 @@ function makeFetchReturning(status: number, body: unknown): typeof globalThis.fe
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
+describe('GitHubRESTAdapter.repoExists', () => {
+  it('returns true when GET /repos/{owner}/{repo} responds 200', async () => {
+    const adapter = createGitHubRESTAdapter({ token: 'tok' });
+
+    await withFetchStub(
+      makeFetchReturning(200, { id: 12345, name: 'qr-kod-uretici' }),
+      async () => {
+        const exists = await adapter.repoExists!('testowner', 'qr-kod-uretici');
+        assert.equal(exists, true);
+      }
+    );
+  });
+
+  it('returns false when GET /repos/{owner}/{repo} responds 404', async () => {
+    const adapter = createGitHubRESTAdapter({ token: 'tok' });
+
+    await withFetchStub(makeFetchReturning(404, { message: 'Not Found' }), async () => {
+      const exists = await adapter.repoExists!('testowner', 'qr-kod-uretici');
+      assert.equal(exists, false);
+    });
+  });
+
+  it('propagates non-404 errors (caller decides whether to fall back)', async () => {
+    const adapter = createGitHubRESTAdapter({ token: 'tok' });
+
+    await withFetchStub(makeFetchReturning(500, { message: 'Internal Server Error' }), async () => {
+      await assert.rejects(
+        () => adapter.repoExists!('testowner', 'qr-kod-uretici'),
+        (err: unknown) => {
+          assert.ok(err instanceof GitHubAPIError);
+          return true;
+        }
+      );
+    });
+  });
+});
+
 describe('GitHubRESTAdapter.createRepository', () => {
   it('throws GitHubTokenInvalidError when POST /user/repos returns 404', async () => {
     const adapter = createGitHubRESTAdapter({ token: 'invalid-token' });
 
-    await withFetchStub(
-      makeFetchReturning(404, { message: 'Not Found' }),
-      async () => {
-        await assert.rejects(
-          () => adapter.createRepository('testowner', 'my-repo', false),
-          (err: unknown) => {
-            assert.ok(
-              err instanceof GitHubTokenInvalidError,
-              `Expected GitHubTokenInvalidError, got ${err instanceof Error ? err.constructor.name : String(err)}`,
-            );
-            assert.equal(err.code, 'GITHUB_TOKEN_INVALID');
-            assert.equal(err.retryable, false);
-            assert.equal(err.recoveryAction, 'reconnect_github');
-            return true;
-          },
-        );
-      },
-    );
+    await withFetchStub(makeFetchReturning(404, { message: 'Not Found' }), async () => {
+      await assert.rejects(
+        () => adapter.createRepository('testowner', 'my-repo', false),
+        (err: unknown) => {
+          assert.ok(
+            err instanceof GitHubTokenInvalidError,
+            `Expected GitHubTokenInvalidError, got ${err instanceof Error ? err.constructor.name : String(err)}`
+          );
+          assert.equal(err.code, 'GITHUB_TOKEN_INVALID');
+          assert.equal(err.retryable, false);
+          assert.equal(err.recoveryAction, 'reconnect_github');
+          return true;
+        }
+      );
+    });
   });
 
   it('does NOT throw GitHubTokenInvalidError for non-404 GitHub errors (e.g. 422)', async () => {
@@ -77,16 +111,16 @@ describe('GitHubRESTAdapter.createRepository', () => {
             // Should be a plain GitHubAPIError, not the token-invalid variant
             assert.ok(
               err instanceof GitHubAPIError,
-              `Expected GitHubAPIError, got ${err instanceof Error ? err.constructor.name : String(err)}`,
+              `Expected GitHubAPIError, got ${err instanceof Error ? err.constructor.name : String(err)}`
             );
             assert.ok(
               !(err instanceof GitHubTokenInvalidError),
-              'Should NOT be GitHubTokenInvalidError for 422',
+              'Should NOT be GitHubTokenInvalidError for 422'
             );
             return true;
-          },
+          }
         );
-      },
+      }
     );
   });
 });

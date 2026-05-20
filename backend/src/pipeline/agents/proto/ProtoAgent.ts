@@ -48,6 +48,18 @@ export interface ProtoAIDeps {
 
 export interface ProtoGitHubDeps {
   createRepository(owner: string, name: string, isPrivate: boolean): Promise<{ url: string }>;
+  /**
+   * Optional repo-existence probe. When provided, ProtoAgent uses it to
+   * resolve a unique repo name BEFORE calling createRepository (appending
+   * `-2`, `-3`, ... on conflict). When absent, ProtoAgent falls back to the
+   * legacy attempt-create + catch-422 behavior.
+   *
+   * PR-V-duplicate-repo (2026-05-20): without this guard, re-running the same
+   * idea twice generated the same Scribe spec title → same kebab-case repo
+   * name → GitHub 422 on the second pipeline (or silent push to the existing
+   * repo, overwriting the user's previous output).
+   */
+  repoExists?(owner: string, name: string): Promise<boolean>;
   createBranch(owner: string, repo: string, branch: string, fromBranch?: string): Promise<void>;
   commitFile(
     owner: string,
@@ -1037,16 +1049,94 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
   // ─── GitHub Operations ──────────────────────────
 
+  /**
+   * Maximum suffix attempts when resolving a unique repo name.
+   * `name`, `name-2`, ..., `name-MAX_REPO_SUFFIX_ATTEMPTS`. After that we
+   * give up and surface an error rather than spinning forever — in practice
+   * a single user almost never has more than a handful of same-named repos.
+   */
+  private static readonly MAX_REPO_SUFFIX_ATTEMPTS = 50;
+
+  /**
+   * Resolve a unique repo name under `<owner>/...` by probing GitHub with
+   * `repoExists` and appending `-2`, `-3`, ... until a free slot is found.
+   *
+   * PR-V-duplicate-repo (2026-05-20): without this guard, re-running the same
+   * idea twice generated the same Scribe spec title → same kebab-case repo
+   * name → GitHub 422 on the second pipeline (or silent push to the existing
+   * repo, overwriting the user's previous output). The "silent reuse" was
+   * worse than the 422 — that's the bug we're closing here.
+   *
+   * Returns the resolved name. Returns the input name unchanged when the
+   * adapter has no `repoExists` capability (legacy test mocks); callers then
+   * fall back to attempt-create behavior.
+   */
+  async ensureUniqueRepoName(owner: string, baseName: string): Promise<string> {
+    if (!this.github.repoExists) {
+      // No probe capability → caller falls back to attempt-create flow.
+      return baseName;
+    }
+
+    let name = baseName;
+    for (let attempt = 1; attempt <= ProtoAgent.MAX_REPO_SUFFIX_ATTEMPTS; attempt++) {
+      let exists: boolean;
+      try {
+        exists = await this.github.repoExists(owner, name);
+      } catch (err) {
+        // Probe failed (network / 5xx). Fail safe: assume the name is taken
+        // so the caller still benefits from suffixing instead of attempting
+        // a clashing create. If even the suffixed probes fail, we exit the
+        // loop and return the last candidate — createRepository's own error
+        // handler will then surface a clean PipelineError.
+        logger.warn(
+          { err, owner, name, attempt },
+          '[Proto] repoExists probe failed — treating as occupied and continuing'
+        );
+        name = `${baseName}-${attempt + 1}`;
+        continue;
+      }
+      if (!exists) {
+        if (name !== baseName) {
+          logger.info(
+            { owner, baseName, resolved: name, attempt },
+            '[Proto] resolved unique repo name after conflict'
+          );
+        }
+        return name;
+      }
+      // Occupied — try next suffix. attempt=1 → "<base>-2", attempt=2 → "-3", ...
+      name = `${baseName}-${attempt + 1}`;
+    }
+
+    // Exhausted suffixes — last candidate is returned; createRepository
+    // will likely fail and the user can pick a different idea.
+    logger.warn(
+      { owner, baseName, exhausted: ProtoAgent.MAX_REPO_SUFFIX_ATTEMPTS },
+      '[Proto] ensureUniqueRepoName exhausted suffix attempts'
+    );
+    return name;
+  }
+
   private async createRepo(
     input: ProtoInput
-  ): Promise<{ type: 'output' } | { type: 'error'; error: PipelineError }> {
+  ): Promise<
+    { type: 'output'; resolvedRepoName: string } | { type: 'error'; error: PipelineError }
+  > {
+    // PR-V-duplicate-repo: probe GitHub for an unused name first. Mutating
+    // `input.repoName` lets every downstream step (pushFiles, verify, URL
+    // construction) keep reading `input.repoName` without ceremony.
+    const resolvedName = await this.ensureUniqueRepoName(input.owner, input.repoName);
+    if (resolvedName !== input.repoName) {
+      input.repoName = resolvedName;
+    }
+
     try {
       await this.github.createRepository(
         input.owner,
         input.repoName,
         input.repoVisibility === 'private'
       );
-      return { type: 'output' };
+      return { type: 'output', resolvedRepoName: input.repoName };
     } catch (err) {
       // Typed error classes come first — substring matching on `msg` below is
       // a fallback for legacy paths that `throw new Error(...)` without a
@@ -1063,13 +1153,54 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
 
       const msg = err instanceof Error ? err.message : String(err);
 
+      // PR-V-duplicate-repo: legacy fallback for adapters without
+      // `repoExists` capability. Try a small number of suffix retries
+      // directly via createRepository before giving up.
       if (
-        msg.includes('already exists') ||
-        msg.includes('name already exists') ||
-        msg.includes('422')
+        !this.github.repoExists &&
+        (msg.includes('already exists') ||
+          msg.includes('name already exists') ||
+          msg.includes('422'))
       ) {
-        // Repo already exists — this is fine, proceed to branch creation
-        return { type: 'output' };
+        const baseName = input.repoName;
+        for (let attempt = 2; attempt <= 5; attempt++) {
+          const candidate = `${baseName}-${attempt}`;
+          try {
+            await this.github.createRepository(
+              input.owner,
+              candidate,
+              input.repoVisibility === 'private'
+            );
+            input.repoName = candidate;
+            logger.info(
+              { owner: input.owner, baseName, resolved: candidate, attempt },
+              '[Proto] resolved unique repo name via attempt-create fallback'
+            );
+            return { type: 'output', resolvedRepoName: candidate };
+          } catch (retryErr) {
+            const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            if (
+              retryMsg.includes('already exists') ||
+              retryMsg.includes('name already exists') ||
+              retryMsg.includes('422')
+            ) {
+              continue;
+            }
+            // Different error during retry — surface it
+            return {
+              type: 'error',
+              error: createPipelineError(PipelineErrorCode.GITHUB_API_ERROR, retryMsg),
+            };
+          }
+        }
+        // Exhausted fallback retries — surface as conflict error
+        return {
+          type: 'error',
+          error: createPipelineError(
+            PipelineErrorCode.GITHUB_API_ERROR,
+            `Could not resolve a unique repo name under "${input.owner}" (tried up to ${baseName}-5)`
+          ),
+        };
       }
       if (msg.includes('permission') || msg.includes('forbidden') || msg.includes('403')) {
         return {
@@ -1225,6 +1356,11 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     // createRepo only reads owner / repoName / repoVisibility off ProtoInput.
     // The rest of the fields are unused on this code path, so the partial
     // cast keeps the call site honest without fabricating a full spec.
+    //
+    // PR-V-duplicate-repo: createRepo may suffix the name on conflict
+    // (`qr-kod-uretici` → `qr-kod-uretici-2`). The resolved name comes back
+    // on the success result; we use it for all subsequent steps (push,
+    // verify, output URL) so the pipeline records the real repo on GitHub.
     const repoResult = await this.createRepo({
       owner,
       repoName,
@@ -1234,6 +1370,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       emit?.('error', 'GitHub deposu oluşturulamadı', 0);
       return repoResult;
     }
+    const effectiveRepoName = repoResult.resolvedRepoName;
 
     const branchName = 'main';
     emit?.(
@@ -1244,7 +1381,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       undefined,
       'pipeline.activity.proto.pushing_github'
     );
-    const pushResult = await this.pushFiles(owner, repoName, branchName, files, emit);
+    const pushResult = await this.pushFiles(owner, effectiveRepoName, branchName, files, emit);
     if (pushResult.type === 'error') {
       emit?.('error', 'Dosyalar yüklenemedi', 0);
       return pushResult;
@@ -1254,7 +1391,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     const pushedPaths = files.map((f) => f.filePath);
     const verifyResult = await this.verifyRepoPushed(
       owner,
-      repoName,
+      effectiveRepoName,
       branchName,
       files.length,
       pushedPaths
@@ -1271,12 +1408,12 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       data: {
         ok: true,
         branch: branchName,
-        repo: `${owner}/${repoName}`,
-        repoUrl: `https://github.com/${owner}/${repoName}`,
+        repo: `${owner}/${effectiveRepoName}`,
+        repoUrl: `https://github.com/${owner}/${effectiveRepoName}`,
         files,
         setupCommands: this.buildSetupCommands(
           owner,
-          repoName,
+          effectiveRepoName,
           options.setupCommands ?? ['npm install', 'npm run dev']
         ),
         ...(options.summary ? { summary: options.summary } : {}),
