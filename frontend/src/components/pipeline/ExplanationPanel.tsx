@@ -5,7 +5,7 @@ import type {
   ReasoningFinding,
   AcCoverageReport,
 } from '../../types/pipeline';
-import type { StructuredSpec } from '../../types/workflow';
+import type { StructuredSpec, Workflow } from '../../types/workflow';
 import { workflowsApi } from '../../services/api/workflows';
 import { useI18n } from '../../i18n/useI18n';
 import { ConfidenceBadge } from './ConfidenceBadge';
@@ -385,6 +385,20 @@ export interface ExplanationPanelProps {
    * same disclosure UI.
    */
   scribeAssumptions?: string[] | null;
+  /**
+   * PR-V6-fix2 (2026-05-20): self-healing fallback fetcher. When
+   * `scribeSpec` arrives `undefined` from upstream (e.g. activeWorkflow not
+   * yet hydrated, partial SSE state, race on initial mount), the panel
+   * fetches the pipeline directly via `pipelineId` and pulls `spec` +
+   * `assumptions` out of `stages.scribe`. Without this safety net, the V6
+   * disclosures (problem, AC, user stories, out-of-scope, assumptions)
+   * silently disappear even though `/api/pipelines/:id` returns them —
+   * exactly the bug PR-V6-fix (PR #592) only half-fixed (it handled the
+   * `explanation.stages.length === 0` case but not the case where stages
+   * exist yet `scribeSpec` is undefined). DI'd via prop so tests can stub
+   * the network; defaults to `workflowsApi.get`.
+   */
+  pipelineFetcher?: (id: string) => Promise<Workflow>;
 }
 
 const AGENT_LABEL: Record<string, string> = {
@@ -592,6 +606,7 @@ export function ExplanationPanel({
   acCoverage,
   scribeSpec,
   scribeAssumptions,
+  pipelineFetcher,
 }: ExplanationPanelProps) {
   const [explanation, setExplanation] = useState<PipelineExplanation | null>(priming ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -599,6 +614,54 @@ export function ExplanationPanel({
   const [expandedStages, setExpandedStages] = useState<Set<number>>(() =>
     defaultExpanded ? new Set([0, 1, 2, 3, 4]) : new Set()
   );
+
+  // PR-V6-fix2 (2026-05-20): self-healing scribe-spec fetch. The chain
+  // ChatPageLayout → ChatPanel → PipelineDetailRail → ExplanationPanel
+  // depends on `activeWorkflow.stages.scribe.spec` being populated on the
+  // browser side. Browser inspection on 2026-05-20 (after PR #592 landed)
+  // confirmed `/api/pipelines/:id` returns the full spec but the loader
+  // doesn't always hydrate it into `activeWorkflow` — race conditions, SSE
+  // partial overwrites, smoke-recovered pipelines, etc. Instead of chasing
+  // every upstream call site, the panel now owns its own fallback: when
+  // `scribeSpec`/`scribeAssumptions` are both empty AND we have a
+  // pipelineId, fetch the workflow directly and pull the spec out. Network
+  // errors fail silently — the disclosures simply stay hidden (existing
+  // behavior, not a regression).
+  const [fetchedSpec, setFetchedSpec] = useState<StructuredSpec | null>(null);
+  const [fetchedAssumptions, setFetchedAssumptions] = useState<string[] | null>(null);
+
+  const hasIncomingScribeContent =
+    !!scribeSpec || (!!scribeAssumptions && scribeAssumptions.length > 0);
+
+  useEffect(() => {
+    // Skip the fetch when the host already threaded scribe content through;
+    // re-fetching would clobber a fresher upstream value.
+    if (hasIncomingScribeContent) return;
+    if (!pipelineId) return;
+    let cancelled = false;
+    const fetchFn = pipelineFetcher ?? workflowsApi.get;
+    fetchFn(pipelineId)
+      .then((workflow) => {
+        if (cancelled) return;
+        const spec = workflow?.stages?.scribe?.spec ?? null;
+        const assumptions = workflow?.stages?.scribe?.assumptions ?? null;
+        setFetchedSpec(spec);
+        setFetchedAssumptions(
+          Array.isArray(assumptions) && assumptions.length > 0 ? assumptions : null
+        );
+      })
+      .catch(() => {
+        // Silent failure — disclosures just don't render. Matches the
+        // pre-fix behavior (nothing was rendered when `scribeSpec` was
+        // undefined) so no user-visible regression.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pipelineId, hasIncomingScribeContent, pipelineFetcher]);
+
+  const effectiveScribeSpec = scribeSpec ?? fetchedSpec;
+  const effectiveScribeAssumptions = scribeAssumptions ?? fetchedAssumptions;
 
   useEffect(() => {
     if (priming) {
@@ -663,7 +726,14 @@ export function ExplanationPanel({
   // empty/legacy placeholders move below the disclosures so the user still
   // gets a clear "no reasoning" signal but the rich spec content is no longer
   // gated behind the persistence layer.
-  const hasScribeContent = !!scribeSpec || (!!scribeAssumptions && scribeAssumptions.length > 0);
+  //
+  // PR-V6-fix2 (2026-05-20): use the effective values so the
+  // self-healing fetch above benefits every fallback path (empty stages,
+  // partial persistence missing the Scribe row, and the per-stage
+  // ReasoningCard render below).
+  const hasScribeContent =
+    !!effectiveScribeSpec ||
+    (!!effectiveScribeAssumptions && effectiveScribeAssumptions.length > 0);
 
   if (explanation.stages.length === 0) {
     // F-11 backfill: pipeline finished before persistence existed → no rows in
@@ -709,8 +779,8 @@ export function ExplanationPanel({
             Bu pipeline için ayrıntılı karar kaydı yok; ancak Scribe çıktısı aşağıda görünür.
           </p>
           <ScribeOutputDisclosures
-            spec={scribeSpec}
-            assumptions={scribeAssumptions}
+            spec={effectiveScribeSpec}
+            assumptions={effectiveScribeAssumptions}
             className="mt-2"
           />
         </article>
@@ -750,8 +820,8 @@ export function ExplanationPanel({
               Bu pipeline için Scribe kararı kaydedilmemiş; ancak spec çıktısı aşağıda görünür.
             </p>
             <ScribeOutputDisclosures
-              spec={scribeSpec}
-              assumptions={scribeAssumptions}
+              spec={effectiveScribeSpec}
+              assumptions={effectiveScribeAssumptions}
               className="mt-2"
             />
           </article>
@@ -766,8 +836,8 @@ export function ExplanationPanel({
             onIterationStarted={onIterationStarted}
             iterateWithFeedback={iterateWithFeedback}
             acCoverage={acCoverage}
-            scribeSpec={scribeSpec}
-            scribeAssumptions={scribeAssumptions}
+            scribeSpec={effectiveScribeSpec}
+            scribeAssumptions={effectiveScribeAssumptions}
           />
         ))}
       </div>

@@ -213,6 +213,151 @@ describe('ExplanationPanel', () => {
     });
   });
 
+  // PR-V6-fix2 (2026-05-20): self-healing scribe-spec fetch. PR #592's fix
+  // (PR-V6-fix above) only covered `explanation.stages.length === 0`. The
+  // actual production bug is that `activeWorkflow.stages.scribe.spec` is
+  // often `undefined` on the browser even when the API returns it —
+  // workflow loader race, partial SSE update, etc. The panel now fetches
+  // the pipeline itself via `pipelineFetcher` when the prop is missing.
+  describe('PR-V6-fix2 — fallback fetch of scribeSpec via pipelineId', () => {
+    const mkWorkflow = (
+      overrides: { spec?: StructuredSpec | null; assumptions?: string[] | null } = {}
+    ) =>
+      ({
+        id: 'p-fetched',
+        title: 't',
+        status: 'completed',
+        traceEnabled: false,
+        createdAt: '2026-05-20T00:00:00Z',
+        stages: {
+          scribe: {
+            status: 'completed',
+            spec: overrides.spec === undefined ? mkSpec() : overrides.spec,
+            assumptions: overrides.assumptions === undefined ? [] : overrides.assumptions,
+          },
+          approve: { status: 'completed' },
+          proto: { status: 'idle' },
+          trace: { status: 'idle' },
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any;
+
+    it('fetches spec via pipelineFetcher when scribeSpec prop is undefined', async () => {
+      const fetcher = vi.fn().mockResolvedValue(mkWorkflow());
+      render(
+        <ExplanationPanel
+          pipelineId="p-fetched"
+          explanation={mkExplanation({ stages: [] })}
+          pipelineFetcher={fetcher}
+          // scribeSpec deliberately omitted
+        />
+      );
+      await waitFor(() => expect(fetcher).toHaveBeenCalledWith('p-fetched'));
+      // After the fetch resolves, the fallback card should appear with the
+      // disclosures (because stages are empty AND the fetched spec is now
+      // the effective spec).
+      expect(await screen.findByTestId('scribe-spec-fallback-card')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-output-disclosures')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-acceptance-criteria-disclosure')).toBeInTheDocument();
+      expect(screen.getByText(/Kabul Kriterleri \(2\)/)).toBeInTheDocument();
+    });
+
+    it('fetches spec and surfaces it via Scribe ReasoningCard when stages have a Scribe row', async () => {
+      // The real-world scenario from the 2026-05-20 browser inspection:
+      // explanation.stages has the Scribe row, but the upstream
+      // `activeWorkflow.stages.scribe.spec` is undefined so the
+      // ReasoningCard `showScribeOutputs` gate never fires. The fallback
+      // fetch should populate `effectiveScribeSpec` and let the
+      // ReasoningCard render the disclosures.
+      const fetcher = vi.fn().mockResolvedValue(mkWorkflow());
+      render(
+        <ExplanationPanel
+          pipelineId="p-fetched"
+          explanation={mkExplanation({
+            stages: [mkStage({ agentName: 'scribe', decision: 'Scribe karar' })],
+          })}
+          pipelineFetcher={fetcher}
+          // scribeSpec deliberately omitted
+        />
+      );
+      await waitFor(() => expect(fetcher).toHaveBeenCalledWith('p-fetched'));
+      // The disclosures should appear inside the regular Scribe ReasoningCard
+      // (no fallback card needed because the Scribe stage already exists).
+      expect(await screen.findByTestId('scribe-output-disclosures')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-acceptance-criteria-disclosure')).toBeInTheDocument();
+      expect(screen.queryByTestId('scribe-spec-fallback-card')).toBeNull();
+    });
+
+    it('also fetches and surfaces assumptions when only those are present in the workflow', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        mkWorkflow({
+          spec: null,
+          assumptions: ['React kullanılacak', 'PostgreSQL veritabanı'],
+        })
+      );
+      render(
+        <ExplanationPanel
+          pipelineId="p-fetched"
+          explanation={mkExplanation({ stages: [] })}
+          pipelineFetcher={fetcher}
+        />
+      );
+      await waitFor(() => expect(fetcher).toHaveBeenCalledWith('p-fetched'));
+      expect(await screen.findByTestId('scribe-spec-fallback-card')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-assumptions-disclosure')).toBeInTheDocument();
+      expect(screen.getByText(/Varsayımlar \(2\)/)).toBeInTheDocument();
+    });
+
+    it('does NOT call pipelineFetcher when scribeSpec is already provided', async () => {
+      const fetcher = vi.fn();
+      render(
+        <ExplanationPanel
+          pipelineId="p-fetched"
+          explanation={mkExplanation({
+            stages: [mkStage({ agentName: 'scribe', decision: 'Scribe karar' })],
+          })}
+          scribeSpec={mkSpec()}
+          pipelineFetcher={fetcher}
+        />
+      );
+      // Wait a tick to make sure no async fetch fires
+      await Promise.resolve();
+      expect(fetcher).not.toHaveBeenCalled();
+      // The disclosures still render via the props-provided spec.
+      expect(screen.getByTestId('scribe-output-disclosures')).toBeInTheDocument();
+    });
+
+    it('does NOT call pipelineFetcher when scribeAssumptions are already provided', async () => {
+      const fetcher = vi.fn();
+      render(
+        <ExplanationPanel
+          pipelineId="p-fetched"
+          explanation={mkExplanation({ stages: [] })}
+          scribeAssumptions={['Modal kullanılacak']}
+          pipelineFetcher={fetcher}
+        />
+      );
+      await Promise.resolve();
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it('fails silently when the fetcher rejects — disclosures stay hidden', async () => {
+      const fetcher = vi.fn().mockRejectedValue(new Error('boom'));
+      render(
+        <ExplanationPanel
+          pipelineId="p-fetched"
+          explanation={mkExplanation({ stages: [] })}
+          pipelineFetcher={fetcher}
+        />
+      );
+      await waitFor(() => expect(fetcher).toHaveBeenCalledWith('p-fetched'));
+      // Empty stages + no resolved spec → falls through to the placeholder.
+      expect(screen.getByText(/Henüz açıklama yok/)).toBeInTheDocument();
+      expect(screen.queryByTestId('scribe-spec-fallback-card')).toBeNull();
+      expect(screen.queryByTestId('scribe-output-disclosures')).toBeNull();
+    });
+  });
+
   // PR-B (2026-05-18): the panel no longer renders an inline
   // AttentionBanner. Attention points live on the Akış tab of
   // PipelineDetailRail; surfacing them here too duplicated the banner and
