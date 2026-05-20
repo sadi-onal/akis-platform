@@ -53,7 +53,8 @@ describe('extractJsonSafe', () => {
   });
 
   it('handles JSON with surrounding markdown text', () => {
-    const input = 'I generated the following:\n\n{"files": [{"path": "a.ts"}]}\n\nLet me know if you need changes.';
+    const input =
+      'I generated the following:\n\n{"files": [{"path": "a.ts"}]}\n\nLet me know if you need changes.';
     assert.equal(extractJsonSafe(input), '{"files": [{"path": "a.ts"}]}');
   });
 
@@ -212,7 +213,7 @@ describe('parseAIJson', () => {
   it('throws SyntaxError for completely invalid input', () => {
     assert.throws(
       () => parseAIJson('this is not json at all'),
-      (err: unknown) => err instanceof SyntaxError,
+      (err: unknown) => err instanceof SyntaxError
     );
   });
 
@@ -228,8 +229,11 @@ describe('parseAIJson', () => {
   });
 
   it('handles the exact ```json wrapper issue from Trace agent', () => {
-    const aiResponse = '```json\n{"testFiles": [{"filePath": "tests/e2e/app.spec.ts", "content": "test code", "testCount": 3}], "coverageMatrix": {"ac-1": ["tests/e2e/app.spec.ts"]}, "testSummary": {"totalTests": 3, "frameworks": ["playwright"]}}\n```';
-    const result = parseAIJson<{ testFiles: unknown[]; testSummary: { totalTests: number } }>(aiResponse);
+    const aiResponse =
+      '```json\n{"testFiles": [{"filePath": "tests/e2e/app.spec.ts", "content": "test code", "testCount": 3}], "coverageMatrix": {"ac-1": ["tests/e2e/app.spec.ts"]}, "testSummary": {"totalTests": 3, "frameworks": ["playwright"]}}\n```';
+    const result = parseAIJson<{ testFiles: unknown[]; testSummary: { totalTests: number } }>(
+      aiResponse
+    );
     assert.equal(result.testFiles.length, 1);
     assert.equal(result.testSummary.totalTests, 3);
   });
@@ -257,14 +261,14 @@ describe('parseAIJson', () => {
       '  "testFiles": [\n' +
       '    {\n' +
       '      "filePath": "tests/e2e/app.spec.ts",\n' +
-      '      "content": "import { test, expect } from \'@playwright/test\';\\n\\ntest(\'works\', async ({ page }) => {\\n  await page.goto(\'/\');\\n  await expect(page.getByRole(\'heading\')).toBeVisible();\\n});",\n' +
+      "      \"content\": \"import { test, expect } from '@playwright/test';\\n\\ntest('works', async ({ page }) => {\\n  await page.goto('/');\\n  await expect(page.getByRole('heading')).toBeVisible();\\n});\",\n" +
       '      "testCount": 1\n' +
       '    },\n' +
       '    {\n' +
       '      "filePath": "tests/e2e/crud.spec.ts",\n' +
-      '      "content": "import { test, expect } from \'@playwright/test\';\\n\\ntest(\'creates\', async ({ page';
+      "      \"content\": \"import { test, expect } from '@playwright/test';\\n\\ntest('creates', async ({ page";
     const result = parseAIJson<{ testFiles: Array<{ filePath: string; testCount?: number }> }>(
-      truncated,
+      truncated
     );
     assert.ok(Array.isArray(result.testFiles), 'testFiles should be an array');
     assert.ok(result.testFiles.length >= 1, 'at least one testFile recovered');
@@ -289,8 +293,74 @@ describe('parseAIJson', () => {
     assert.deepEqual(result.a.b.c.d, [1, 2, 3]);
   });
 
+  // PR-V regression (2026-05-20): production bug — Trace stage failed 3x on
+  // pipeline 67f2c32c with responseLen 38-45K. AI emitted a ```json fence,
+  // ran out of max_tokens mid-`content` string of the last testFile, and
+  // the string body contained literal `}` chars from inline JS object
+  // literals (e.g. `await page.click({ page })`). Previous extractJsonSafe
+  // strategy 2b used naive `lastIndexOf('}')` which landed *inside* the
+  // unclosed string, breaking repair. New string-aware structural walker
+  // ignores `}` inside string literals.
+  it('PR-V: parses truncated trace JSON with `}` inside open string (real-world bug)', () => {
+    const truncated =
+      '```json\n' +
+      '{\n' +
+      '  "testFiles": [\n' +
+      '    {\n' +
+      '      "filePath": "tests/e2e/checkout.spec.ts",\n' +
+      '      "content": "import { test, expect } from \'@playwright/test\';\n' +
+      '\n' +
+      "test('checkout flow', async ({ page }) => {\n" +
+      "  await page.goto('/cart');\n" +
+      "  await page.click('button.checkout');\n" +
+      "  await expect(page.getByRole('heading', { name: 'Order placed' })).toBeVisible();\n" +
+      '});\n' +
+      '\n' +
+      "test('empty cart', async ({ page";
+    const result = parseAIJson<{ testFiles: Array<{ filePath: string }> }>(truncated);
+    assert.ok(Array.isArray(result.testFiles), 'testFiles should be an array');
+    assert.equal(result.testFiles.length, 1);
+    assert.equal(result.testFiles[0].filePath, 'tests/e2e/checkout.spec.ts');
+  });
+
+  it('PR-V: parses 3-file response truncated mid-third-file with literal newlines + nested `}`', () => {
+    const truncated =
+      '```json\n' +
+      '{\n' +
+      '  "testFiles": [\n' +
+      '    {\n' +
+      '      "filePath": "tests/e2e/auth.spec.ts",\n' +
+      '      "content": "import { test } from \'@playwright/test\';",\n' +
+      '      "testCount": 1\n' +
+      '    },\n' +
+      '    {\n' +
+      '      "filePath": "tests/e2e/products.spec.ts",\n' +
+      '      "content": "import { test } from \'@playwright/test\';",\n' +
+      '      "testCount": 1\n' +
+      '    },\n' +
+      '    {\n' +
+      '      "filePath": "tests/e2e/checkout.spec.ts",\n' +
+      '      "content": "import { test, expect } from \'@playwright/test\';\n' +
+      '\n' +
+      "test('checkout', async ({ page }) => {\n" +
+      "  await page.goto('/cart');\n" +
+      "  await expect(page.getByRole('heading', { name: 'Order' })).toBeVisible();\n" +
+      '});\n' +
+      "test('apply coupon', async ({ page";
+    const result = parseAIJson<{ testFiles: Array<{ filePath: string }> }>(truncated);
+    // Should recover at least the first two complete files; third may or may
+    // not be recoverable depending on truncation point, but parse must succeed.
+    assert.ok(Array.isArray(result.testFiles));
+    assert.ok(result.testFiles.length >= 2, `expected >= 2 files, got ${result.testFiles.length}`);
+    assert.equal(result.testFiles[0].filePath, 'tests/e2e/auth.spec.ts');
+    assert.equal(result.testFiles[1].filePath, 'tests/e2e/products.spec.ts');
+  });
+
   it('preserves generic type parameter', () => {
-    interface MyType { name: string; count: number }
+    interface MyType {
+      name: string;
+      count: number;
+    }
     const result = parseAIJson<MyType>('{"name": "test", "count": 42}');
     assert.equal(result.name, 'test');
     assert.equal(result.count, 42);

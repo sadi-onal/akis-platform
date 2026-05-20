@@ -146,6 +146,17 @@ export function reduceStageViews(
         retrySource: 'trace',
       });
     }
+    // PR-V (2026-05-20) Bug 2 — Trace stage_completed clears stale retry
+    // meta. When Trace dry-run fails 3x in the preview-confirm flow, the
+    // orchestrator emits a `stage_completed` (status='completed') activity
+    // with a neutral message before opening the push gate. Without this
+    // reset, the cinema would keep showing "Test deniyor (3)" forever
+    // because the last retry-trigger set retryCount=3 and no later activity
+    // touched the meta. Reset on completion so the column shows a clean
+    // final state.
+    if (a.stage === 'trace' && a.step === 'stage_completed') {
+      metaFor.delete('trace');
+    }
     // PR-F3 (2026-05-19): Critic critical-finding iterate-loop retry — Critic
     // `criticPhase=code` + `step=retry-trigger` activity'si Proto column'unda
     // "Critic düzeltiyor (n/max)" badge olarak gösterilir. Trace badge'i ile

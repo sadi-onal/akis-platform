@@ -266,6 +266,69 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
     expect(views[2]!.meta?.maxRetries).toBe(3);
   });
 
+  // PR-V (2026-05-20) Bug 2 — UI stale state on Trace fallback.
+  // When Trace dry-run hits the 3-retry cap and the orchestrator opens the
+  // push gate without tests, the cinema used to keep showing the stale
+  // "Test deniyor (3)" badge plus the "Playwright testleri oluşturuluyor
+  // (deneme 3)..." shimmer forever. The fix: backend emits an explicit
+  // `step: 'stage_completed'` (status: 'completed') for the trace stage
+  // BEFORE the gate_open event, and the cinema utility resets retry meta
+  // when that signal arrives.
+  it('PR-V: stage_completed activity clears Trace retry meta after dry-run failure', () => {
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'trace',
+        step: 'retry-trigger',
+        retryCount: 3,
+        progress: 80,
+        message: 'Yeniden deneniyor (3/3)',
+      }),
+      mk({
+        stage: 'trace',
+        step: 'stage_completed',
+        status: 'completed',
+        progress: 100,
+        message: 'Test üretilemedi (devam ediliyor)',
+      }),
+      mk({
+        stage: 'trace',
+        step: 'gate_open',
+        progress: 100,
+        message: 'Gönderim onayı bekleniyor',
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[acts.length - 1]!, 'awaiting_push_confirm');
+    // Trace column: meta cleared (no stale retry badge), state = complete
+    // (explicit signal), latest message = the neutral gate_open text.
+    expect(views[2]!.meta?.retryCount).toBeUndefined();
+    expect(views[2]!.meta?.maxRetries).toBeUndefined();
+    expect(views[2]!.state).toBe('complete');
+    expect(views[2]!.latest?.message).toBe('Gönderim onayı bekleniyor');
+  });
+
+  it('PR-V: without stage_completed, Trace retry meta persists (regression guard)', () => {
+    // Sanity check: removing the stage_completed signal restores the old
+    // broken behavior. Pins the contract — the reset is gated on the
+    // explicit completion step, not on any other field.
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'trace',
+        step: 'retry-trigger',
+        retryCount: 3,
+        progress: 80,
+        message: 'Yeniden deneniyor (3/3)',
+      }),
+      mk({
+        stage: 'trace',
+        step: 'gate_open',
+        progress: 100,
+        message: 'Gönderim onayı bekleniyor',
+      }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!, 'awaiting_push_confirm');
+    expect(views[2]!.meta?.retryCount).toBe(3);
+  });
+
   // ─── PR-V5: explicit-completion completion logic ────────────────────
   // Pre-PR-V5 the frontend inferred completion from "stage is no longer
   // the latest activity" — which fired premature checkmarks at every

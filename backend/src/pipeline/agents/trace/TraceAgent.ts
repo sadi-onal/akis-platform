@@ -98,6 +98,20 @@ const MAX_FILE_SIZE_BYTES = 100_000; // 100KB per file
 const AI_CALL_TIMEOUT_MS = RETRY_CONFIG.aiCallTimeoutMs;
 const MAX_CODEBASE_CONTEXT_CHARS = RETRY_CONFIG.maxCodebaseContextChars;
 
+/**
+ * PR-V (2026-05-20): Build a bounded head+tail snippet of an AI response for
+ * post-mortem debugging when all parse retries failed. Full 40-50K-char
+ * payloads are noisy in pino logs and don't survive DB column limits — a
+ * 600-char head + 600-char tail is enough to spot the truncation point and
+ * the markdown fence pattern.
+ */
+function buildRawResponseSnippet(text: string, headLen = 600, tailLen = 600): string {
+  if (text.length <= headLen + tailLen + 32) return text;
+  const head = text.slice(0, headLen);
+  const tail = text.slice(text.length - tailLen);
+  return `${head}\n…[${text.length - headLen - tailLen} chars elided]…\n${tail}`;
+}
+
 /** Timeout wrapper for individual AI calls (prevents indefinite hangs). */
 function withAiTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout>;
@@ -803,11 +817,17 @@ After pushing, respond with a JSON summary:
           `[Trace] JSON parse failed (attempt ${attempt + 1}, responseLen=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
         );
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
+        // PR-V (2026-05-20): when all parse attempts fail, capture a bounded
+        // head+tail snippet of the raw AI response in `technicalDetail` so
+        // the orchestrator can persist it onto `intermediateState.lastFailedTraceResponse`.
+        // Future debugging no longer needs to grep pino logs for the broken
+        // 40K-char blob — it lives on the pipeline row.
+        const snippet = buildRawResponseSnippet(responseText);
         return {
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.TRACE_TEST_GENERATION_FAILED,
-            `Invalid JSON from test generation (len=${responseText.length})`
+            `Invalid JSON from test generation (len=${responseText.length}). Snippet:\n${snippet}`
           ),
         };
       }

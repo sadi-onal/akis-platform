@@ -3128,6 +3128,11 @@ export class PipelineOrchestrator {
         // an explicit override checkbox before the push button enables.
         const pipelineNow = await this.store.getById(pipelineId);
         const intermediate = (pipelineNow?.intermediateState ?? {}) as Record<string, unknown>;
+        // PR-V (2026-05-20) Bug 1 — TraceAgent embeds a head+tail snippet of
+        // the raw AI response in `technicalDetail` when all parse attempts
+        // fail. Persist it on `intermediateState.lastFailedTraceResponse`
+        // for post-mortem debugging without bloating pino logs.
+        const rawSnippet = traceResult.error.technicalDetail ?? null;
         const updated = await this.store.update(pipelineId, {
           stage: 'awaiting_push_confirm',
           metrics: {
@@ -3139,11 +3144,31 @@ export class PipelineOrchestrator {
             traceDryRunStatus: 'failed',
             traceDryRunErrorCode: traceResult.error.code,
             traceDryRunErrorAt: new Date().toISOString(),
+            ...(rawSnippet ? { lastFailedTraceResponse: rawSnippet } : {}),
           },
           // We intentionally do NOT persist the error onto the pipeline — it's
           // a soft failure for the dryRun pass. The flag above tells the UI.
         });
         this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
+        // PR-V (2026-05-20) Bug 2 — UI stale state on Trace fallback. Before
+        // emitting the gate_open activity, emit an explicit
+        // `step: 'stage_completed'` with `status: 'completed'` for the Trace
+        // stage so the cinema:
+        //   - marks Trace as "complete" via the explicit-completion Set
+        //   - the retry badge / "Playwright testleri oluşturuluyor (deneme 3)"
+        //     shimmer is cleared (retry-trigger meta superseded)
+        //   - the column shows the final neutral message
+        // The cinema utility (PR-V) also clears retry meta when a
+        // `stage_completed` activity arrives for trace.
+        emitActivity({
+          pipelineId,
+          stage: 'trace',
+          step: 'stage_completed',
+          status: 'completed',
+          message: 'Test üretilemedi (devam ediliyor)',
+          progress: 100,
+          timestamp: new Date().toISOString(),
+        });
         // PR-T3 S1 + PR-U3: explicit gate_open activity so SSE-driven
         // refresh on the frontend catches the transition.
         emitActivity({
