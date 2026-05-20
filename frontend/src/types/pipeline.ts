@@ -207,6 +207,18 @@ export interface Pipeline {
   };
   metrics: PipelineMetrics;
   error?: PipelineError;
+  /**
+   * T3: GitHub Actions run result, populated by the orchestrator's CI
+   * polling step after a successful Trace + push. Surfaced via
+   * `intermediateState.ciResult` from the backend.
+   */
+  ciResult?: {
+    ok: boolean;
+    runId: number;
+    status: string;
+    conclusion: string | null;
+    htmlUrl: string;
+  };
   intermediateState?: {
     criticSpecOutput?: CriticReviewOutput;
     criticCodeOutput?: CriticReviewOutput;

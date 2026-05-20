@@ -847,3 +847,77 @@ describe('PipelineDetailRail — T2 Jira Epic link', () => {
     expect(screen.queryByText(/Jira Epic/)).toBeNull();
   });
 });
+
+describe('PipelineDetailRail — T3 CI pill', () => {
+  it('renders an amber "CI çalışıyor…" badge when uiState=ci_running and no result yet', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="ci_running"
+        activities={[mkActivity('trace')]}
+        currentStep={mkActivity('trace')}
+      />
+    );
+    expect(screen.getByTestId('ci-pill-running')).toBeInTheDocument();
+    expect(screen.queryByTestId('ci-pill-success')).toBeNull();
+    expect(screen.queryByTestId('ci-pill-failed')).toBeNull();
+  });
+
+  it('renders a green ✓ pill linked to GitHub Actions when ciResult.ok is true', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('trace')]}
+        currentStep={null}
+        ciResult={{
+          ok: true,
+          runId: 42,
+          status: 'completed',
+          conclusion: 'success',
+          htmlUrl: 'https://github.com/o/r/actions/runs/42',
+        }}
+      />
+    );
+    const pill = screen.getByTestId('ci-pill-success');
+    expect(pill).toBeInTheDocument();
+    expect(pill).toHaveAttribute('href', 'https://github.com/o/r/actions/runs/42');
+    expect(pill).toHaveAttribute('target', '_blank');
+    expect(pill).toHaveTextContent(/Başarılı/i);
+  });
+
+  it('renders a red ✗ pill when ciResult.ok is false', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('trace')]}
+        currentStep={null}
+        ciResult={{
+          ok: false,
+          runId: 43,
+          status: 'completed',
+          conclusion: 'failure',
+          htmlUrl: 'https://github.com/o/r/actions/runs/43',
+        }}
+      />
+    );
+    const pill = screen.getByTestId('ci-pill-failed');
+    expect(pill).toBeInTheDocument();
+    expect(pill).toHaveTextContent(/Başarısız/i);
+  });
+
+  it('renders nothing CI-related when ciResult is undefined and uiState is not ci_running', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('trace')]}
+        currentStep={null}
+      />
+    );
+    expect(screen.queryByTestId('ci-pill-running')).toBeNull();
+    expect(screen.queryByTestId('ci-pill-success')).toBeNull();
+    expect(screen.queryByTestId('ci-pill-failed')).toBeNull();
+  });
+});

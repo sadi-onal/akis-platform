@@ -118,6 +118,20 @@ export interface PipelineDetailRailProps {
     epicKey?: string;
     siteUrl?: string;
   };
+  /**
+   * T3 — GitHub Actions run result threaded from the workflow. When
+   * present the rail renders a "CI: ✓ Başarılı / ✗ Başarısız" pill that
+   * deep-links to the workflow run. While the pipeline is at
+   * `ci_running` we render an amber "CI çalışıyor…" pill on uiState
+   * alone — the result lands once polling finishes.
+   */
+  ciResult?: {
+    ok: boolean;
+    runId: number;
+    status: string;
+    conclusion: string | null;
+    htmlUrl: string;
+  };
   className?: string;
 }
 
@@ -201,6 +215,7 @@ export function PipelineDetailRail({
   scribeSpec,
   scribeAssumptions,
   jiraConfig,
+  ciResult,
   className,
   // onPushResolved is accepted in the interface so callers can keep
   // passing it (it's still consumed by the T1 PushGateFooter render path,
@@ -616,6 +631,36 @@ export function PipelineDetailRail({
               <span aria-hidden="true">!</span>
               {attentionPoints.length} dikkat noktası
             </button>
+          )}
+          {/* T3 — CI pill. Two render modes:
+              - `ci_running`: amber "CI çalışıyor…" badge (no link until result lands)
+              - completed: green/red pill linked to the GitHub Actions run */}
+          {uiState === 'ci_running' && !ciResult && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
+              data-testid="ci-pill-running"
+              title="GitHub Actions workflow çalışıyor"
+            >
+              <span aria-hidden="true">⏳</span>CI çalışıyor…
+            </span>
+          )}
+          {ciResult && (
+            <a
+              href={ciResult.htmlUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid={ciResult.ok ? 'ci-pill-success' : 'ci-pill-failed'}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+                ciResult.ok
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300'
+                  : 'border-rose-500/40 bg-rose-500/10 text-rose-700 hover:bg-rose-500/20 dark:text-rose-300'
+              }`}
+              aria-label={`CI: ${ciResult.ok ? 'Başarılı' : 'Başarısız'} — GitHub Actions sayfasına git`}
+              title="GitHub Actions run'ı aç"
+            >
+              <span aria-hidden="true">{ciResult.ok ? '✓' : '✗'}</span>
+              CI: {ciResult.ok ? 'Başarılı' : 'Başarısız'}
+            </a>
           )}
         </div>
       </header>

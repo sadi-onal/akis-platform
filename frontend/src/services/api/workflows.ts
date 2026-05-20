@@ -444,6 +444,14 @@ export function mapPipelineToWorkflow(
   // reasoning persistence layer failed after retries.
   const explainabilityDegraded = Boolean(pipeline.intermediateState?.explainabilityDegraded);
 
+  // T3: GitHub Actions CI run result. The backend writes this into
+  // `intermediateState.ciResult` once the polling step finishes; we lift it
+  // to a top-level field so consumers (PipelineDetailRail) don't need to
+  // know about the intermediate-state contract.
+  const rawCiResult = pipeline.intermediateState?.ciResult as
+    | { ok: boolean; runId: number; status: string; conclusion: string | null; htmlUrl: string }
+    | undefined;
+
   return {
     id: pipeline.id,
     traceEnabled: pipeline.traceEnabled ?? false,
@@ -468,6 +476,7 @@ export function mapPipelineToWorkflow(
     // pipeline record so the rail can render the "Jira Epic: PROJ-123" link
     // when the Epic was successfully created.
     ...(pipeline.jiraConfig ? { jiraConfig: pipeline.jiraConfig } : {}),
+    ...(rawCiResult ? { ciResult: rawCiResult } : {}),
   };
 }
 

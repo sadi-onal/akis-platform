@@ -2412,10 +2412,18 @@ export class PipelineOrchestrator {
       pipelineNow.protoConfig && resolvedRepoName !== pipelineNow.protoConfig.repoName
         ? { ...pipelineNow.protoConfig, repoName: resolvedRepoName }
         : pipelineNow.protoConfig;
+    // T3: when Trace produced tests AND the push succeeded, kick off the
+    // GitHub Actions workflow_dispatch and poll the run in the background.
+    // The pipeline transitions through `ci_running` → `completed` /
+    // `completed_partial`; failure to trigger or poll is fail-safe — it
+    // logs and falls through to the standard completion state.
+    const shouldRunCi = pipelineNow.traceOutput !== undefined && pipelineNow.traceEnabled !== false;
+    const initialStage: PipelineStage = shouldRunCi ? 'ci_running' : completionStage;
+
     await this.store.update(pipelineId, {
       protoOutput: updatedProtoOutput,
       ...(protoConfigUpdate ? { protoConfig: protoConfigUpdate } : {}),
-      stage: completionStage,
+      stage: initialStage,
       metrics: {
         ...pipelineNow.metrics,
         protoCompletedAt: pipelineNow.metrics.protoCompletedAt ?? new Date(),
@@ -2423,15 +2431,113 @@ export class PipelineOrchestrator {
         totalDurationMs: Date.now() - toEpoch(pipelineNow.metrics.startedAt),
       },
     });
-    this.emitEvent(pipelineId, 'stage_change', completionStage);
+    this.emitEvent(pipelineId, 'stage_change', initialStage);
     logger.info(
       {
         pipelineId,
-        stage: completionStage,
+        stage: initialStage,
         hasTraceOutput: pipelineNow.traceOutput !== undefined,
+        ciTriggered: shouldRunCi,
       },
       '[Pipeline] PR-F2 confirmPush finalized — Trace already ran in dryRun pre-gate'
     );
+
+    if (shouldRunCi) {
+      const branch = updatedProtoOutput.branch;
+      const repoFull = updatedProtoOutput.repo;
+      const [ciOwner, ciRepo] = repoFull.split('/');
+      if (ciOwner && ciRepo) {
+        this.runCiPolling(pipelineId, pipelineNow.userId, ciOwner, ciRepo, branch).catch((err) =>
+          logger.warn({ err, pipelineId }, '[Pipeline] T3 CI polling failed')
+        );
+      }
+    }
+  }
+
+  /**
+   * T3: trigger workflow_dispatch on the pushed branch, poll the run, and
+   * persist the result. Best-effort: any failure leaves the pipeline at the
+   * completion stage Trace would have produced — the CI panel just stays
+   * empty. Runs detached from `runConfirmedPush` so the user's API call
+   * returns immediately.
+   */
+  private async runCiPolling(
+    pipelineId: string,
+    userId: string,
+    owner: string,
+    repo: string,
+    branch: string
+  ): Promise<void> {
+    const { triggerWorkflowDispatch, pollWorkflowRun } = await import(
+      '../../services/CIService.js'
+    );
+
+    let token: string;
+    try {
+      const gh = await this.validateGitHubAccess(userId);
+      token = gh.token;
+    } catch (err) {
+      logger.warn({ err, pipelineId }, '[Pipeline] T3 CI: GitHub token unresolved — skipping');
+      await this.finishCiUnpolled(pipelineId);
+      return;
+    }
+
+    try {
+      await triggerWorkflowDispatch(token, owner, repo, branch);
+    } catch (err) {
+      logger.warn(
+        { err, pipelineId, owner, repo, branch },
+        '[Pipeline] T3 CI: workflow_dispatch failed — pipeline completes without CI result'
+      );
+      await this.finishCiUnpolled(pipelineId);
+      return;
+    }
+
+    let result: import('../../services/CIService.js').CIResult;
+    try {
+      result = await pollWorkflowRun(token, owner, repo, branch, (status) =>
+        logger.info({ pipelineId, status }, '[Pipeline] T3 CI poll tick')
+      );
+    } catch (err) {
+      logger.warn(
+        { err, pipelineId },
+        '[Pipeline] T3 CI: pollWorkflowRun threw — pipeline completes without CI result'
+      );
+      await this.finishCiUnpolled(pipelineId);
+      return;
+    }
+
+    const pipelineNow = await this.getPipeline(pipelineId);
+    const nextIntermediate = {
+      ...(pipelineNow.intermediateState ?? {}),
+      ciResult: result,
+    } as Record<string, unknown>;
+    const ciOk = result.status === 'completed' && result.ok;
+    const finalStage: PipelineStage = ciOk ? 'completed' : 'completed_partial';
+
+    if (result.status === 'timed_out') {
+      logger.warn(
+        { pipelineId, runId: result.runId },
+        '[Pipeline] T3 CI: poll timed out after 10min — marking completed_partial'
+      );
+    }
+
+    await this.store.update(pipelineId, {
+      stage: finalStage,
+      intermediateState: nextIntermediate,
+    });
+    this.emitEvent(pipelineId, 'stage_change', finalStage, { ciResult: result });
+    logger.info(
+      { pipelineId, finalStage, runId: result.runId, conclusion: result.conclusion },
+      '[Pipeline] T3 CI poll finished'
+    );
+  }
+
+  private async finishCiUnpolled(pipelineId: string): Promise<void> {
+    const pipelineNow = await this.getPipeline(pipelineId);
+    const finalStage: PipelineStage = pipelineNow.traceOutput ? 'completed' : 'completed_partial';
+    await this.store.update(pipelineId, { stage: finalStage });
+    this.emitEvent(pipelineId, 'stage_change', finalStage);
   }
 
   /**

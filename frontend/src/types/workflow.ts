@@ -233,6 +233,19 @@ export interface Workflow {
     epicKey?: string;
     siteUrl?: string;
   };
+  /**
+   * T3 — GitHub Actions CI run result. Surfaced from
+   * `pipeline.intermediateState.ciResult` so the rail can render a CI pill
+   * (✓/✗) without traversing intermediateState. `htmlUrl` is always present
+   * on the row, even on failure.
+   */
+  ciResult?: {
+    ok: boolean;
+    runId: number;
+    status: string;
+    conclusion: string | null;
+    htmlUrl: string;
+  };
 }
 
 export interface WorkflowStats {

@@ -854,12 +854,42 @@ After pushing, respond with a JSON summary:
         testCount: typeof f.testCount === 'number' ? f.testCount : 0,
       }));
 
+      // T3 EKSİK #1: `testFiles` array dolu ama her dosyanın `content` boş /
+      // sadece whitespace ise — Trace gerçek test üretmedi, sadece dosya
+      // iskeletleri verdi. Tek bir non-empty dosya yeterli; hiçbiri yoksa
+      // hard error.
+      const hasNonEmptyContent = normalizedFiles.some((f) => f.content.trim().length > 0);
+      if (!hasNonEmptyContent) {
+        if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
+        return {
+          type: 'error',
+          error: createPipelineError(
+            PipelineErrorCode.TRACE_TEST_GENERATION_FAILED,
+            'All test files have empty content'
+          ),
+        };
+      }
+
       const totalTests = normalizedFiles.reduce((sum, f) => sum + f.testCount, 0);
       const specCriteria = spec?.acceptanceCriteria?.map((ac) => ac.id) ?? [];
       const coveredCriteria = coverageMatrix
         ? Object.keys(coverageMatrix).filter((k) => specCriteria.includes(k))
         : [];
       const uncoveredCriteria = specCriteria.filter((id) => !coveredCriteria.includes(id));
+
+      // T3 EKSİK #2: spec.acceptanceCriteria dolu ama coverageMatrix ya tamamen
+      // boş {} ya da hiçbir spec AC'sini kapsamıyor. Trace coverage iddiası
+      // var ama hiçbir testin spec AC'sine bağlanmıyor → hard error.
+      if (specCriteria.length > 0 && coveredCriteria.length === 0) {
+        if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
+        return {
+          type: 'error',
+          error: createPipelineError(
+            PipelineErrorCode.TRACE_TEST_GENERATION_FAILED,
+            'No acceptance criterion covered by tests'
+          ),
+        };
+      }
 
       return {
         type: 'output',

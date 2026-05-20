@@ -328,6 +328,9 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       // "Jira Epic: PROJ-123" link in its header once the
                       // Epic is created.
                       jiraConfig={activeWorkflow?.jiraConfig}
+                      // T3: forward the GitHub Actions CI run result so the
+                      // rail can render the ✓/✗ pill once polling lands.
+                      ciResult={activeWorkflow?.ciResult}
                       onCriticResolved={
                         onPushResolved
                           ? () => {

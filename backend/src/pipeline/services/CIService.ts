@@ -21,12 +21,7 @@ export interface CIResult {
   };
 }
 
-async function ghFetch<T>(
-  token: string,
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<T> {
+async function ghFetch<T>(token: string, method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${GITHUB_API}${path}`, {
     method,
     headers: {
@@ -51,19 +46,24 @@ async function ghFetch<T>(
 }
 
 /**
- * Trigger workflow_dispatch for the akis-tests.yml workflow.
+ * Trigger workflow_dispatch for the AKIS e2e workflow.
+ *
+ * T3: file name aligned with what Proto/Trace actually push into the user's
+ * scaffold — see `pipeline/templates/akisE2eWorkflow.ts:7`. The previous
+ * `akis-tests.yml` reference 404'd because the workflow on disk was always
+ * `akis-e2e.yml`.
  */
 export async function triggerWorkflowDispatch(
   token: string,
   owner: string,
   repo: string,
-  branch: string,
+  branch: string
 ): Promise<void> {
   await ghFetch(
     token,
     'POST',
-    `/repos/${owner}/${repo}/actions/workflows/akis-tests.yml/dispatches`,
-    { ref: branch },
+    `/repos/${owner}/${repo}/actions/workflows/akis-e2e.yml/dispatches`,
+    { ref: branch }
   );
 }
 
@@ -76,7 +76,7 @@ export async function pollWorkflowRun(
   owner: string,
   repo: string,
   branch: string,
-  onProgress?: (status: string) => void,
+  onProgress?: (status: string) => void
 ): Promise<CIResult> {
   const startTime = Date.now();
 
@@ -93,7 +93,11 @@ export async function pollWorkflowRun(
         head_branch: string;
         event: string;
       }>;
-    }>(token, 'GET', `/repos/${owner}/${repo}/actions/runs?branch=${branch}&event=workflow_dispatch&per_page=1`);
+    }>(
+      token,
+      'GET',
+      `/repos/${owner}/${repo}/actions/runs?branch=${branch}&event=workflow_dispatch&per_page=1`
+    );
 
     const run = runs.workflow_runs?.[0];
     if (!run) {
@@ -125,30 +129,10 @@ export async function pollWorkflowRun(
   };
 }
 
-/**
- * GitHub Actions workflow YAML template for Proto to include in scaffolds.
- */
-export const AKIS_TESTS_WORKFLOW_YAML = `name: AKIS Tests
-on:
-  workflow_dispatch:
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npx playwright test --reporter=json
-        continue-on-error: true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: test-results/
-        if: always()
-`;
+// T3: the previous `AKIS_TESTS_WORKFLOW_YAML` template lived here as a
+// would-be Proto inclusion, but Proto/Trace already push
+// `pipeline/templates/akisE2eWorkflow.ts` into every scaffold. The two
+// templates diverged in name (`akis-tests.yml` vs `akis-e2e.yml`) and
+// content, causing `triggerWorkflowDispatch` to fire against a workflow
+// file that wasn't on disk. The dead template is gone; the live template
+// in `pipeline/templates/akisE2eWorkflow.ts` is the single source of truth.

@@ -118,6 +118,12 @@ interface ChatPanelProps {
    * render the "Jira Epic: PROJ-123" link in the rail header.
    */
   jiraConfig?: import('../../types/workflow').Workflow['jiraConfig'];
+  /**
+   * T3: GitHub Actions CI run result threaded down from the workflow.
+   * PipelineDetailRail uses it to render a green/red CI pill in the
+   * header once the orchestrator's polling step finishes.
+   */
+  ciResult?: import('../../types/workflow').Workflow['ciResult'];
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -171,6 +177,7 @@ export const ChatPanel = memo(function ChatPanel({
   scribeSpec,
   scribeAssumptions,
   jiraConfig,
+  ciResult,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -285,6 +292,7 @@ export const ChatPanel = memo(function ChatPanel({
           scribeSpec={scribeSpec}
           scribeAssumptions={scribeAssumptions}
           jiraConfig={jiraConfig}
+          ciResult={ciResult}
         />
       )}
 

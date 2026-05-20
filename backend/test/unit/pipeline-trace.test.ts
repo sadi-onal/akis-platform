@@ -384,6 +384,79 @@ describe('Trace — AI error handling', () => {
       assert.equal(result.error.code, 'TRACE_TEST_GENERATION_FAILED');
     }
   });
+
+  // T3 EKSİK #1: testFiles dolu ama her dosyanın content'i boş/whitespace
+  it('T3: returns error when all test files have empty content', async () => {
+    const ai = createMockAI(
+      JSON.stringify({
+        testFiles: [
+          { filePath: 'tests/e2e/todo.spec.ts', content: '', testCount: 0 },
+          { filePath: 'tests/playwright.config.ts', content: '   \n  \t  ', testCount: 0 },
+        ],
+        coverageMatrix: { 'ac-1': ['tests/e2e/todo.spec.ts'] },
+      })
+    );
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ dryRun: true }));
+    assert.equal(result.type, 'error');
+    if (result.type === 'error') {
+      assert.equal(result.error.code, 'TRACE_TEST_GENERATION_FAILED');
+      assert.match(String(result.error.technicalDetail), /empty content/i);
+    }
+  });
+
+  // T3 EKSİK #2: coverageMatrix tamamen boş + spec AC'leri var
+  it('T3: returns error when coverageMatrix is empty and spec has acceptance criteria', async () => {
+    const ai = createMockAI(
+      JSON.stringify({
+        testFiles: [
+          {
+            filePath: 'tests/e2e/todo.spec.ts',
+            content: 'import { test, expect } from "@playwright/test";\ntest("x", () => {});',
+            testCount: 1,
+          },
+        ],
+        coverageMatrix: {},
+      })
+    );
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ dryRun: true }));
+    assert.equal(result.type, 'error');
+    if (result.type === 'error') {
+      assert.equal(result.error.code, 'TRACE_TEST_GENERATION_FAILED');
+      assert.match(String(result.error.technicalDetail), /No acceptance criterion/i);
+    }
+  });
+
+  // T3 EKSİK #2 variant: coverageMatrix dolu ama hiçbir key spec AC ID'siyle eşleşmiyor
+  it('T3: returns error when coverageMatrix keys do not match any spec AC', async () => {
+    const ai = createMockAI(
+      JSON.stringify({
+        testFiles: [
+          {
+            filePath: 'tests/e2e/todo.spec.ts',
+            content: 'import { test } from "@playwright/test";\ntest("x", () => {});',
+            testCount: 1,
+          },
+        ],
+        // ac-99 doesn't exist in spec — should fail
+        coverageMatrix: { 'ac-99': ['tests/e2e/todo.spec.ts'] },
+      })
+    );
+    const github = createMockGitHub();
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput({ dryRun: true }));
+    assert.equal(result.type, 'error');
+    if (result.type === 'error') {
+      assert.equal(result.error.code, 'TRACE_TEST_GENERATION_FAILED');
+      assert.match(String(result.error.technicalDetail), /No acceptance criterion/i);
+    }
+  });
 });
 
 // ─── JSON Extraction ──────────────────────────────

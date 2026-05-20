@@ -17,9 +17,7 @@ import type {
 const minimalSpec: StructuredSpec = {
   title: 'Edge Case App',
   problemStatement: 'Test edge scenarios',
-  userStories: [
-    { persona: 'User', action: 'Interact', benefit: 'Value' },
-  ],
+  userStories: [{ persona: 'User', action: 'Interact', benefit: 'Value' }],
   acceptanceCriteria: [
     { id: 'ac-1', given: 'User on page', when: 'clicks button', then: 'action happens' },
   ],
@@ -31,7 +29,8 @@ const validAIResponse = JSON.stringify({
   testFiles: [
     {
       filePath: 'tests/e2e/app.spec.ts',
-      content: 'import { test, expect } from "@playwright/test";\ntest("loads", async ({ page }) => { await page.goto("/"); });',
+      content:
+        'import { test, expect } from "@playwright/test";\ntest("loads", async ({ page }) => { await page.goto("/"); });',
       testCount: 1,
     },
     {
@@ -60,19 +59,28 @@ function baseInput(overrides?: Partial<TraceInput>): TraceInput {
 }
 
 function createMockAI(response: string): TraceAIDeps {
-  return { async generateText() { return response; } };
+  return {
+    async generateText() {
+      return response;
+    },
+  };
 }
 
 function createMockGitHub(overrides?: Partial<TraceGitHubDeps>): TraceGitHubDeps {
   return {
-    async listFiles() { return ['src/App.tsx', 'src/index.ts']; },
+    async listFiles() {
+      return ['src/App.tsx', 'src/index.ts'];
+    },
     async getFileContent(_o, _r, _b, filePath) {
-      if (filePath === 'src/App.tsx') return 'export default function App() { return <div>Hello</div>; }';
+      if (filePath === 'src/App.tsx')
+        return 'export default function App() { return <div>Hello</div>; }';
       return 'export {};';
     },
     async commitFile() {},
     async createBranch() {},
-    async createPR() { return { url: 'https://github.com/testuser/edge-case-repo/pull/1' }; },
+    async createPR() {
+      return { url: 'https://github.com/testuser/edge-case-repo/pull/1' };
+    },
     ...overrides,
   };
 }
@@ -85,7 +93,9 @@ describe('Trace edge — Empty repository', () => {
   it('returns TRACE_EMPTY_CODEBASE when repo has zero files', async () => {
     const ai = createMockAI(validAIResponse);
     const github = createMockGitHub({
-      async listFiles() { return []; },
+      async listFiles() {
+        return [];
+      },
     });
     const agent = new TraceAgent(ai, github);
 
@@ -101,10 +111,15 @@ describe('Trace edge — Empty repository', () => {
   it('AI generateText is never called for empty repo', async () => {
     let aiCalled = false;
     const ai: TraceAIDeps = {
-      async generateText() { aiCalled = true; return ''; },
+      async generateText() {
+        aiCalled = true;
+        return '';
+      },
     };
     const github = createMockGitHub({
-      async listFiles() { return []; },
+      async listFiles() {
+        return [];
+      },
     });
     const agent = new TraceAgent(ai, github);
 
@@ -185,9 +200,9 @@ describe('Trace edge — Binary files in repo', () => {
           'docs/manual.pdf',
           'assets/font.woff2',
           'images/hero.jpg',
-          'dist/bundle.js',       // excluded by EXCLUDE_PATTERNS (dist/)
-          'build/output.js',      // excluded by EXCLUDE_PATTERNS (build/)
-          'src/styles.css',       // CSS is a source extension
+          'dist/bundle.js', // excluded by EXCLUDE_PATTERNS (dist/)
+          'build/output.js', // excluded by EXCLUDE_PATTERNS (build/)
+          'src/styles.css', // CSS is a source extension
         ];
       },
       async getFileContent(_o, _r, _b, filePath) {
@@ -259,8 +274,13 @@ describe('Trace edge — TraceOutput schema validation', () => {
         { filePath: 'tests/a.spec.ts', content: 'test code', testCount: 'not-a-number' },
         { filePath: 'tests/b.spec.ts', content: 'more code', testCount: null },
       ],
-      coverageMatrix: {},
-      testSummary: { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
+      coverageMatrix: { 'ac-1': ['tests/a.spec.ts'] },
+      testSummary: {
+        totalTests: 0,
+        coveragePercentage: 100,
+        coveredCriteria: ['ac-1'],
+        uncoveredCriteria: [],
+      },
     });
     const ai = createMockAI(aiResponse);
     const github = createMockGitHub();
@@ -278,11 +298,14 @@ describe('Trace edge — TraceOutput schema validation', () => {
 
   it('stringifies non-string filePath and content', async () => {
     const aiResponse = JSON.stringify({
-      testFiles: [
-        { filePath: 12345, content: true, testCount: 1 },
-      ],
-      coverageMatrix: {},
-      testSummary: { totalTests: 1, coveragePercentage: 100, coveredCriteria: [], uncoveredCriteria: [] },
+      testFiles: [{ filePath: 12345, content: true, testCount: 1 }],
+      coverageMatrix: { 'ac-1': ['12345'] },
+      testSummary: {
+        totalTests: 1,
+        coveragePercentage: 100,
+        coveredCriteria: ['ac-1'],
+        uncoveredCriteria: [],
+      },
     });
     const ai = createMockAI(aiResponse);
     const github = createMockGitHub();
@@ -307,12 +330,18 @@ describe('Trace edge — Test file syntax validation', () => {
       testFiles: [
         {
           filePath: 'tests/e2e/login.spec.ts',
-          content: 'import { test, expect } from "@playwright/test";\n\ntest("login works", async ({ page }) => {\n  await page.goto("/login");\n  await expect(page.locator("h1")).toBeVisible();\n});',
+          content:
+            'import { test, expect } from "@playwright/test";\n\ntest("login works", async ({ page }) => {\n  await page.goto("/login");\n  await expect(page.locator("h1")).toBeVisible();\n});',
           testCount: 1,
         },
       ],
       coverageMatrix: { 'ac-1': ['tests/e2e/login.spec.ts'] },
-      testSummary: { totalTests: 1, coveragePercentage: 100, coveredCriteria: ['ac-1'], uncoveredCriteria: [] },
+      testSummary: {
+        totalTests: 1,
+        coveragePercentage: 100,
+        coveredCriteria: ['ac-1'],
+        uncoveredCriteria: [],
+      },
     });
     const ai = createMockAI(responseWithImports);
     const github = createMockGitHub();
@@ -331,13 +360,17 @@ describe('Trace edge — Test file syntax validation', () => {
   });
 
   it('preserves test file content through the pipeline', async () => {
-    const originalContent = 'import { test } from "@playwright/test";\ntest("smoke", async () => {});';
+    const originalContent =
+      'import { test } from "@playwright/test";\ntest("smoke", async () => {});';
     const aiResponse = JSON.stringify({
-      testFiles: [
-        { filePath: 'tests/smoke.spec.ts', content: originalContent, testCount: 1 },
-      ],
-      coverageMatrix: {},
-      testSummary: { totalTests: 1, coveragePercentage: 100, coveredCriteria: [], uncoveredCriteria: [] },
+      testFiles: [{ filePath: 'tests/smoke.spec.ts', content: originalContent, testCount: 1 }],
+      coverageMatrix: { 'ac-1': ['tests/smoke.spec.ts'] },
+      testSummary: {
+        totalTests: 1,
+        coveragePercentage: 100,
+        coveredCriteria: ['ac-1'],
+        uncoveredCriteria: [],
+      },
     });
     const ai = createMockAI(aiResponse);
     const github = createMockGitHub();
@@ -373,7 +406,8 @@ describe('Trace edge — GitHub API rate limit (403)', () => {
       assert.equal(result.error.code, 'TRACE_CODE_READ_FAILED');
       assert.ok(result.error.retryable);
       assert.ok(
-        result.error.technicalDetail?.includes('rate limit') || result.error.technicalDetail?.includes('403'),
+        result.error.technicalDetail?.includes('rate limit') ||
+          result.error.technicalDetail?.includes('403'),
         'Technical detail should mention rate limit or 403'
       );
     }
@@ -417,7 +451,8 @@ describe('Trace edge — Branch not found', () => {
     if (result.type === 'error') {
       assert.equal(result.error.code, 'TRACE_CODE_READ_FAILED');
       assert.ok(
-        result.error.technicalDetail?.includes('not found') || result.error.technicalDetail?.includes('ref'),
+        result.error.technicalDetail?.includes('not found') ||
+          result.error.technicalDetail?.includes('ref'),
         'Should mention branch not found in technical detail'
       );
     }
@@ -449,7 +484,9 @@ describe('Trace edge — dryRun mode (no GitHub writes)', () => {
     let commitCalled = false;
     const ai = createMockAI(validAIResponse);
     const github = createMockGitHub({
-      async commitFile() { commitCalled = true; },
+      async commitFile() {
+        commitCalled = true;
+      },
     });
     const agent = new TraceAgent(ai, github);
 
@@ -462,7 +499,9 @@ describe('Trace edge — dryRun mode (no GitHub writes)', () => {
     let branchCreated = false;
     const ai = createMockAI(validAIResponse);
     const github = createMockGitHub({
-      async createBranch() { branchCreated = true; },
+      async createBranch() {
+        branchCreated = true;
+      },
     });
     const agent = new TraceAgent(ai, github);
 
@@ -475,7 +514,10 @@ describe('Trace edge — dryRun mode (no GitHub writes)', () => {
     let prCreated = false;
     const ai = createMockAI(validAIResponse);
     const github = createMockGitHub({
-      async createPR() { prCreated = true; return { url: '' }; },
+      async createPR() {
+        prCreated = true;
+        return { url: '' };
+      },
     });
     const agent = new TraceAgent(ai, github);
 
@@ -522,7 +564,9 @@ describe('Trace edge — Very large repo (100+ files)', () => {
     const allFiles = Array.from({ length: 150 }, (_, i) => `src/component-${i}.ts`);
     const ai = createMockAI(validAIResponse);
     const github = createMockGitHub({
-      async listFiles() { return allFiles; },
+      async listFiles() {
+        return allFiles;
+      },
       async getFileContent(_o, _r, _b, filePath) {
         readFiles.push(filePath);
         return `export const c${readFiles.length} = true;`;
@@ -566,7 +610,9 @@ describe('Trace edge — Very large repo (100+ files)', () => {
     const readFiles: string[] = [];
     const ai = createMockAI(validAIResponse);
     const github = createMockGitHub({
-      async listFiles() { return allFiles; },
+      async listFiles() {
+        return allFiles;
+      },
       async getFileContent(_o, _r, _b, filePath) {
         readFiles.push(filePath);
         return 'a'.repeat(60_000);
@@ -592,7 +638,9 @@ describe('Trace edge — Very large repo (100+ files)', () => {
     ];
     const ai = createMockAI(validAIResponse);
     const github = createMockGitHub({
-      async listFiles() { return allFiles; },
+      async listFiles() {
+        return allFiles;
+      },
       async getFileContent(_o, _r, _b, filePath) {
         if (filePath === 'src/App.tsx') return 'export default function App() { return <div />; }';
         return 'export {};';
@@ -649,22 +697,32 @@ describe('Trace edge — Coverage matrix validation', () => {
     }
   });
 
-  it('produces empty coverageMatrix when AI returns none', async () => {
+  // T3: AI omitting coverageMatrix is no longer accepted when the spec has
+  // acceptance criteria — TraceAgent now hard-errors instead. The agent's
+  // graceful-default behaviour for empty coverage is preserved only when
+  // the spec itself has no AC (e.g. discovery / spike pipelines).
+  it('hard-errors when coverageMatrix is missing and spec has acceptance criteria', async () => {
     const aiResponse = JSON.stringify({
       testFiles: [
         { filePath: 'tests/e2e/basic.spec.ts', content: 'test("works", () => {});', testCount: 1 },
       ],
-      // No coverageMatrix in response
-      testSummary: { totalTests: 1, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: ['ac-1'] },
+      // No coverageMatrix in response — spec has ac-1 so this now fails.
+      testSummary: {
+        totalTests: 1,
+        coveragePercentage: 0,
+        coveredCriteria: [],
+        uncoveredCriteria: ['ac-1'],
+      },
     });
     const ai = createMockAI(aiResponse);
     const github = createMockGitHub();
     const agent = new TraceAgent(ai, github);
 
     const result = await agent.execute(baseInput({ dryRun: true }));
-    assert.equal(result.type, 'output');
-    if (result.type === 'output') {
-      assert.deepEqual(result.data.coverageMatrix, {});
+    assert.equal(result.type, 'error');
+    if (result.type === 'error') {
+      assert.equal(result.error.code, 'TRACE_TEST_GENERATION_FAILED');
+      assert.match(String(result.error.technicalDetail), /No acceptance criterion/i);
     }
   });
 
@@ -679,9 +737,7 @@ describe('Trace edge — Coverage matrix validation', () => {
     };
     // AI covers ac-1 and ac-2 (2/3 = 67%)
     const aiResponse = JSON.stringify({
-      testFiles: [
-        { filePath: 'tests/app.spec.ts', content: 'tests', testCount: 2 },
-      ],
+      testFiles: [{ filePath: 'tests/app.spec.ts', content: 'tests', testCount: 2 }],
       coverageMatrix: {
         'ac-1': ['tests/app.spec.ts'],
         'ac-2': ['tests/app.spec.ts'],
@@ -719,20 +775,21 @@ describe('Trace edge — Coverage matrix validation', () => {
     const result = await agent.execute(baseInput({ dryRun: true, spec: specNoACs }));
     assert.equal(result.type, 'output');
     if (result.type === 'output') {
-      assert.equal(result.data.testSummary.coveragePercentage, 100,
-        'Should default to 100% when no criteria exist');
+      assert.equal(
+        result.data.testSummary.coveragePercentage,
+        100,
+        'Should default to 100% when no criteria exist'
+      );
     }
   });
 
   it('ignores AI coverage matrix keys that are not in the spec', async () => {
     const aiResponse = JSON.stringify({
-      testFiles: [
-        { filePath: 'tests/app.spec.ts', content: 'tests', testCount: 1 },
-      ],
+      testFiles: [{ filePath: 'tests/app.spec.ts', content: 'tests', testCount: 1 }],
       coverageMatrix: {
         'ac-1': ['tests/app.spec.ts'],
-        'ac-99': ['tests/app.spec.ts'],  // not in spec
-        'bogus': ['tests/app.spec.ts'],   // not in spec
+        'ac-99': ['tests/app.spec.ts'], // not in spec
+        bogus: ['tests/app.spec.ts'], // not in spec
       },
     });
     const ai = createMockAI(aiResponse);
@@ -794,8 +851,12 @@ describe('Trace edge — pushFiles fallback to commitFile', () => {
     let commitFileCalled = false;
     const ai = createMockAI(validAIResponse);
     const github = createMockGitHub({
-      async pushFiles() { pushFilesCalled = true; },
-      async commitFile() { commitFileCalled = true; },
+      async pushFiles() {
+        pushFilesCalled = true;
+      },
+      async commitFile() {
+        commitFileCalled = true;
+      },
     });
     const agent = new TraceAgent(ai, github);
 
