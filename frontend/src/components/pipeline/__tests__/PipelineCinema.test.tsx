@@ -412,7 +412,12 @@ describe('PipelineCinema component (PR-F 3-column)', () => {
     expect(screen.queryByText('Critic · Kod')).not.toBeInTheDocument();
   });
 
-  it('attaches bakkal-Türkçesi tooltip to each stage card', () => {
+  // PR-V (tooltip-ux): bakkal-Türkçesi stage description moved from the
+  // card's native `title=` attribute to a dedicated `?` StageInfoButton
+  // popover. The card still exposes the description via `aria-label` for
+  // screen readers — the native tooltip no longer fires (so it can't clash
+  // with the ConfidenceBadge popover).
+  it('exposes bakkal-Türkçesi stage description via aria-label (not native title)', () => {
     const { container } = render(<PipelineCinema activities={[]} currentStep={null} />);
     const stages: Array<{ name: string; expected: string }> = [
       { name: 'scribe', expected: "Fikri spec'e çevirir" },
@@ -422,8 +427,65 @@ describe('PipelineCinema component (PR-F 3-column)', () => {
     for (const { name, expected } of stages) {
       const card = container.querySelector(`[data-stage="${name}"]`);
       expect(card, `card for ${name} should exist`).toBeTruthy();
-      expect(card?.getAttribute('title')).toContain(expected);
+      // aria-label still carries the description for a11y.
+      expect(card?.getAttribute('aria-label')).toContain(expected);
+      // Native title MUST be absent to avoid the two-tooltip clash.
+      expect(card?.getAttribute('title')).toBeNull();
     }
+  });
+
+  // PR-V (tooltip-ux): each stage card has a `?` info button in the header
+  // that opens a popover with the stage description on hover/focus/click.
+  it('renders a stage-info button for each stage that reveals the description on hover', () => {
+    render(<PipelineCinema activities={[]} currentStep={null} />);
+    const stages: Array<{ name: 'scribe' | 'proto' | 'trace'; expected: string }> = [
+      { name: 'scribe', expected: "Fikri spec'e çevirir" },
+      { name: 'proto', expected: "Spec'ten kod üretir" },
+      { name: 'trace', expected: 'Otomatik test üretir' },
+    ];
+    for (const { name, expected } of stages) {
+      const btn = screen.getByTestId(`stage-info-${name}`);
+      expect(btn).toBeInTheDocument();
+      // Closed by default — no tooltip in the document for this stage.
+      expect(btn).not.toHaveAttribute('aria-describedby');
+      // Hover opens the popover for this stage.
+      fireEvent.mouseEnter(btn);
+      const ariaId = btn.getAttribute('aria-describedby');
+      expect(ariaId).toBeTruthy();
+      const popover = document.getElementById(ariaId!);
+      expect(popover).not.toBeNull();
+      expect(popover!).toHaveTextContent(expected);
+      // Leave to close so the next iteration starts clean.
+      fireEvent.mouseLeave(btn);
+    }
+  });
+
+  it('closes the stage-info popover when Escape is pressed', () => {
+    render(<PipelineCinema activities={[]} currentStep={null} />);
+    const btn = screen.getByTestId('stage-info-scribe');
+    fireEvent.mouseEnter(btn);
+    expect(btn).toHaveAttribute('aria-describedby');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(btn).not.toHaveAttribute('aria-describedby');
+  });
+
+  // PR-V (tooltip-ux): badge's own popover must be back on the card — the
+  // suppressTooltip=true prop on PipelineCinema's usage was removed because
+  // the card no longer competes with a native `title=` tooltip.
+  it('confidence badge inside the card exposes its own popover-trigger button (no longer suppressed)', () => {
+    const acts: PipelineActivity[] = [
+      mk({
+        stage: 'scribe',
+        progress: 100,
+        reasoning: { decision: 'Approved', confidence: 88 },
+      }),
+    ];
+    render(<PipelineCinema activities={acts} currentStep={acts[0]!} />);
+    // The badge re-renders as a <button> (popover-enabled) instead of a
+    // plain <span> pill — the PR-E `suppressTooltip` workaround is gone.
+    const badge = screen.getByRole('button', { name: /88%/ });
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveClass('cursor-help');
   });
 
   it('renders compact toggle when callback provided', () => {

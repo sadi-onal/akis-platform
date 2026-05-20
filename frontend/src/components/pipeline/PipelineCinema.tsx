@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { PipelineActivity } from '../../hooks/usePipelineStream';
 import type { ConversationUIState } from '../../types/chat';
 import { ConfidenceBadge } from './ConfidenceBadge';
@@ -83,6 +83,89 @@ const STAGE_TOOLTIP_KEY: Record<CinemaStage, string> = {
   trace: 'pipeline.stage.trace.tooltip',
 };
 
+/**
+ * StageInfoButton — small "?" trigger that opens a popover with the stage
+ * description. Replaces the card's old native `title` attribute, which used
+ * to clash with the ConfidenceBadge's own popover (two tooltips stacked on
+ * hover). By giving the stage description its own discrete trigger element,
+ * the badge's popover can stay enabled without competing for the same hover
+ * surface.
+ *
+ * PR-V (tooltip-ux): accessible — keyboard focus + Escape + outside-click.
+ */
+function StageInfoButton({
+  label,
+  description,
+  stage,
+}: {
+  /** Visible stage name used for the aria-label, e.g. "Scribe". */
+  label: string;
+  /** Türkçe açıklama metni. */
+  description: string;
+  /** Stage id, used to namespace the popover id + test selectors. */
+  stage: CinemaStage;
+}) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [open]);
+
+  return (
+    <span ref={ref} className="relative inline-flex">
+      <button
+        type="button"
+        data-testid={`stage-info-${stage}`}
+        onClick={() => setOpen((v) => !v)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        aria-describedby={open ? id : undefined}
+        aria-label={`${label}: ${description}`}
+        // Visual: subtle circular question-mark, large enough to be a tap
+        // target but small enough not to dominate the header. Same tier of
+        // affordance as the ConfidenceBadge (rounded-full, border, cursor-help).
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-ak-border-default text-[10px] font-semibold leading-none text-ak-text-tertiary transition hover:border-ak-border-strong hover:text-ak-text-secondary"
+      >
+        <span aria-hidden="true">?</span>
+      </button>
+      {open && (
+        // Anchored to the LEFT edge of the button so the popover extends
+        // rightward into the column — the info button lives on the left side
+        // of the header (next to the stage label), and the column to its
+        // right has plenty of room. `min(16rem, 90vw)` keeps it readable on
+        // very narrow viewports.
+        <span
+          id={id}
+          role="tooltip"
+          style={{ maxWidth: 'min(16rem, 90vw)' }}
+          className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-ak-border bg-ak-surface p-2 text-xs leading-relaxed text-ak-text-secondary shadow-lg"
+        >
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ak-text-tertiary">
+            {label}
+          </span>
+          {description}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function StageColumn({
   view,
   reducedMotion,
@@ -90,7 +173,11 @@ function StageColumn({
 }: {
   view: StageView;
   reducedMotion: boolean;
-  /** PR-A Fix 3: bakkal-Türkçesi hover text describing what this stage does. */
+  /** PR-A Fix 3: bakkal-Türkçesi hover text describing what this stage does.
+   * PR-V (tooltip-ux): no longer passed to a native `title=` attribute on
+   * the card (which clashed with the ConfidenceBadge's own popover). It now
+   * feeds the StageInfoButton's popover only. The card itself retains the
+   * description via `aria-label` for screen readers. */
   tooltip: string;
 }) {
   // PR-V5: `progress` removed from the destructure — the bar is now
@@ -140,7 +227,11 @@ function StageColumn({
       data-stage={stage}
       data-state={state}
       className={`${baseClass} ${stateClass}`}
-      title={tooltip}
+      // PR-V (tooltip-ux): no `title=` here. The native browser tooltip used
+      // to fire alongside the ConfidenceBadge's popover, producing the
+      // "two-tooltips-on-hover" clash. Stage description is now reached via
+      // the dedicated `?` StageInfoButton in the header. `aria-label` still
+      // describes the column to screen readers.
       aria-label={tooltip}
     >
       <header className="flex items-center justify-between gap-2">
@@ -152,6 +243,7 @@ function StageColumn({
             } ${state === 'pending' ? 'opacity-40' : ''}`}
           />
           <span className={`text-sm font-semibold ${accent.text}`}>{STAGE_LABEL[stage]}</span>
+          <StageInfoButton label={STAGE_LABEL[stage]} description={tooltip} stage={stage} />
         </span>
         <span className="flex items-center gap-1.5">
           {retryBadge && (
@@ -164,10 +256,11 @@ function StageColumn({
             </span>
           )}
           {reasoning?.confidence !== undefined && (
-            // PR-E bulgu #2: stage card already owns a Türkçe tooltip (title +
-            // aria-label on the wrapper). Suppress the badge's own popover so
-            // the user never sees two tooltips stacked on hover.
-            <ConfidenceBadge score={reasoning.confidence} compact suppressTooltip />
+            // PR-V (tooltip-ux): badge's own popover re-enabled. The card no
+            // longer competes with a native `title=` tooltip — the stage
+            // description now lives behind the dedicated `?` button — so
+            // hovering the badge cleanly opens its tier-explanation popover.
+            <ConfidenceBadge score={reasoning.confidence} compact />
           )}
         </span>
       </header>
