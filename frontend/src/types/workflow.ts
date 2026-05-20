@@ -46,6 +46,15 @@ export interface StageResult {
   duration?: string;
   confidence?: number;
   spec?: StructuredSpec | null;
+  /**
+   * PR-V6-fix (2026-05-20): Scribe `assumptions` propagated through
+   * `mapScribeOutput` so ChatPageLayout can thread them as
+   * `scribeAssumptions` into PipelineDetailRail → ExplanationPanel.
+   * Without this, the assumption disclosure (which the chat-side PlanCard
+   * already had via `ConversationMessage.assumptions`) never rendered in
+   * the Açıklama tab.
+   */
+  assumptions?: string[];
   approvedBy?: string;
   branch?: string;
   repo?: string;

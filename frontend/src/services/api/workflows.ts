@@ -117,8 +117,15 @@ function mapStageStatus(
 function mapScribeOutput(scribeOutput?: ScribeOutput): Partial<StageResult> {
   if (!scribeOutput) return {};
   const spec = scribeOutput.spec;
+  // PR-V6-fix (2026-05-20): forward `assumptions` so ChatPageLayout can
+  // surface them through PipelineDetailRail → ExplanationPanel. Previously
+  // the chat-side PlanCard already had assumptions (via
+  // `ConversationMessage.assumptions` from `spec_draft`), but the Açıklama
+  // tab's disclosure section was always undefined because the mapper dropped
+  // them on the floor.
   return {
     confidence: scribeOutput.confidence,
+    assumptions: scribeOutput.assumptions,
     spec: spec
       ? {
           title: spec.title,

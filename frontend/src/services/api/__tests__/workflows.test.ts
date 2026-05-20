@@ -106,6 +106,97 @@ describe('mapPipelineToWorkflow', () => {
     });
   });
 
+  // PR-V6-fix (2026-05-20): the smoke-test artifact on 2026-05-19 showed
+  // `scribeSpec=undefined` at ChatPanel level despite the backend returning
+  // the spec correctly. The unit tests existing at the time only exercised
+  // `<ScribeOutputDisclosures spec={...} />` with explicit props — they
+  // never asserted that `mapPipelineToWorkflow` actually populates
+  // `stages.scribe.spec` end-to-end. These tests pin that contract so a
+  // regression in the mapping (or accidental rename of `scribeOutput.spec`)
+  // gets caught at the loader boundary instead of in manual smoke.
+  describe('PR-V6 scribe spec + assumptions mapping', () => {
+    function makeScribeOutput(overrides = {}): Pipeline['scribeOutput'] {
+      return {
+        spec: {
+          title: 'Görev Yönetim Uygulaması',
+          problemStatement: 'Kullanıcı görevlerini takip etmek istiyor.',
+          userStories: [
+            { persona: 'Yönetici', action: 'görev oluştur', benefit: 'ekip ilerlesin' },
+          ],
+          acceptanceCriteria: [
+            { id: 'AC-1', given: 'liste boş', when: 'görev eklerim', then: 'listede görünür' },
+            { id: 'AC-2', given: 'görev var', when: 'tamamlandı işaretlerim', then: 'arşivlenir' },
+          ],
+          technicalConstraints: { stack: 'React + Vite' },
+          outOfScope: ['Mobil uygulama'],
+        },
+        rawMarkdown: '',
+        confidence: 87,
+        clarificationsAsked: 2,
+        assumptions: ['Tek kullanıcı; auth gerekmez', 'PostgreSQL'],
+        ...overrides,
+      } as Pipeline['scribeOutput'];
+    }
+
+    it('threads scribeOutput.spec into stages.scribe.spec for awaiting_approval', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'awaiting_approval',
+          scribeOutput: makeScribeOutput(),
+        })
+      );
+      expect(w.stages.scribe.spec).toBeDefined();
+      expect(w.stages.scribe.spec?.acceptanceCriteria).toHaveLength(2);
+      expect(w.stages.scribe.spec?.acceptanceCriteria[0].id).toBe('AC-1');
+      expect(w.stages.scribe.spec?.problemStatement).toContain('takip etmek');
+      expect(w.stages.scribe.spec?.userStories[0].persona).toBe('Yönetici');
+      expect(w.stages.scribe.spec?.outOfScope).toContain('Mobil uygulama');
+    });
+
+    it('threads scribeOutput.assumptions into stages.scribe.assumptions', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'awaiting_approval',
+          scribeOutput: makeScribeOutput(),
+        })
+      );
+      expect(w.stages.scribe.assumptions).toEqual(['Tek kullanıcı; auth gerekmez', 'PostgreSQL']);
+    });
+
+    it('preserves spec + assumptions on completed pipelines (smoke artifact case)', () => {
+      // Smoke verification on 2026-05-19 used a pipeline at stage=completed
+      // (reassigned to a new user). The backend kept `scribeOutput.spec`
+      // populated; the mapper must propagate it so the Açıklama tab can
+      // render disclosures even after the pipeline finished.
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'completed',
+          scribeOutput: makeScribeOutput(),
+        })
+      );
+      expect(w.stages.scribe.spec).toBeDefined();
+      expect(w.stages.scribe.spec?.title).toBe('Görev Yönetim Uygulaması');
+      expect(w.stages.scribe.assumptions).toHaveLength(2);
+    });
+
+    it('leaves spec undefined when scribeOutput is missing (older pipelines)', () => {
+      const w = mapPipelineToWorkflow(makePipeline({ stage: 'completed' }));
+      expect(w.stages.scribe.spec).toBeUndefined();
+      expect(w.stages.scribe.assumptions).toBeUndefined();
+    });
+
+    it('forwards confidence alongside spec so ConfidenceBadge keeps working', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'awaiting_approval',
+          scribeOutput: makeScribeOutput({ confidence: 92 }),
+        })
+      );
+      expect(w.stages.scribe.confidence).toBe(92);
+      expect(w.stages.scribe.spec).toBeDefined();
+    });
+  });
+
   describe('title derivation', () => {
     it('uses pipeline title when available', () => {
       const w = mapPipelineToWorkflow(makePipeline({ title: 'My Project' }));

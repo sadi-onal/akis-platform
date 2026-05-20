@@ -646,32 +646,76 @@ export function ExplanationPanel({
   if (!explanation) {
     return null;
   }
+
+  // PR-V6-fix (2026-05-20): when reasoning persistence hasn't produced any
+  // stages yet (older pipelines, transient pre-persistence window, smoke
+  // re-assignments), we previously early-returned a placeholder and the Scribe
+  // spec disclosures (problem statement, AC, user stories, out-of-scope,
+  // assumptions) silently disappeared even though `workflow.stages.scribe.spec`
+  // was fully populated. The original V6 chain (ChatPageLayout → ChatPanel →
+  // PipelineDetailRail → ExplanationPanel → ScribeOutputDisclosures) only
+  // covered the happy path where at least one reasoning row exists. Smoke
+  // verification on 2026-05-19 confirmed the regression: DOM had 0 `<details>`
+  // elements even though `/api/pipelines/:id` returned the spec.
+  //
+  // Fix: always render the spec disclosures at the top when `scribeSpec`
+  // carries content, regardless of `explanation.stages.length`. The
+  // empty/legacy placeholders move below the disclosures so the user still
+  // gets a clear "no reasoning" signal but the rich spec content is no longer
+  // gated behind the persistence layer.
+  const hasScribeContent = !!scribeSpec || (!!scribeAssumptions && scribeAssumptions.length > 0);
+
   if (explanation.stages.length === 0) {
     // F-11 backfill: pipeline finished before persistence existed → no rows in
     // pipeline_reasonings. Show a distinct, honest message instead of the
     // generic "henüz açıklama yok" so users don't think the agents broke.
-    if (explanation.meta?.persistencePreEpoch) {
-      return (
-        <div
-          role="status"
-          className="rounded-lg border border-dashed border-amber-400/40 bg-amber-500/5 px-4 py-6 text-center"
-        >
-          <p className="text-sm font-medium text-amber-700 dark:text-amber-200">
-            Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok.
-          </p>
-          <p className="mt-1 text-xs text-ak-text-tertiary">
-            İsterseniz yeniden çalıştırabilirsiniz.
-          </p>
-        </div>
-      );
-    }
-    return (
+    const placeholder = explanation.meta?.persistencePreEpoch ? (
+      <div
+        role="status"
+        className="rounded-lg border border-dashed border-amber-400/40 bg-amber-500/5 px-4 py-6 text-center"
+      >
+        <p className="text-sm font-medium text-amber-700 dark:text-amber-200">
+          Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok.
+        </p>
+        <p className="mt-1 text-xs text-ak-text-tertiary">
+          İsterseniz yeniden çalıştırabilirsiniz.
+        </p>
+      </div>
+    ) : (
       <div className="rounded-lg border border-dashed border-ak-border bg-ak-surface-2 px-4 py-6 text-center">
         <p className="text-sm font-medium text-ak-text-secondary">Henüz açıklama yok</p>
         <p className="mt-1 text-xs text-ak-text-tertiary">
           Pipeline ilerledikçe her ajanın kararı, güven skoru ve riskleri burada görünecek.
         </p>
       </div>
+    );
+
+    if (!hasScribeContent) {
+      return placeholder;
+    }
+
+    return (
+      <section
+        aria-label="Pipeline açıklaması"
+        className={`flex flex-col gap-3 ${className ?? ''}`}
+      >
+        <article
+          className="rounded-lg border border-ak-border bg-ak-surface p-3"
+          data-stage="scribe"
+          data-testid="scribe-spec-fallback-card"
+        >
+          <h3 className="text-sm font-semibold text-ak-scribe">Scribe</h3>
+          <p className="mt-1 text-xs text-ak-text-tertiary">
+            Bu pipeline için ayrıntılı karar kaydı yok; ancak Scribe çıktısı aşağıda görünür.
+          </p>
+          <ScribeOutputDisclosures
+            spec={scribeSpec}
+            assumptions={scribeAssumptions}
+            className="mt-2"
+          />
+        </article>
+        {placeholder}
+      </section>
     );
   }
 
@@ -683,9 +727,35 @@ export function ExplanationPanel({
       return next;
     });
 
+  // PR-V6-fix (2026-05-20): if stages exist but none is the Scribe stage
+  // (e.g., partial persistence ran for Proto/Trace but the Scribe reasoning
+  // row was dropped), the ReasoningCard `showScribeOutputs` gate would never
+  // fire and the disclosures would not render. Surface a thin "Scribe çıktısı"
+  // card at the top so the spec is still inspectable even when its reasoning
+  // row never made it to `pipeline_reasonings`.
+  const explanationHasScribeStage = explanation.stages.some((s) => s.agentName === 'scribe');
+  const showScribeFallback = !explanationHasScribeStage && hasScribeContent;
+
   return (
     <section aria-label="Pipeline açıklaması" className={`flex flex-col gap-3 ${className ?? ''}`}>
       <div className="flex flex-col gap-2">
+        {showScribeFallback && (
+          <article
+            className="rounded-lg border border-ak-border bg-ak-surface p-3"
+            data-stage="scribe"
+            data-testid="scribe-spec-fallback-card"
+          >
+            <h3 className="text-sm font-semibold text-ak-scribe">Scribe</h3>
+            <p className="mt-1 text-xs text-ak-text-tertiary">
+              Bu pipeline için Scribe kararı kaydedilmemiş; ancak spec çıktısı aşağıda görünür.
+            </p>
+            <ScribeOutputDisclosures
+              spec={scribeSpec}
+              assumptions={scribeAssumptions}
+              className="mt-2"
+            />
+          </article>
+        )}
         {explanation.stages.map((s, idx) => (
           <ReasoningCard
             key={`${s.agentName}-${idx}`}
