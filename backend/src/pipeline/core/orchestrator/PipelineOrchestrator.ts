@@ -1816,8 +1816,50 @@ export class PipelineOrchestrator {
           string,
           unknown
         >;
+
+        // T4: append one entry to `iterationHistory` for every completed
+        // Proto → Critic pass. Each entry pins the Proto confidence + Critic
+        // score for the iteration so the UI can render the trajectory
+        // ("Critic %52 → %67 → %84 — agent kendi kendine iyileşiyor")
+        // instead of only showing the final iteration's score.
+        //
+        // Iteration number derives from the existing
+        // `criticIterateRetryCount` (0-indexed retry → 1-indexed iter).
+        // Existing `criticCodeOutput` keeps tracking the latest iteration so
+        // every downstream consumer (gate, score bar, attention chip) stays
+        // backward-compatible.
+        const currentRetry =
+          typeof existingIntermediate.criticIterateRetryCount === 'number'
+            ? (existingIntermediate.criticIterateRetryCount as number)
+            : 0;
+        const protoVerification = (
+          protoResult.data as { verificationReport?: { confidenceScore?: number } }
+        ).verificationReport;
+        const protoConfidence =
+          typeof protoVerification?.confidenceScore === 'number'
+            ? protoVerification.confidenceScore
+            : null;
+        const findings = criticResult.findings ?? [];
+        const newIterationEntry = {
+          iteration: currentRetry + 1,
+          protoConfidence,
+          criticScore: criticResult.overallScore ?? null,
+          criticFindingsCount: findings.length,
+          criticCriticalCount: findings.filter((f) => f.severity === 'critical').length,
+          timestamp: new Date().toISOString(),
+          decision: criticResult.approved ? 'approved' : 'rejected',
+        };
+        const existingHistory = Array.isArray(existingIntermediate.iterationHistory)
+          ? (existingIntermediate.iterationHistory as Array<Record<string, unknown>>)
+          : [];
+        const nextHistory = [...existingHistory, newIterationEntry];
+
         await this.store.update(pipelineId, {
-          intermediateState: { ...existingIntermediate, criticCodeOutput: criticResult },
+          intermediateState: {
+            ...existingIntermediate,
+            criticCodeOutput: criticResult,
+            iterationHistory: nextHistory,
+          },
         });
 
         // Level 4: Explainability — record critic-code reasoning

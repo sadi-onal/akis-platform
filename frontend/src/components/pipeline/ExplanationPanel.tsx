@@ -11,6 +11,7 @@ import { useI18n } from '../../i18n/useI18n';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { AcCoverageChecklist } from './AcCoverageChecklist';
 import { ScribeOutputDisclosures } from './ScribeOutputDisclosures';
+import { IterationTrajectory } from './IterationTrajectory';
 
 // Hard ceiling enforced by the backend feedback schema (B5,
 // `IterateFeedbackRequestSchema.feedback.max(2000)`). We mirror it
@@ -455,6 +456,12 @@ interface ReasoningCardProps {
   scribeSpec?: StructuredSpec | null;
   /** PR-V6: assumptions surfaced through the same disclosure UI. */
   scribeAssumptions?: string[] | null;
+  /**
+   * T4: Critic-Proto iterate loop trajectory threaded through from the
+   * `PipelineExplanation` payload. Only rendered on the Critic — Kod
+   * inceleme card; other agent cards ignore it.
+   */
+  iterationTrajectory?: import('../../types/pipeline').IterationTrajectory;
 }
 
 function ReasoningCard({
@@ -467,9 +474,17 @@ function ReasoningCard({
   acCoverage,
   scribeSpec,
   scribeAssumptions,
+  iterationTrajectory,
 }: ReasoningCardProps) {
   const hasStructuredFindings = !!stage.findings && stage.findings.length > 0;
   const showAcChecklist = stage.agentName === 'proto' && !!acCoverage && acCoverage.totalAcs > 0;
+  // T4: trajectory belongs to the Critic — Kod inceleme card (the only one
+  // that actually iterates). Spec critic + other agents skip it.
+  const showIterationTrajectory =
+    stage.agentName === 'critic' &&
+    stage.stageKey === 'critic-code' &&
+    !!iterationTrajectory &&
+    iterationTrajectory.entries.length > 0;
   // PR-V6: only the Scribe card renders the structured-spec disclosures.
   const showScribeOutputs =
     stage.agentName === 'scribe' &&
@@ -541,6 +556,11 @@ function ReasoningCard({
           className="mt-2"
         />
       )}
+      {/* T4: Critic-Proto iterate loop trajectory — per-iter Proto confidence
+          + Critic score + decision, so the user can see "%52 → %67 → %84
+          — agent kendi kendine iyileşiyor" instead of just the final
+          iteration's score. */}
+      {showIterationTrajectory && <IterationTrajectory trajectory={iterationTrajectory} />}
       {hasDetail && (
         <button
           type="button"
@@ -838,6 +858,7 @@ export function ExplanationPanel({
             acCoverage={acCoverage}
             scribeSpec={effectiveScribeSpec}
             scribeAssumptions={effectiveScribeAssumptions}
+            iterationTrajectory={explanation.iterationTrajectory}
           />
         ))}
       </div>

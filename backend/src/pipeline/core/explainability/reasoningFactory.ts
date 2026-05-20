@@ -2,7 +2,11 @@
 // Kept side-effect-free so they can be unit-tested in isolation; the
 // orchestrator just calls these and pushes the result into ExplainabilityService.
 
-import type { AgentReasoning } from './ExplainabilityTypes.js';
+import type {
+  AgentReasoning,
+  IterationHistoryEntry,
+  IterationTrajectory,
+} from './ExplainabilityTypes.js';
 import type { ScribeOutput, ProtoOutput, TraceOutput } from '../contracts/PipelineTypes.js';
 import type { CriticReviewOutput } from '../../agents/critic/CriticTypes.js';
 import { buildAcCoverage } from './acCoverage.js';
@@ -255,3 +259,25 @@ export function buildFallbackReasoning(
       : {}),
   };
 }
+
+// T4: turn the orchestrator's iterationHistory trail into the
+// PipelineExplanation-facing trajectory. Pure factory — no DB, no time.
+export function buildIterationTrajectory(
+  history: IterationHistoryEntry[] | undefined | null
+): IterationTrajectory | undefined {
+  if (!history || history.length === 0) return undefined;
+  const sorted = [...history].sort((a, b) => a.iteration - b.iteration);
+  const firstScore = sorted[0]?.criticScore;
+  const lastScore = sorted[sorted.length - 1]?.criticScore;
+  const criticScoreDelta =
+    typeof firstScore === 'number' && typeof lastScore === 'number'
+      ? lastScore - firstScore
+      : null;
+  const finalDecision = sorted[sorted.length - 1]?.decision ?? null;
+  return {
+    entries: sorted,
+    criticScoreDelta,
+    finalDecision: finalDecision ?? null,
+  };
+}
+

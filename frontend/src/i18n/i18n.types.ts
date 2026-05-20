@@ -1075,6 +1075,16 @@ export const MESSAGE_KEYS = [
   'pipeline.acCoverage.hideList',
   'pipeline.acCoverage.emptyState',
 
+  // T4 — Critic-Proto iteration trajectory
+  'pipeline.iteration.trajectory.title',
+  'pipeline.iteration.trajectory.empty',
+  'pipeline.iteration.trajectory.iterRow',
+  'pipeline.iteration.trajectory.iterRowNoProto',
+  'pipeline.iteration.trajectory.approved',
+  'pipeline.iteration.trajectory.rejected',
+  'pipeline.iteration.trajectory.blocked',
+  'pipeline.iteration.trajectory.findings',
+
   // P5b — AI request log viewer (admin/debug)
   'pipeline.aiLogs.tab',
   'pipeline.aiLogs.empty',

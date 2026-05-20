@@ -17,9 +17,11 @@ import { pipelineReasonings, pipelines } from '../../../db/schema.js';
 import type {
   AgentReasoning,
   AttentionPoint,
+  IterationHistoryEntry,
   PipelineExplanation,
   ExplainabilityConfig,
 } from './ExplainabilityTypes.js';
+import { buildIterationTrajectory } from './reasoningFactory.js';
 
 /**
  * Pipeline stages that mean "pipeline is done — no more reasoning will be
@@ -119,13 +121,42 @@ export class ExplainabilityService {
     if (stages.length === 0 && (await this.isTerminalPipeline(pipelineId))) {
       meta.persistencePreEpoch = true;
     }
+    // T4: surface Critic-Proto iterate trajectory alongside the stage cards
+    // so the frontend can render "Critic %52 → %67 → %84" without traversing
+    // pipeline.intermediateState directly.
+    const iterationTrajectory = await this.loadIterationTrajectory(pipelineId);
     return {
       pipelineId,
       stages,
       overallNarrative: this.narrateStages(stages),
       attentionPoints: this.collectAttentionPoints(stages),
+      ...(iterationTrajectory ? { iterationTrajectory } : {}),
       meta,
     };
+  }
+
+  /**
+   * T4: read `iterationHistory` off the pipeline row's intermediateState
+   * (populated by PipelineOrchestrator after each completed Proto → Critic
+   * pass) and hand it to the trajectory factory. Returns `undefined` when
+   * the loop never ran, so callers can `...spread` it conditionally.
+   */
+  private async loadIterationTrajectory(pipelineId: string) {
+    if (!this.db) return undefined;
+    try {
+      const rows = await this.db
+        .select({ intermediateState: pipelines.intermediateState })
+        .from(pipelines)
+        .where(eq(pipelines.id, pipelineId));
+      const intermediate = rows[0]?.intermediateState as Record<string, unknown> | null | undefined;
+      const history = intermediate?.iterationHistory;
+      if (!Array.isArray(history) || history.length === 0) return undefined;
+      return buildIterationTrajectory(history as IterationHistoryEntry[]);
+    } catch {
+      // Best-effort: a DB read failure here must not break the rest of the
+      // explanation surface.
+      return undefined;
+    }
   }
 
   /** Async sibling of generateNarrative kept for callers that only want the text. */

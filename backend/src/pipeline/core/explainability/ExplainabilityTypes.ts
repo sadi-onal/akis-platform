@@ -62,11 +62,35 @@ export interface PipelineExplanationMeta {
   persistencePreEpoch?: boolean;
 }
 
+/**
+ * T4: one entry per completed Proto → Critic pass, capturing the Proto
+ * confidence and Critic verdict for that iteration so the UI can render a
+ * trajectory ("Critic %52 → %67 → %84"). Iteration number is 1-indexed.
+ */
+export interface IterationHistoryEntry {
+  iteration: number;
+  protoConfidence: number | null;
+  criticScore: number | null;
+  criticFindingsCount: number;
+  criticCriticalCount: number;
+  timestamp: string;
+  decision?: 'approved' | 'rejected' | 'blocked';
+}
+
+export interface IterationTrajectory {
+  entries: IterationHistoryEntry[];
+  /** Delta between the first and last criticScore (positive = improvement). */
+  criticScoreDelta: number | null;
+  finalDecision: 'approved' | 'rejected' | 'blocked' | null;
+}
+
 export interface PipelineExplanation {
   pipelineId: string;
   stages: AgentReasoning[];
   overallNarrative: string;
   attentionPoints: AttentionPoint[];
+  /** T4: Critic-Proto iterate loop trajectory, when the loop ran at least once. */
+  iterationTrajectory?: IterationTrajectory;
   /** Optional meta — backend hints for the explanation panel UI. */
   meta?: PipelineExplanationMeta;
 }
