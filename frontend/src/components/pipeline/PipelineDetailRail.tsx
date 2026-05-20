@@ -66,10 +66,10 @@ export interface PipelineDetailRailProps {
   /** P5b — DI for tests; falls back to workflowsApi.getAiCalls */
   aiCallsFetcher?: (id: string) => Promise<AiCallEntry[]>;
   /**
-   * P5b — visibility override for the AI logs tab. When undefined, the tab
-   * is gated by `isInternalUiVisible()` (URL `?debug=1`, localStorage
-   * `akis_debug=true`, or build-time `VITE_SHOW_INTERNAL_UI=true`). Tests
-   * pass an explicit boolean so behavior is deterministic.
+   * P5b — visibility override for the AI logs tab. T1 removed the
+   * `isInternalUiVisible()` debug gate — the tab is now visible to every
+   * user by default. Tests can still set this to `false` to render the rail
+   * without it.
    */
   showAiLogsTab?: boolean;
   /**
@@ -110,25 +110,6 @@ export interface PipelineDetailRailProps {
 }
 
 type Tab = 'flow' | 'why' | 'regression' | 'aiLogs';
-
-/**
- * P5b — internal-UI gate for the AI Logs tab. Mirrors the same three-way
- * trigger as PreviewPanel's console (URL ?debug=1, localStorage flag, or
- * build-time env var). Re-implemented locally instead of importing so this
- * file stays free of cross-feature coupling.
- */
-function isInternalUiVisible(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    if (new URLSearchParams(window.location.search).get('debug') === '1') return true;
-    if (window.localStorage?.getItem('akis_debug') === 'true') return true;
-  } catch {
-    // SecurityError under privacy-mode sandboxing — fall through.
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const env = (import.meta as any)?.env;
-  return env?.VITE_SHOW_INTERNAL_UI === 'true';
-}
 
 // uiStates after which the regression confidence surface makes sense.
 // Both root pipelines and iteration children settle into `idle` once
@@ -238,9 +219,9 @@ export function PipelineDetailRail({
   const regressionVisible = isRegressionVisible(uiState, activities.length > 0, pipelineHasOutputs);
   const pushGateActive = isPushGate(uiState);
   const criticGateActive = isCriticGate(uiState);
-  // P5b: AI logs tab is internal-only. Parent can override (tests + future
-  // admin-role plumbing); fall back to URL/localStorage/env gate.
-  const aiLogsTabVisible = showAiLogsTab ?? isInternalUiVisible();
+  // T1: AI logs tab is visible to every user by default. Tests can still
+  // pass `showAiLogsTab={false}` to render the rail without it.
+  const aiLogsTabVisible = showAiLogsTab ?? true;
   // Keep the collapse contract from v0.7.0: collapse on idle. The
   // Regresyon tab is still clickable and renders content when the user
   // manually expands the rail; auto-expansion would clobber the chat
@@ -548,7 +529,7 @@ export function PipelineDetailRail({
                   onClick={() => setTab('aiLogs')}
                   className={`${tabBtnBase} ${effectiveTab === 'aiLogs' ? tabBtnActive : tabBtnInactive}`}
                 >
-                  AI Logları
+                  {t('pipeline.aiLogs.tab')}
                 </button>
               )}
             </div>

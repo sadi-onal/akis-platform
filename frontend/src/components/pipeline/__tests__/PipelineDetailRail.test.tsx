@@ -274,10 +274,10 @@ describe('PipelineDetailRail — interactions', () => {
   });
 });
 
-describe('PipelineDetailRail — P5b AI Logs tab gating', () => {
-  // Tab is internal-only. Parent passes `showAiLogsTab` explicitly so the
-  // production gate (URL/localStorage/env) is bypassed for deterministic
-  // tests.
+describe('PipelineDetailRail — P5b/T1 AI Logs tab', () => {
+  // T1 removed the production debug gate — the tab is now visible to every
+  // user by default. Tests can still pass `showAiLogsTab={false}` to render
+  // the rail without it (so other tab assertions stay deterministic).
   it('hides the AI Logları tab when showAiLogsTab is false', () => {
     render(
       <PipelineDetailRail
@@ -288,7 +288,7 @@ describe('PipelineDetailRail — P5b AI Logs tab gating', () => {
         showAiLogsTab={false}
       />
     );
-    expect(screen.queryByRole('tab', { name: 'AI Logları' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'pipeline.aiLogs.tab' })).toBeNull();
   });
 
   it('shows the AI Logları tab when showAiLogsTab is true', () => {
@@ -301,7 +301,7 @@ describe('PipelineDetailRail — P5b AI Logs tab gating', () => {
         showAiLogsTab
       />
     );
-    expect(screen.getByRole('tab', { name: 'AI Logları' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'pipeline.aiLogs.tab' })).toBeInTheDocument();
   });
 
   it('clicking the AI Logları tab triggers the aiCallsFetcher', async () => {
@@ -316,16 +316,15 @@ describe('PipelineDetailRail — P5b AI Logs tab gating', () => {
         aiCallsFetcher={aiCallsFetcher}
       />
     );
-    fireEvent.click(screen.getByRole('tab', { name: 'AI Logları' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'pipeline.aiLogs.tab' }));
     await waitFor(() => expect(aiCallsFetcher).toHaveBeenCalledWith('p-1'));
     // Empty state renders without crashing.
     await waitFor(() => expect(screen.getByTestId('ai-calls-empty')).toBeInTheDocument());
   });
 
-  it('hides tab by default (production gate disabled in test environment)', () => {
-    // No showAiLogsTab prop → falls back to isInternalUiVisible(). In
-    // jsdom the URL is `localhost`, localStorage is empty, and the env
-    // var is not set, so the gate is closed.
+  it('shows the AI Logları tab by default (T1 — no debug gate)', () => {
+    // T1: the debug gate (URL/localStorage/env) is gone. With no
+    // `showAiLogsTab` prop the tab is visible.
     render(
       <PipelineDetailRail
         pipelineId="p-1"
@@ -334,7 +333,7 @@ describe('PipelineDetailRail — P5b AI Logs tab gating', () => {
         currentStep={mkActivity('proto')}
       />
     );
-    expect(screen.queryByRole('tab', { name: 'AI Logları' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'pipeline.aiLogs.tab' })).toBeInTheDocument();
   });
 });
 

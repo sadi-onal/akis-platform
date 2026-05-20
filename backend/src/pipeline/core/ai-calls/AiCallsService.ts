@@ -1,24 +1,25 @@
 // P5b: AI request log viewer service.
 //
-// Looks up `job_ai_calls` rows for a pipeline so the admin/debug viewer can
-// render "what we asked the model and what it answered" for every AI call
-// the pipeline made.
+// Looks up `job_ai_calls` rows for a pipeline so the AI Logs tab can render
+// "what we asked the model and what it answered" for every AI call the
+// pipeline made.
 //
 // Correlation model
 // -----------------
-// `job_ai_calls.job_id` references the legacy `jobs` table (single-agent
-// endpoints under `/api/agents/*`). The pipeline orchestrator does not yet
-// insert into `job_ai_calls` directly — its AI calls flow through
-// PipelineMetricsService instead. To keep this endpoint useful both today
-// and after future wiring, we look for the conventional `pipelineId` slot
-// in `jobs.payload`. Pre-existing pipelines without such jobs simply yield
-// an empty list, which the UI renders as an "empty state" — no crash, no
-// noisy error.
+// Two write paths land in the same table:
+//   1. Pipeline orchestrator (T1, modern): writes one row per AI call with
+//      `pipeline_id` set directly.
+//   2. Legacy single-agent endpoints (`/api/agents/*`): write rows with
+//      `job_id` set, where `jobs.payload->>'pipelineId'` may carry a
+//      pipeline reference for the older flow.
+//
+// `getCalls(pipelineId)` returns the union of both, ordered by timestamp →
+// callIndex. Pre-existing pipelines that wrote nothing yield an empty list.
 //
 // Auth is enforced at the route layer (pipeline ownership). The service is
 // trusting and stateless.
 
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
 
 import { db as defaultDb } from '../../../db/client.js';
 import { jobAiCalls, jobs } from '../../../db/schema.js';
@@ -100,6 +101,11 @@ export class AiCallsService {
     if (!this.db) return [];
     if (!pipelineId) return [];
 
+    // T1: prefer the direct `pipeline_id` column (modern pipeline path).
+    // Fall back to legacy rows where the `jobs.payload->>'pipelineId'`
+    // shape carried the correlation, so single-agent endpoints that pre-date
+    // the column keep working. Drizzle's leftJoin returns the join as
+    // nullable; we filter via OR on the two possible matches.
     const rows = await this.db
       .select({
         id: jobAiCalls.id,
@@ -121,10 +127,14 @@ export class AiCallsService {
         toolCalls: jobAiCalls.toolCalls,
       })
       .from(jobAiCalls)
-      .innerJoin(jobs, eq(jobs.id, jobAiCalls.jobId))
+      .leftJoin(jobs, eq(jobs.id, jobAiCalls.jobId))
       .where(
-        and(
-          sql`(${jobs.payload}->>'pipelineId')::text = ${pipelineId}`
+        or(
+          eq(jobAiCalls.pipelineId, pipelineId),
+          and(
+            isNull(jobAiCalls.pipelineId),
+            sql`(${jobs.payload}->>'pipelineId')::text = ${pipelineId}`
+          )
         )
       )
       .orderBy(asc(jobAiCalls.timestamp), asc(jobAiCalls.callIndex));
