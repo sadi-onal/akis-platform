@@ -82,10 +82,11 @@ describe('AttentionBanner', () => {
     expect(screen.getByText('Bilgi')).toBeInTheDocument();
   });
 
+  // T5: display-only rename — Critic → Değerlendirme
   it('renders the issue text and stage', () => {
     render(<AttentionBanner points={[mk('high', 'critic', 'XSS açığı')]} />);
     expect(screen.getByText('XSS açığı')).toBeInTheDocument();
-    expect(screen.getByText('Critic')).toBeInTheDocument();
+    expect(screen.getByText('Değerlendirme')).toBeInTheDocument();
   });
 
   it('renders the granular critic stage label (spec vs kod)', () => {
@@ -97,7 +98,7 @@ describe('AttentionBanner', () => {
         ]}
       />
     );
-    expect(screen.getByText('Critic · spec')).toBeInTheDocument();
-    expect(screen.getByText('Critic · kod')).toBeInTheDocument();
+    expect(screen.getByText('Değerlendirme · spec')).toBeInTheDocument();
+    expect(screen.getByText('Değerlendirme · kod')).toBeInTheDocument();
   });
 });

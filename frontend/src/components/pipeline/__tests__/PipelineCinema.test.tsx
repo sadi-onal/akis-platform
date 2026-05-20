@@ -239,7 +239,7 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
         step: 'retry-trigger',
         retryCount: 2,
         progress: 80,
-        message: 'Critic kritik bulgu raporladı — Proto yeniden çalışıyor (2/3)',
+        message: 'Değerlendirme kritik bulgu raporladı — Proto yeniden çalışıyor (2/3)',
       }),
     ];
     const views = reduceStageViews(acts, acts[2]!);
@@ -618,12 +618,12 @@ describe('PipelineCinema component (PR-F 3-column)', () => {
         step: 'retry-trigger',
         retryCount: 2,
         progress: 80,
-        message: 'Critic kritik bulgu raporladı — Proto yeniden çalışıyor (2/3)',
+        message: 'Değerlendirme kritik bulgu raporladı — Proto yeniden çalışıyor (2/3)',
       }),
     ];
     render(<PipelineCinema activities={acts} currentStep={acts[2]!} />);
     const badge = screen.getByTestId('critic-retry-badge');
-    expect(badge).toHaveTextContent(/Critic düzeltiyor/);
+    expect(badge).toHaveTextContent(/Değerlendirme düzeltiyor/);
     expect(badge).toHaveTextContent(/2\/3/);
     // Trace column has no badge in this scenario.
     expect(screen.queryByTestId('trace-retry-badge')).toBeNull();

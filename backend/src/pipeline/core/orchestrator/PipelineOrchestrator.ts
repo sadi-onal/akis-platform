@@ -1930,7 +1930,8 @@ export class PipelineOrchestrator {
           });
           criticIterateEmit(
             'retry-trigger',
-            `Critic kritik bulgu raporladı — Proto yeniden çalışıyor (${criticIterateDecision.nextRetry}/${criticIterateDecision.maxRetries})`,
+            // T5: display-only rename — Critic → Değerlendirme
+            `Değerlendirme kritik bulgu raporladı — Proto yeniden çalışıyor (${criticIterateDecision.nextRetry}/${criticIterateDecision.maxRetries})`,
             80,
             criticIterateDecision.feedback,
             criticIterateDecision.nextRetry,
@@ -1978,7 +1979,8 @@ export class PipelineOrchestrator {
           pipelineId,
           stage: 'critic',
           step: 'gate_open',
-          message: 'Critic kritik bulgu raporladı — kullanıcı kararı bekleniyor',
+          // T5: display-only rename — Critic → Değerlendirme
+          message: 'Değerlendirme kritik bulgu raporladı — kullanıcı kararı bekleniyor',
           progress: 100,
           timestamp: new Date().toISOString(),
         });

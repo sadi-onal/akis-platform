@@ -403,6 +403,12 @@ export class ExplainabilityService {
   }
 
   private formatAgentName(agentName: string): string {
+    // T5: display-only rename — Critic → Değerlendirme, Validator → Statik
+    // Kontrol. Backend stage identifier stays 'critic' / 'validator' so
+    // persisted history keeps mapping cleanly; only the narrator label
+    // surfaces the new name.
+    if (agentName === 'critic') return 'Değerlendirme';
+    if (agentName === 'validator') return 'Statik Kontrol';
     return agentName.charAt(0).toUpperCase() + agentName.slice(1);
   }
 }

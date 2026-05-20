@@ -302,7 +302,8 @@ export function getRunningAgentName(state: ConversationUIState): string | null {
     case 'scribe_revise':
       return 'Scribe';
     case 'critic_running':
-      return 'Critic';
+      // T5: display-only rename
+      return 'Değerlendirme';
     case 'proto_running':
       return 'Proto';
     case 'trace_running':

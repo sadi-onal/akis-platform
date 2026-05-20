@@ -402,12 +402,16 @@ export interface ExplanationPanelProps {
   pipelineFetcher?: (id: string) => Promise<Workflow>;
 }
 
+// T5: display-only rename — Critic → Değerlendirme (Evaluator),
+// Validator → Statik Kontrol (Static Check). Backend agent identifiers
+// (e.g. activity stage 'critic', explainability stageKey 'critic-spec'
+// / 'critic-code') stay unchanged; only labels surface the new names.
 const AGENT_LABEL: Record<string, string> = {
   scribe: 'Scribe',
-  critic: 'Critic',
+  critic: 'Değerlendirme',
   proto: 'Proto',
   trace: 'Trace',
-  validator: 'Validator',
+  validator: 'Statik Kontrol',
 };
 
 const AGENT_TEXT: Record<string, string> = {
@@ -424,8 +428,8 @@ function formatAgent(name: string, stageKey?: string): string {
   // cards in the Açıklama tab with no clue which one targets the spec vs
   // the code. Backend already distinguishes via stageKey; surface it.
   if (name === 'critic') {
-    if (stageKey === 'critic-spec') return 'Critic — Spec inceleme';
-    if (stageKey === 'critic-code') return 'Critic — Kod inceleme';
+    if (stageKey === 'critic-spec') return 'Değerlendirme — Spec inceleme';
+    if (stageKey === 'critic-code') return 'Değerlendirme — Kod inceleme';
   }
   return AGENT_LABEL[name] ?? name.charAt(0).toUpperCase() + name.slice(1);
 }

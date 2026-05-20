@@ -15,7 +15,9 @@ import type { PipelineError } from '../../types/pipeline';
 
 function getAgentInfo(uiState: ConversationUIState) {
   if (uiState.includes('scribe')) return { label: 'Scribe', color: 'var(--ak-scribe, #3b82f6)' };
-  if (uiState === 'critic_running') return { label: 'Critic', color: 'var(--ak-critic, #f43f5e)' };
+  // T5: display-only rename — Critic → Değerlendirme
+  if (uiState === 'critic_running')
+    return { label: 'Değerlendirme', color: 'var(--ak-critic, #f43f5e)' };
   if (uiState === 'proto_running') return { label: 'Proto', color: 'var(--ak-proto, #f59e0b)' };
   if (uiState === 'trace_running') return { label: 'Trace', color: 'var(--ak-trace, #8b5cf6)' };
   if (uiState === 'ci_running') return { label: 'CI', color: 'var(--color-yellow-400, #facc15)' };

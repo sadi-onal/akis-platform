@@ -12,7 +12,7 @@ vi.mock('../../../i18n/useI18n', () => ({
       if (key === 'chat.criticFindings.applying') return 'Uygulanıyor...';
       if (key === 'chat.criticFindings.checkbox.aria') return 'Bu öneriyi uygulanacak listeye ekle';
       if (key === 'chat.criticFindings.feedbackHeader')
-        return 'Aşağıdaki Critic önerileri uygulansın:';
+        return 'Aşağıdaki Değerlendirme önerileri uygulansın:';
       if (key === 'chat.criticFindings.applyError') return 'Düzeltme gönderilemedi.';
       if (key === 'chat.criticFindings.applySuccess') return 'Yeni Proto iterasyonu başladı.';
       return key;
@@ -400,7 +400,13 @@ describe('ExplanationPanel', () => {
       />
     );
     const headings = screen.getAllByRole('heading', { level: 3 });
-    expect(headings.map((h) => h.textContent)).toEqual(['Scribe', 'Critic', 'Proto', 'Trace']);
+    // T5: display-only rename — Critic → Değerlendirme
+    expect(headings.map((h) => h.textContent)).toEqual([
+      'Scribe',
+      'Değerlendirme',
+      'Proto',
+      'Trace',
+    ]);
   });
 
   it('shows risks in red when present and detail expanded', () => {
@@ -531,7 +537,7 @@ describe('ExplanationPanel — PR-C suggestion selection', () => {
     await waitFor(() => expect(iterate).toHaveBeenCalledTimes(1));
     const [pipelineId, feedback] = iterate.mock.calls[0];
     expect(pipelineId).toBe('p-42');
-    expect(feedback).toContain('Aşağıdaki Critic önerileri uygulansın:');
+    expect(feedback).toContain('Aşağıdaki Değerlendirme önerileri uygulansın:');
     expect(feedback).toMatch(/1\.\s.+/);
     expect(feedback).toMatch(/2\.\s.+/);
     // Both selected suggestions should appear regardless of grouping order.

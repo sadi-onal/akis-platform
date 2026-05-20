@@ -20,9 +20,10 @@ describe('useConversationState', () => {
     it('maps critic_reviewing_spec to critic_running', () => {
       const { result } = renderHook(() => useConversationState('critic_reviewing_spec'));
       expect(result.current.uiState).toBe('critic_running');
-      expect(result.current.runningAgentName).toBe('Critic');
+      // T5: display-only rename — Critic → Değerlendirme
+      expect(result.current.runningAgentName).toBe('Değerlendirme');
       expect(result.current.showCancelButton).toBe(true);
-      expect(result.current.inputPlaceholder).toContain('Critic');
+      expect(result.current.inputPlaceholder).toContain('Değerlendirme');
     });
 
     it('maps awaiting_approval to awaiting_approval', () => {
@@ -175,7 +176,7 @@ describe('useConversationState', () => {
     // P8 — critic hard-block placeholder
     it('shows critic-resolution prompt when blocked', () => {
       const { result } = renderHook(() =>
-        useConversationState('awaiting_critic_resolution' as PipelineStage),
+        useConversationState('awaiting_critic_resolution' as PipelineStage)
       );
       expect(result.current.uiState).toBe('awaiting_critic_resolution');
       expect(result.current.inputPlaceholder).toContain('Kritik bulgu');

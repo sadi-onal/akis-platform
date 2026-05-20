@@ -348,8 +348,9 @@ describe('getRunningAgentName', () => {
     expect(getRunningAgentName('scribe_revise')).toBe('Scribe');
   });
 
-  it('returns Critic for critic_running', () => {
-    expect(getRunningAgentName('critic_running')).toBe('Critic');
+  // T5: display-only rename — Critic → Değerlendirme
+  it('returns Değerlendirme for critic_running', () => {
+    expect(getRunningAgentName('critic_running')).toBe('Değerlendirme');
   });
 
   it('returns Proto for proto_running', () => {

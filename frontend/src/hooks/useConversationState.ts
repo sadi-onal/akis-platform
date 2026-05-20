@@ -55,7 +55,8 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
       return "Kritik bulgu bulundu — düzeltmek için chat'e yaz ya da sağ paneldeki 'Yine de devam et' butonuna bas.";
     if (uiState === 'scribe_running' || uiState === 'scribe_revise')
       return 'Scribe çalışıyor... Mesaj bırakabilirsiniz.';
-    if (uiState === 'critic_running') return 'Critic inceliyor... Mesaj bırakabilirsiniz.';
+    // T5: display-only rename — Critic → Değerlendirme
+    if (uiState === 'critic_running') return 'Değerlendirme inceliyor... Mesaj bırakabilirsiniz.';
     if (uiState === 'proto_running') return 'Proto scaffold oluşturuyor... Mesaj bırakabilirsiniz.';
     if (uiState === 'trace_running') return 'Trace test yazıyor... Mesaj bırakabilirsiniz.';
     if (uiState === 'ci_running') return 'CI çalışıyor... Mesaj bırakabilirsiniz.';

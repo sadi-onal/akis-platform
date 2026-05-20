@@ -209,9 +209,10 @@ function StageColumn({
   const retryLabel = (() => {
     if (!showRetryBadge || !meta) return null;
     if (stage === 'proto' && meta.retrySource === 'critic') {
+      // T5: display-only rename — Critic → Değerlendirme
       return meta.maxRetries
-        ? `Critic düzeltiyor (${meta.retryCount}/${meta.maxRetries})`
-        : `Critic düzeltiyor (${meta.retryCount})`;
+        ? `Değerlendirme düzeltiyor (${meta.retryCount}/${meta.maxRetries})`
+        : `Değerlendirme düzeltiyor (${meta.retryCount})`;
     }
     return meta.maxRetries
       ? `Test deniyor (${meta.retryCount}/${meta.maxRetries})`

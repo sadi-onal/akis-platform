@@ -27,13 +27,16 @@ const SEVERITY_RANK = { high: 0, medium: 1, low: 2 } as const;
 // (critic-spec, critic-code) so the banner can disambiguate the two
 // Critic rounds; older payloads still send bare agent names so we
 // gracefully fall back to a Title-cased version.
+// T5: surface the renamed labels — Critic → Değerlendirme. Backend
+// stage identifiers ('critic', 'critic-spec', 'critic-code') stay the
+// same so persisted events keep displaying correctly.
 const STAGE_LABEL: Record<string, string> = {
   scribe: 'Scribe',
   proto: 'Proto',
   trace: 'Trace',
-  critic: 'Critic',
-  'critic-spec': 'Critic · spec',
-  'critic-code': 'Critic · kod',
+  critic: 'Değerlendirme',
+  'critic-spec': 'Değerlendirme · spec',
+  'critic-code': 'Değerlendirme · kod',
 };
 
 function labelForStage(stage: string): string {

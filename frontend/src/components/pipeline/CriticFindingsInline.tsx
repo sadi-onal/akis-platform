@@ -78,7 +78,7 @@ export function CriticFindingsInline({
   // yoksa client-side hesaplanır — backward-compat).
   const maxSeverity =
     criticReview.maxSeverity ??
-    (findings.reduce<'critical' | 'major' | 'minor' | 'info'>((acc, f) => {
+    findings.reduce<'critical' | 'major' | 'minor' | 'info'>((acc, f) => {
       const order: Record<typeof acc, number> = {
         info: 0,
         minor: 1,
@@ -86,7 +86,7 @@ export function CriticFindingsInline({
         critical: 3,
       };
       return order[f.severity] > order[acc] ? f.severity : acc;
-    }, 'info'));
+    }, 'info');
 
   const chipClass =
     maxSeverity === 'critical'
@@ -106,7 +106,7 @@ export function CriticFindingsInline({
     >
       <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-ak-text-tertiary">
-          Critic incelemesi
+          Değerlendirme
         </h4>
         <span
           className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${chipClass}`}
