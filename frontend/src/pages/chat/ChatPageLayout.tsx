@@ -318,7 +318,12 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       // PR-V6 — thread full Scribe spec to the rail so the
                       // Açıklama tab's Scribe card surfaces AC + user stories
                       // + problem statement as disclosures.
+                      // PR-V6-fix (2026-05-20): also thread `assumptions` so
+                      // the Varsayımlar disclosure renders alongside the spec.
+                      // Without this, ChatPanel accepted the prop but no
+                      // caller ever supplied it.
                       scribeSpec={activeWorkflow?.stages?.scribe?.spec}
+                      scribeAssumptions={activeWorkflow?.stages?.scribe?.assumptions}
                       onCriticResolved={
                         onPushResolved
                           ? () => {

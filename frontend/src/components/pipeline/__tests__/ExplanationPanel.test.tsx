@@ -30,6 +30,28 @@ import type {
   AgentReasoning,
   ReasoningFinding,
 } from '../../../types/pipeline';
+import type { StructuredSpec } from '../../../types/workflow';
+
+const mkSpec = (overrides: Partial<StructuredSpec> = {}): StructuredSpec => ({
+  title: 'Görev Yönetim Uygulaması',
+  problemStatement: 'Kullanıcı görevlerini takip etmek istiyor.',
+  userStories: [
+    {
+      persona: 'Yönetici',
+      as: 'Yönetici',
+      action: 'görev oluştur',
+      iWant: 'görev oluştur',
+      benefit: 'ekip ilerlesin',
+      soThat: 'ekip ilerlesin',
+    },
+  ],
+  acceptanceCriteria: [
+    { id: 'AC-1', given: 'liste boş', when: 'görev eklerim', then: 'listede görünür' },
+    { id: 'AC-2', given: 'görev var', when: 'tamamlandı işaretlerim', then: 'arşivlenir' },
+  ],
+  outOfScope: ['Mobil uygulama'],
+  ...overrides,
+});
 
 const mkStage = (overrides: Partial<AgentReasoning> = {}): AgentReasoning => ({
   agentName: 'scribe',
@@ -89,6 +111,106 @@ describe('ExplanationPanel', () => {
     expect(screen.getByText(/İsterseniz yeniden çalıştırabilirsiniz/)).toBeInTheDocument();
     // The generic empty state should NOT appear when the legacy banner does.
     expect(screen.queryByText(/Henüz açıklama yok/)).toBeNull();
+  });
+
+  // PR-V6-fix (2026-05-20): when reasoning persistence has no rows yet
+  // (pipeline_reasonings empty) the panel used to early-return a placeholder
+  // and the Scribe spec disclosures threaded via `scribeSpec` silently
+  // disappeared — even when `workflow.stages.scribe.spec` was fully
+  // populated. Smoke verification on 2026-05-19 found DOM had 0
+  // `<details>` elements in that scenario. The fix renders a fallback
+  // Scribe card with the spec disclosures whenever `scribeSpec` carries
+  // content, regardless of `explanation.stages.length`.
+  describe('PR-V6-fix — Scribe disclosures fallback when no reasoning rows', () => {
+    it('renders spec disclosures when stages is empty but scribeSpec is provided', () => {
+      render(
+        <ExplanationPanel
+          pipelineId="p-1"
+          explanation={mkExplanation({ stages: [] })}
+          scribeSpec={mkSpec()}
+        />
+      );
+      expect(screen.getByTestId('scribe-spec-fallback-card')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-output-disclosures')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-acceptance-criteria-disclosure')).toBeInTheDocument();
+      expect(screen.getByText(/Kabul Kriterleri \(2\)/)).toBeInTheDocument();
+      // Placeholder still appears below so the "no reasoning rows" signal is not lost
+      expect(screen.getByText(/Henüz açıklama yok/)).toBeInTheDocument();
+    });
+
+    it('renders spec disclosures when stages is empty + persistencePreEpoch flag is set', () => {
+      render(
+        <ExplanationPanel
+          pipelineId="p-1"
+          explanation={mkExplanation({ stages: [], meta: { persistencePreEpoch: true } })}
+          scribeSpec={mkSpec()}
+        />
+      );
+      expect(screen.getByTestId('scribe-spec-fallback-card')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-acceptance-criteria-disclosure')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Bu pipeline eski sürümde tamamlandı, açıklama kaydı yok/)
+      ).toBeInTheDocument();
+    });
+
+    it('renders assumption disclosure when only scribeAssumptions are provided (empty stages)', () => {
+      render(
+        <ExplanationPanel
+          pipelineId="p-1"
+          explanation={mkExplanation({ stages: [] })}
+          scribeAssumptions={['Modal kullanılacak', 'PostgreSQL veritabanı']}
+        />
+      );
+      expect(screen.getByTestId('scribe-spec-fallback-card')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-assumptions-disclosure')).toBeInTheDocument();
+      expect(screen.getByText(/Varsayımlar \(2\)/)).toBeInTheDocument();
+    });
+
+    it('falls through to the placeholder when stages empty AND no spec/assumptions', () => {
+      render(<ExplanationPanel pipelineId="p-1" explanation={mkExplanation({ stages: [] })} />);
+      expect(screen.queryByTestId('scribe-spec-fallback-card')).toBeNull();
+      expect(screen.queryByTestId('scribe-output-disclosures')).toBeNull();
+      expect(screen.getByText(/Henüz açıklama yok/)).toBeInTheDocument();
+    });
+
+    it('renders fallback card when stages have rows but no Scribe stage row', () => {
+      // Partial persistence: Proto reasoning persisted but the Scribe row was
+      // dropped. ReasoningCard's `agentName === 'scribe'` gate would never
+      // fire so the disclosures stayed hidden. The fallback card surfaces
+      // them at the top of the panel.
+      render(
+        <ExplanationPanel
+          pipelineId="p-1"
+          explanation={mkExplanation({
+            stages: [mkStage({ agentName: 'proto', decision: 'Proto karar' })],
+          })}
+          scribeSpec={mkSpec()}
+        />
+      );
+      expect(screen.getByTestId('scribe-spec-fallback-card')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-acceptance-criteria-disclosure')).toBeInTheDocument();
+      // Proto stage card is still rendered below
+      expect(screen.getByText('Proto karar')).toBeInTheDocument();
+    });
+
+    it('does NOT render fallback card when stages already contain a Scribe stage', () => {
+      // Happy path — ReasoningCard's existing `showScribeOutputs` gate handles
+      // the disclosure rendering. Adding a second fallback card would create
+      // a duplicate UI.
+      render(
+        <ExplanationPanel
+          pipelineId="p-1"
+          explanation={mkExplanation({
+            stages: [mkStage({ agentName: 'scribe', decision: 'Scribe karar' })],
+          })}
+          scribeSpec={mkSpec()}
+        />
+      );
+      expect(screen.queryByTestId('scribe-spec-fallback-card')).toBeNull();
+      // The disclosures still render — via the Scribe ReasoningCard
+      expect(screen.getByTestId('scribe-output-disclosures')).toBeInTheDocument();
+      expect(screen.getByTestId('scribe-acceptance-criteria-disclosure')).toBeInTheDocument();
+    });
   });
 
   // PR-B (2026-05-18): the panel no longer renders an inline
