@@ -736,6 +736,154 @@ describe('UsageTab', () => {
   });
 });
 
+// ---------- UsageTab — refresh behavior (PR-V) ----------
+//
+// Regression: numbers used to be stuck at mount-time values until the user
+// hard-reloaded. UsageTab now polls every 30s, re-fetches on window focus, and
+// exposes a manual Refresh button.
+
+describe('UsageTab — auto-refresh', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    withTab('usage');
+    globalThis.fetch = makeFetch() as unknown as typeof fetch;
+  });
+
+  function mkUsage(jobCount: number) {
+    return {
+      period: { start: '2026-05-01', end: '2026-05-31' },
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        estimatedCostUsd: 0.005,
+        jobCount,
+      },
+      userIsAdmin: false,
+    };
+  }
+
+  it('re-fetches every 30 seconds via setInterval (poll)', async () => {
+    mockGetUsage
+      .mockResolvedValueOnce(mkUsage(1))
+      .mockResolvedValueOnce(mkUsage(2))
+      .mockResolvedValueOnce(mkUsage(3));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<SettingsPage />);
+      // Initial mount fetch.
+      await vi.waitFor(() => {
+        expect(mockGetUsage).toHaveBeenCalledTimes(1);
+      });
+      // After 30s the interval should fire once more.
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.waitFor(() => {
+        expect(mockGetUsage).toHaveBeenCalledTimes(2);
+      });
+      // And again at the 60s mark.
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.waitFor(() => {
+        expect(mockGetUsage).toHaveBeenCalledTimes(3);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('re-fetches when the window receives a focus event', async () => {
+    mockGetUsage.mockResolvedValueOnce(mkUsage(1)).mockResolvedValueOnce(mkUsage(2));
+    render(<SettingsPage />);
+    await waitFor(() => {
+      expect(mockGetUsage).toHaveBeenCalledTimes(1);
+    });
+    fireEvent(window, new Event('focus'));
+    await waitFor(() => {
+      expect(mockGetUsage).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('re-fetches when the manual Refresh button is clicked', async () => {
+    mockGetUsage.mockResolvedValueOnce(mkUsage(7)).mockResolvedValueOnce(mkUsage(9));
+    render(<SettingsPage />);
+    const button = await screen.findByTestId('usage-refresh');
+    expect(mockGetUsage).toHaveBeenCalledTimes(1);
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(mockGetUsage).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('renders the "last updated" timestamp once data has loaded', async () => {
+    mockGetUsage.mockResolvedValue(mkUsage(5));
+    render(<SettingsPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId('usage-last-updated')).toBeInTheDocument();
+    });
+    // Initial render is within 5 seconds of "now" so the formatter returns
+    // "Az önce" (TR — the mocked locale).
+    expect(screen.getByTestId('usage-last-updated').textContent).toMatch(
+      /(Az önce|Just now|Son güncelleme|Last updated)/
+    );
+  });
+
+  it('stops polling after unmount (no leaked timers)', async () => {
+    mockGetUsage.mockResolvedValue(mkUsage(1));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { unmount } = render(<SettingsPage />);
+      await vi.waitFor(() => {
+        expect(mockGetUsage).toHaveBeenCalledTimes(1);
+      });
+      unmount();
+      mockGetUsage.mockClear();
+      await vi.advanceTimersByTimeAsync(60_000);
+      // No additional fetches after unmount.
+      expect(mockGetUsage).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ---------- formatLastUpdated helper ----------
+
+describe('formatLastUpdated', () => {
+  it('returns "Az önce" for deltas under 5 seconds (tr)', async () => {
+    const { formatLastUpdated } = await import('../SettingsPage');
+    const now = new Date('2026-05-20T12:00:04Z');
+    const updated = new Date('2026-05-20T12:00:00Z');
+    expect(formatLastUpdated(now, updated, 'tr')).toBe('Az önce');
+  });
+
+  it('returns seconds for sub-minute deltas (tr)', async () => {
+    const { formatLastUpdated } = await import('../SettingsPage');
+    const now = new Date('2026-05-20T12:00:30Z');
+    const updated = new Date('2026-05-20T12:00:00Z');
+    expect(formatLastUpdated(now, updated, 'tr')).toBe('30 sn önce');
+  });
+
+  it('returns minutes for sub-hour deltas (tr)', async () => {
+    const { formatLastUpdated } = await import('../SettingsPage');
+    const now = new Date('2026-05-20T12:05:00Z');
+    const updated = new Date('2026-05-20T12:00:00Z');
+    expect(formatLastUpdated(now, updated, 'tr')).toBe('5 dk önce');
+  });
+
+  it('returns hours for >=1h deltas (en)', async () => {
+    const { formatLastUpdated } = await import('../SettingsPage');
+    const now = new Date('2026-05-20T14:00:00Z');
+    const updated = new Date('2026-05-20T12:00:00Z');
+    expect(formatLastUpdated(now, updated, 'en')).toBe('2h ago');
+  });
+
+  it('renders "Just now" for English locale', async () => {
+    const { formatLastUpdated } = await import('../SettingsPage');
+    const now = new Date('2026-05-20T12:00:02Z');
+    const updated = new Date('2026-05-20T12:00:00Z');
+    expect(formatLastUpdated(now, updated, 'en')).toBe('Just now');
+  });
+});
+
 // ---------- JiraSection PAT fallback ----------
 
 describe('JiraSection — PAT fallback', () => {

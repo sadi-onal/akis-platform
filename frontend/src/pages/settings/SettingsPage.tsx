@@ -1779,18 +1779,97 @@ function JiraSection() {
 /*  Usage Tab                                                          */
 /* ------------------------------------------------------------------ */
 
+/** Poll interval for Usage tab (ms). 30s is a balance between freshness and
+ *  request volume — the endpoint is cheap (single Postgres aggregate) but we
+ *  don't want to hammer it. */
+export const USAGE_POLL_INTERVAL_MS = 30_000;
+
+/**
+ * Render a "Son güncelleme: X" timestamp from a `Date`.
+ * Exported for unit testing the formatter without mounting the tab.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatLastUpdated(now: Date, updatedAt: Date, locale: string): string {
+  const deltaSec = Math.max(0, Math.floor((now.getTime() - updatedAt.getTime()) / 1000));
+  const isTr = locale.startsWith('tr');
+  if (deltaSec < 5) return isTr ? 'Az önce' : 'Just now';
+  if (deltaSec < 60) {
+    return isTr ? `${deltaSec} sn önce` : `${deltaSec}s ago`;
+  }
+  const deltaMin = Math.floor(deltaSec / 60);
+  if (deltaMin < 60) {
+    return isTr ? `${deltaMin} dk önce` : `${deltaMin}m ago`;
+  }
+  const deltaHr = Math.floor(deltaMin / 60);
+  return isTr ? `${deltaHr} sa önce` : `${deltaHr}h ago`;
+}
+
 function UsageTab() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [data, setData] = useState<Awaited<ReturnType<typeof api.getUsage>> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  /** Tick state so the relative timestamp re-renders every 30s even without new data. */
+  const [, setNowTick] = useState(0);
+
+  // Fetch is wrapped in useCallback so it can be referenced by the manual
+  // refresh button, the interval, and the focus listener without stale-closure
+  // bugs (the bug we are fixing — old code only fetched once on mount).
+  const fetchUsage = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setRefreshing(true);
+    try {
+      const d = await api.getUsage();
+      setData(d);
+      setLastUpdatedAt(new Date());
+    } catch {
+      // Keep stale data on transient errors; the user can still see last-good values.
+      // Refresh attempts will retry automatically via the interval.
+    } finally {
+      if (!opts.silent) setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    api
-      .getUsage()
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+    const initial = async () => {
+      try {
+        const d = await api.getUsage();
+        if (!cancelled) {
+          setData(d);
+          setLastUpdatedAt(new Date());
+        }
+      } catch {
+        if (!cancelled) setData(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void initial();
+
+    // Poll every 30s while the tab is mounted.
+    const interval = window.setInterval(() => {
+      void fetchUsage({ silent: true });
+    }, USAGE_POLL_INTERVAL_MS);
+
+    // Re-fetch when the user returns to the window/tab.
+    const onFocus = () => {
+      void fetchUsage({ silent: true });
+    };
+    window.addEventListener('focus', onFocus);
+
+    // Tick every 15s so the "X mins ago" label stays fresh.
+    const tickInterval = window.setInterval(() => {
+      setNowTick((n) => n + 1);
+    }, 15_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.clearInterval(tickInterval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [fetchUsage]);
 
   if (loading) {
     return (
@@ -1833,12 +1912,42 @@ function UsageTab() {
     <div className="space-y-4">
       <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-ak-text-primary">
-            {t('settings.usage.title')}
-          </h2>
-          <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-semibold text-ak-primary">
-            {t('settings.usage.unlimited')}
-          </span>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-ak-text-primary">
+              {t('settings.usage.title')}
+            </h2>
+            {lastUpdatedAt && (
+              <span
+                className="text-[10px] text-ak-text-tertiary"
+                data-testid="usage-last-updated"
+                title={lastUpdatedAt.toLocaleString(locale.startsWith('tr') ? 'tr-TR' : 'en-US')}
+              >
+                {locale.startsWith('tr') ? 'Son güncelleme: ' : 'Last updated: '}
+                {formatLastUpdated(new Date(), lastUpdatedAt, locale)}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void fetchUsage()}
+              disabled={refreshing}
+              data-testid="usage-refresh"
+              className="rounded-md border border-ak-border bg-ak-surface-2 px-2 py-1 text-[10px] font-medium text-ak-text-secondary transition hover:bg-ak-surface-3 hover:text-ak-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={locale.startsWith('tr') ? 'Yenile' : 'Refresh'}
+            >
+              {refreshing
+                ? locale.startsWith('tr')
+                  ? 'Yenileniyor…'
+                  : 'Refreshing…'
+                : locale.startsWith('tr')
+                  ? 'Yenile'
+                  : 'Refresh'}
+            </button>
+            <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-semibold text-ak-primary">
+              {t('settings.usage.unlimited')}
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
