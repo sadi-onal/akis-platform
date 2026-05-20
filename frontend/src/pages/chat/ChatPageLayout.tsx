@@ -254,7 +254,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
         {conversationId || pendingConv ? (
           <div ref={splitContainerRef} className="flex min-w-0 flex-1 min-h-0">
             <div
-              className="min-w-0 flex-1 flex flex-col min-h-0"
+              className="min-w-0 flex-1 flex flex-col min-h-0 overflow-hidden"
               style={
                 showPreview
                   ? { flexBasis: `${100 - previewWidth}%`, flexGrow: 0, flexShrink: 0 }

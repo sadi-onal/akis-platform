@@ -76,7 +76,7 @@ export function ChatHeader({
   const { t } = useI18n();
   const modeTooltip = mode ? t(MODE_TOOLTIP_KEYS[mode]) : '';
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-ak-border bg-ak-surface px-4 py-3 z-10">
+    <div className="flex min-w-0 shrink-0 items-center gap-2 border-b border-ak-border bg-ak-surface px-4 py-3 z-10">
       {showBackButton && (
         <button
           onClick={onBack}
