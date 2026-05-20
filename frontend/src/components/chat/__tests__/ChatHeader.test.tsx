@@ -185,4 +185,30 @@ describe('ChatHeader', () => {
     fireEvent.click(screen.getByLabelText('Önizleme'));
     expect(onToggle).toHaveBeenCalledOnce();
   });
+
+  // PR-V-preview-overlap (2026-05-20): when the right preview pane is widened,
+  // the chat panel container shrinks. Without `min-w-0` on the header, flex
+  // children (title, badges, Önizleme button) would refuse to shrink and the
+  // rightmost item (the Önizleme button) ended up visually crossing the
+  // separator line between the two panes. Asserting both `min-w-0` (allow
+  // flex shrink) and `shrink-0` (header itself stays a row, doesn't collapse
+  // vertically) here so a future refactor that drops either class trips this.
+  it('header row carries min-w-0 + shrink-0 so flex children negotiate width without overflowing the panel', () => {
+    const { container } = render(
+      <ChatHeader
+        {...baseProps}
+        hasPreview
+        showPreview={false}
+        onTogglePreview={vi.fn()}
+        branch="main"
+        prUrl="https://github.com/testuser/todo-app/pull/42"
+        prNumber={42}
+      />
+    );
+    const headerRow = container.firstElementChild as HTMLElement | null;
+    expect(headerRow).not.toBeNull();
+    const classes = headerRow!.className;
+    expect(classes).toContain('min-w-0');
+    expect(classes).toContain('shrink-0');
+  });
 });
