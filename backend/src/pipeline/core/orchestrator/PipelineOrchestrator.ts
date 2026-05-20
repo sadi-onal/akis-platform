@@ -298,6 +298,15 @@ export class PipelineOrchestrator {
   // ─── Chat memory (issue #462) ────────────────────
   private chatMemory: ChatMemoryContextService = chatMemoryContextService;
 
+  /**
+   * PR-V-github-401-graceful — optional hook to clear stale GitHub tokens
+   * from `github_integrations` after a 401. Constructor-injected (not always
+   * provided in tests / DI seams that don't talk to the DB). When unset, the
+   * orchestrator still surfaces the user-facing GITHUB_TOKEN_INVALID error;
+   * the cleanup is a separate concern.
+   */
+  private invalidateGitHubToken?: (userId: string) => Promise<boolean>;
+
   constructor(
     private store: PipelineStore,
     private scribe: ScribeAgent,
@@ -315,6 +324,47 @@ export class PipelineOrchestrator {
       onTokenUsage?: import('../pipeline-factory.js').TokenUsageCallback
     ) => AgentSet
   ) {}
+
+  /** PR-V-github-401-graceful — install token-invalidation hook (DI seam). */
+  setGitHubTokenInvalidator(fn: (userId: string) => Promise<boolean>): void {
+    this.invalidateGitHubToken = fn;
+  }
+
+  /**
+   * PR-V-github-401-graceful — best-effort cleanup helper. When a pipeline
+   * error surfaces with code `GITHUB_TOKEN_INVALID`, drop the user's stale
+   * token row from `github_integrations` so the next pipeline starts from
+   * an empty state (forcing the reconnect modal). Safe to call without an
+   * invalidator wired — becomes a logged no-op.
+   */
+  private async maybeInvalidateGitHubTokenOnAuthError(
+    pipelineId: string,
+    errorCode: string
+  ): Promise<void> {
+    if (errorCode !== 'GITHUB_TOKEN_INVALID') return;
+    if (!this.invalidateGitHubToken) {
+      logger.debug(
+        { pipelineId },
+        '[Pipeline] GITHUB_TOKEN_INVALID — no invalidator wired, skipping cleanup'
+      );
+      return;
+    }
+    const pipelineForAuth = await this.store.getById(pipelineId);
+    const ownerId = pipelineForAuth?.userId;
+    if (!ownerId) return;
+    try {
+      const cleared = await this.invalidateGitHubToken(ownerId);
+      logger.warn(
+        { pipelineId, userId: ownerId, cleared },
+        '[Pipeline] GITHUB_TOKEN_INVALID — stale github_integrations row cleared'
+      );
+    } catch (cleanupErr) {
+      logger.error(
+        { pipelineId, userId: ownerId, err: String(cleanupErr) },
+        '[Pipeline] GITHUB_TOKEN_INVALID — token invalidation failed (continuing)'
+      );
+    }
+  }
 
   /** Inject optional agent activity logger for integrity metrics */
   setActivityLogger(logger: { record(entry: Record<string, unknown>): Promise<void> }): void {
@@ -1307,6 +1357,9 @@ export class PipelineOrchestrator {
     if (await this.isCancelled(pipelineId)) return;
 
     if (protoResult.type === 'error') {
+      // PR-V-github-401-graceful — clear stale token row when Proto's
+      // GitHub call surfaced a 401-derived error.
+      await this.maybeInvalidateGitHubTokenOnAuthError(pipelineId, protoResult.error.code);
       await this.store.update(pipelineId, { stage: 'failed', error: protoResult.error });
       this.emitEvent(pipelineId, 'error', 'failed', protoResult.error);
       return;
@@ -1529,6 +1582,9 @@ export class PipelineOrchestrator {
     if (await this.isCancelled(pipelineId)) return;
 
     if (protoResult.type === 'error') {
+      // PR-V-github-401-graceful — clear stale token row when Proto's
+      // GitHub call surfaced a 401-derived error.
+      await this.maybeInvalidateGitHubTokenOnAuthError(pipelineId, protoResult.error.code);
       await this.store.update(pipelineId, {
         stage: 'failed',
         error: protoResult.error,
@@ -3046,11 +3102,18 @@ export class PipelineOrchestrator {
 
     if (traceResult.type === 'error') {
       const isAiTimeout = traceResult.error.code === 'TRACE_AI_CALL_TIMEOUT';
+      // PR-V-github-401-graceful — auth failure surfaced from the adapter.
+      // Clear the stale token row (best-effort) and skip FixLoop entirely;
+      // retrying with the same dead credential will just 401 again.
+      const isGitHubAuthError = traceResult.error.code === 'GITHUB_TOKEN_INVALID';
+      await this.maybeInvalidateGitHubTokenOnAuthError(pipelineId, traceResult.error.code);
       traceEmit(
         'error',
         isAiTimeout
           ? 'AI servisi yanıt vermedi — test üretimi atlandı'
-          : `Test üretimi başarısız: ${traceResult.error.message}`,
+          : isGitHubAuthError
+            ? 'GitHub bağlantınız geçersiz — lütfen yeniden bağlanın'
+            : `Test üretimi başarısız: ${traceResult.error.message}`,
         0
       );
 
@@ -3102,7 +3165,10 @@ export class PipelineOrchestrator {
       // ─── Level 3: FixLoop auto-trigger on Trace failure ───
       const currentPipelineForFix = await this.store.getById(pipelineId);
       const protoOutput = currentPipelineForFix?.protoOutput;
-      if (protoOutput && spec && !isAiTimeout) {
+      // PR-V-github-401-graceful — auth failures cannot be fixed by
+      // regenerating code. Skip FixLoop and go straight to completed_partial
+      // so the user sees the actionable reconnect-github banner.
+      if (protoOutput && spec && !isAiTimeout && !isGitHubAuthError) {
         logger.info({ pipelineId }, '[Pipeline] Trace failed — triggering FixLoop');
         await this.store.update(pipelineId, { stage: 'fix_loop_iteration' });
         this.emitEvent(pipelineId, 'stage_change', 'fix_loop_iteration');

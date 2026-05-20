@@ -86,6 +86,32 @@ async function ghFetch<T>(token: string, method: string, path: string, body?: un
       throw err;
     }
 
+    // PR-V-github-401-graceful: 401 on ANY GitHub endpoint means the
+    // OAuth/PAT token is invalid or expired (GitHub revoked, user-side
+    // revoked, token rotated). Surface a dedicated typed error so the
+    // pipeline never retries — auth failures don't recover with backoff.
+    // The orchestrator catches this class and (a) clears the stale token
+    // from `github_integrations`, (b) returns a user-actionable error code
+    // (GITHUB_TOKEN_INVALID) that the banner renders with a "reconnect"
+    // CTA pointing at /settings?tab=integrations.
+    if (res.status === 401) {
+      const text = await res.text().catch(() => '');
+      let detail = '';
+      try {
+        const json = JSON.parse(text);
+        detail = json.message || text;
+      } catch {
+        detail = text;
+      }
+      logger.warn(
+        { method, path, status: 401, body: text.slice(0, 200) },
+        'github_rest_unauthorized'
+      );
+      throw new GitHubTokenInvalidError(
+        `GitHub API ${method} ${path} → 401: ${detail || 'Bad credentials'}`
+      );
+    }
+
     // Rate limit: back off and retry
     if (res.status === 429 || res.status === 403) {
       const retryAfter = res.headers.get('retry-after');

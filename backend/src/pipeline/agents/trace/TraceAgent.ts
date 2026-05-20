@@ -9,6 +9,7 @@ import {
   PipelineErrorCode,
   createPipelineError,
   RETRY_CONFIG,
+  GitHubTokenInvalidError,
 } from '../../core/contracts/PipelineErrors.js';
 import { createActivityEmitter } from '../../core/activityEmitter.js';
 import { generateGherkinFromSpec } from '../../integrations/cucumberGenerator.js';
@@ -42,18 +43,13 @@ export interface TraceAIDeps {
   generateTextWithImages?(
     systemPrompt: string,
     userPrompt: string,
-    images: readonly AnthropicImageBlock[],
+    images: readonly AnthropicImageBlock[]
   ): Promise<string>;
 }
 
 export interface TraceGitHubDeps {
   listFiles(owner: string, repo: string, branch: string): Promise<string[]>;
-  getFileContent(
-    owner: string,
-    repo: string,
-    branch: string,
-    filePath: string
-  ): Promise<string>;
+  getFileContent(owner: string, repo: string, branch: string, filePath: string): Promise<string>;
   commitFile(
     owner: string,
     repo: string,
@@ -69,12 +65,7 @@ export interface TraceGitHubDeps {
     files: Array<{ path: string; content: string }>,
     message: string
   ): Promise<void>;
-  createBranch(
-    owner: string,
-    repo: string,
-    branch: string,
-    fromBranch?: string
-  ): Promise<void>;
+  createBranch(owner: string, repo: string, branch: string, fromBranch?: string): Promise<void>;
   createPR(
     owner: string,
     repo: string,
@@ -92,7 +83,16 @@ export type TraceResult =
 // ─── Constants ────────────────────────────────────
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.vue', '.svelte', '.css', '.html'];
-const EXCLUDE_PATTERNS = ['node_modules/', '.git/', 'dist/', 'build/', '.next/', 'coverage/', '.cache/', '__pycache__/'];
+const EXCLUDE_PATTERNS = [
+  'node_modules/',
+  '.git/',
+  'dist/',
+  'build/',
+  '.next/',
+  'coverage/',
+  '.cache/',
+  '__pycache__/',
+];
 const MAX_SOURCE_FILES = 80;
 const MAX_FILE_SIZE_BYTES = 100_000; // 100KB per file
 const AI_CALL_TIMEOUT_MS = RETRY_CONFIG.aiCallTimeoutMs;
@@ -102,7 +102,10 @@ const MAX_CODEBASE_CONTEXT_CHARS = RETRY_CONFIG.maxCodebaseContextChars;
 function withAiTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`AI call timed out after ${Math.round(ms / 1000)}s`)), ms);
+    timeoutId = setTimeout(
+      () => reject(new Error(`AI call timed out after ${Math.round(ms / 1000)}s`)),
+      ms
+    );
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
@@ -215,7 +218,7 @@ export class TraceAgent {
     ai: TraceAIDeps,
     github: TraceGitHubDeps,
     agenticDeps?: AgenticLoopDeps,
-    skillRegistry?: SkillRegistry,
+    skillRegistry?: SkillRegistry
   ) {
     this.ai = ai;
     this.github = github;
@@ -236,7 +239,7 @@ export class TraceAgent {
   private async dispatchGenerate(
     systemPrompt: string,
     userPrompt: string,
-    images?: readonly AnthropicImageBlock[],
+    images?: readonly AnthropicImageBlock[]
   ): Promise<string> {
     const hasImages = images && images.length > 0;
     if (hasImages && this.ai.generateTextWithImages) {
@@ -245,7 +248,7 @@ export class TraceAgent {
       } catch (err) {
         logger.warn(
           { err, imageCount: images.length },
-          '[trace] multimodal path failed, falling back to text-only',
+          '[trace] multimodal path failed, falling back to text-only'
         );
       }
     }
@@ -253,16 +256,15 @@ export class TraceAgent {
   }
 
   async execute(input: TraceInput): Promise<TraceResult> {
-    const emit = input.pipelineId
-      ? createActivityEmitter(input.pipelineId, 'trace')
-      : undefined;
+    const emit = input.pipelineId ? createActivityEmitter(input.pipelineId, 'trace') : undefined;
 
     // PR-F2 (2026-05-19): when running pre-push-gate, the orchestrator passes
     // dryRun=true PLUS Proto's in-memory files as `inputFiles`. We must skip
     // both the agentic GitHub tool-use loop AND the legacy listFiles fetch —
     // the scaffold isn't on GitHub yet. Test execution is also skipped (we
     // only generate the test plan + coverage matrix).
-    const useLocalFiles = input.dryRun === true && Array.isArray(input.inputFiles) && input.inputFiles.length > 0;
+    const useLocalFiles =
+      input.dryRun === true && Array.isArray(input.inputFiles) && input.inputFiles.length > 0;
 
     // Agentic path: if tool_use deps available and not dryRun, use Claude with tools.
     // dryRun (with or without inputFiles) always takes the legacy path so we can
@@ -288,13 +290,27 @@ export class TraceAgent {
       );
       // Filter to source-like files only (mirrors readCodebase's filter) but
       // keep the budget loose — Proto outputs are bounded by their own caps.
-      files = input.inputFiles!
-        .filter((f) => this.isSourceFile(f.filePath) && f.content.length <= MAX_FILE_SIZE_BYTES)
+      files = input
+        .inputFiles!.filter(
+          (f) => this.isSourceFile(f.filePath) && f.content.length <= MAX_FILE_SIZE_BYTES
+        )
         .slice(0, MAX_SOURCE_FILES)
         .map((f) => ({ filePath: f.filePath, content: f.content }));
     } else {
-      emit?.('fetching', 'İskelet dalından kaynak dosyalar alınıyor...', 15, undefined, undefined, 'pipeline.activity.trace.reading_repo');
-      const codebaseResult = await this.readCodebase(input.repoOwner, input.repo, input.branch, emit);
+      emit?.(
+        'fetching',
+        'İskelet dalından kaynak dosyalar alınıyor...',
+        15,
+        undefined,
+        undefined,
+        'pipeline.activity.trace.reading_repo'
+      );
+      const codebaseResult = await this.readCodebase(
+        input.repoOwner,
+        input.repo,
+        input.branch,
+        emit
+      );
       if (codebaseResult.type === 'error') {
         emit?.('error', 'Kod tabanı okunamadı', 0);
         return codebaseResult;
@@ -303,12 +319,18 @@ export class TraceAgent {
     }
 
     if (files.length === 0) {
-      emit?.('error', useLocalFiles ? 'Lokal scaffold dosyası bulunamadı' : 'Depoda kaynak dosya bulunamadı', 0);
+      emit?.(
+        'error',
+        useLocalFiles ? 'Lokal scaffold dosyası bulunamadı' : 'Depoda kaynak dosya bulunamadı',
+        0
+      );
       return {
         type: 'error',
         error: createPipelineError(
           PipelineErrorCode.TRACE_EMPTY_CODEBASE,
-          useLocalFiles ? 'No source files in supplied inputFiles' : 'No source files found in repository'
+          useLocalFiles
+            ? 'No source files in supplied inputFiles'
+            : 'No source files found in repository'
         ),
       };
     }
@@ -317,8 +339,21 @@ export class TraceAgent {
 
     // Step 2: Generate tests via AI (with dedicated timeout)
     const totalChars = files.reduce((sum, f) => sum + f.content.length, 0);
-    emit?.('ai_call', `Claude AI ile Playwright testleri oluşturuluyor (${files.length} dosya, ${Math.round(totalChars / 1024)}KB)...`, 45, undefined, undefined, 'pipeline.activity.trace.writing_scenarios');
-    const testsResult = await this.generateTests(files, input.spec, emit, input.knowledgeContext, input.imageBlocks);
+    emit?.(
+      'ai_call',
+      `Claude AI ile Playwright testleri oluşturuluyor (${files.length} dosya, ${Math.round(totalChars / 1024)}KB)...`,
+      45,
+      undefined,
+      undefined,
+      'pipeline.activity.trace.writing_scenarios'
+    );
+    const testsResult = await this.generateTests(
+      files,
+      input.spec,
+      emit,
+      input.knowledgeContext,
+      input.imageBlocks
+    );
     if (testsResult.type === 'error') {
       emit?.('error', 'Test üretimi başarısız oldu', 0);
       return testsResult;
@@ -328,9 +363,10 @@ export class TraceAgent {
     emit?.('parsing', `${testFiles.length} test dosyası hazırlandı`, 75);
 
     // Generate BDD/Gherkin feature files from spec (only when Cucumber is enabled)
-    const gherkinResult = (input.cucumberEnabled && input.spec)
-      ? generateGherkinFromSpec(input.spec)
-      : { features: [], stepDefinitions: [] };
+    const gherkinResult =
+      input.cucumberEnabled && input.spec
+        ? generateGherkinFromSpec(input.spec)
+        : { features: [], stepDefinitions: [] };
 
     if (input.dryRun) {
       return {
@@ -353,8 +389,16 @@ export class TraceAgent {
     // Combine Playwright test files with Gherkin feature/step files for push
     const allFilesToPush: TraceOutput['testFiles'] = mergeAkisCiWorkflowIntoTestFiles([
       ...testFiles,
-      ...gherkinResult.features.map((f) => ({ filePath: f.filePath, content: f.content, testCount: f.scenarioCount })),
-      ...gherkinResult.stepDefinitions.map((s) => ({ filePath: s.filePath, content: s.content, testCount: 0 })),
+      ...gherkinResult.features.map((f) => ({
+        filePath: f.filePath,
+        content: f.content,
+        testCount: f.scenarioCount,
+      })),
+      ...gherkinResult.stepDefinitions.map((s) => ({
+        filePath: s.filePath,
+        content: s.content,
+        testCount: 0,
+      })),
     ]);
 
     const pushResult = await this.pushTestFiles(
@@ -405,16 +449,20 @@ export class TraceAgent {
 
   private async executeWithTools(
     input: TraceInput,
-    emit?: ReturnType<typeof createActivityEmitter>,
+    emit?: ReturnType<typeof createActivityEmitter>
   ): Promise<TraceResult> {
     emit?.('ai_call', 'Claude AI tool_use ile test yazılıyor...', 10);
 
     // Issue #397: generate Gherkin features alongside Playwright tests when the
     // BDD toggle is on. Previously this only ran in the legacy path — the
     // agentic path (production default) silently ignored `cucumberEnabled`.
-    const gherkin = (input.cucumberEnabled && input.spec)
-      ? generateGherkinFromSpec(input.spec)
-      : { features: [] as ReturnType<typeof generateGherkinFromSpec>['features'], stepDefinitions: [] as ReturnType<typeof generateGherkinFromSpec>['stepDefinitions'] };
+    const gherkin =
+      input.cucumberEnabled && input.spec
+        ? generateGherkinFromSpec(input.spec)
+        : {
+            features: [] as ReturnType<typeof generateGherkinFromSpec>['features'],
+            stepDefinitions: [] as ReturnType<typeof generateGherkinFromSpec>['stepDefinitions'],
+          };
     // We inject the .feature + .steps.ts files into the first successful
     // push_files call so everything lands in the same branch + commit. The
     // flag prevents duplicate additions across multi-push loops.
@@ -422,36 +470,35 @@ export class TraceAgent {
 
     const toolDeps: TraceToolDeps = {
       listFiles: (owner, repo, branch) => this.github.listFiles(owner, repo, branch),
-      getFileContent: (owner, repo, branch, filePath) => this.github.getFileContent(owner, repo, branch, filePath),
+      getFileContent: (owner, repo, branch, filePath) =>
+        this.github.getFileContent(owner, repo, branch, filePath),
       pushFiles: (owner, repo, branch, files, message) => {
         const extraFiles: Array<{ path: string; content: string }> = [];
         if (!gherkinAttached && gherkin.features.length > 0) {
           extraFiles.push(
             ...gherkin.features.map((f) => ({ path: f.filePath, content: f.content })),
-            ...gherkin.stepDefinitions.map((s) => ({ path: s.filePath, content: s.content })),
+            ...gherkin.stepDefinitions.map((s) => ({ path: s.filePath, content: s.content }))
           );
           gherkinAttached = true;
         }
-        const combined = [
-          ...files,
-          ...extraFiles,
-        ];
+        const combined = [...files, ...extraFiles];
         const merged = mergeAkisCiWorkflowIntoTestFiles(
           combined.map((f) => ({
             filePath: f.path,
             content: f.content,
             testCount: 0,
-          })),
+          }))
         );
         return this.github.pushFiles!(
           owner,
           repo,
           branch,
           merged.map((f) => ({ path: f.filePath, content: f.content })),
-          message,
+          message
         );
       },
-      createBranch: (owner, repo, branch, fromBranch) => this.github.createBranch(owner, repo, branch, fromBranch),
+      createBranch: (owner, repo, branch, fromBranch) =>
+        this.github.createBranch(owner, repo, branch, fromBranch),
     };
     const handlers = createTraceToolHandlers(toolDeps);
 
@@ -512,9 +559,17 @@ After pushing, respond with a JSON summary:
         onToolCall: (name) => {
           if (name === 'list_files') emit?.('fetching', 'Dosya listesi okunuyor...', 20);
           if (name === 'read_file') emit?.('fetching', 'Kaynak dosya okunuyor...', 40);
-          if (name === 'push_files') emit?.('github_push', 'Test dosyaları yükleniyor...', 80, undefined, undefined, 'pipeline.activity.trace.pushing_tests');
+          if (name === 'push_files')
+            emit?.(
+              'github_push',
+              'Test dosyaları yükleniyor...',
+              80,
+              undefined,
+              undefined,
+              'pipeline.activity.trace.pushing_tests'
+            );
         },
-      },
+      }
     );
 
     // Parse the final JSON summary from Claude's text response
@@ -524,17 +579,35 @@ After pushing, respond with a JSON summary:
         const parsed = JSON.parse(jsonMatch[0]) as {
           testFiles?: Array<{ filePath: string; testCount: number }>;
           coverageMatrix?: Record<string, string[]>;
-          testSummary?: { totalTests: number; coveragePercentage: number; coveredCriteria: string[]; uncoveredCriteria: string[] };
+          testSummary?: {
+            totalTests: number;
+            coveragePercentage: number;
+            coveredCriteria: string[];
+            uncoveredCriteria: string[];
+          };
         };
 
-        emit?.('complete', `Testler yazıldı: ${parsed.testSummary?.totalTests ?? 0} test (tool_use)`, 100);
+        emit?.(
+          'complete',
+          `Testler yazıldı: ${parsed.testSummary?.totalTests ?? 0} test (tool_use)`,
+          100
+        );
         return {
           type: 'output',
           data: {
             ok: true,
-            testFiles: (parsed.testFiles ?? []).map((f) => ({ filePath: f.filePath, content: '', testCount: f.testCount })),
+            testFiles: (parsed.testFiles ?? []).map((f) => ({
+              filePath: f.filePath,
+              content: '',
+              testCount: f.testCount,
+            })),
             coverageMatrix: parsed.coverageMatrix ?? {},
-            testSummary: parsed.testSummary ?? { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
+            testSummary: parsed.testSummary ?? {
+              totalTests: 0,
+              coveragePercentage: 0,
+              coveredCriteria: [],
+              uncoveredCriteria: [],
+            },
             branch: 'trace/tests',
             ciWorkflowPath: AKIS_E2E_WORKFLOW_PATH,
             gherkinFeatures: gherkin.features,
@@ -542,7 +615,9 @@ After pushing, respond with a JSON summary:
           },
         };
       }
-    } catch { /* fall through to default */ }
+    } catch {
+      /* fall through to default */
+    }
 
     // Default: could not parse structured output
     emit?.('complete', 'Test yazımı tamamlandı (tool_use)', 100);
@@ -552,7 +627,12 @@ After pushing, respond with a JSON summary:
         ok: true,
         testFiles: [],
         coverageMatrix: {},
-        testSummary: { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
+        testSummary: {
+          totalTests: 0,
+          coveragePercentage: 0,
+          coveredCriteria: [],
+          uncoveredCriteria: [],
+        },
         gherkinFeatures: gherkin.features,
         stepDefinitions: gherkin.stepDefinitions,
       },
@@ -565,7 +645,7 @@ After pushing, respond with a JSON summary:
     owner: string,
     repo: string,
     branch: string,
-    emit?: ReturnType<typeof createActivityEmitter>,
+    emit?: ReturnType<typeof createActivityEmitter>
   ): Promise<
     | { type: 'output'; data: Array<{ filePath: string; content: string }> }
     | { type: 'error'; error: PipelineError }
@@ -573,9 +653,7 @@ After pushing, respond with a JSON summary:
     for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
       try {
         const allFiles = await this.github.listFiles(owner, repo, branch);
-        const sourceFiles = allFiles
-          .filter((f) => this.isSourceFile(f))
-          .slice(0, MAX_SOURCE_FILES);
+        const sourceFiles = allFiles.filter((f) => this.isSourceFile(f)).slice(0, MAX_SOURCE_FILES);
 
         emit?.('fetching', `${sourceFiles.length} kaynak dosya okunuyor...`, 18);
 
@@ -588,7 +666,9 @@ After pushing, respond with a JSON summary:
 
           // Enforce total context budget
           if (totalChars + content.length > MAX_CODEBASE_CONTEXT_CHARS) {
-            logger.info(`[Trace] Context budget reached at file ${i + 1}/${sourceFiles.length} (${totalChars} chars). Stopping.`);
+            logger.info(
+              `[Trace] Context budget reached at file ${i + 1}/${sourceFiles.length} (${totalChars} chars). Stopping.`
+            );
             break;
           }
 
@@ -604,8 +684,31 @@ After pushing, respond with a JSON summary:
 
         return { type: 'output', data: contents };
       } catch (err) {
+        // PR-V-github-401-graceful — when GitHub returns 401, the user's
+        // token is invalid. Retrying with the same dead credential burns
+        // backoff time for nothing and the eventual failure surfaces as a
+        // vague TRACE_CODE_READ_FAILED. Short-circuit with a dedicated
+        // GITHUB_TOKEN_INVALID error so the banner renders a "Reconnect
+        // GitHub" CTA and the orchestrator can drop the stale row from
+        // `github_integrations` instead of trying again.
+        if (err instanceof GitHubTokenInvalidError) {
+          logger.warn(
+            { owner, repo, branch, attempt: attempt + 1 },
+            '[Trace] readCodebase: 401 detected — surfacing GITHUB_TOKEN_INVALID without retry'
+          );
+          return {
+            type: 'error',
+            error: createPipelineError(PipelineErrorCode.GITHUB_TOKEN_INVALID, err.message),
+          };
+        }
         if (attempt < RETRY_CONFIG.maxRetries) {
-          emit?.('retry', `Dosya okuma yeniden deneniyor (${attempt + 1})...`, 15, undefined, attempt + 1);
+          emit?.(
+            'retry',
+            `Dosya okuma yeniden deneniyor (${attempt + 1})...`,
+            15,
+            undefined,
+            attempt + 1
+          );
           await this.delay(RETRY_CONFIG.backoffDelays[attempt]);
           continue;
         }
@@ -637,14 +740,12 @@ After pushing, respond with a JSON summary:
     spec?: StructuredSpec,
     emit?: ReturnType<typeof createActivityEmitter>,
     knowledgeContext?: string,
-    imageBlocks?: readonly AnthropicImageBlock[],
+    imageBlocks?: readonly AnthropicImageBlock[]
   ): Promise<
     | { type: 'output'; data: Pick<TraceOutput, 'testFiles' | 'coverageMatrix' | 'testSummary'> }
     | { type: 'error'; error: PipelineError }
   > {
-    const codebaseContext = files
-      .map((f) => `--- ${f.filePath} ---\n${f.content}`)
-      .join('\n\n');
+    const codebaseContext = files.map((f) => `--- ${f.filePath} ---\n${f.content}`).join('\n\n');
     const specContext = spec ? JSON.stringify(spec, null, 2) : 'No specification provided.';
     const hasImages = (imageBlocks?.length ?? 0) > 0;
     const imageAckSection = hasImages
@@ -658,7 +759,13 @@ After pushing, respond with a JSON summary:
         if (attempt === 0) {
           emit?.('ai_call', `Playwright testleri oluşturuluyor (deneme ${attempt + 1})...`, 45);
         } else {
-          emit?.('ai_call', `Playwright testleri oluşturuluyor (deneme ${attempt + 1})...`, 45, undefined, attempt);
+          emit?.(
+            'ai_call',
+            `Playwright testleri oluşturuluyor (deneme ${attempt + 1})...`,
+            45,
+            undefined,
+            attempt
+          );
         }
         const traceSystemPrompt = knowledgeContext
           ? `${this.enhance(TEST_GENERATION_PROMPT)}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
@@ -669,15 +776,21 @@ After pushing, respond with a JSON summary:
       } catch (err) {
         const isTimeout = err instanceof Error && err.message.includes('timed out');
         if (isTimeout) {
-          logger.warn(`[Trace] AI call timed out after ${AI_CALL_TIMEOUT_MS / 1000}s (attempt ${attempt + 1})`);
+          logger.warn(
+            `[Trace] AI call timed out after ${AI_CALL_TIMEOUT_MS / 1000}s (attempt ${attempt + 1})`
+          );
           emit?.('retry', `AI yanıt vermedi, tekrar deneniyor...`, 40, undefined, attempt + 1);
         }
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         return {
           type: 'error',
           error: createPipelineError(
-            isTimeout ? PipelineErrorCode.TRACE_AI_CALL_TIMEOUT : PipelineErrorCode.TRACE_TEST_GENERATION_FAILED,
-            isTimeout ? `AI call timed out after ${AI_CALL_TIMEOUT_MS / 1000}s` : 'AI call failed after retries'
+            isTimeout
+              ? PipelineErrorCode.TRACE_AI_CALL_TIMEOUT
+              : PipelineErrorCode.TRACE_TEST_GENERATION_FAILED,
+            isTimeout
+              ? `AI call timed out after ${AI_CALL_TIMEOUT_MS / 1000}s`
+              : 'AI call failed after retries'
           ),
         };
       }
@@ -686,7 +799,9 @@ After pushing, respond with a JSON summary:
       try {
         parsed = parseAIJson(responseText);
       } catch (parseErr) {
-        logger.warn(`[Trace] JSON parse failed (attempt ${attempt + 1}, responseLen=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+        logger.warn(
+          `[Trace] JSON parse failed (attempt ${attempt + 1}, responseLen=${responseText.length}): ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
+        );
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         return {
           type: 'error',
@@ -765,15 +880,20 @@ After pushing, respond with a JSON summary:
       try {
         if (this.github.pushFiles) {
           await this.github.pushFiles(
-            owner, repo, branch,
+            owner,
+            repo,
+            branch,
             files.map((f) => ({ path: f.filePath, content: f.content })),
-            `test: playwright tests generated by AKIS Trace (${files.length} files)`,
+            `test: playwright tests generated by AKIS Trace (${files.length} files)`
           );
         } else {
           for (const file of files) {
             await this.github.commitFile(
-              owner, repo, branch,
-              file.filePath, file.content,
+              owner,
+              repo,
+              branch,
+              file.filePath,
+              file.content,
               `test: add ${file.filePath}`
             );
           }
@@ -796,10 +916,7 @@ After pushing, respond with a JSON summary:
 
     return {
       type: 'error',
-      error: createPipelineError(
-        PipelineErrorCode.TRACE_TEST_GENERATION_FAILED,
-        'Unreachable'
-      ),
+      error: createPipelineError(PipelineErrorCode.TRACE_TEST_GENERATION_FAILED, 'Unreachable'),
     };
   }
 
@@ -808,7 +925,7 @@ After pushing, respond with a JSON summary:
   private buildPRBody(
     summary: TraceOutput['testSummary'],
     matrix: Record<string, string[]>,
-    includeCiHint = false,
+    includeCiHint = false
   ): string {
     const lines = [
       '## Playwright E2E Tests',
@@ -824,7 +941,7 @@ After pushing, respond with a JSON summary:
         '',
         `Bu depoya \`${AKIS_E2E_WORKFLOW_PATH}\` eklendi: yükleme veya değişiklik teklifi sonrası Playwright E2E ve (varsa) Cucumber özellik dosyaları koşar.`,
         'Sonuçlar **Actions** sekmesinde; başarısızlıkta `playwright-report` artifact yüklenir.',
-        '',
+        ''
       );
     }
 

@@ -39,12 +39,16 @@ import { crewRoutes, initCrewRunManager } from './api/crew.js';
 import { ragRoutes } from './api/rag.js';
 import { adminRoutes } from './api/admin.js';
 import { githubRoutes, getGitHubToken } from './api/github.js';
+import { invalidateUserGitHubToken } from './services/auth/githubToken.js';
 import { pipelinePlugin } from './pipeline/api/pipeline.plugin.js';
 import { pipelineStreamPlugin } from './pipeline/api/pipeline-stream.plugin.js';
 import { devSessionPlugin } from './pipeline/api/dev-session.plugin.js';
 import { createPipelineSystem, type GitHubServiceLike } from './pipeline/core/pipeline-factory.js';
 import { initSkills } from './pipeline/agents/skills/index.js';
-import { createGitHubRESTAdapter, getGitHubOwnerViaREST } from './pipeline/adapters/GitHubRESTAdapter.js';
+import {
+  createGitHubRESTAdapter,
+  getGitHubOwnerViaREST,
+} from './pipeline/adapters/GitHubRESTAdapter.js';
 import { pushLog } from './lib/logBuffer.js';
 import { logger } from './lib/logger.js';
 import { isDevMode } from './config/devMode.js';
@@ -58,7 +62,11 @@ import {
   FreshnessScheduler,
   setFreshnessSchedulerInstance,
 } from './services/knowledge/FreshnessScheduler.js';
-import { formatErrorResponse, getStatusCodeForError, type ErrorCode } from './utils/errorHandler.js';
+import {
+  formatErrorResponse,
+  getStatusCodeForError,
+  type ErrorCode,
+} from './utils/errorHandler.js';
 import { requireAuth } from './utils/auth.js';
 import { cookiesPlugin } from './plugins/security/cookies.js';
 import { ZodError } from 'zod';
@@ -99,20 +107,36 @@ export async function buildApp() {
   // Log AI service configuration (without secrets)
   const configSummary = aiService.getConfigSummary();
   logger.info(`[buildApp] AI Provider: ${configSummary.provider}`);
-  logger.info(`[buildApp] AI Models: default=${configSummary.models.default}, planner=${configSummary.models.planner}, validation=${configSummary.models.validation}`);
+  logger.info(
+    `[buildApp] AI Models: default=${configSummary.models.default}, planner=${configSummary.models.planner}, validation=${configSummary.models.validation}`
+  );
   logger.info(`[buildApp] AI Base URL: ${configSummary.baseUrl}`);
-  logger.info(`[buildApp] AI API Key: ${configSummary.hasApiKey ? 'configured' : 'NOT CONFIGURED'}`);
+  logger.info(
+    `[buildApp] AI API Key: ${configSummary.hasApiKey ? 'configured' : 'NOT CONFIGURED'}`
+  );
 
   // Startup diagnostics for encryption, email, OAuth, and MCP (no secrets)
-  logger.info(`[buildApp] Encryption: ${isEncryptionConfigured() ? 'configured' : 'NOT CONFIGURED — AI key save will return 503'}`);
-  logger.info(`[buildApp] Email: provider=${env.EMAIL_PROVIDER}, configured=${isEmailConfigured(env.EMAIL_PROVIDER)}`);
-  logger.info(`[buildApp] OAuth: google=${env.GOOGLE_OAUTH_CLIENT_ID ? 'configured' : 'NOT SET'}, github=${env.GITHUB_OAUTH_CLIENT_ID ? 'configured' : 'NOT SET'}`);
+  logger.info(
+    `[buildApp] Encryption: ${isEncryptionConfigured() ? 'configured' : 'NOT CONFIGURED — AI key save will return 503'}`
+  );
+  logger.info(
+    `[buildApp] Email: provider=${env.EMAIL_PROVIDER}, configured=${isEmailConfigured(env.EMAIL_PROVIDER)}`
+  );
+  logger.info(
+    `[buildApp] OAuth: google=${env.GOOGLE_OAUTH_CLIENT_ID ? 'configured' : 'NOT SET'}, github=${env.GITHUB_OAUTH_CLIENT_ID ? 'configured' : 'NOT SET'}`
+  );
   if (env.GOOGLE_OAUTH_CLIENT_ID || env.GITHUB_OAUTH_CLIENT_ID) {
-    logger.info(`[buildApp] OAuth callback base: ${env.BACKEND_URL}/auth/oauth/<provider>/callback`);
+    logger.info(
+      `[buildApp] OAuth callback base: ${env.BACKEND_URL}/auth/oauth/<provider>/callback`
+    );
   }
-  logger.info(`[buildApp] MCP: GITHUB_MCP_BASE_URL=${env.GITHUB_MCP_BASE_URL ? '(configured)' : 'NOT SET — agents requiring GitHub will fail'}`);
+  logger.info(
+    `[buildApp] MCP: GITHUB_MCP_BASE_URL=${env.GITHUB_MCP_BASE_URL ? '(configured)' : 'NOT SET — agents requiring GitHub will fail'}`
+  );
   if (env.EMAIL_PROVIDER === 'smtp') {
-    logger.info(`[buildApp] SMTP: host=${process.env.SMTP_HOST || 'NOT SET'}, port=${process.env.SMTP_PORT || '587'}, from=${process.env.SMTP_FROM_EMAIL || 'NOT SET'}`);
+    logger.info(
+      `[buildApp] SMTP: host=${process.env.SMTP_HOST || 'NOT SET'}, port=${process.env.SMTP_PORT || '587'}, from=${process.env.SMTP_FROM_EMAIL || 'NOT SET'}`
+    );
   }
 
   // Phase 5.D: Create MCPTools (signature-only adapters for now)
@@ -206,7 +230,8 @@ export async function buildApp() {
 
   app.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     const duration = reply.elapsedTime! / 1000;
-    const route: string = request.routeOptions?.url ?? request.routerPath ?? request.url.split('?')[0];
+    const route: string =
+      request.routeOptions?.url ?? request.routerPath ?? request.url.split('?')[0];
     metrics.httpDuration.observe(
       {
         method: request.method,
@@ -297,13 +322,13 @@ export async function buildApp() {
     chatIntentRoutes(instance, {
       aiService,
       provider: aiService.getConfigSummary().provider,
-    }),
+    })
   );
   await app.register(async (instance) =>
     chatQARoutes(instance, {
       aiService,
       provider: aiService.getConfigSummary().provider,
-    }),
+    })
   );
   await app.register(conversationsRoutes);
   await app.register(studioRoutes, { prefix: '/api/studio' });
@@ -324,7 +349,8 @@ export async function buildApp() {
   let pipelineGitHubService: GitHubServiceLike;
   let _pipelineGetGitHubOwner: (userId: string) => Promise<string>;
 
-  const hasRealGitHubToken = env.GITHUB_TOKEN && !env.GITHUB_TOKEN.startsWith('<') && env.GITHUB_TOKEN.length > 10;
+  const hasRealGitHubToken =
+    env.GITHUB_TOKEN && !env.GITHUB_TOKEN.startsWith('<') && env.GITHUB_TOKEN.length > 10;
   const hasMCPGateway = !!(env.GITHUB_MCP_BASE_URL && hasRealGitHubToken);
 
   if (hasMCPGateway) {
@@ -359,16 +385,39 @@ export async function buildApp() {
     logger.info('[buildApp] Pipeline GitHub: REST API (set GITHUB_MCP_BASE_URL for MCP)');
   } else {
     // Option 3: No token — fail-hard mode (no silent stubs)
-    const noTokenError = () => { throw new Error('GitHub token yapilandirilmamis. Pipeline calistirmak icin GITHUB_TOKEN veya GitHub OAuth baglantisi gereklidir.'); };
-    pipelineGitHubService = {
-      async createRepository() { noTokenError(); return { url: '' }; },
-      async createBranch() { noTokenError(); },
-      async commitFile() { noTokenError(); },
-      async createPR() { noTokenError(); return { url: '' }; },
-      async listFiles() { noTokenError(); return []; },
-      async getFileContent() { noTokenError(); return ''; },
+    const noTokenError = () => {
+      throw new Error(
+        'GitHub token yapilandirilmamis. Pipeline calistirmak icin GITHUB_TOKEN veya GitHub OAuth baglantisi gereklidir.'
+      );
     };
-    _pipelineGetGitHubOwner = async () => { noTokenError(); return ''; };
+    pipelineGitHubService = {
+      async createRepository() {
+        noTokenError();
+        return { url: '' };
+      },
+      async createBranch() {
+        noTokenError();
+      },
+      async commitFile() {
+        noTokenError();
+      },
+      async createPR() {
+        noTokenError();
+        return { url: '' };
+      },
+      async listFiles() {
+        noTokenError();
+        return [];
+      },
+      async getFileContent() {
+        noTokenError();
+        return '';
+      },
+    };
+    _pipelineGetGitHubOwner = async () => {
+      noTokenError();
+      return '';
+    };
     logger.warn('[buildApp] Pipeline GitHub: NOT CONFIGURED (GITHUB_TOKEN or OAuth required)');
   }
 
@@ -382,30 +431,40 @@ export async function buildApp() {
   const skillRegistry = await initSkills();
   logger.info('[buildApp] Skill system initialized');
 
-  const { orchestrator: pipelineOrchestrator, reconciler: pipelineReconciler } = createPipelineSystem({
-    aiService,
-    skillRegistry,
-    createGitHubService: (token: string) => createGitHubRESTAdapter({ token }),
-    fallbackGitHubService: pipelineGitHubService,
-    getGitHubOwner: async (userId: string) => {
-      // Per-user token first, then platform fallback
-      const userToken = await getGitHubToken(userId);
-      const token = userToken ?? env.GITHUB_TOKEN;
-      if (!token || token.startsWith('<')) return 'unknown';
-      try { return await getGitHubOwnerViaREST(token); } catch { return 'unknown'; }
-    },
-    getGitHubToken: async (userId: string) => {
-      const userToken = await getGitHubToken(userId);
-      if (userToken) return userToken;
-      // Fallback to platform token
-      if (env.GITHUB_TOKEN && !env.GITHUB_TOKEN.startsWith('<') && env.GITHUB_TOKEN.length > 10) {
-        return env.GITHUB_TOKEN;
-      }
-      return null;
-    },
-    store: pipelineStore,
-    agenticDeps: { callWithTools: createToolCallingClient() },
-  });
+  const { orchestrator: pipelineOrchestrator, reconciler: pipelineReconciler } =
+    createPipelineSystem({
+      aiService,
+      skillRegistry,
+      createGitHubService: (token: string) => createGitHubRESTAdapter({ token }),
+      fallbackGitHubService: pipelineGitHubService,
+      getGitHubOwner: async (userId: string) => {
+        // Per-user token first, then platform fallback
+        const userToken = await getGitHubToken(userId);
+        const token = userToken ?? env.GITHUB_TOKEN;
+        if (!token || token.startsWith('<')) return 'unknown';
+        try {
+          return await getGitHubOwnerViaREST(token);
+        } catch {
+          return 'unknown';
+        }
+      },
+      getGitHubToken: async (userId: string) => {
+        const userToken = await getGitHubToken(userId);
+        if (userToken) return userToken;
+        // Fallback to platform token
+        if (env.GITHUB_TOKEN && !env.GITHUB_TOKEN.startsWith('<') && env.GITHUB_TOKEN.length > 10) {
+          return env.GITHUB_TOKEN;
+        }
+        return null;
+      },
+      store: pipelineStore,
+      agenticDeps: { callWithTools: createToolCallingClient() },
+      // PR-V-github-401-graceful — wire the stale-token cleanup hook so the
+      // orchestrator can drop the user's row from `github_integrations` when
+      // the adapter surfaces a 401. Without this, the next pipeline retries
+      // the same dead credential.
+      invalidateUserGitHubToken,
+    });
   // Start reconciler to recover stuck pipelines (clean shutdown via onClose)
   pipelineReconciler.start();
   app.addHook('onClose', () => pipelineReconciler.stop());
@@ -428,22 +487,29 @@ export async function buildApp() {
     }
   }
   await app.register(
-    async (instance) => pipelinePlugin(instance, { orchestrator: pipelineOrchestrator, requireAuth, devUserId }),
-    { prefix: '/api/pipelines' },
+    async (instance) =>
+      pipelinePlugin(instance, { orchestrator: pipelineOrchestrator, requireAuth, devUserId }),
+    { prefix: '/api/pipelines' }
   );
   await app.register(
-    async (instance) => pipelineStreamPlugin(instance, { requireAuth, devUserId, orchestrator: pipelineOrchestrator }),
-    { prefix: '/api/pipelines' },
+    async (instance) =>
+      pipelineStreamPlugin(instance, {
+        requireAuth,
+        devUserId,
+        orchestrator: pipelineOrchestrator,
+      }),
+    { prefix: '/api/pipelines' }
   );
   await app.register(
-    async (instance) => devSessionPlugin(instance, {
-      aiService,
-      githubToken: hasRealGitHubToken ? env.GITHUB_TOKEN! : null,
-      orchestrator: pipelineOrchestrator,
-      requireAuth,
-      devUserId,
-    }),
-    { prefix: '/api/pipelines' },
+    async (instance) =>
+      devSessionPlugin(instance, {
+        aiService,
+        githubToken: hasRealGitHubToken ? env.GITHUB_TOKEN! : null,
+        orchestrator: pipelineOrchestrator,
+        requireAuth,
+        devUserId,
+      }),
+    { prefix: '/api/pipelines' }
   );
 
   // Initialize Piri RAG service if configured

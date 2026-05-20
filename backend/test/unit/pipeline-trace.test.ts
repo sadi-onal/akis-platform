@@ -6,7 +6,10 @@ import {
   type TraceAIDeps,
   type TraceGitHubDeps,
 } from '../../src/pipeline/agents/trace/TraceAgent.js';
-import type { TraceInput, StructuredSpec } from '../../src/pipeline/core/contracts/PipelineTypes.js';
+import type {
+  TraceInput,
+  StructuredSpec,
+} from '../../src/pipeline/core/contracts/PipelineTypes.js';
 
 // ─── Test Fixtures ────────────────────────────────
 
@@ -14,13 +17,31 @@ const validSpec: StructuredSpec = {
   title: 'Todo App with Google Auth',
   problemStatement: 'Kullanıcıların günlük görevlerini takip edebilecekleri basit bir uygulama.',
   userStories: [
-    { persona: 'Kayıtlı kullanıcı', action: 'Yeni görev oluşturma', benefit: 'Görevlerimi takip etmek' },
+    {
+      persona: 'Kayıtlı kullanıcı',
+      action: 'Yeni görev oluşturma',
+      benefit: 'Görevlerimi takip etmek',
+    },
   ],
   acceptanceCriteria: [
-    { id: 'ac-1', given: 'Giriş yapmış kullanıcı', when: 'Görev ekle butonuna tıklarsa', then: 'Yeni görev oluşur' },
-    { id: 'ac-2', given: 'Giriş yapmış kullanıcı', when: 'Görevi silerse', then: 'Görev listeden kaldırılır' },
+    {
+      id: 'ac-1',
+      given: 'Giriş yapmış kullanıcı',
+      when: 'Görev ekle butonuna tıklarsa',
+      then: 'Yeni görev oluşur',
+    },
+    {
+      id: 'ac-2',
+      given: 'Giriş yapmış kullanıcı',
+      when: 'Görevi silerse',
+      then: 'Görev listeden kaldırılır',
+    },
   ],
-  technicalConstraints: { stack: 'React + Vite + TypeScript', integrations: ['Google OAuth'], nonFunctional: [] },
+  technicalConstraints: {
+    stack: 'React + Vite + TypeScript',
+    integrations: ['Google OAuth'],
+    nonFunctional: [],
+  },
   outOfScope: ['Admin paneli'],
 };
 
@@ -28,7 +49,8 @@ const testGenResponse = JSON.stringify({
   testFiles: [
     {
       filePath: 'tests/e2e/todo.spec.ts',
-      content: 'import { test, expect } from "@playwright/test";\n\ntest.describe("Todo App", () => {\n  test("should create todo", async ({ page }) => {\n    await page.goto("/");\n    await expect(page).toHaveTitle(/Todo/);\n  });\n  test("should delete todo", async ({ page }) => {\n    await page.goto("/");\n  });\n});',
+      content:
+        'import { test, expect } from "@playwright/test";\n\ntest.describe("Todo App", () => {\n  test("should create todo", async ({ page }) => {\n    await page.goto("/");\n    await expect(page).toHaveTitle(/Todo/);\n  });\n  test("should delete todo", async ({ page }) => {\n    await page.goto("/");\n  });\n});',
       testCount: 2,
     },
     {
@@ -38,7 +60,8 @@ const testGenResponse = JSON.stringify({
     },
     {
       filePath: 'tests/playwright.config.ts',
-      content: 'import { defineConfig } from "@playwright/test";\nexport default defineConfig({ testDir: "./e2e" });',
+      content:
+        'import { defineConfig } from "@playwright/test";\nexport default defineConfig({ testDir: "./e2e" });',
       testCount: 0,
     },
   ],
@@ -90,10 +113,18 @@ function createFailingAI(failCount: number, thenRespond: string): TraceAIDeps {
 function createMockGitHub(overrides?: Partial<TraceGitHubDeps>): TraceGitHubDeps {
   return {
     async listFiles() {
-      return ['src/App.tsx', 'src/index.ts', 'package.json', 'README.md', 'node_modules/react/index.js', '.git/HEAD'];
+      return [
+        'src/App.tsx',
+        'src/index.ts',
+        'package.json',
+        'README.md',
+        'node_modules/react/index.js',
+        '.git/HEAD',
+      ];
     },
     async getFileContent(_o, _r, _b, filePath) {
-      if (filePath === 'src/App.tsx') return 'export default function App() { return <div>Hello</div>; }';
+      if (filePath === 'src/App.tsx')
+        return 'export default function App() { return <div>Hello</div>; }';
       if (filePath === 'src/index.ts') return 'import App from "./App";\nrender(App);';
       return '';
     },
@@ -256,6 +287,43 @@ describe('Trace — GitHub error handling', () => {
       assert.equal(result.data.branch, 'proto/scaffold-123');
     }
   });
+
+  // PR-V-github-401-graceful — when listFiles/getFileContent surface a
+  // GitHubTokenInvalidError (401), TraceAgent must:
+  //   1. Return GITHUB_TOKEN_INVALID error (not the vague TRACE_CODE_READ_FAILED)
+  //   2. NOT retry (auth failure won't recover with backoff)
+  // The orchestrator then catches the dedicated code, clears the stale token
+  // row, and renders the reconnect-github banner.
+  it('returns GITHUB_TOKEN_INVALID without retry when adapter throws auth error', async () => {
+    const { GitHubTokenInvalidError } = await import(
+      '../../src/pipeline/core/contracts/PipelineErrors.js'
+    );
+    let listFilesCalls = 0;
+    const ai = createMockAI(testGenResponse);
+    const github = createMockGitHub({
+      async listFiles() {
+        listFilesCalls++;
+        throw new GitHubTokenInvalidError(
+          'GitHub API GET /repos/foo/bar/git/trees/main → 401: Bad credentials'
+        );
+      },
+    });
+    const agent = new TraceAgent(ai, github);
+
+    const result = await agent.execute(baseInput());
+    assert.equal(result.type, 'error');
+    if (result.type === 'error') {
+      assert.equal(
+        result.error.code,
+        'GITHUB_TOKEN_INVALID',
+        'should surface dedicated auth error, not TRACE_CODE_READ_FAILED'
+      );
+      assert.equal(result.error.recoveryAction, 'reconnect_github');
+      assert.equal(result.error.retryable, false);
+    }
+    // Critical: adapter must NOT be retried on auth failure.
+    assert.equal(listFilesCalls, 1, '401 should bail immediately — no retry');
+  });
 });
 
 // ─── AI Error Handling ────────────────────────────
@@ -295,11 +363,18 @@ describe('Trace — AI error handling', () => {
   });
 
   it('returns error when AI returns empty testFiles array', async () => {
-    const ai = createMockAI(JSON.stringify({
-      testFiles: [],
-      coverageMatrix: {},
-      testSummary: { totalTests: 0, coveragePercentage: 0, coveredCriteria: [], uncoveredCriteria: [] },
-    }));
+    const ai = createMockAI(
+      JSON.stringify({
+        testFiles: [],
+        coverageMatrix: {},
+        testSummary: {
+          totalTests: 0,
+          coveragePercentage: 0,
+          coveredCriteria: [],
+          uncoveredCriteria: [],
+        },
+      })
+    );
     const github = createMockGitHub();
     const agent = new TraceAgent(ai, github);
 
