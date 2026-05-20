@@ -1827,7 +1827,7 @@ function UsageTab() {
 
   const userIsAdmin = Boolean(data.userIsAdmin);
   const costBreakdown = data.breakdown;
-  const costLabel = userIsAdmin ? 'Gercek Maliyet (Wholesale)' : 'Tahmini Maliyet';
+  const costLabel = userIsAdmin ? t('settings.usage.costAdmin') : t('settings.usage.cost');
 
   return (
     <div className="space-y-4">
@@ -1837,19 +1837,19 @@ function UsageTab() {
             {t('settings.usage.title')}
           </h2>
           <span className="rounded-full bg-ak-primary/10 px-2 py-0.5 text-[10px] font-semibold text-ak-primary">
-            Sinirsiz
+            {t('settings.usage.unlimited')}
           </span>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
           <UsageStatCard
-            label="Calistirilan Is"
+            label={t('settings.usage.jobs')}
             value={String(data.usage.jobCount)}
             icon="&#9889;"
             color="text-yellow-400"
           />
           <UsageStatCard
-            label="Token Kullanimi"
+            label={t('settings.usage.tokens')}
             value={formatTokens(data.usage.totalTokens)}
             icon="&#9881;"
             color="text-blue-400"
@@ -1869,7 +1869,7 @@ function UsageTab() {
                 Admin
               </span>
               <span className="text-xs text-ak-text-secondary">
-                Maliyet Dagilimi (markup {costBreakdown.markup.toFixed(2)}x)
+                {t('settings.usage.costBreakdown')} (markup {costBreakdown.markup.toFixed(2)}x)
               </span>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -1897,7 +1897,9 @@ function UsageTab() {
       </div>
 
       <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-        <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">Detayli Dagilim</h3>
+        <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">
+          {t('settings.usage.detailedBreakdown')}
+        </h3>
         <div className="space-y-2">
           <BreakdownRow
             label={t('settings.usage.inputTokens')}
@@ -1907,13 +1909,19 @@ function UsageTab() {
             label={t('settings.usage.outputTokens')}
             value={formatTokens(data.usage.outputTokens)}
           />
-          <BreakdownRow label="Toplam Token" value={formatTokens(data.usage.totalTokens)} accent />
+          <BreakdownRow
+            label={t('settings.usage.totalTokens')}
+            value={formatTokens(data.usage.totalTokens)}
+            accent
+          />
         </div>
       </div>
 
       {data.daily && data.daily.length > 0 && (
         <div className="rounded-xl border border-ak-border bg-ak-surface p-4">
-          <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">Gunluk Aktivite</h3>
+          <h3 className="mb-3 text-sm font-semibold text-ak-text-primary">
+            {t('settings.usage.dailyActivity')}
+          </h3>
           <DailyChart days={data.daily} />
           <div className="mt-3 space-y-1.5">
             {data.daily
@@ -1931,7 +1939,9 @@ function UsageTab() {
                     })}
                   </span>
                   <div className="flex items-center gap-4">
-                    <span className="text-xs font-mono text-ak-text-secondary">{d.jobs} is</span>
+                    <span className="text-xs font-mono text-ak-text-secondary">
+                      {d.jobs} {t('settings.usage.jobSuffix')}
+                    </span>
                     <span className="text-xs font-mono text-blue-400">
                       {formatTokens(d.tokens)}
                     </span>
@@ -1951,6 +1961,7 @@ function DailyChart({
 }: {
   days: Array<{ date: string; tokens: number; cost: number; jobs: number }>;
 }) {
+  const { t } = useI18n();
   const maxTokens = Math.max(...days.map((d) => d.tokens), 1);
   return (
     <div className="flex items-end gap-1" style={{ height: 80 }}>
@@ -1971,7 +1982,7 @@ function DailyChart({
             </span>
             {/* Tooltip */}
             <div className="pointer-events-none absolute -top-10 left-1/2 z-10 hidden -translate-x-1/2 rounded bg-ak-bg px-2 py-1 text-xs text-ak-text-primary shadow-lg border border-ak-border group-hover:block whitespace-nowrap">
-              {formatTokens(d.tokens)} token &middot; {d.jobs} is
+              {formatTokens(d.tokens)} token &middot; {d.jobs} {t('settings.usage.jobSuffix')}
             </div>
           </div>
         );

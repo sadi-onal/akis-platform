@@ -674,7 +674,7 @@ describe('UsageTab', () => {
       expect(screen.getByText('settings.usage.title')).toBeInTheDocument();
     });
     expect(screen.getByText('42')).toBeInTheDocument();
-    expect(screen.getByText('Tahmini Maliyet')).toBeInTheDocument();
+    expect(screen.getByText('settings.usage.cost')).toBeInTheDocument();
     // formatTokens: 2.5M, 1.5K
     expect(screen.getAllByText('2.5M').length).toBeGreaterThan(0);
     expect(screen.getByText('1.5K')).toBeInTheDocument();
@@ -702,7 +702,7 @@ describe('UsageTab', () => {
     });
     render(<SettingsPage />);
     await waitFor(() => {
-      expect(screen.getByText('Gercek Maliyet (Wholesale)')).toBeInTheDocument();
+      expect(screen.getByText('settings.usage.costAdmin')).toBeInTheDocument();
     });
     expect(screen.getByText('Wholesale')).toBeInTheDocument();
     expect(screen.getByText('Retail')).toBeInTheDocument();
@@ -729,10 +729,10 @@ describe('UsageTab', () => {
     });
     render(<SettingsPage />);
     await waitFor(() => {
-      expect(screen.getByText('Gunluk Aktivite')).toBeInTheDocument();
+      expect(screen.getByText('settings.usage.dailyActivity')).toBeInTheDocument();
     });
-    // The daily list rows should be present.
-    expect(screen.getAllByText(/is$/).length).toBeGreaterThan(0);
+    // The daily list rows should be present (uses settings.usage.jobSuffix key).
+    expect(screen.getAllByText(/settings\.usage\.jobSuffix/).length).toBeGreaterThan(0);
   });
 });
 
