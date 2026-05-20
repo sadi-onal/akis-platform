@@ -181,8 +181,17 @@ function createProtoAIDeps(
   model?: string,
   onTokenUsage?: TokenUsageCallback
 ): ProtoAIDeps {
+  // PR-V-proto-diagnostics (2026-05-20): bumped from 16 384 → 64 000 to reach
+  // parity with Trace (raised in PR-H on 2026-05-19 — see TRACE_MAX_TOKENS
+  // note below). Manual-test investigation 2026-05-19 showed Proto scaffold
+  // responses for complex specs hitting the cap and truncating mid-JSON, so
+  // `extractJsonSafe` + repair both fail and all 3 retries return the same
+  // truncated payload → PROTO_SCAFFOLD_GENERATION_FAILED. 64K is the
+  // documented Anthropic max for Sonnet/Haiku 4-class models, same headroom
+  // Trace already uses.
+  const PROTO_MAX_TOKENS = 64_000;
   const deps: ProtoAIDeps = {
-    generateText: makeGenerateText(aiService, 16384, model, onTokenUsage),
+    generateText: makeGenerateText(aiService, PROTO_MAX_TOKENS, model, onTokenUsage),
   };
   // Wire the multimodal path only when the AIService actually supports it.
   // Mock stores and non-Anthropic providers leave `generateMultimodalArtifact`
@@ -194,7 +203,7 @@ function createProtoAIDeps(
         systemPrompt,
         task: userPrompt,
         images,
-        maxTokens: 16384,
+        maxTokens: PROTO_MAX_TOKENS,
         modelOverride: model,
       });
       if (onTokenUsage && result.metadata?.usage) {

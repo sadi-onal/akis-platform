@@ -98,6 +98,32 @@ const MIN_SCAFFOLD_FILES = 6;
 const PROTO_SUMMARY_MAX_LEN = 500;
 
 /**
+ * PR-V-proto-diagnostics (2026-05-20): max raw-AI-response slice persisted into
+ * `PipelineError.technicalDetail` when scaffold parsing fails. 2 000 chars is
+ * enough to see the JSON head/tail (where truncation happens) without blowing
+ * up the DB row — pipelines.error is a jsonb column and we already log the
+ * full response in pino. The goal is post-mortem grep: when a user reports
+ * PROTO_SCAFFOLD_GENERATION_FAILED in production we want to immediately tell
+ * whether the AI returned empty, returned non-JSON, or returned truncated JSON
+ * without re-running the pipeline.
+ */
+const PROTO_RAW_RESPONSE_SNIPPET_MAX = 2_000;
+
+/**
+ * Build the `technicalDetail` string for a PROTO_SCAFFOLD_GENERATION_FAILED
+ * error, including a truncated slice of the raw AI response. Pure — exported
+ * for unit tests.
+ */
+export function buildProtoFailureDetail(reason: string, rawResponse: string | undefined): string {
+  if (!rawResponse) {
+    return `${reason} (AI response: <empty>)`;
+  }
+  const snippet = rawResponse.slice(0, PROTO_RAW_RESPONSE_SNIPPET_MAX);
+  const suffix = rawResponse.length > PROTO_RAW_RESPONSE_SNIPPET_MAX ? '…' : '';
+  return `${reason} | rawResponseLen=${rawResponse.length} | rawResponse(first ${PROTO_RAW_RESPONSE_SNIPPET_MAX} chars): ${snippet}${suffix}`;
+}
+
+/**
  * Extract a chat-friendly Turkish summary from Proto's final assistant text.
  *
  * The tool-use prompt asks Claude for a 1-3 sentence plain-text summary after
@@ -527,7 +553,7 @@ JSON format (respond with ONLY this, nothing else):
         type: 'error',
         error: createPipelineError(
           PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
-          'İterasyon sonucu ayrıştırılamadı veya dosya üretilmedi'
+          buildProtoFailureDetail('İterasyon sonucu ayrıştırılamadı veya dosya üretilmedi', raw)
         ),
       };
     }
@@ -910,6 +936,14 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     };
     const userPrompt = JSON.stringify(condensedSpec);
 
+    // PR-V-proto-diagnostics: track the last raw AI response across retries so
+    // the terminal-failure paths (`AI call failed`, `All retries exhausted`,
+    // etc.) can persist a snippet of what the AI actually returned into
+    // `PipelineError.technicalDetail`. Without this, post-mortems on
+    // PROTO_SCAFFOLD_GENERATION_FAILED can only see the logger output, which
+    // is rotated; the pipeline row itself just had a generic message.
+    let lastResponseText: string | undefined;
+    let lastAiCallError: string | undefined;
     for (let attempt = 0; attempt <= RETRY_CONFIG.specValidationMaxRetries; attempt++) {
       let responseText: string;
       try {
@@ -918,16 +952,17 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           ? `${scaffoldBase}\n\n--- RETRIEVED KNOWLEDGE ---\n${knowledgeContext}\n--- END KNOWLEDGE ---`
           : scaffoldBase;
         responseText = await this.ai.generateText(protoSystemPrompt, userPrompt);
+        lastResponseText = responseText;
       } catch (err) {
-        logger.error(
-          `[Proto] Attempt ${attempt + 1}: AI call error: ${err instanceof Error ? err.message : String(err)}`
-        );
+        const errMsg = err instanceof Error ? err.message : String(err);
+        lastAiCallError = errMsg;
+        logger.error(`[Proto] Attempt ${attempt + 1}: AI call error: ${errMsg}`);
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
         return {
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
-            'AI call failed after retries'
+            buildProtoFailureDetail(`AI call failed after retries: ${errMsg}`, lastResponseText)
           ),
         };
       }
@@ -940,7 +975,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
-            'AI returned empty response after retries'
+            buildProtoFailureDetail('AI returned empty response after retries', responseText)
           ),
         };
       }
@@ -980,7 +1015,10 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
             type: 'error',
             error: createPipelineError(
               PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
-              `Invalid JSON from scaffold generation (response length: ${responseText.length})`
+              buildProtoFailureDetail(
+                `Invalid JSON from scaffold generation (response length: ${responseText.length})`,
+                responseText
+              )
             ),
           };
         }
@@ -1009,7 +1047,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
           type: 'error',
           error: createPipelineError(
             PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
-            'No files generated'
+            buildProtoFailureDetail('No files generated', responseText)
           ),
         };
       }
@@ -1038,11 +1076,14 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
       };
     }
 
+    const exhaustedReason = lastAiCallError
+      ? `All retries exhausted (last AI call error: ${lastAiCallError})`
+      : 'All retries exhausted';
     return {
       type: 'error',
       error: createPipelineError(
         PipelineErrorCode.PROTO_SCAFFOLD_GENERATION_FAILED,
-        'All retries exhausted'
+        buildProtoFailureDetail(exhaustedReason, lastResponseText)
       ),
     };
   }
