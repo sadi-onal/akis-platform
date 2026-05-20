@@ -26,9 +26,7 @@ export interface ResolvedGitHubToken {
 }
 
 export interface GitHubTokenDeps {
-  readIntegrationRow?: (
-    userId: string,
-  ) => Promise<{ accessToken: string | null } | null>;
+  readIntegrationRow?: (userId: string) => Promise<{ accessToken: string | null } | null>;
   decrypt?: (args: {
     userId: string;
     provider: 'github';
@@ -60,7 +58,7 @@ function defaultDeps(): Required<GitHubTokenDeps> {
 
 export async function resolveGitHubToken(
   userId: string,
-  deps: GitHubTokenDeps = {},
+  deps: GitHubTokenDeps = {}
 ): Promise<ResolvedGitHubToken> {
   const d = { ...defaultDeps(), ...deps };
 
@@ -84,20 +82,14 @@ export async function resolveGitHubToken(
           // Connected via DEV_MODE bypass without a real GITHUB_TOKEN —
           // user is "linked" so the modal stays dismissed, but pipeline
           // calls must fail with a clear "no token" signal.
-          logger.warn(
-            `[github-token] dev-bypass sentinel detected userId=${userId}; skipping`,
-          );
+          logger.warn(`[github-token] dev-bypass sentinel detected userId=${userId}; skipping`);
         }
       } catch (error) {
-        logger.warn(
-          `[github-token] decrypt failed userId=${userId} error=${String(error)}`,
-        );
+        logger.warn(`[github-token] decrypt failed userId=${userId} error=${String(error)}`);
       }
     }
   } catch (error) {
-    logger.warn(
-      `[github-token] integration lookup failed userId=${userId} error=${String(error)}`,
-    );
+    logger.warn(`[github-token] integration lookup failed userId=${userId} error=${String(error)}`);
   }
 
   // 2. DEV_MODE env fallback — never active in production (defense-in-depth
@@ -119,8 +111,57 @@ export async function resolveGitHubToken(
  */
 export async function getGitHubToken(
   userId: string,
-  deps?: GitHubTokenDeps,
+  deps?: GitHubTokenDeps
 ): Promise<string | null> {
   const { token } = await resolveGitHubToken(userId, deps);
   return token;
+}
+
+/**
+ * PR-V-github-401-graceful — clear a user's stored GitHub integration token.
+ *
+ * Called by the orchestrator when GitHub returns 401 ("Bad credentials") on a
+ * real API call. The stored token is no longer usable — either the user
+ * revoked the OAuth grant from github.com or GitHub rotated it. Leaving the
+ * row in place would cause the next pipeline to retry the same dead token
+ * indefinitely; deleting it forces the UI back through the "Connect GitHub"
+ * flow.
+ *
+ * Idempotent: deleting an already-empty row is a no-op. Logs (but does not
+ * rethrow) DB errors — the caller is already in a failure path, swallowing
+ * a secondary DB error keeps the user-facing error code (GITHUB_TOKEN_INVALID)
+ * stable instead of degrading to a generic 500.
+ *
+ * @returns `true` when the row was deleted, `false` when no row existed or
+ *          the delete failed. Used by tests to assert wiring.
+ */
+export async function invalidateUserGitHubToken(
+  userId: string,
+  deps: {
+    deleteIntegrationRow?: (userId: string) => Promise<{ rowCount: number }>;
+  } = {}
+): Promise<boolean> {
+  const deleteRow =
+    deps.deleteIntegrationRow ??
+    (async (id: string) => {
+      const result = await db.delete(githubIntegrations).where(eq(githubIntegrations.userId, id));
+      // drizzle returns a PgQueryResult-like object; rowCount is optional.
+      const rc = (result as unknown as { rowCount?: number | null }).rowCount ?? 0;
+      return { rowCount: rc };
+    });
+
+  try {
+    const { rowCount } = await deleteRow(userId);
+    logger.warn(
+      { userId, rowCount },
+      '[github-token] invalidateUserGitHubToken: stale token cleared after 401'
+    );
+    return rowCount > 0;
+  } catch (error) {
+    logger.error(
+      { userId, error: String(error) },
+      '[github-token] invalidateUserGitHubToken: delete failed (swallowing)'
+    );
+    return false;
+  }
 }

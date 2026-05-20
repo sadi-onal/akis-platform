@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
   resolveGitHubToken,
   getGitHubToken,
+  invalidateUserGitHubToken,
   type GitHubTokenDeps,
 } from '../../src/services/auth/githubToken.js';
 import { DEV_BYPASS_SENTINEL_TOKEN } from '../../src/services/auth/githubOauthDevBypass.js';
@@ -126,5 +127,38 @@ describe('getGitHubToken (thin wrapper)', () => {
   it('returns null when resolver finds nothing', async () => {
     const token = await getGitHubToken('user-nothing', makeDeps());
     assert.equal(token, null);
+  });
+});
+
+// PR-V-github-401-graceful — when GitHub returns 401, the orchestrator drops
+// the stale row from `github_integrations` so the next pipeline starts from a
+// clean state instead of retrying the dead credential indefinitely.
+describe('invalidateUserGitHubToken', () => {
+  it('returns true when a row was deleted', async () => {
+    let deleteCalledWith: string | null = null;
+    const result = await invalidateUserGitHubToken('user-revoked', {
+      deleteIntegrationRow: async (userId) => {
+        deleteCalledWith = userId;
+        return { rowCount: 1 };
+      },
+    });
+    assert.equal(result, true);
+    assert.equal(deleteCalledWith, 'user-revoked');
+  });
+
+  it('returns false when no row existed (idempotent)', async () => {
+    const result = await invalidateUserGitHubToken('user-never-connected', {
+      deleteIntegrationRow: async () => ({ rowCount: 0 }),
+    });
+    assert.equal(result, false);
+  });
+
+  it('swallows DB errors and returns false (does not rethrow)', async () => {
+    const result = await invalidateUserGitHubToken('user-db-down', {
+      deleteIntegrationRow: async () => {
+        throw new Error('connection refused');
+      },
+    });
+    assert.equal(result, false);
   });
 });

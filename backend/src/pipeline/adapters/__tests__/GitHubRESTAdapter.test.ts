@@ -78,6 +78,69 @@ describe('GitHubRESTAdapter.repoExists', () => {
   });
 });
 
+// PR-V-github-401-graceful — when GitHub returns 401 on ANY endpoint, the
+// adapter throws GitHubTokenInvalidError so the orchestrator can render the
+// "GitHub Bağlantısını Yenile" CTA + clear the stale row from
+// `github_integrations`. Generic GitHubAPIError would be retried by FixLoop
+// and the user would only see "Üretilen kod GitHub'dan okunamadı".
+describe('GitHubRESTAdapter ghFetch 401 handling', () => {
+  it('throws GitHubTokenInvalidError when ANY endpoint returns 401', async () => {
+    const adapter = createGitHubRESTAdapter({ token: 'expired-token' });
+
+    await withFetchStub(makeFetchReturning(401, { message: 'Bad credentials' }), async () => {
+      // listFiles is the path that 401s in the real-world bug report
+      // (pipeline 592d97d0... — Trace tried to read code, GitHub returned
+      // 401, pipeline got stuck on TRACE_CODE_READ_FAILED).
+      await assert.rejects(
+        () => adapter.listFiles('testowner', 'qr-kod', 'main'),
+        (err: unknown) => {
+          assert.ok(
+            err instanceof GitHubTokenInvalidError,
+            `Expected GitHubTokenInvalidError, got ${err instanceof Error ? err.constructor.name : String(err)}`
+          );
+          assert.equal(err.code, 'GITHUB_TOKEN_INVALID');
+          assert.equal(err.retryable, false);
+          assert.equal(err.recoveryAction, 'reconnect_github');
+          return true;
+        }
+      );
+    });
+  });
+
+  it('throws GitHubTokenInvalidError when getFileContent endpoint returns 401', async () => {
+    const adapter = createGitHubRESTAdapter({ token: 'expired-token' });
+
+    await withFetchStub(makeFetchReturning(401, { message: 'Bad credentials' }), async () => {
+      await assert.rejects(
+        () => adapter.getFileContent('testowner', 'qr-kod', 'main', 'src/index.ts'),
+        (err: unknown) => {
+          assert.ok(err instanceof GitHubTokenInvalidError);
+          return true;
+        }
+      );
+    });
+  });
+
+  it('does NOT throw GitHubTokenInvalidError for a 500 server error', async () => {
+    const adapter = createGitHubRESTAdapter({ token: 'valid-token' });
+
+    await withFetchStub(makeFetchReturning(500, { message: 'Internal Server Error' }), async () => {
+      await assert.rejects(
+        () => adapter.listFiles('testowner', 'qr-kod', 'main'),
+        (err: unknown) => {
+          // 500 should remain a generic GitHubAPIError so outer code retries.
+          assert.ok(err instanceof GitHubAPIError);
+          assert.ok(
+            !(err instanceof GitHubTokenInvalidError),
+            'Should NOT promote a 500 to GitHubTokenInvalidError'
+          );
+          return true;
+        }
+      );
+    });
+  });
+});
+
 describe('GitHubRESTAdapter.createRepository', () => {
   it('throws GitHubTokenInvalidError when POST /user/repos returns 404', async () => {
     const adapter = createGitHubRESTAdapter({ token: 'invalid-token' });

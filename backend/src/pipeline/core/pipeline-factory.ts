@@ -383,6 +383,13 @@ export interface CreatePipelineOrchestratorOptions {
   getGitHubOwner: (userId: string) => Promise<string>;
   /** Retrieves a per-user GitHub token (returns null if user has no token) */
   getGitHubToken: (userId: string) => Promise<string | null>;
+  /**
+   * PR-V-github-401-graceful — optional hook called by the orchestrator
+   * when the GitHub API responds 401 ("Bad credentials"). Implementations
+   * should remove the user's stored integration token so future pipelines
+   * don't retry the same dead credential. Returns whether a row was deleted.
+   */
+  invalidateUserGitHubToken?: (userId: string) => Promise<boolean>;
   store?: PipelineStore;
   /** Optional: tool-calling client for agentic loop (Claude API tool_use) */
   agenticDeps?: AgenticLoopDeps;
@@ -486,6 +493,13 @@ export function createPipelineSystem(opts: CreatePipelineOrchestratorOptions): P
 
   // Wire AI service for RepoContextAgent
   orchestrator.setAIService(opts.aiService);
+
+  // PR-V-github-401-graceful — install token-invalidation hook so 401s from
+  // adapter calls drop the stale `github_integrations` row instead of looping
+  // the same dead credential through the next pipeline.
+  if (opts.invalidateUserGitHubToken) {
+    orchestrator.setGitHubTokenInvalidator(opts.invalidateUserGitHubToken);
+  }
 
   const reconciler = new PipelineReconciler(store);
   return { orchestrator, reconciler };
