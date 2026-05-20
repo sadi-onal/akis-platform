@@ -112,6 +112,12 @@ interface ChatPanelProps {
   scribeSpec?: import('../../types/workflow').StructuredSpec | null;
   /** PR-V6: assumption list shown alongside the spec disclosures. */
   scribeAssumptions?: string[] | null;
+  /**
+   * T2: Jira integration metadata (projectKey, enabled, epicKey, siteUrl)
+   * threaded down from the workflow record. PipelineDetailRail uses it to
+   * render the "Jira Epic: PROJ-123" link in the rail header.
+   */
+  jiraConfig?: import('../../types/workflow').Workflow['jiraConfig'];
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -164,6 +170,7 @@ export const ChatPanel = memo(function ChatPanel({
   traceDryRunStatus,
   scribeSpec,
   scribeAssumptions,
+  jiraConfig,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -277,6 +284,7 @@ export const ChatPanel = memo(function ChatPanel({
           traceDryRunStatus={traceDryRunStatus}
           scribeSpec={scribeSpec}
           scribeAssumptions={scribeAssumptions}
+          jiraConfig={jiraConfig}
         />
       )}
 

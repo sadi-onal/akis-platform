@@ -246,6 +246,13 @@ export const JiraConfigSchema = z
       .regex(/^[A-Z][A-Z0-9_]*$/, 'Jira proje anahtarı geçersiz'),
     enabled: z.boolean(),
     epicKey: z.string().optional(),
+    /**
+     * T2: full base URL of the user's Atlassian site (e.g.
+     * `https://example.atlassian.net`). Stamped at Epic creation so the UI can
+     * render `Jira Epic: PROJ-123` as a clickable link without an extra status
+     * round-trip.
+     */
+    siteUrl: z.string().url().optional(),
   })
   .optional();
 

@@ -222,6 +222,17 @@ export interface Workflow {
    * graceful banner instead of an empty card.
    */
   explainabilityDegraded?: boolean;
+  /**
+   * T2 — Jira integration metadata. Present when the user enabled Jira at
+   * pipeline creation; `epicKey` lands once the Epic is created, `siteUrl`
+   * is stamped alongside so the UI can render a clickable Epic link.
+   */
+  jiraConfig?: {
+    projectKey: string;
+    enabled: boolean;
+    epicKey?: string;
+    siteUrl?: string;
+  };
 }
 
 export interface WorkflowStats {

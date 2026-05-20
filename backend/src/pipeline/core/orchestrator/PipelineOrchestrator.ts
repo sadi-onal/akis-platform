@@ -11,6 +11,7 @@ import type {
   TraceOutput,
 } from '../contracts/PipelineTypes.js';
 import { JiraMCPService } from '../../../services/mcp/adapters/JiraMCPService.js';
+import { atlassianOAuthService } from '../../../services/atlassian/AtlassianOAuthService.js';
 import {
   createJiraEpicFromSpec,
   commentJiraWithProtoResult,
@@ -157,7 +158,7 @@ export interface PipelineStateUpdate {
   traceOutput: TraceOutput;
   repoContext: import('../../agents/repo-context/RepoContextTypes.js').RepoContext;
   protoConfig: { repoName: string; repoVisibility: 'public' | 'private' };
-  jiraConfig: { projectKey: string; enabled: boolean; epicKey?: string };
+  jiraConfig: { projectKey: string; enabled: boolean; epicKey?: string; siteUrl?: string };
   metrics: PipelineMetrics;
   error: PipelineError | null;
   intermediateState: Record<string, unknown>;
@@ -3896,8 +3897,21 @@ export class PipelineOrchestrator {
       if (!jira) return;
       const epicKey = await createJiraEpicFromSpec(jira, projectKey, spec);
       if (epicKey) {
+        // T2: stamp siteUrl alongside the epicKey so the UI can render a
+        // clickable link without an extra round-trip. getStatus is cheap
+        // (single DB read) and only runs once per Epic creation.
+        let siteUrl: string | undefined;
+        try {
+          const status = await atlassianOAuthService.getStatus(userId);
+          siteUrl = status.siteUrl;
+        } catch (err) {
+          logger.warn(
+            { err, userId },
+            '[Pipeline] Jira siteUrl resolve failed (Epic still linked, link will be missing)'
+          );
+        }
         await this.store.update(pipelineId, {
-          jiraConfig: { projectKey, enabled: true, epicKey },
+          jiraConfig: { projectKey, enabled: true, epicKey, siteUrl },
         });
         logger.info(`[Pipeline] Jira Epic ${epicKey} linked to pipeline ${pipelineId}`);
       }

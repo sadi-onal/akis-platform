@@ -193,6 +193,18 @@ export interface Pipeline {
   protoOutput?: ProtoOutput;
   traceOutput?: TraceOutput;
   protoConfig?: { repoName: string; repoVisibility: 'public' | 'private' };
+  /**
+   * T2 — Jira integration metadata. `epicKey` is filled by the backend
+   * after the Jira Epic creation hook succeeds; `siteUrl` is stamped
+   * alongside so the UI can construct the Epic link without a separate
+   * status round-trip.
+   */
+  jiraConfig?: {
+    projectKey: string;
+    enabled: boolean;
+    epicKey?: string;
+    siteUrl?: string;
+  };
   metrics: PipelineMetrics;
   error?: PipelineError;
   intermediateState?: {

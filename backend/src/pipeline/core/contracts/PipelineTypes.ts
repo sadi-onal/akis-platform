@@ -290,6 +290,8 @@ export interface PipelineState {
     projectKey: string;
     enabled: boolean;
     epicKey?: string;
+    /** T2: site base URL for "Jira Epic: PROJ-123" links in the UI. */
+    siteUrl?: string;
   };
   repoContext?: import('../../agents/repo-context/RepoContextTypes.js').RepoContext;
 

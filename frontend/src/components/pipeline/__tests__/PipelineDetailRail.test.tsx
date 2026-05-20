@@ -777,3 +777,73 @@ describe('PipelineDetailRail — PR-V2 Critic findings summary chip', () => {
     expect(screen.queryByTestId('critic-findings-summary-chip')).toBeNull();
   });
 });
+
+describe('PipelineDetailRail — T2 Jira Epic link', () => {
+  it('renders a clickable Atlassian link when epicKey + siteUrl are set', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        jiraConfig={{
+          projectKey: 'AKIS',
+          enabled: true,
+          epicKey: 'AKIS-42',
+          siteUrl: 'https://example.atlassian.net',
+        }}
+      />
+    );
+    const link = screen.getByRole('link', { name: /AKIS-42/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', 'https://example.atlassian.net/browse/AKIS-42');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('renders epic name as plain badge (no link) when siteUrl is missing', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        jiraConfig={{
+          projectKey: 'AKIS',
+          enabled: true,
+          epicKey: 'AKIS-42',
+        }}
+      />
+    );
+    expect(screen.queryByRole('link', { name: /AKIS-42/i })).toBeNull();
+    expect(screen.getByText(/Jira Epic: AKIS-42/)).toBeInTheDocument();
+  });
+
+  it('renders nothing when epicKey is missing (Jira disabled or Epic creation failed)', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        jiraConfig={{
+          projectKey: 'AKIS',
+          enabled: true,
+        }}
+      />
+    );
+    expect(screen.queryByText(/Jira Epic/)).toBeNull();
+  });
+
+  it('renders nothing when jiraConfig is undefined (Jira disabled at start)', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+      />
+    );
+    expect(screen.queryByText(/Jira Epic/)).toBeNull();
+  });
+});

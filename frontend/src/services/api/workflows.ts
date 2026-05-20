@@ -464,6 +464,10 @@ export function mapPipelineToWorkflow(
     traceDryRunStatus,
     ...(traceDryRunErrorCode ? { traceDryRunErrorCode } : {}),
     explainabilityDegraded,
+    // T2: jiraConfig (project + epicKey + siteUrl) flows straight from the
+    // pipeline record so the rail can render the "Jira Epic: PROJ-123" link
+    // when the Epic was successfully created.
+    ...(pipeline.jiraConfig ? { jiraConfig: pipeline.jiraConfig } : {}),
   };
 }
 

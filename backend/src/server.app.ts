@@ -147,14 +147,23 @@ export async function buildApp() {
     );
   }
 
-  // Phase 5.D: Create MCPTools (signature-only adapters for now)
-  // In production, these would be initialized with real tokens/baseUrls
-  const mcpTools: MCPTools = {
-    // Adapters are signature-only, so we don't instantiate them yet
-    // githubMCP: new GitHubMCPService({ baseUrl: env.GITHUB_MCP_BASE_URL || '', token: '...' }),
-    // jiraMCP: new JiraMCPService({ baseUrl: env.ATLASSIAN_MCP_BASE_URL || '', token: '...' }),
-    // confluenceMCP: new ConfluenceMCPService({ baseUrl: env.ATLASSIAN_MCP_BASE_URL || '', token: '...' }),
-  };
+  // Phase 5.D: Create MCPTools for the legacy AgentOrchestrator
+  // (single-agent endpoints under /api/agents/*).
+  //
+  // T2: the modern PipelineOrchestrator does NOT consume MCPTools. It uses
+  // per-user factories at runtime: `JiraMCPService.fromOAuth(userId)` reads
+  // the user's Atlassian OAuth token from the DB and returns a scoped
+  // client (or null when env is missing / user hasn't connected). See
+  // PipelineOrchestrator.runJiraEpicCreation / runJiraProtoComment / etc.
+  // for the consumers.
+  //
+  // GitHub MCP is the same pattern — pipeline uses per-user GitHubRESTAdapter
+  // via opts.createGitHubService below, not MCPTools.githubMCP.
+  //
+  // The legacy AgentFactory currently does not actually read any of these
+  // (see AgentFactory.AgentDependencies.tools), so this stays empty until a
+  // legacy consumer needs it.
+  const mcpTools: MCPTools = {};
 
   // Phase 5.D: Create orchestrator with DI
   const orchestrator = new AgentOrchestrator({}, aiService, mcpTools);

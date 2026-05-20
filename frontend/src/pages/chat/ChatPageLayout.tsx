@@ -324,6 +324,10 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       // caller ever supplied it.
                       scribeSpec={activeWorkflow?.stages?.scribe?.spec}
                       scribeAssumptions={activeWorkflow?.stages?.scribe?.assumptions}
+                      // T2: thread Jira metadata so the rail can render the
+                      // "Jira Epic: PROJ-123" link in its header once the
+                      // Epic is created.
+                      jiraConfig={activeWorkflow?.jiraConfig}
                       onCriticResolved={
                         onPushResolved
                           ? () => {

@@ -106,6 +106,18 @@ export interface PipelineDetailRailProps {
   scribeSpec?: import('../../types/workflow').StructuredSpec | null;
   /** PR-V6 — assumption list rendered alongside the spec disclosures. */
   scribeAssumptions?: string[] | null;
+  /**
+   * T2 — Jira integration metadata threaded down from the workflow.
+   * When `epicKey` is set the rail header renders a "Jira Epic: PROJ-123"
+   * link; `siteUrl` makes the link clickable. Either field missing → silent
+   * no-op (no broken icon, no error state).
+   */
+  jiraConfig?: {
+    projectKey: string;
+    enabled: boolean;
+    epicKey?: string;
+    siteUrl?: string;
+  };
   className?: string;
 }
 
@@ -188,6 +200,7 @@ export function PipelineDetailRail({
   traceDryRunStatus,
   scribeSpec,
   scribeAssumptions,
+  jiraConfig,
   className,
   // onPushResolved is accepted in the interface so callers can keep
   // passing it (it's still consumed by the T1 PushGateFooter render path,
@@ -558,22 +571,53 @@ export function PipelineDetailRail({
             </span>
           )}
         </div>
-        {!effectiveCollapsed && attentionPoints.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setTab('flow')}
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
-              highSevCount > 0
-                ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 hover:bg-rose-500/20 dark:text-rose-300'
-                : 'border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300'
-            }`}
-            aria-label={`${attentionPoints.length} dikkat noktası — Akış sekmesinde göster`}
-            title="Akış sekmesine geç ve dikkat noktalarını görüntüle"
-          >
-            <span aria-hidden="true">!</span>
-            {attentionPoints.length} dikkat noktası
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* T2 — Jira Epic link. Renders only when the backend has both
+              the epic key and the site URL; falls back to plain text when
+              siteUrl is missing so the badge still names the Epic. */}
+          {jiraConfig?.epicKey &&
+            (jiraConfig.siteUrl ? (
+              <a
+                href={`${jiraConfig.siteUrl.replace(/\/$/, '')}/browse/${jiraConfig.epicKey}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-500/20 dark:text-blue-300"
+                aria-label={`Jira Epic ${jiraConfig.epicKey} — yeni sekmede aç`}
+                title={`Jira Epic'i Atlassian'da aç`}
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.593 24V12.518a1.005 1.005 0 0 0-1.022-1.005z" />
+                </svg>
+                Jira Epic: {jiraConfig.epicKey}
+              </a>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300"
+                title="Atlassian site URL eksik — link inşa edilemedi"
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.593 24V12.518a1.005 1.005 0 0 0-1.022-1.005z" />
+                </svg>
+                Jira Epic: {jiraConfig.epicKey}
+              </span>
+            ))}
+          {!effectiveCollapsed && attentionPoints.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTab('flow')}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+                highSevCount > 0
+                  ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 hover:bg-rose-500/20 dark:text-rose-300'
+                  : 'border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300'
+              }`}
+              aria-label={`${attentionPoints.length} dikkat noktası — Akış sekmesinde göster`}
+              title="Akış sekmesine geç ve dikkat noktalarını görüntüle"
+            >
+              <span aria-hidden="true">!</span>
+              {attentionPoints.length} dikkat noktası
+            </button>
+          )}
+        </div>
       </header>
       {!effectiveCollapsed && (
         <div
