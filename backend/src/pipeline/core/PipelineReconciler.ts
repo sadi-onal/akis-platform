@@ -22,6 +22,62 @@ const RUNNING_STAGES: PipelineStage[] = [
   'trace_testing',
 ];
 
+// Inline Turkish label map (extracted to a helper in Task 6 — keep inline for now)
+const stageLabelTR: Partial<Record<PipelineStage, string>> = {
+  scribe_clarifying: 'Fikir analiz adımı',
+  scribe_generating: 'Fikir analiz adımı',
+  proto_building: 'Kod üretim adımı',
+  trace_testing: 'Test üretim adımı',
+};
+
+type StuckEventKind = 'trace_failed' | 'scribe_failed' | 'proto_failed';
+const eventKindByStage: Partial<Record<PipelineStage, StuckEventKind>> = {
+  trace_testing: 'trace_failed',
+  scribe_generating: 'scribe_failed',
+  scribe_clarifying: 'scribe_failed',
+  proto_building: 'proto_failed',
+};
+
+function buildStuckEvent(
+  kind: StuckEventKind,
+  stage: PipelineStage,
+  prevConversation: ScribeMessageType[],
+  stuckMinutes: number
+): ScribeMessageType {
+  const label = stageLabelTR[stage] ?? 'İşlem';
+  const errorMessage = `${label} ${stuckMinutes} dakika boyunca yanıt vermedi. Otomatik olarak durduruldu.`;
+  const timestamp = new Date().toISOString();
+  if (kind === 'trace_failed') {
+    const iteration =
+      prevConversation.filter((m: ScribeMessageType) => m.type === 'trace_completed').length + 1;
+    return {
+      type: 'trace_failed',
+      content: { iteration, errorCode: 'PIPELINE_TIMEOUT', errorMessage, recoveryAction: 'retry' },
+      timestamp,
+    };
+  }
+  if (kind === 'proto_failed') {
+    const iteration =
+      prevConversation.filter((m: ScribeMessageType) => m.type === 'proto_completed').length + 1;
+    return {
+      type: 'proto_failed',
+      content: { iteration, errorCode: 'PIPELINE_TIMEOUT', errorMessage, recoveryAction: 'retry' },
+      timestamp,
+    };
+  }
+  // scribe_failed
+  return {
+    type: 'scribe_failed',
+    content: {
+      stageStuck: stage,
+      errorCode: 'PIPELINE_TIMEOUT',
+      errorMessage,
+      recoveryAction: 'retry',
+    },
+    timestamp,
+  };
+}
+
 export class PipelineReconciler {
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -88,32 +144,14 @@ export class PipelineReconciler {
           continue;
         }
 
-        // Compute the per-stage chat event (only trace_testing has a mapped event for now).
-        type StuckEventMap = { [K in PipelineStage]?: 'trace_failed' };
-        const eventTypeByStage: StuckEventMap = {
-          trace_testing: 'trace_failed',
-        };
-        const eventType = eventTypeByStage[p.stage];
-
-        const conversation =
-          eventType === 'trace_failed'
-            ? [
-                ...full.scribeConversation,
-                {
-                  type: 'trace_failed' as const,
-                  content: {
-                    iteration:
-                      full.scribeConversation.filter(
-                        (m: ScribeMessageType) => m.type === 'trace_completed'
-                      ).length + 1,
-                    errorCode: 'PIPELINE_TIMEOUT',
-                    errorMessage: `Test yazımı ${stuckMinutes} dakika yanıt vermedi. Otomatik olarak durduruldu.`,
-                    recoveryAction: 'retry' as const,
-                  },
-                  timestamp: new Date().toISOString(),
-                },
-              ]
-            : full.scribeConversation;
+        // Compute the per-stage chat event from the stage→event mapping.
+        const eventKind = eventKindByStage[p.stage];
+        const conversation = eventKind
+          ? [
+              ...full.scribeConversation,
+              buildStuckEvent(eventKind, p.stage, full.scribeConversation, stuckMinutes),
+            ]
+          : full.scribeConversation;
 
         await this.store.update(p.id, { stage: 'failed', error, scribeConversation: conversation });
         recovered++;
