@@ -335,6 +335,38 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
           recoveryAction: msg.content.recoveryAction,
         });
         break;
+      case 'scribe_failed':
+        // Task 4 (failed-state-holistic): mirror trace_failed shape so the
+        // chat timeline can render a dedicated failure message when the
+        // Reconciler sweeps a stuck Scribe pipeline. `stageStuck` carries
+        // the orchestrator's PipelineStage at the moment of the sweep so
+        // the UI can localise per-stage copy (Task 5+).
+        messages.push({
+          role: 'system',
+          type: 'scribe_failed',
+          content: msg.content.errorMessage,
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+          stageStuck: msg.content.stageStuck,
+          errorCode: msg.content.errorCode,
+          errorMessage: msg.content.errorMessage,
+          recoveryAction: msg.content.recoveryAction,
+        });
+        break;
+      case 'proto_failed':
+        // Task 4 (failed-state-holistic): mirror trace_failed shape for
+        // Proto sweeps. `iteration` is optional on the backend payload
+        // (an early Proto failure may pre-date the first iteration tick).
+        messages.push({
+          role: 'system',
+          type: 'proto_failed',
+          content: msg.content.errorMessage,
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+          ...(msg.content.iteration !== undefined ? { iteration: msg.content.iteration } : {}),
+          errorCode: msg.content.errorCode,
+          errorMessage: msg.content.errorMessage,
+          recoveryAction: msg.content.recoveryAction,
+        });
+        break;
     }
   }
 
