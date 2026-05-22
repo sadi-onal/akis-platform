@@ -138,6 +138,16 @@ export interface PipelineDetailRailProps {
     conclusion: string | null;
     htmlUrl: string;
   };
+  /**
+   * F-1 (2026-05-22, T9 follow-up) — workflow.stages slice forwarded so the
+   * Akış tab's PipelineCinema can flip a stage card to the `failed` visual
+   * when `mapPipelineToWorkflow` has stamped
+   * `stages.<X>.status='failed'` + `.error=<label>` (e.g. "Zaman aşımı"
+   * for PIPELINE_TIMEOUT). Without this, T9's mapper change had no
+   * user-visible effect because cinema derives state from the SSE
+   * activity stream, not from `workflow.stages.*`.
+   */
+  workflowStages?: import('../../types/workflow').WorkflowStages;
   className?: string;
 }
 
@@ -223,6 +233,7 @@ export function PipelineDetailRail({
   scribeAssumptions,
   jiraConfig,
   ciResult,
+  workflowStages,
   className,
   // onPushResolved is accepted in the interface so callers can keep
   // passing it (it's still consumed by the T1 PushGateFooter render path,
@@ -257,6 +268,14 @@ export function PipelineDetailRail({
   // T1: AI logs tab is visible to every user by default. Tests can still
   // pass `showAiLogsTab={false}` to render the rail without it.
   const aiLogsTabVisible = showAiLogsTab ?? true;
+  // T9 follow-up: failed pipelines collapse to uiState='idle' (no 'failed'
+  // member in the union), which hid the rose Trace failed card behind the
+  // auto-collapse. Treat any failed stage as auto-expand so AC-1 is visible
+  // by default without a manual click.
+  const hasFailedStage =
+    workflowStages?.scribe?.status === 'failed' ||
+    workflowStages?.proto?.status === 'failed' ||
+    workflowStages?.trace?.status === 'failed';
   // Keep the collapse contract from v0.7.0: collapse on idle. The
   // Regresyon tab is still clickable and renders content when the user
   // manually expands the rail; auto-expansion would clobber the chat
@@ -264,7 +283,11 @@ export function PipelineDetailRail({
   // critic gates to the auto-expand set so the user can't miss the inline
   // resolution surface.
   const autoCollapsed =
-    !isRunning(uiState) && !isExplainable(uiState) && !pushGateActive && !criticGateActive;
+    !isRunning(uiState) &&
+    !isExplainable(uiState) &&
+    !pushGateActive &&
+    !criticGateActive &&
+    !hasFailedStage;
   // PR-B: push + critic gates render their inline action UI inside the
   // Akış tab (alongside the cinema). Auto-route to 'flow' for those so the
   // gate is immediately reachable — otherwise the user lands on Açıklama
@@ -727,6 +750,26 @@ export function PipelineDetailRail({
               currentStep={currentStep}
               uiState={uiState}
               compact
+              // F-1 (2026-05-22): derive the per-stage failure label map
+              // from `workflow.stages.<X>.status === 'failed'` + `.error`.
+              // T9's `mapPipelineToWorkflow` writes these fields when the
+              // Reconciler sweeps a stuck pipeline to `pipeline.stage =
+              // 'failed'`; cinema picks them up here so the matched card
+              // flips to a failed visual with the errorCode-based label.
+              failedStages={
+                workflowStages
+                  ? ((): import('./PipelineCinema.utils').FailedStagesMap | undefined => {
+                      const out: import('./PipelineCinema.utils').FailedStagesMap = {};
+                      if (workflowStages.scribe?.status === 'failed' && workflowStages.scribe.error)
+                        out.scribe = workflowStages.scribe.error;
+                      if (workflowStages.proto?.status === 'failed' && workflowStages.proto.error)
+                        out.proto = workflowStages.proto.error;
+                      if (workflowStages.trace?.status === 'failed' && workflowStages.trace.error)
+                        out.trace = workflowStages.trace.error;
+                      return Object.keys(out).length > 0 ? out : undefined;
+                    })()
+                  : undefined
+              }
             />
           )}
           {/* PR-V2 (2026-05-19): Akış tab'ında Critic findings yalnızca özet

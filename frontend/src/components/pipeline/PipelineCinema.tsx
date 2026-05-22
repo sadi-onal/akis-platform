@@ -4,7 +4,12 @@ import type { ConversationUIState } from '../../types/chat';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useI18n } from '../../i18n/useI18n';
-import { reduceStageViews, type CinemaStage, type StageView } from './PipelineCinema.utils';
+import {
+  reduceStageViews,
+  type CinemaStage,
+  type FailedStagesMap,
+  type StageView,
+} from './PipelineCinema.utils';
 
 export interface PipelineCinemaProps {
   activities: PipelineActivity[];
@@ -16,6 +21,18 @@ export interface PipelineCinemaProps {
    * emits a "stage finished" marker.
    */
   uiState?: ConversationUIState;
+  /**
+   * F-1 (2026-05-22) — per-stage failure label map sourced from
+   * `workflow.stages.{scribe,proto,trace}.error` (populated by T9's
+   * `mapPipelineToWorkflow` change when `pipeline.stage === 'failed'`).
+   * The matched stage card flips to a `failed` visual and displays the
+   * label ("Zaman aşımı" for PIPELINE_TIMEOUT, error message otherwise)
+   * instead of its stale running text. Stages absent from the map render
+   * normally. Without this prop the upper banner offers "Tekrar Dene"
+   * while the Trace card keeps showing "Test senaryolarını
+   * hazırlıyor..." — the gap this prop closes.
+   */
+  failedStages?: FailedStagesMap;
   /** Compact mode hides the full-screen takeover; the row stays visible. */
   compact?: boolean;
   /** Callback when user toggles compact mode */
@@ -189,12 +206,19 @@ function StageColumn({
   const messageText = latest?.message ?? '';
   const baseClass =
     'flex min-h-[160px] flex-col gap-2 rounded-xl border bg-ak-surface p-3 transition-all';
+  // F-1 (2026-05-22): failed state uses the rose theme already established
+  // by PipelineErrorBanner / AttentionBanner for "needs your attention,
+  // something broke" surfaces. The other states keep their accent-driven
+  // theming so a failed Trace card visually contrasts with a complete
+  // Proto card sitting next to it.
   const stateClass =
-    state === 'active'
-      ? `${accent.ring} ${accent.tint}`
-      : state === 'complete'
-        ? 'border-ak-border-default'
-        : 'border-ak-border-subtle opacity-60';
+    state === 'failed'
+      ? 'border-rose-500/60 bg-rose-500/5 shadow-[0_0_0_1px_rgb(244_63_94/0.25)]'
+      : state === 'active'
+        ? `${accent.ring} ${accent.tint}`
+        : state === 'complete'
+          ? 'border-ak-border-default'
+          : 'border-ak-border-subtle opacity-60';
   // PR-F: Trace iterate-loop retry rozetinin gösterileceği koşul. retryCount
   // tanımlı ise (en az 1 retry tetiklenmişse) badge görünür; max bilinmiyorsa
   // sadece "Test deniyor (n)" formatında düşer.
@@ -237,13 +261,33 @@ function StageColumn({
     >
       <header className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2">
+          {/* F-1: failed state swaps the accent dot for a small ✗ glyph in
+              the rose theme so the card is recognizable as broken at a
+              glance — matches the iconography used by PipelineErrorBanner
+              + the rail's "✗ Başarısız" CI pill. */}
+          {state === 'failed' ? (
+            <span
+              aria-hidden="true"
+              data-testid={`stage-failed-icon-${stage}`}
+              className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-rose-500/15 text-[8px] font-bold leading-none text-rose-600 dark:text-rose-300"
+            >
+              ✗
+            </span>
+          ) : (
+            <span
+              aria-hidden="true"
+              className={`inline-block h-2 w-2 rounded-full ${accent.dot} ${
+                state === 'active' && !reducedMotion ? 'animate-pulse' : ''
+              } ${state === 'pending' ? 'opacity-40' : ''}`}
+            />
+          )}
           <span
-            aria-hidden="true"
-            className={`inline-block h-2 w-2 rounded-full ${accent.dot} ${
-              state === 'active' && !reducedMotion ? 'animate-pulse' : ''
-            } ${state === 'pending' ? 'opacity-40' : ''}`}
-          />
-          <span className={`text-sm font-semibold ${accent.text}`}>{STAGE_LABEL[stage]}</span>
+            className={`text-sm font-semibold ${
+              state === 'failed' ? 'text-rose-700 dark:text-rose-300' : accent.text
+            }`}
+          >
+            {STAGE_LABEL[stage]}
+          </span>
           <StageInfoButton label={STAGE_LABEL[stage]} description={tooltip} stage={stage} />
         </span>
         <span className="flex items-center gap-1.5">
@@ -276,7 +320,9 @@ function StageColumn({
               the whole stage and then jump to 100% on transition, because
               the orchestrator rarely sets `progress`. Completed stages
               stay at a full bar. `prefers-reduced-motion` collapses the
-              shimmer to a static 40% wide indicator. */}
+              shimmer to a static 40% wide indicator.
+              F-1: failed stages get a static red bar — no shimmer (the
+              column is terminal, not in flight). */}
           {state === 'active' ? (
             <div
               className={accent.dot}
@@ -292,6 +338,13 @@ function StageColumn({
                     }
               }
             />
+          ) : state === 'failed' ? (
+            <div
+              className="bg-rose-500"
+              data-testid={`stage-progress-${stage}`}
+              data-state="failed"
+              style={{ height: '100%', width: '100%' }}
+            />
           ) : (
             <div
               className={accent.dot}
@@ -304,10 +357,18 @@ function StageColumn({
       )}
       {messageText && (
         <p
+          // F-1: failed message uses rose theming + role=alert (assistive
+          // tech surfaces the failure label immediately when the override
+          // flips the card).
           className={`text-xs leading-snug ${
-            state === 'pending' ? 'text-ak-text-tertiary' : 'text-ak-text-primary'
+            state === 'failed'
+              ? 'font-medium text-rose-700 dark:text-rose-300'
+              : state === 'pending'
+                ? 'text-ak-text-tertiary'
+                : 'text-ak-text-primary'
           }`}
-          aria-live="polite"
+          aria-live={state === 'failed' ? 'assertive' : 'polite'}
+          role={state === 'failed' ? 'alert' : undefined}
         >
           {messageText}
         </p>
@@ -334,6 +395,7 @@ export function PipelineCinema({
   activities,
   currentStep,
   uiState,
+  failedStages,
   compact = false,
   onToggleCompact,
   approvalSlot,
@@ -342,8 +404,8 @@ export function PipelineCinema({
   const reducedMotion = useReducedMotion();
   const i18n = useI18n();
   const views = useMemo(
-    () => reduceStageViews(activities, currentStep, uiState),
-    [activities, currentStep, uiState]
+    () => reduceStageViews(activities, currentStep, uiState, failedStages),
+    [activities, currentStep, uiState, failedStages]
   );
 
   const tooltipFor = (stage: CinemaStage): string => {

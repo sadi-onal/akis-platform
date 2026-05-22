@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Pipeline, PipelineStage } from '../../../types/pipeline';
+import type { Pipeline, PipelineStage, ScribeMessageType } from '../../../types/pipeline';
 
 // ── Mock HttpClient before importing workflows module ──
 
@@ -246,11 +246,82 @@ describe('mapPipelineToWorkflow', () => {
       const w = mapPipelineToWorkflow(
         makePipeline({
           stage: 'failed',
+          // approvedSpec set + no protoOutput → F-1 branch routes the
+          // failure to the proto stage (scribe stays completed).
+          approvedSpec: {
+            title: 'X',
+            userStories: [],
+            acceptanceCriteria: [],
+            problemStatement: '',
+            outOfScope: [],
+            technicalConstraints: { stack: '', integrations: [], nonFunctional: [] },
+          } as unknown as Pipeline['approvedSpec'],
           error: { code: 'PROTO_FAILED', message: 'GitHub push failed', retryable: true },
         })
       );
       // Scribe was completed since stage progressed past it
       expect(w.stages.scribe.status).toBe('completed');
+    });
+  });
+
+  // F-1 (2026-05-22): when the Reconciler sweeps a stuck pipeline to
+  // `stage='failed'`, the 3-card upper view must mark the correct stage as
+  // failed with a label derived from the error code. Before this fix the
+  // mapper had no `stage === 'failed'` branch, so the Trace card kept
+  // showing the running-stage label (e.g. "Test senaryolarını hazırlıyor")
+  // even when the pipeline had been swept to failed.
+  describe('mapPipelineToWorkflow — failed-state stage labels (F-1)', () => {
+    it('marks trace stage failed with timeout label when stage=failed + PIPELINE_TIMEOUT + protoOutput exists', () => {
+      const pipeline = makePipeline({
+        stage: 'failed',
+        protoOutput: {
+          ok: true,
+          files: [],
+          branch: 'main',
+          repo: 'owner/r',
+          metadata: { filesCreated: 5, totalLinesOfCode: 100 },
+        } as unknown as Pipeline['protoOutput'],
+        traceOutput: null,
+        error: { code: 'PIPELINE_TIMEOUT', message: 'X', retryable: true },
+        traceEnabled: true,
+      });
+      const w = mapPipelineToWorkflow(pipeline);
+      expect(w.stages.trace.status).toBe('failed');
+      expect(w.stages.trace.error).toMatch(/zaman aşımı/i);
+    });
+
+    it('marks proto stage failed with generic error label when stage=failed + non-timeout + no protoOutput', () => {
+      const pipeline = makePipeline({
+        stage: 'failed',
+        approvedSpec: {
+          title: 'X',
+          userStories: [],
+          acceptanceCriteria: [],
+          problemStatement: '',
+          outOfScope: [],
+          technicalConstraints: { stack: '', integrations: [], nonFunctional: [] },
+        } as unknown as Pipeline['approvedSpec'],
+        protoOutput: null,
+        traceOutput: null,
+        error: { code: 'AI_PROVIDER_ERROR', message: 'rate limit', retryable: true },
+        traceEnabled: true,
+      });
+      const w = mapPipelineToWorkflow(pipeline);
+      expect(w.stages.proto.status).toBe('failed');
+      expect(w.stages.proto.error).toMatch(/rate limit|hata/i);
+    });
+
+    it('marks scribe stage failed when stage=failed and no spec yet', () => {
+      const pipeline = makePipeline({
+        stage: 'failed',
+        approvedSpec: undefined,
+        protoOutput: null,
+        traceOutput: null,
+        error: { code: 'AI_PROVIDER_ERROR', message: 'rate limit', retryable: true },
+        traceEnabled: true,
+      });
+      const w = mapPipelineToWorkflow(pipeline);
+      expect(w.stages.scribe.status).toBe('failed');
     });
   });
 
@@ -338,6 +409,175 @@ describe('mapPipelineToWorkflow', () => {
           m.content.includes('Trace test üretimi tamamlanamadı')
       );
       expect(traceFailure).toBeUndefined();
+    });
+  });
+
+  // Chat event-log gating (2026-05-22): once the orchestrator persists typed
+  // event-log entries (proto_completed / trace_completed / trace_failed) in
+  // `scribeConversation`, the snapshot-derived synthetic proto_result and
+  // trace_result rows would render duplicates. The mapper now skips the
+  // snapshot synthesis when an event-log entry is present, and keeps it for
+  // pipelines that pre-date the event-log (backward compat — NF-1).
+  describe('event-log gating for snapshot synthesis (2026-05-22)', () => {
+    function makeProtoOutput() {
+      return {
+        ok: true,
+        branch: 'main',
+        repo: 'owner/repo',
+        repoUrl: 'https://github.com/owner/repo',
+        files: [],
+        setupCommands: [],
+        summary: 'Snapshot özet',
+        metadata: {
+          filesCreated: 3,
+          totalLinesOfCode: 120,
+          committed: true,
+        },
+        verificationReport: {
+          specCoverage: '100%',
+          integrityIssues: [],
+          confidenceScore: 95,
+        },
+      } as unknown as Pipeline['protoOutput'];
+    }
+
+    function makeTraceOutput() {
+      return {
+        ok: true,
+        testFiles: [{ filePath: 'tests/foo.spec.ts', content: '', testCount: 3 }],
+        coverageMatrix: {},
+        testSummary: {
+          totalTests: 3,
+          coveragePercentage: 80,
+          coveredCriteria: [],
+          uncoveredCriteria: [],
+        },
+      } as unknown as Pipeline['traceOutput'];
+    }
+
+    it('skips snapshot proto_result synthesis when scribeConversation has proto_completed', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'completed',
+          protoOutput: makeProtoOutput(),
+          scribeConversation: [
+            {
+              type: 'proto_completed',
+              content: {
+                iteration: 1,
+                summary: 'Event-log özet',
+                filesCreated: 3,
+                totalLines: 120,
+                branch: 'main',
+              },
+              timestamp: '2026-05-22T10:00:00Z',
+            },
+          ] as unknown as Pipeline['scribeConversation'],
+        })
+      );
+      const protoRows = (w.conversation ?? []).filter(
+        (m) => m.role === 'proto' && m.type === 'proto_result'
+      );
+      // Only the event-log-derived row, NOT the synthetic snapshot one.
+      expect(protoRows).toHaveLength(1);
+      expect(protoRows[0].content).toBe('Event-log özet');
+      // verificationReport + repo should be merged from pipeline.protoOutput
+      // so the explainability rail keeps its data even after the snapshot
+      // synthesis path is gated.
+      expect(protoRows[0].protoResult?.verificationReport).toBeDefined();
+      expect(protoRows[0].protoResult?.verificationReport?.confidenceScore).toBe(95);
+      expect(protoRows[0].protoResult?.repo).toBe('owner/repo');
+    });
+
+    it('keeps snapshot proto_result synthesis when scribeConversation is empty (NF-1 backward compat)', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'completed',
+          protoOutput: makeProtoOutput(),
+          // No event-log entries — legacy pipeline.
+          scribeConversation: [],
+        })
+      );
+      const protoRows = (w.conversation ?? []).filter(
+        (m) => m.role === 'proto' && m.type === 'proto_result'
+      );
+      expect(protoRows).toHaveLength(1);
+      // Legacy snapshot content includes the "Scaffold oluşturuldu" prefix.
+      expect(protoRows[0].content).toContain('Scaffold oluşturuldu');
+    });
+
+    it('skips snapshot trace_result synthesis when scribeConversation has trace_completed', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'completed',
+          protoOutput: makeProtoOutput(),
+          traceOutput: makeTraceOutput(),
+          scribeConversation: [
+            {
+              type: 'trace_completed',
+              content: { iteration: 1, totalTests: 3, coverage: 80, passed: true },
+              timestamp: '2026-05-22T10:01:00Z',
+            },
+          ] as unknown as Pipeline['scribeConversation'],
+        })
+      );
+      const traceRows = (w.conversation ?? []).filter(
+        (m) => m.role === 'trace' && m.type === 'trace_result'
+      );
+      // Only the event-log-derived row.
+      expect(traceRows).toHaveLength(1);
+      expect(traceRows[0].iteration).toBe(1);
+    });
+
+    it('keeps snapshot trace_result synthesis when scribeConversation is empty (NF-1 backward compat)', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'completed',
+          protoOutput: makeProtoOutput(),
+          traceOutput: makeTraceOutput(),
+          scribeConversation: [],
+        })
+      );
+      const traceRows = (w.conversation ?? []).filter(
+        (m) => m.role === 'trace' && m.type === 'trace_result'
+      );
+      // Legacy snapshot still synthesises a trace_result row.
+      expect(traceRows).toHaveLength(1);
+      expect(traceRows[0].content).toContain('Test yazıldı');
+    });
+
+    it('skips the "Trace test üretimi tamamlanamadı" info row when scribeConversation has trace_failed', () => {
+      const w = mapPipelineToWorkflow(
+        makePipeline({
+          stage: 'awaiting_push_confirm',
+          protoOutput: makeProtoOutput(),
+          // No `traceOutput` (Trace failed); event-log carries the failure
+          // so we should NOT also emit the legacy "tamamlanamadı" info row.
+          scribeConversation: [
+            {
+              type: 'trace_failed',
+              content: {
+                iteration: 1,
+                errorCode: 'PIPELINE_TIMEOUT',
+                errorMessage: 'Trace zaman aşımına uğradı',
+                recoveryAction: 'retry',
+              },
+              timestamp: '2026-05-22T10:02:00Z',
+            },
+          ] as unknown as Pipeline['scribeConversation'],
+        })
+      );
+      const conv = w.conversation ?? [];
+      const legacyInfo = conv.find(
+        (m) =>
+          m.role === 'system' &&
+          typeof m.content === 'string' &&
+          m.content.includes('Trace test üretimi tamamlanamadı')
+      );
+      expect(legacyInfo).toBeUndefined();
+      // But the event-log trace_failed row IS still there.
+      const eventLogFailure = conv.find((m) => m.role === 'system' && m.type === 'trace_failed');
+      expect(eventLogFailure).toBeDefined();
     });
   });
 });
@@ -462,6 +702,120 @@ describe('workflowsApi', () => {
 
       expect(mockGet).toHaveBeenCalledWith('/api/pipelines/p-123/regression');
       expect(result).toEqual(report);
+    });
+  });
+
+  describe('mapPipelineToConversation — chat event-log proxy', () => {
+    it('maps proto_started/proto_completed/trace_started/trace_completed/trace_failed', () => {
+      const pipeline = makePipeline({
+        id: 'p1',
+        stage: 'failed',
+        scribeConversation: [
+          { type: 'user_idea', content: 'idea' },
+          {
+            type: 'spec_approved',
+            content: {
+              title: 'X',
+              userStories: [],
+              acceptanceCriteria: [],
+              problemStatement: '',
+              outOfScope: [],
+              technicalConstraints: { stack: '', integrations: [], nonFunctional: [] },
+            },
+          },
+          { type: 'proto_started', content: { iteration: 1 }, timestamp: '2026-05-22T10:00:00Z' },
+          {
+            type: 'proto_completed',
+            content: {
+              iteration: 1,
+              summary: 'Done.',
+              filesCreated: 5,
+              totalLines: 100,
+              branch: 'main',
+            },
+            timestamp: '2026-05-22T10:01:00Z',
+          },
+          { type: 'trace_started', content: { iteration: 1 }, timestamp: '2026-05-22T10:02:00Z' },
+          {
+            type: 'trace_failed',
+            content: {
+              iteration: 1,
+              errorCode: 'PIPELINE_TIMEOUT',
+              errorMessage: 'Test yazımı 15 dakika yanıt vermedi.',
+              recoveryAction: 'retry' as const,
+            },
+            timestamp: '2026-05-22T10:17:00Z',
+          },
+        ] as ScribeMessageType[],
+        error: { code: 'PIPELINE_TIMEOUT', message: 'X', retryable: true },
+        metrics: { startedAt: '2026-05-22T10:00:00Z', clarificationRounds: 0, retryCount: 0 },
+        traceEnabled: true,
+      });
+
+      const w = mapPipelineToWorkflow(pipeline);
+      const msgs = w.conversation ?? [];
+      const types = msgs.map((m) => m.type);
+
+      expect(types).toContain('proto_started');
+      expect(types).toContain('proto_result'); // proto_completed → proto_result
+      expect(types).toContain('trace_started');
+      expect(types).toContain('trace_failed');
+
+      const failed = msgs.find((m) => m.type === 'trace_failed');
+      expect(failed?.errorCode).toBe('PIPELINE_TIMEOUT');
+      expect(failed?.recoveryAction).toBe('retry');
+
+      const completed = msgs.find((m) => m.type === 'proto_result');
+      expect(completed?.iteration).toBe(1);
+    });
+
+    it('maps proto_completed.summary into proto_result.content', () => {
+      const pipeline = makePipeline({
+        id: 'p1',
+        stage: 'completed',
+        scribeConversation: [
+          { type: 'proto_started', content: { iteration: 1 }, timestamp: '2026-05-22T10:00:00Z' },
+          {
+            type: 'proto_completed',
+            content: {
+              iteration: 1,
+              summary: 'Sayaç hazır — artırma/azaltma/sıfırla çalışıyor.',
+              filesCreated: 15,
+              totalLines: 552,
+              branch: 'main',
+            },
+            timestamp: '2026-05-22T10:01:00Z',
+          },
+        ] as ScribeMessageType[],
+        metrics: { startedAt: '2026-05-22T10:00:00Z', clarificationRounds: 0, retryCount: 0 },
+        traceEnabled: true,
+      });
+
+      const w = mapPipelineToWorkflow(pipeline);
+      const msgs = w.conversation ?? [];
+      const proto = msgs.find((m) => m.type === 'proto_result');
+      expect(proto?.content).toContain('Sayaç hazır');
+    });
+
+    it('maps trace_completed into trace_result with iteration', () => {
+      const pipeline = makePipeline({
+        id: 'p1',
+        stage: 'completed',
+        scribeConversation: [
+          {
+            type: 'trace_completed',
+            content: { iteration: 2, totalTests: 12, coverage: 87, passed: true },
+            timestamp: '2026-05-22T10:05:00Z',
+          },
+        ] as ScribeMessageType[],
+        metrics: { startedAt: '2026-05-22T10:00:00Z', clarificationRounds: 0, retryCount: 0 },
+      });
+
+      const w = mapPipelineToWorkflow(pipeline);
+      const msgs = w.conversation ?? [];
+      const trace = msgs.find((m) => m.type === 'trace_result');
+      expect(trace?.iteration).toBe(2);
+      expect(trace?.traceResult?.testCount).toBe(12);
     });
   });
 });

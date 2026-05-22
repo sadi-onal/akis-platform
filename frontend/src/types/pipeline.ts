@@ -75,7 +75,36 @@ export type ScribeMessageType =
   | { type: 'spec_draft'; content: ScribeOutput }
   | { type: 'spec_approved'; content: StructuredSpec }
   | { type: 'spec_rejected'; content: { feedback: string } }
-  | { type: 'user_note'; content: string };
+  | { type: 'user_note'; content: string }
+  // Chat event-log types (2026-05-22)
+  | { type: 'proto_started'; content: { iteration: number }; timestamp?: string }
+  | {
+      type: 'proto_completed';
+      content: {
+        iteration: number;
+        summary: string;
+        filesCreated: number;
+        totalLines: number;
+        branch?: string;
+      };
+      timestamp?: string;
+    }
+  | { type: 'trace_started'; content: { iteration: number }; timestamp?: string }
+  | {
+      type: 'trace_completed';
+      content: { iteration: number; totalTests: number; coverage: number; passed: boolean };
+      timestamp?: string;
+    }
+  | {
+      type: 'trace_failed';
+      content: {
+        iteration: number;
+        errorCode: string;
+        errorMessage: string;
+        recoveryAction?: 'retry' | 'skip';
+      };
+      timestamp?: string;
+    };
 
 export interface VerificationReport {
   specCoverage: string;

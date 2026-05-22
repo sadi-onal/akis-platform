@@ -188,6 +188,29 @@ describe('PipelineDetailRail — auto state', () => {
     expect(region).toHaveAttribute('data-collapsed', 'false');
     expect(region).toHaveAttribute('data-active-tab', 'why');
   });
+
+  // T9 follow-up — failed pipelines collapse to uiState='idle', which used
+  // to hide the rose Trace failed card behind the auto-collapse-on-idle
+  // contract. The rail must auto-expand when any stage has status='failed'
+  // so the AC-1 visual lands in front of the user without a manual click.
+  it('auto-expands when a stage status is failed (T9 follow-up)', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('trace')]}
+        currentStep={null}
+        workflowStages={{
+          scribe: { status: 'completed' },
+          approve: { status: 'completed' },
+          proto: { status: 'completed' },
+          trace: { status: 'failed', error: 'Zaman aşımı' },
+        }}
+      />
+    );
+    const region = screen.getByLabelText('Pipeline detayı');
+    expect(region).toHaveAttribute('data-collapsed', 'false');
+  });
 });
 
 describe('PipelineDetailRail — interactions', () => {
@@ -919,5 +942,86 @@ describe('PipelineDetailRail — T3 CI pill', () => {
     expect(screen.queryByTestId('ci-pill-running')).toBeNull();
     expect(screen.queryByTestId('ci-pill-success')).toBeNull();
     expect(screen.queryByTestId('ci-pill-failed')).toBeNull();
+  });
+});
+
+// F-1 (2026-05-22, T9 follow-up) — workflow.stages failure forwarded to
+// PipelineCinema. T9's mapPipelineToWorkflow change sets
+// `stages.<X>.status='failed'` + `.error=<label>` when the Reconciler
+// sweeps a stuck pipeline. The rail must derive the cinema's
+// `failedStages` prop from those fields so the matched card flips to a
+// failed visual with the errorCode-based label — otherwise the upper
+// banner offers "Tekrar Dene" while the Trace card keeps its stale
+// "Test senaryolarını hazırlıyor..." text.
+describe('PipelineDetailRail — F-1 failed stage card', () => {
+  // Failed pipelines end up at uiState='idle' (the union has no 'failed'
+  // value — see ConversationUIState), which auto-collapses the rail.
+  // The user manually expands the rail to inspect the cards; the test
+  // mirrors that interaction so the assertions run against the expanded
+  // cinema, not the mini-row.
+  it('flips the Trace card to a failed visual when stages.trace.status=failed', () => {
+    const { container } = render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('scribe'), mkActivity('proto'), mkActivity('trace')]}
+        currentStep={mkActivity('trace')}
+        pipelineHasOutputs
+        workflowStages={{
+          scribe: { status: 'completed' },
+          approve: { status: 'completed' },
+          proto: { status: 'completed' },
+          trace: { status: 'failed', error: 'Zaman aşımı' },
+        }}
+      />
+    );
+    // T9 follow-up: hasFailedStage auto-expands the rail, so we no longer
+    // need to manually click "Pipeline detayı" to reveal the cinema.
+    // Idle autoTab is 'why' (Açıklama) — switch to Akış so the cinema mounts.
+    fireEvent.click(screen.getByRole('tab', { name: 'Akış' }));
+    const trace = container.querySelector('[data-stage="trace"]');
+    expect(trace).not.toBeNull();
+    expect(trace).toHaveAttribute('data-state', 'failed');
+    expect(trace).toHaveTextContent('Zaman aşımı');
+  });
+
+  it('leaves cinema unaffected when workflowStages is omitted (regression guard)', () => {
+    const { container } = render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('scribe'), mkActivity('proto'), mkActivity('trace')]}
+        currentStep={mkActivity('trace')}
+        pipelineHasOutputs
+      />
+    );
+    fireEvent.click(screen.getByText(/Pipeline detayı/));
+    // Idle autoTab is 'why' (Açıklama) — switch to Akış so the cinema mounts.
+    fireEvent.click(screen.getByRole('tab', { name: 'Akış' }));
+    const trace = container.querySelector('[data-stage="trace"]');
+    expect(trace?.getAttribute('data-state')).not.toBe('failed');
+  });
+
+  it('does NOT flip the Trace card when stages.trace.status is completed', () => {
+    const { container } = render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="idle"
+        activities={[mkActivity('scribe'), mkActivity('proto'), mkActivity('trace')]}
+        currentStep={mkActivity('trace')}
+        pipelineHasOutputs
+        workflowStages={{
+          scribe: { status: 'completed' },
+          approve: { status: 'completed' },
+          proto: { status: 'completed' },
+          trace: { status: 'completed' },
+        }}
+      />
+    );
+    fireEvent.click(screen.getByText(/Pipeline detayı/));
+    // Idle autoTab is 'why' (Açıklama) — switch to Akış so the cinema mounts.
+    fireEvent.click(screen.getByRole('tab', { name: 'Akış' }));
+    const trace = container.querySelector('[data-stage="trace"]');
+    expect(trace?.getAttribute('data-state')).not.toBe('failed');
   });
 });

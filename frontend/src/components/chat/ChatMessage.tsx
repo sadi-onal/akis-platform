@@ -3,6 +3,7 @@ import { cn } from '../../utils/cn';
 import type { ChatMessage as ChatMessageType, AgentName, UserMessageImage } from '../../types/chat';
 import { PlanCard } from './PlanCard';
 import { AgentStartedLine } from './AgentStartedLine';
+import { TraceFailureMessage } from './TraceFailureMessage';
 
 /** Lightweight inline markdown renderer — no external deps, handles code blocks, bold, inline code */
 function SimpleMarkdown({ text }: { text: string }) {
@@ -333,6 +334,18 @@ export function ChatMessage({
 
     case 'agent': {
       const c = AGENT_COLORS[message.agent];
+      // F-6 (2026-05-22): Proto rows lead with the LLM-generated human-language
+      // `summary` ("Sayaç için React projesi hazırladım…") and demote technical
+      // metadata (dosya/satır/branch) to a smaller secondary line. Bakkal
+      // persona (non-developer) reads narration first, numbers second.
+      // Other agents (Scribe/Trace narration) and legacy pipelines without
+      // `summary` fall through to the original SimpleMarkdown(content) path.
+      const hasProtoSummary = message.agent === 'proto' && !!message.summary;
+      const hasProtoMeta =
+        message.agent === 'proto' &&
+        (message.totalFiles !== undefined || message.totalLines !== undefined || !!message.branch);
+      // Copy text: prefer summary (what the user reads); fall back to content.
+      const copyText = hasProtoSummary ? (message.summary as string) : message.content;
       return (
         <div className="group flex gap-2.5 animate-in fade-in slide-in-from-left-2 duration-200">
           <AgentAvatar agent={message.agent} />
@@ -344,7 +357,7 @@ export function ChatMessage({
               </span>
               <JiraBadge epicKey={message.jiraEpicKey} />
               <button
-                onClick={() => navigator.clipboard.writeText(message.content)}
+                onClick={() => navigator.clipboard.writeText(copyText)}
                 title="Kopyala"
                 aria-label="Mesajı kopyala"
                 className="ml-auto rounded p-1 text-ak-text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ak-surface-2 hover:text-ak-primary"
@@ -364,7 +377,26 @@ export function ChatMessage({
                 </svg>
               </button>
             </div>
-            <SimpleMarkdown text={message.content} />
+            {hasProtoSummary ? (
+              <div data-testid="proto-summary-primary" className="space-y-1">
+                <p className="whitespace-pre-wrap text-sm text-ak-text-secondary">
+                  {message.summary}
+                </p>
+                {hasProtoMeta && (
+                  <p data-testid="proto-meta-secondary" className="text-xs text-ak-text-tertiary">
+                    {[
+                      message.totalFiles !== undefined ? `${message.totalFiles} dosya` : null,
+                      message.totalLines !== undefined ? `${message.totalLines} satır` : null,
+                      message.branch ? message.branch : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <SimpleMarkdown text={message.content} />
+            )}
           </div>
         </div>
       );
@@ -941,6 +973,23 @@ export function ChatMessage({
         </div>
       );
     }
+
+    case 'trace_failure':
+      // T8 (defense-blocker F-3): inline failure row for Trace stage
+      // timeouts / provider errors. Reuses ChatMessage's existing
+      // onRetry / onSkip handler props (`onSkip` here IS the skip-trace
+      // path — same convention as PipelineErrorBanner). Renders as a
+      // no-op div if handlers are missing so the chat never crashes.
+      return (
+        <TraceFailureMessage
+          errorCode={message.errorCode}
+          errorMessage={message.errorMessage}
+          recoveryAction={message.recoveryAction}
+          iteration={message.iteration}
+          onRetry={onRetry ?? (() => {})}
+          onSkipTrace={onSkip ?? (() => {})}
+        />
+      );
 
     case 'gherkin_spec': {
       const { features, totalScenarios } = message;

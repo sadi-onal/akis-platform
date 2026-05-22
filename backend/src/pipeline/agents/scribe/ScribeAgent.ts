@@ -473,7 +473,7 @@ export class ScribeAgent {
 
     emit?.(
       'ai_call',
-      'Claude AI ile fikir analiz ediliyor...',
+      'Fikrini detaylandırıyor...',
       25,
       undefined,
       undefined,

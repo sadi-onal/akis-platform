@@ -86,16 +86,60 @@ export interface ScribeOutput {
 }
 
 export type ScribeMessageType =
-  | { type: 'user_idea'; content: string }
-  | { type: 'clarification'; content: ScribeClarification }
-  | { type: 'user_answer'; content: string }
-  | { type: 'spec_draft'; content: ScribeOutput }
-  | { type: 'spec_approved'; content: StructuredSpec }
-  | { type: 'spec_rejected'; content: { feedback: string } }
-  | { type: 'user_note'; content: string }
+  | { type: 'user_idea'; content: string; timestamp?: string }
+  | { type: 'clarification'; content: ScribeClarification; timestamp?: string }
+  | { type: 'user_answer'; content: string; timestamp?: string }
+  | { type: 'spec_draft'; content: ScribeOutput; timestamp?: string }
+  | { type: 'spec_approved'; content: StructuredSpec; timestamp?: string }
+  | { type: 'spec_rejected'; content: { feedback: string }; timestamp?: string }
+  | { type: 'user_note'; content: string; timestamp?: string }
   // B5 — user correction request from the push-confirm gate. Triggers
   // `iterateProtoFromFeedback` which re-runs Proto in dryRun mode.
-  | { type: 'user_feedback'; content: string };
+  | { type: 'user_feedback'; content: string; timestamp?: string }
+  // Chat event-log (2026-05-22): persisted pipeline events for the chat
+  // timeline. Rendered by frontend `conversationToChatMessages`; iteration
+  // counter = (count of prior matching events) + 1.
+  | {
+      type: 'proto_started';
+      content: { iteration: number };
+      timestamp: string;
+    }
+  | {
+      type: 'proto_completed';
+      content: {
+        iteration: number;
+        summary: string;
+        filesCreated: number;
+        totalLines: number;
+        branch?: string;
+      };
+      timestamp: string;
+    }
+  | {
+      type: 'trace_started';
+      content: { iteration: number };
+      timestamp: string;
+    }
+  | {
+      type: 'trace_completed';
+      content: {
+        iteration: number;
+        totalTests: number;
+        coverage: number;
+        passed: boolean;
+      };
+      timestamp: string;
+    }
+  | {
+      type: 'trace_failed';
+      content: {
+        iteration: number;
+        errorCode: string;
+        errorMessage: string;
+        recoveryAction?: 'retry' | 'skip';
+      };
+      timestamp: string;
+    };
 
 // ─── PROTO ────────────────────────────────────────
 

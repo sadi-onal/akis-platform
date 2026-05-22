@@ -411,6 +411,129 @@ describe('conversationToChatMessages — live narrator marker', () => {
   });
 });
 
+describe('conversationToChatMessages — event-log entries (2026-05-22)', () => {
+  it("proto_started ConversationMessage emits an agent_started ChatMessage for 'proto'", () => {
+    const m: ConversationMessage = {
+      role: 'system',
+      type: 'proto_started',
+      content: '',
+      timestamp: '2026-05-22T10:00:00Z',
+      iteration: 1,
+    } as unknown as ConversationMessage;
+    const msgs = conversationToChatMessages([m]);
+    const started = msgs.find(
+      (x) => x.type === 'agent_started' && (x as unknown as { agent: string }).agent === 'proto'
+    );
+    expect(started).toBeDefined();
+    expect((started as unknown as { state: string }).state).toBe('started');
+    // Should NOT also push an info bubble for the empty system content row.
+    const info = msgs.find((x) => x.type === 'info');
+    expect(info).toBeUndefined();
+  });
+
+  it("trace_started ConversationMessage emits an agent_started ChatMessage for 'trace'", () => {
+    const m: ConversationMessage = {
+      role: 'system',
+      type: 'trace_started',
+      content: '',
+      timestamp: '2026-05-22T10:01:00Z',
+      iteration: 1,
+    } as unknown as ConversationMessage;
+    const msgs = conversationToChatMessages([m]);
+    const started = msgs.find(
+      (x) => x.type === 'agent_started' && (x as unknown as { agent: string }).agent === 'trace'
+    );
+    expect(started).toBeDefined();
+    expect((started as unknown as { state: string }).state).toBe('started');
+  });
+
+  it('trace_failed ConversationMessage emits a trace_failure ChatMessage with errorCode + recoveryAction', () => {
+    const m: ConversationMessage = {
+      role: 'system',
+      type: 'trace_failed',
+      content: 'Trace zaman aşımı',
+      timestamp: '2026-05-22T10:02:00Z',
+      iteration: 2,
+      errorCode: 'PIPELINE_TIMEOUT',
+      errorMessage: 'Trace zaman aşımına uğradı',
+      recoveryAction: 'retry',
+    } as unknown as ConversationMessage;
+    const msgs = conversationToChatMessages([m]);
+    const failure = msgs.find((x) => x.type === 'trace_failure');
+    expect(failure).toBeDefined();
+    expect(failure).toMatchObject({
+      type: 'trace_failure',
+      errorCode: 'PIPELINE_TIMEOUT',
+      errorMessage: 'Trace zaman aşımına uğradı',
+      recoveryAction: 'retry',
+      iteration: 2,
+      timestamp: '2026-05-22T10:02:00Z',
+    });
+  });
+
+  it('two sequential proto_result ConversationMessages render with iteration metadata exposed', () => {
+    const iter1: ConversationMessage = {
+      role: 'proto',
+      type: 'proto_result',
+      content: 'İlk tur özetidir.',
+      timestamp: '2026-05-22T10:10:00Z',
+      iteration: 1,
+      protoResult: {
+        branch: 'main',
+        repo: '',
+        files: [],
+        totalFiles: 5,
+        totalLines: 100,
+        summary: 'İlk tur özetidir.',
+      },
+    } as unknown as ConversationMessage;
+    const iter2: ConversationMessage = {
+      role: 'proto',
+      type: 'proto_result',
+      content: 'İkinci tur özetidir.',
+      timestamp: '2026-05-22T10:20:00Z',
+      iteration: 2,
+      protoResult: {
+        branch: 'main',
+        repo: '',
+        files: [],
+        totalFiles: 7,
+        totalLines: 140,
+        summary: 'İkinci tur özetidir.',
+      },
+    } as unknown as ConversationMessage;
+    const msgs = conversationToChatMessages([iter1, iter2]);
+    const agentMsgs = msgs.filter(
+      (m) => m.type === 'agent' && (m as unknown as { agent: string }).agent === 'proto'
+    );
+    expect(agentMsgs).toHaveLength(2);
+    expect((agentMsgs[0] as unknown as { iteration?: number }).iteration).toBe(1);
+    expect((agentMsgs[1] as unknown as { iteration?: number }).iteration).toBe(2);
+  });
+
+  it('trace_completed ConversationMessage carries iteration onto the test_result ChatMessage', () => {
+    const m: ConversationMessage = {
+      role: 'trace',
+      type: 'trace_result',
+      content: 'Test yazıldı',
+      timestamp: '2026-05-22T10:30:00Z',
+      iteration: 3,
+      traceResult: {
+        testCount: 8,
+        passing: 8,
+        failing: 0,
+        coverage: '90%',
+        duration: '',
+        testFiles: [],
+      },
+    } as unknown as ConversationMessage;
+    const msgs = conversationToChatMessages([m]);
+    const result = msgs.find((x) => x.type === 'test_result');
+    expect(result).toBeDefined();
+    expect((result as unknown as { iteration?: number }).iteration).toBe(3);
+  });
+});
+
 describe('specToUserFriendlyPlan (via conversationToChatMessages) — edge cases', () => {
   // The exported helper is consumed indirectly through the spec branch; we
   // smoke-test the corner cases on the rendered plan payload.

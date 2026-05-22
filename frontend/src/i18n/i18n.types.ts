@@ -931,6 +931,11 @@ export const MESSAGE_KEYS = [
   'chat.message.skipStep',
   'chat.message.testResults',
   'chat.message.viewOnGithub',
+  // T8 — trace_failure ChatMessage variant (defense-blocker F-3)
+  'chat.trace_failure.timeout_title',
+  'chat.trace_failure.error_title',
+  'chat.trace_failure.retry',
+  'chat.trace_failure.skip',
   'trace.criteriaMap',
   'trace.criteriaWarning',
   'trace.testCount',

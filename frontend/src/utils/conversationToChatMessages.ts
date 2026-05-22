@@ -131,6 +131,10 @@ export function conversationToChatMessages(
               .map((t) => t.criterionId)
               .filter((v, i, a) => a.indexOf(v) === i),
             timestamp: ts,
+            // Chat event-log (2026-05-22) — expose iteration when the message
+            // originated from a `trace_completed` event so the UI can show
+            // "İterasyon N" badges. Snapshot-derived messages omit this.
+            ...(m.iteration !== undefined ? { iteration: m.iteration } : {}),
           });
           // Append BDD/Gherkin spec message if features were generated
           if (tr.gherkinFeatures?.length) {
@@ -171,10 +175,67 @@ export function conversationToChatMessages(
             timestamp: ts,
           });
         } else {
-          msgs.push({ type: 'agent', agent: m.role, content: m.content, timestamp: ts });
+          // Proto F-6 (2026-05-22): when this is a Proto stage `proto_result`
+          // message, thread the human-language `summary` and metadata fields
+          // through to the agent ChatMessage so the renderer can lead with the
+          // narration and demote the file/line counts to a secondary line.
+          // Non-Proto rows (Scribe message, Trace progress narration) leave
+          // these undefined and render via the legacy content-only path.
+          const isProtoResult = m.role === 'proto' && m.type === 'proto_result' && !!m.protoResult;
+          const protoFields = isProtoResult
+            ? {
+                ...(m.protoResult?.summary ? { summary: m.protoResult.summary } : {}),
+                ...(m.protoResult?.totalFiles !== undefined
+                  ? { totalFiles: m.protoResult.totalFiles }
+                  : {}),
+                ...(m.protoResult?.totalLines !== undefined
+                  ? { totalLines: m.protoResult.totalLines }
+                  : {}),
+                ...(m.protoResult?.branch ? { branch: m.protoResult.branch } : {}),
+              }
+            : {};
+          msgs.push({
+            type: 'agent',
+            agent: m.role,
+            content: m.content,
+            timestamp: ts,
+            // Chat event-log (2026-05-22) — surface iteration on event-log-derived
+            // proto_result / trace_result rows so each tour renders as a distinct
+            // identifiable bubble instead of looking like duplicate text.
+            ...(m.iteration !== undefined ? { iteration: m.iteration } : {}),
+            ...protoFields,
+          });
         }
         break;
       case 'system':
+        // Chat event-log (2026-05-22) — typed system rows from the orchestrator's
+        // event log. Handle these first so they don't fall through to the legacy
+        // info-bubble + approval-string-match path.
+        if (m.type === 'proto_started') {
+          // pushAgentStarted's `agentMarked` set dedups against earlier system
+          // 'onaylandı' markers; that's intentional for the FIRST iteration
+          // (we don't want two "Proto başlatıldı" rows back-to-back). Iteration
+          // 2+ would dedup too — but the iteration column on the proto_result
+          // bubble already surfaces the new tour, so a second start marker is
+          // not required for the timeline to read correctly.
+          pushAgentStarted('proto', 'started', ts);
+          break;
+        }
+        if (m.type === 'trace_started') {
+          pushAgentStarted('trace', 'started', ts);
+          break;
+        }
+        if (m.type === 'trace_failed') {
+          msgs.push({
+            type: 'trace_failure',
+            errorCode: m.errorCode ?? 'UNKNOWN',
+            errorMessage: m.errorMessage ?? m.content,
+            ...(m.recoveryAction !== undefined ? { recoveryAction: m.recoveryAction } : {}),
+            ...(m.iteration !== undefined ? { iteration: m.iteration } : {}),
+            timestamp: ts,
+          });
+          break;
+        }
         // Check if system message indicates approval/rejection and update last plan
         if (specSeen && (m.content.includes('onaylandı') || m.content.includes('reddedildi'))) {
           for (let j = msgs.length - 1; j >= 0; j--) {

@@ -170,6 +170,20 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
 
   if (!Array.isArray(scribeConv)) return messages;
 
+  // Chat event-log gating (2026-05-22) — when the orchestrator has persisted
+  // typed event-log entries (proto_completed / trace_completed / trace_failed)
+  // we MUST skip the snapshot-derived synthetic rows further down, otherwise
+  // the chat timeline would render duplicate proto/trace bubbles. Compute the
+  // flags once up-front so both the loop body and the post-loop synthesis see
+  // the same view of the data.
+  const hasProtoEventLog = scribeConv.some(
+    (m: unknown) => (m as { type?: string })?.type === 'proto_completed'
+  );
+  const hasTraceEventLog = scribeConv.some((m: unknown) => {
+    const t = (m as { type?: string })?.type;
+    return t === 'trace_completed' || t === 'trace_failed';
+  });
+
   for (const entry of scribeConv) {
     const msg = entry as ScribeMessageType;
 
@@ -249,11 +263,87 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
         });
         break;
       }
+      case 'proto_started':
+        messages.push({
+          role: 'system',
+          type: 'proto_started',
+          content: '',
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+          iteration: msg.content.iteration,
+        });
+        break;
+      case 'proto_completed': {
+        // T6 reviewer note: the event-log message only carries summary +
+        // counts. Pull verificationReport / repo / files from the snapshot
+        // (pipeline.protoOutput) so the explainability rail keeps its data
+        // even after the snapshot synthesis path is gated below. Falls back
+        // gracefully when protoOutput is absent (early-stage pipelines).
+        const po = pipeline.protoOutput;
+        messages.push({
+          role: 'proto',
+          type: 'proto_result',
+          content: msg.content.summary,
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+          iteration: msg.content.iteration,
+          protoResult: {
+            branch: msg.content.branch ?? po?.branch ?? '',
+            repo: po?.repo ?? '',
+            files: [],
+            totalFiles: msg.content.filesCreated,
+            totalLines: msg.content.totalLines,
+            summary: msg.content.summary,
+            ...(po?.verificationReport ? { verificationReport: po.verificationReport } : {}),
+          },
+        });
+        break;
+      }
+      case 'trace_started':
+        messages.push({
+          role: 'system',
+          type: 'trace_started',
+          content: '',
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+          iteration: msg.content.iteration,
+        });
+        break;
+      case 'trace_completed':
+        messages.push({
+          role: 'trace',
+          type: 'trace_result',
+          content: `Test yazıldı — ${msg.content.totalTests} test, %${msg.content.coverage}`,
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+          iteration: msg.content.iteration,
+          traceResult: {
+            testCount: msg.content.totalTests,
+            passing: msg.content.totalTests,
+            failing: 0,
+            coverage: `${msg.content.coverage}%`,
+            duration: '',
+            testFiles: [],
+          },
+        });
+        break;
+      case 'trace_failed':
+        messages.push({
+          role: 'system',
+          type: 'trace_failed',
+          content: msg.content.errorMessage,
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+          iteration: msg.content.iteration,
+          errorCode: msg.content.errorCode,
+          errorMessage: msg.content.errorMessage,
+          recoveryAction: msg.content.recoveryAction,
+        });
+        break;
     }
   }
 
-  // Add proto result message if completed
-  if (pipeline.protoOutput?.ok) {
+  // Add proto result message if completed.
+  // 2026-05-22 — gated by `hasProtoEventLog`: when the orchestrator persisted
+  // a `proto_completed` event-log entry above, that row already represents
+  // the run; emitting this snapshot-derived row would duplicate the bubble.
+  // Older pipelines (pre-event-log) still hit this fallback (NF-1).
+  if (!hasProtoEventLog && pipeline.protoOutput?.ok) {
     // PR-T3 S4: protoOutput sadece son iterasyonu saklıyor (backend overwrite
     // ediyor); manuel testte kullanıcı "scaffold 14 dosya" gördükten sonra
     // sayfa yenileyince "10 dosya"ya dönüştüğünü farkedip iterasyon olduğunu
@@ -264,9 +354,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
     const iterHistory = pipeline.intermediateState?.iterationHistory;
     const iterCount = Array.isArray(iterHistory) ? iterHistory.length : 0;
     const iterNote =
-      iterCount > 1
-        ? `\n\n_Değerlendirme geri bildirimi sonrası ${iterCount}. iterasyon._`
-        : '';
+      iterCount > 1 ? `\n\n_Değerlendirme geri bildirimi sonrası ${iterCount}. iterasyon._` : '';
     const stat = `Scaffold oluşturuldu — ${pipeline.protoOutput.metadata.filesCreated} dosya, ${pipeline.protoOutput.metadata.totalLinesOfCode} satır${iterNote}`;
     const summary = pipeline.protoOutput.summary;
     messages.push({
@@ -294,8 +382,11 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
     });
   }
 
-  // Add trace result message if completed
-  if (pipeline.traceOutput) {
+  // Add trace result message if completed.
+  // 2026-05-22 — gated by `hasTraceEventLog`: when the orchestrator persisted
+  // a `trace_completed` or `trace_failed` event-log entry, that row already
+  // narrates the outcome; this snapshot-derived row would duplicate it.
+  if (!hasTraceEventLog && pipeline.traceOutput) {
     const ts = pipeline.traceOutput.testSummary;
     messages.push({
       role: 'trace',
@@ -327,6 +418,11 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
     // and the user thinks the pipeline is stuck. Add an info row so the chat
     // narrates the missing tests instead of going silent. Same handling for
     // post-Proto stages where Trace would have run but didn't produce output.
+    // 2026-05-22 — also gated by `hasTraceEventLog`: when the orchestrator
+    // wrote a `trace_failed` event-log entry above (which renders via the
+    // dedicated TraceFailureMessage component in T8), we skip this legacy
+    // info row to avoid narrating the same failure twice.
+    !hasTraceEventLog &&
     pipeline.protoOutput?.ok &&
     (pipeline.stage === 'awaiting_push_confirm' ||
       pipeline.stage === 'completed' ||
@@ -392,7 +488,27 @@ export function mapPipelineToWorkflow(
 
   // If pipeline has error, mark the current running stage as failed
   if (pipeline.error) {
-    if (pipeline.stage === 'completed_partial') {
+    if (pipeline.stage === 'failed') {
+      // F-1 (2026-05-22): when the Reconciler sweeps a stuck pipeline to
+      // `stage='failed'`, no stage is `running` anymore. Pick the failing
+      // stage from cumulative outputs (most-progress wins): if traceOutput
+      // is missing but protoOutput exists → trace failed; if protoOutput
+      // is missing but a spec exists → proto failed; otherwise scribe.
+      // Label uses "Zaman aşımı" for PIPELINE_TIMEOUT, else the error
+      // message (the UI prefixes it with a localized "Hata:" label).
+      const isTimeout = pipeline.error.code === 'PIPELINE_TIMEOUT';
+      const label = isTimeout ? 'Zaman aşımı' : (pipeline.error.message ?? 'Hata');
+      if (pipeline.protoOutput && !pipeline.traceOutput) {
+        stages.trace.status = 'failed';
+        stages.trace.error = label;
+      } else if (pipeline.approvedSpec && !pipeline.protoOutput) {
+        stages.proto.status = 'failed';
+        stages.proto.error = label;
+      } else {
+        stages.scribe.status = 'failed';
+        stages.scribe.error = label;
+      }
+    } else if (pipeline.stage === 'completed_partial') {
       // Trace failed gracefully — carry error to trace stage
       stages.trace.status = 'failed';
       stages.trace.error = pipeline.error.message;

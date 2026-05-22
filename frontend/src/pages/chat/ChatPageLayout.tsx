@@ -334,6 +334,13 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       // T3: forward the GitHub Actions CI run result so the
                       // rail can render the ✓/✗ pill once polling lands.
                       ciResult={activeWorkflow?.ciResult}
+                      // F-1 (2026-05-22, T9 follow-up): forward the
+                      // workflow.stages slice so PipelineDetailRail can map
+                      // `stages.<X>.status='failed'` + `.error` (written by
+                      // mapPipelineToWorkflow when pipeline.stage='failed')
+                      // into the cinema's `failedStages` prop. Closes the
+                      // gap between T9's mapper change and the visible card.
+                      workflowStages={activeWorkflow?.stages}
                       onCriticResolved={
                         onPushResolved
                           ? () => {

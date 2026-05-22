@@ -132,6 +132,15 @@ interface ChatPanelProps {
    * header once the orchestrator's polling step finishes.
    */
   ciResult?: import('../../types/workflow').Workflow['ciResult'];
+  /**
+   * F-1 (2026-05-22, T9 follow-up): workflow.stages slice threaded down to
+   * PipelineDetailRail so the cinema can flip a stage card to the `failed`
+   * visual when `mapPipelineToWorkflow` has stamped
+   * `stages.<X>.status='failed'` + `.error=<label>` ("Zaman aşımı" for
+   * PIPELINE_TIMEOUT). The mapper change alone was inert because cinema
+   * derives state from the SSE stream, not from `workflow.stages.*`.
+   */
+  workflowStages?: import('../../types/workflow').WorkflowStages;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -187,6 +196,7 @@ export const ChatPanel = memo(function ChatPanel({
   scribeAssumptions,
   jiraConfig,
   ciResult,
+  workflowStages,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -303,6 +313,7 @@ export const ChatPanel = memo(function ChatPanel({
           scribeAssumptions={scribeAssumptions}
           jiraConfig={jiraConfig}
           ciResult={ciResult}
+          workflowStages={workflowStages}
         />
       )}
 

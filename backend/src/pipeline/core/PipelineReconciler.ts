@@ -8,12 +8,12 @@
  * to 'failed' so users can retry.
  */
 import type { PipelineStore } from './orchestrator/PipelineOrchestrator.js';
-import type { PipelineStage } from './contracts/PipelineTypes.js';
+import type { PipelineStage, ScribeMessageType } from './contracts/PipelineTypes.js';
 import { createPipelineError, PipelineErrorCode } from './contracts/PipelineErrors.js';
 import { logger } from '../../lib/logger.js';
 
-const SWEEP_INTERVAL_MS = 5 * 60 * 1000;    // 5 minutes
-const STUCK_THRESHOLD_MS = 15 * 60 * 1000;   // 15 minutes
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const STUCK_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
 const RUNNING_STAGES: PipelineStage[] = [
   'scribe_generating',
@@ -34,7 +34,9 @@ export class PipelineReconciler {
         logger.error({ err }, '[Reconciler] Sweep failed');
       });
     }, SWEEP_INTERVAL_MS);
-    logger.info(`[Reconciler] Started (interval: ${SWEEP_INTERVAL_MS / 1000}s, threshold: ${STUCK_THRESHOLD_MS / 1000}s)`);
+    logger.info(
+      `[Reconciler] Started (interval: ${SWEEP_INTERVAL_MS / 1000}s, threshold: ${STUCK_THRESHOLD_MS / 1000}s)`
+    );
   }
 
   stop(): void {
@@ -62,20 +64,62 @@ export class PipelineReconciler {
       return 0;
     }
 
-    const stuckPipelines = await (this.store as PipelineStore & {
-      listStuck(stages: PipelineStage[], olderThan: Date): Promise<Array<{ id: string; stage: PipelineStage; updatedAt: Date }>>;
-    }).listStuck(RUNNING_STAGES, threshold);
+    const stuckPipelines = await (
+      this.store as PipelineStore & {
+        listStuck(
+          stages: PipelineStage[],
+          olderThan: Date
+        ): Promise<Array<{ id: string; stage: PipelineStage; updatedAt: Date }>>;
+      }
+    ).listStuck(RUNNING_STAGES, threshold);
 
     for (const p of stuckPipelines) {
       try {
         const stuckMinutes = Math.round((now - p.updatedAt.getTime()) / 60_000);
         const error = createPipelineError(
           PipelineErrorCode.PIPELINE_TIMEOUT,
-          `Pipeline ${p.stage} aşamasında ${stuckMinutes} dakikadır yanıt vermiyor. Otomatik olarak durduruldu.`,
+          `Pipeline ${p.stage} aşamasında ${stuckMinutes} dakikadır yanıt vermiyor. Otomatik olarak durduruldu.`
         );
-        await this.store.update(p.id, { stage: 'failed', error });
+
+        // Re-fetch full state so we can append the chat event atomically with the failure transition.
+        const full = await this.store.getById(p.id);
+        if (!full) {
+          logger.warn(`[Reconciler] Pipeline ${p.id} disappeared between listStuck and get`);
+          continue;
+        }
+
+        // Compute the per-stage chat event (only trace_testing has a mapped event for now).
+        type StuckEventMap = { [K in PipelineStage]?: 'trace_failed' };
+        const eventTypeByStage: StuckEventMap = {
+          trace_testing: 'trace_failed',
+        };
+        const eventType = eventTypeByStage[p.stage];
+
+        const conversation =
+          eventType === 'trace_failed'
+            ? [
+                ...full.scribeConversation,
+                {
+                  type: 'trace_failed' as const,
+                  content: {
+                    iteration:
+                      full.scribeConversation.filter(
+                        (m: ScribeMessageType) => m.type === 'trace_completed'
+                      ).length + 1,
+                    errorCode: 'PIPELINE_TIMEOUT',
+                    errorMessage: `Test yazımı ${stuckMinutes} dakika yanıt vermedi. Otomatik olarak durduruldu.`,
+                    recoveryAction: 'retry' as const,
+                  },
+                  timestamp: new Date().toISOString(),
+                },
+              ]
+            : full.scribeConversation;
+
+        await this.store.update(p.id, { stage: 'failed', error, scribeConversation: conversation });
         recovered++;
-        logger.warn(`[Reconciler] Recovered stuck pipeline ${p.id} (was ${p.stage} for ${stuckMinutes}min)`);
+        logger.warn(
+          `[Reconciler] Recovered stuck pipeline ${p.id} (was ${p.stage} for ${stuckMinutes}min)`
+        );
       } catch (err) {
         logger.error({ err, pipelineId: p.id }, '[Reconciler] Failed to recover pipeline');
       }

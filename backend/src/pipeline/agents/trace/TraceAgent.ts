@@ -355,7 +355,7 @@ export class TraceAgent {
     const totalChars = files.reduce((sum, f) => sum + f.content.length, 0);
     emit?.(
       'ai_call',
-      `Claude AI ile Playwright testleri oluşturuluyor (${files.length} dosya, ${Math.round(totalChars / 1024)}KB)...`,
+      `Test senaryolarını hazırlıyor (${files.length} dosya, ${Math.round(totalChars / 1024)}KB)...`,
       45,
       undefined,
       undefined,
@@ -465,7 +465,7 @@ export class TraceAgent {
     input: TraceInput,
     emit?: ReturnType<typeof createActivityEmitter>
   ): Promise<TraceResult> {
-    emit?.('ai_call', 'Claude AI tool_use ile test yazılıyor...', 10);
+    emit?.('ai_call', 'Test senaryolarını hazırlıyor...', 10);
 
     // Issue #397: generate Gherkin features alongside Playwright tests when the
     // BDD toggle is on. Previously this only ran in the legacy path — the
@@ -771,11 +771,11 @@ After pushing, respond with a JSON summary:
       let responseText: string;
       try {
         if (attempt === 0) {
-          emit?.('ai_call', `Playwright testleri oluşturuluyor (deneme ${attempt + 1})...`, 45);
+          emit?.('ai_call', `Test senaryolarını hazırlıyor (deneme ${attempt + 1})...`, 45);
         } else {
           emit?.(
             'ai_call',
-            `Playwright testleri oluşturuluyor (deneme ${attempt + 1})...`,
+            `Test senaryolarını hazırlıyor (deneme ${attempt + 1})...`,
             45,
             undefined,
             attempt

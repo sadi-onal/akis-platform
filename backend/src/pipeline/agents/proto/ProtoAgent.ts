@@ -345,7 +345,7 @@ export class ProtoAgent {
     // Step 1: Generate scaffold via AI
     emit?.(
       'ai_call',
-      'Claude AI ile MVP iskeleti oluşturuluyor...',
+      'Proje dosyalarını oluşturuyor...',
       20,
       undefined,
       undefined,
@@ -615,7 +615,7 @@ JSON format (respond with ONLY this, nothing else):
     input: ProtoInput,
     emit?: ReturnType<typeof createActivityEmitter>
   ): Promise<ProtoResult> {
-    emit?.('ai_call', 'Claude AI tool_use ile iskelet oluşturuluyor...', 10);
+    emit?.('ai_call', 'Proje dosyalarını oluşturuyor...', 10);
 
     // Issue #483 BUG-J: Hard-enforce repo creation BEFORE the agentic loop so the
     // LLM cannot skip create_repository and call push_files on a non-existent repo.
@@ -845,7 +845,7 @@ After pushing, respond with a 1-3 sentence Turkish summary in plain text (NO JSO
     emit?: ReturnType<typeof createActivityEmitter>
   ): Promise<ProtoResult> {
     // Re-enter the legacy flow from Step 1
-    emit?.('ai_call', 'Claude AI ile MVP iskeleti oluşturuluyor (fallback)...', 20);
+    emit?.('ai_call', 'Proje dosyalarını oluşturuyor (yedek yol)...', 20);
     const scaffoldResult = await this.generateScaffold(input.spec, input.knowledgeContext);
     if (scaffoldResult.type === 'error') {
       emit?.('error', 'İskelet üretimi başarısız oldu', 0);

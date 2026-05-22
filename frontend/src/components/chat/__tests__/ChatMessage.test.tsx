@@ -6,7 +6,12 @@ import type { UserFriendlyPlan } from '../../../types/plan';
 
 // Mock PlanCard to isolate ChatMessage rendering from PlanCard internals
 vi.mock('../PlanCard', () => ({
-  PlanCard: ({ plan, status, onApprove, onReject }: {
+  PlanCard: ({
+    plan,
+    status,
+    onApprove,
+    onReject,
+  }: {
     plan: UserFriendlyPlan;
     version: number;
     status: string;
@@ -14,7 +19,11 @@ vi.mock('../PlanCard', () => ({
     onApprove?: () => void;
     onReject?: () => void;
   }) => (
-    <div data-testid="plan-card" data-status={status} data-project={('projectName' in plan) ? plan.projectName : ''}>
+    <div
+      data-testid="plan-card"
+      data-status={status}
+      data-project={'projectName' in plan ? plan.projectName : ''}
+    >
       <button onClick={onApprove}>Approve</button>
       <button onClick={onReject}>Reject</button>
     </div>
@@ -140,32 +149,57 @@ describe('ChatMessage — user with images', () => {
 
 describe('ChatMessage — agent', () => {
   it('renders scribe label and content', () => {
-    const msg: ChatMessageType = { type: 'agent', agent: 'scribe', content: 'Processing your idea', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'scribe',
+      content: 'Processing your idea',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     expect(screen.getByText('Scribe')).toBeInTheDocument();
     expect(screen.getByText('Processing your idea')).toBeInTheDocument();
   });
 
   it('renders proto label', () => {
-    const msg: ChatMessageType = { type: 'agent', agent: 'proto', content: 'Building scaffold', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'proto',
+      content: 'Building scaffold',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     expect(screen.getByText('Proto')).toBeInTheDocument();
   });
 
   it('renders trace label', () => {
-    const msg: ChatMessageType = { type: 'agent', agent: 'trace', content: 'Writing tests', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'trace',
+      content: 'Writing tests',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     expect(screen.getByText('Trace')).toBeInTheDocument();
   });
 
   it('shows agent avatar initial for scribe', () => {
-    const msg: ChatMessageType = { type: 'agent', agent: 'scribe', content: 'Hello', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'scribe',
+      content: 'Hello',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     expect(screen.getByText('S')).toBeInTheDocument();
   });
 
   it('has a copy button with title "Kopyala"', () => {
-    const msg: ChatMessageType = { type: 'agent', agent: 'scribe', content: 'Copy me', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'scribe',
+      content: 'Copy me',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     const copyBtn = screen.getByTitle('Kopyala');
     expect(copyBtn).toBeInTheDocument();
@@ -176,7 +210,12 @@ describe('ChatMessage — agent', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
 
-    const msg: ChatMessageType = { type: 'agent', agent: 'proto', content: 'Code snippet here', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'proto',
+      content: 'Code snippet here',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     fireEvent.click(screen.getByTitle('Kopyala'));
     expect(writeText).toHaveBeenCalledOnce();
@@ -184,7 +223,12 @@ describe('ChatMessage — agent', () => {
   });
 
   it('copy button is inside the agent message group container', () => {
-    const msg: ChatMessageType = { type: 'agent', agent: 'trace', content: 'Test output', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'trace',
+      content: 'Test output',
+      timestamp: TS,
+    };
     const { container } = render(<ChatMessage message={msg} />);
     const group = container.querySelector('.group');
     expect(group).toBeInTheDocument();
@@ -265,20 +309,38 @@ describe('ChatMessage — plan', () => {
   };
 
   it('renders the mocked PlanCard', () => {
-    const msg: ChatMessageType = { type: 'plan', plan, version: 1, status: 'active', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'plan',
+      plan,
+      version: 1,
+      status: 'active',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     expect(screen.getByTestId('plan-card')).toBeInTheDocument();
   });
 
   it('passes plan project name to PlanCard', () => {
-    const msg: ChatMessageType = { type: 'plan', plan, version: 1, status: 'active', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'plan',
+      plan,
+      version: 1,
+      status: 'active',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     expect(screen.getByTestId('plan-card')).toHaveAttribute('data-project', 'My App');
   });
 
   it('calls onApprove when plan is active and approve button clicked', () => {
     const handleApprove = vi.fn();
-    const msg: ChatMessageType = { type: 'plan', plan, version: 1, status: 'active', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'plan',
+      plan,
+      version: 1,
+      status: 'active',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} onApprove={handleApprove} />);
     fireEvent.click(screen.getByText('Approve'));
     expect(handleApprove).toHaveBeenCalledOnce();
@@ -286,7 +348,13 @@ describe('ChatMessage — plan', () => {
 
   it('does not pass onApprove when plan is not active', () => {
     const handleApprove = vi.fn();
-    const msg: ChatMessageType = { type: 'plan', plan, version: 1, status: 'approved', timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'plan',
+      plan,
+      version: 1,
+      status: 'approved',
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} onApprove={handleApprove} />);
     // The mocked PlanCard receives undefined onApprove, clicking its button is a no-op
     fireEvent.click(screen.getByText('Approve'));
@@ -297,7 +365,12 @@ describe('ChatMessage — plan', () => {
 // ─── 5. file_created message ─────────────────────────────────────────────────
 
 describe('ChatMessage — file_created', () => {
-  const msg: ChatMessageType = { type: 'file_created', path: 'src/index.ts', repo: 'my-repo', timestamp: TS };
+  const msg: ChatMessageType = {
+    type: 'file_created',
+    path: 'src/index.ts',
+    repo: 'my-repo',
+    timestamp: TS,
+  };
 
   it('shows the file path', () => {
     render(<ChatMessage message={msg} />);
@@ -442,27 +515,51 @@ describe('ChatMessage — test_result (with failures)', () => {
 
 describe('ChatMessage — error', () => {
   it('shows error message text', () => {
-    const msg: ChatMessageType = { type: 'error', agent: 'proto', message: 'GitHub token expired', retryable: false, timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'error',
+      agent: 'proto',
+      message: 'GitHub token expired',
+      retryable: false,
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     expect(screen.getByText('GitHub token expired')).toBeInTheDocument();
   });
 
   it('shows "Hata" heading', () => {
-    const msg: ChatMessageType = { type: 'error', agent: 'proto', message: 'Something failed', retryable: false, timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'error',
+      agent: 'proto',
+      message: 'Something failed',
+      retryable: false,
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} />);
     expect(screen.getByText('Hata')).toBeInTheDocument();
   });
 
   it('shows retry button when retryable and onRetry provided', () => {
     const onRetry = vi.fn();
-    const msg: ChatMessageType = { type: 'error', agent: 'proto', message: 'Network error', retryable: true, timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'error',
+      agent: 'proto',
+      message: 'Network error',
+      retryable: true,
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} onRetry={onRetry} />);
     expect(screen.getByText(/Tekrar Dene/)).toBeInTheDocument();
   });
 
   it('calls onRetry when retry button clicked', () => {
     const onRetry = vi.fn();
-    const msg: ChatMessageType = { type: 'error', agent: 'proto', message: 'Network error', retryable: true, timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'error',
+      agent: 'proto',
+      message: 'Network error',
+      retryable: true,
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} onRetry={onRetry} />);
     fireEvent.click(screen.getByText(/Tekrar Dene/));
     expect(onRetry).toHaveBeenCalledOnce();
@@ -470,14 +567,26 @@ describe('ChatMessage — error', () => {
 
   it('does not show retry button when retryable is false', () => {
     const onRetry = vi.fn();
-    const msg: ChatMessageType = { type: 'error', agent: 'proto', message: 'Fatal error', retryable: false, timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'error',
+      agent: 'proto',
+      message: 'Fatal error',
+      retryable: false,
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} onRetry={onRetry} />);
     expect(screen.queryByText(/Tekrar Dene/)).not.toBeInTheDocument();
   });
 
   it('shows skip button when retryable and onSkip provided', () => {
     const onSkip = vi.fn();
-    const msg: ChatMessageType = { type: 'error', agent: 'proto', message: 'Network error', retryable: true, timestamp: TS };
+    const msg: ChatMessageType = {
+      type: 'error',
+      agent: 'proto',
+      message: 'Network error',
+      retryable: true,
+      timestamp: TS,
+    };
     render(<ChatMessage message={msg} onSkip={onSkip} />);
     expect(screen.getByText(/Atla/)).toBeInTheDocument();
   });
@@ -497,6 +606,110 @@ describe('ChatMessage — info', () => {
     const { container } = render(<ChatMessage message={msg} />);
     const wrapper = container.firstElementChild as HTMLElement;
     expect(wrapper.className).toContain('justify-center');
+  });
+});
+
+// ─── 10b. agent message — Proto summary leads metadata (F-6) ───────────────
+
+describe('ChatMessage — agent (Proto F-6 summary leads metadata)', () => {
+  it('Proto row leads with summary, metadata is secondary (F-6)', () => {
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'proto',
+      content: 'Scaffold oluşturuldu — 15 dosya, 552 satır',
+      summary: 'Sayaç için React projesi hazırladım. Artırma, azaltma ve sıfırla çalışıyor.',
+      totalFiles: 15,
+      totalLines: 552,
+      branch: 'feat/counter-app',
+      timestamp: TS,
+    };
+    render(<ChatMessage message={msg} />);
+
+    const summaryEl = screen.getByText(/Sayaç için React projesi/);
+    const metaEl = screen.getByTestId('proto-meta-secondary');
+
+    expect(summaryEl).toBeInTheDocument();
+    expect(metaEl).toBeInTheDocument();
+
+    // DOM order: summary appears BEFORE metadata
+    const order = summaryEl.compareDocumentPosition(metaEl);
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Visual prominence: summary is text-sm, metadata is text-xs
+    expect(summaryEl.className).toContain('text-sm');
+    expect(metaEl.className).toContain('text-xs');
+
+    // Metadata content includes file count, line count, branch — joined by ·
+    expect(metaEl.textContent).toContain('15 dosya');
+    expect(metaEl.textContent).toContain('552 satır');
+    expect(metaEl.textContent).toContain('feat/counter-app');
+
+    // The technical-jargon `content` ("Scaffold oluşturuldu — …") should NOT
+    // leak into the rendered DOM when a summary is present.
+    expect(screen.queryByText(/Scaffold oluşturuldu/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to content when summary is absent (legacy pipelines, NF-1)', () => {
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'proto',
+      content: 'Scaffold oluşturuldu — 14 dosya, 400 satır',
+      timestamp: TS,
+    };
+    render(<ChatMessage message={msg} />);
+    expect(screen.getByText(/Scaffold oluşturuldu/)).toBeInTheDocument();
+    // No metadata secondary line because no structured fields were threaded
+    expect(screen.queryByTestId('proto-meta-secondary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('proto-summary-primary')).not.toBeInTheDocument();
+  });
+
+  it('renders metadata-only fields gracefully when summary is missing', () => {
+    // Defensive: if a future caller threads totalFiles but forgets summary,
+    // we still fall back to content (no orphan metadata block).
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'proto',
+      content: 'Scaffold hazır',
+      totalFiles: 10,
+      totalLines: 200,
+      timestamp: TS,
+    };
+    render(<ChatMessage message={msg} />);
+    expect(screen.getByText(/Scaffold hazır/)).toBeInTheDocument();
+    expect(screen.queryByTestId('proto-meta-secondary')).not.toBeInTheDocument();
+  });
+
+  it('does NOT apply Proto layout to Scribe rows even with summary-like fields', () => {
+    // Scribe narration rows must keep the legacy single-paragraph rendering.
+    const msg = {
+      type: 'agent',
+      agent: 'scribe',
+      content: 'Spec hazırlanıyor',
+      summary: 'this should be ignored on scribe',
+      totalFiles: 7,
+      timestamp: TS,
+    } as unknown as ChatMessageType;
+    render(<ChatMessage message={msg} />);
+    expect(screen.getByText('Spec hazırlanıyor')).toBeInTheDocument();
+    expect(screen.queryByTestId('proto-summary-primary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('proto-meta-secondary')).not.toBeInTheDocument();
+  });
+
+  it('copy button copies the summary text when summary is present', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const msg: ChatMessageType = {
+      type: 'agent',
+      agent: 'proto',
+      content: 'Scaffold oluşturuldu — 15 dosya',
+      summary: 'Sayaç için React projesi hazırladım.',
+      totalFiles: 15,
+      timestamp: TS,
+    };
+    render(<ChatMessage message={msg} />);
+    fireEvent.click(screen.getByTitle('Kopyala'));
+    expect(writeText).toHaveBeenCalledWith('Sayaç için React projesi hazırladım.');
   });
 });
 

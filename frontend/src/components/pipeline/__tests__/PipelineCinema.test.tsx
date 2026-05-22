@@ -648,4 +648,105 @@ describe('PipelineCinema component (PR-F 3-column)', () => {
     const proto = container.querySelector('[data-stage="proto"]');
     expect(proto).toHaveAttribute('data-state', 'active');
   });
+
+  // ─── T9 follow-up (F-1): failed-state stage card ─────────────────────
+  // Background: when the Reconciler sweeps a stuck pipeline to
+  // `pipeline.stage='failed'`, `mapPipelineToWorkflow` writes
+  // `workflow.stages.<failingStage>.status='failed'` + `.error=<label>`.
+  // PipelineCinema must consume the `failedStages` map so the user sees
+  // the correct card flip to a failed visual with the error label.
+  // Previously the Trace card just kept its last-running message
+  // ("Test senaryolarını hazırlıyor...") even though the upper banner
+  // showed "Tekrar Dene".
+  it('F-1: renders Trace card in failed state with errorCode-based label', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'trace', progress: 60, message: 'Test senaryolarını hazırlıyor...' }),
+    ];
+    const { container } = render(
+      <PipelineCinema
+        activities={acts}
+        currentStep={acts[2]!}
+        failedStages={{ trace: 'Zaman aşımı' }}
+      />
+    );
+    const trace = container.querySelector('[data-stage="trace"]');
+    expect(trace).toHaveAttribute('data-state', 'failed');
+    expect(trace).toHaveTextContent('Zaman aşımı');
+    // The stale "Test senaryolarını hazırlıyor..." running message must NOT
+    // appear — failed state replaces it.
+    expect(trace).not.toHaveTextContent('Test senaryolarını hazırlıyor');
+  });
+
+  it('F-1: renders Proto card in failed state when proto is the failing stage', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 30, message: 'Kod yazılıyor' }),
+    ];
+    const { container } = render(
+      <PipelineCinema
+        activities={acts}
+        currentStep={acts[1]!}
+        failedStages={{ proto: 'Kod üretimi başarısız' }}
+      />
+    );
+    const proto = container.querySelector('[data-stage="proto"]');
+    expect(proto).toHaveAttribute('data-state', 'failed');
+    expect(proto).toHaveTextContent('Kod üretimi başarısız');
+  });
+
+  it('F-1: failed override does NOT affect cards that are not in failedStages', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'trace', progress: 60, message: 'Test senaryolarını hazırlıyor...' }),
+    ];
+    const { container } = render(
+      <PipelineCinema
+        activities={acts}
+        currentStep={acts[2]!}
+        failedStages={{ trace: 'Zaman aşımı' }}
+      />
+    );
+    // Scribe + Proto stay complete; only Trace flips.
+    expect(container.querySelector('[data-stage="scribe"]')).toHaveAttribute(
+      'data-state',
+      'complete'
+    );
+    expect(container.querySelector('[data-stage="proto"]')).toHaveAttribute(
+      'data-state',
+      'complete'
+    );
+    expect(container.querySelector('[data-stage="trace"]')).toHaveAttribute('data-state', 'failed');
+  });
+});
+
+// ─── T9 follow-up (F-1): reducer-level failed-state contract ─────────
+describe('reduceStageViews — failed-state override (F-1)', () => {
+  it('marks the targeted stage as failed and stamps the label on latest.message', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'trace', progress: 60, message: 'Test senaryolarını hazırlıyor...' }),
+    ];
+    const views = reduceStageViews(acts, acts[2]!, undefined, { trace: 'Zaman aşımı' });
+    expect(views[2]!.state).toBe('failed');
+    expect(views[2]!.latest?.message).toBe('Zaman aşımı');
+    // Scribe + Proto must remain complete (the override is per-stage).
+    expect(views[0]!.state).toBe('complete');
+    expect(views[1]!.state).toBe('complete');
+  });
+
+  it('failed override beats the legacy idle-completion back-compat branch', () => {
+    // Idle uiState + any activity used to mark every stage with activity as
+    // `complete`. The failed override must still win — Trace is failed, not
+    // complete, even when uiState is idle.
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100 }),
+      mk({ stage: 'trace', progress: 60 }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!, 'idle', { trace: 'Hata' });
+    expect(views[2]!.state).toBe('failed');
+  });
 });

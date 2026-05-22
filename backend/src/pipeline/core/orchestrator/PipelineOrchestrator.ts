@@ -1571,6 +1571,7 @@ export class PipelineOrchestrator {
     const previewGateEnabled = process.env.AUTO_PUSH_AFTER_PROTO !== 'true';
 
     await this.writeCheckpoint(pipelineId, 'proto', spec.title);
+    const protoIteration = await this.appendProtoStarted(pipelineId);
     const protoResult = await withRetry(
       (attempt) => {
         if (attempt > 1) protoEmit('retry', `Proto yeniden deneniyor (deneme ${attempt})...`, 25);
@@ -1622,6 +1623,9 @@ export class PipelineOrchestrator {
       filesGenerated: protoResult.data.files?.length ?? 0,
       specCompliance: 0.85, // Proto succeeded → base compliance
     });
+
+    // Append proto_completed event to chat timeline (immutable event log)
+    await this.appendProtoCompleted(pipelineId, protoIteration, protoResult.data);
 
     const pipeline = await this.getPipeline(pipelineId);
 
@@ -3235,6 +3239,8 @@ export class PipelineOrchestrator {
     // Issue #464 BUG-C — forward user-uploaded screenshots so Trace can see
     // the mockup while writing Playwright selectors/assertions.
     const traceImageBlocks = readPipelineImageBlocks(pipelineForCucumber.intermediateState);
+    // Chat event-log (Task 3): record start before the AI call.
+    const traceIteration = await this.appendTraceStarted(pipelineId);
     const traceResult = await withRetry(
       (attempt) => {
         if (attempt > 1) traceEmit('retry', `Trace yeniden deneniyor (deneme ${attempt})...`, 30);
@@ -3284,6 +3290,14 @@ export class PipelineOrchestrator {
       // retrying with the same dead credential will just 401 again.
       const isGitHubAuthError = traceResult.error.code === 'GITHUB_TOKEN_INVALID';
       await this.maybeInvalidateGitHubTokenOnAuthError(pipelineId, traceResult.error.code);
+      // Chat event-log (Task 3): persist failure before any stage transition.
+      await this.appendTraceFailed(
+        pipelineId,
+        traceIteration,
+        traceResult.error.code,
+        traceResult.error.message,
+        'retry'
+      );
       traceEmit(
         'error',
         isAiTimeout
@@ -3600,6 +3614,8 @@ export class PipelineOrchestrator {
           }
         : {}),
     });
+    // Chat event-log (Task 3): append after traceOutput is persisted (data-consistency).
+    await this.appendTraceCompleted(pipelineId, traceIteration, traceResult.data);
     if (postSuccessStage === 'awaiting_push_confirm') {
       this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
       // PR-T3 S1: state desync fix — `emitEvent` yalnızca dahili event-bus'a
@@ -3897,6 +3913,112 @@ export class PipelineOrchestrator {
     const pipeline = await this.store.getById(id);
     if (!pipeline) throw new PipelineNotFoundError(id);
     return pipeline;
+  }
+
+  // ─── Chat-event helpers (Task 2: proto events) ───────────────────
+
+  private countPriorEvents(
+    conv: ScribeMessageType[],
+    type: 'proto_completed' | 'trace_completed'
+  ): number {
+    return conv.filter((m) => m.type === type).length;
+  }
+
+  private async appendProtoStarted(pipelineId: string): Promise<number> {
+    const pipeline = await this.getPipeline(pipelineId);
+    const iteration = this.countPriorEvents(pipeline.scribeConversation, 'proto_completed') + 1;
+    await this.store.update(pipelineId, {
+      scribeConversation: [
+        ...pipeline.scribeConversation,
+        { type: 'proto_started', content: { iteration }, timestamp: new Date().toISOString() },
+      ],
+    });
+    return iteration;
+  }
+
+  private async appendProtoCompleted(
+    pipelineId: string,
+    iteration: number,
+    output: ProtoOutput
+  ): Promise<void> {
+    const pipeline = await this.getPipeline(pipelineId);
+    await this.store.update(pipelineId, {
+      scribeConversation: [
+        ...pipeline.scribeConversation,
+        {
+          type: 'proto_completed',
+          content: {
+            iteration,
+            summary: output.summary ?? 'Proje dosyaları hazır.',
+            filesCreated: output.metadata.filesCreated,
+            totalLines: output.metadata.totalLinesOfCode,
+            branch: output.branch,
+          },
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    });
+  }
+
+  // ─── Chat-event helpers (Task 3: trace events) ───────────────────
+
+  private async appendTraceStarted(pipelineId: string): Promise<number> {
+    const pipeline = await this.getPipeline(pipelineId);
+    const iteration = this.countPriorEvents(pipeline.scribeConversation, 'trace_completed') + 1;
+    await this.store.update(pipelineId, {
+      scribeConversation: [
+        ...pipeline.scribeConversation,
+        {
+          type: 'trace_started',
+          content: { iteration },
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    });
+    return iteration;
+  }
+
+  private async appendTraceCompleted(
+    pipelineId: string,
+    iteration: number,
+    output: { testSummary: { totalTests: number; coveragePercentage: number } }
+  ): Promise<void> {
+    const pipeline = await this.getPipeline(pipelineId);
+    await this.store.update(pipelineId, {
+      scribeConversation: [
+        ...pipeline.scribeConversation,
+        {
+          type: 'trace_completed',
+          content: {
+            iteration,
+            totalTests: output.testSummary.totalTests,
+            coverage: output.testSummary.coveragePercentage,
+            passed: true,
+          },
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    });
+  }
+
+  private async appendTraceFailed(
+    pipelineId: string,
+    iteration: number,
+    errorCode: string,
+    errorMessage: string,
+    recoveryAction?: 'retry' | 'skip'
+  ): Promise<void> {
+    const pipeline = await this.getPipeline(pipelineId);
+    await this.store.update(pipelineId, {
+      scribeConversation: [
+        ...pipeline.scribeConversation,
+        {
+          type: 'trace_failed',
+          content: { iteration, errorCode, errorMessage, recoveryAction },
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    });
   }
 
   private assertStage(pipeline: PipelineState, expected: PipelineStage): void {

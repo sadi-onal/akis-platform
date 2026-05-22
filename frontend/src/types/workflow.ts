@@ -77,7 +77,16 @@ export interface WorkflowStages {
 
 export interface ConversationMessage {
   role: 'user' | 'scribe' | 'proto' | 'trace' | 'system';
-  type: 'message' | 'clarification' | 'spec' | 'proto_result' | 'trace_result' | 'error';
+  type:
+    | 'message'
+    | 'clarification'
+    | 'spec'
+    | 'proto_result'
+    | 'trace_result'
+    | 'error'
+    | 'proto_started'
+    | 'trace_started'
+    | 'trace_failed';
   content: string;
   timestamp: string;
   // Clarification
@@ -113,6 +122,11 @@ export interface ConversationMessage {
       confidenceScore: number;
     };
   };
+  // Chat event-log (2026-05-22)
+  iteration?: number;
+  errorCode?: string;
+  errorMessage?: string;
+  recoveryAction?: 'retry' | 'skip';
   // Trace result
   traceResult?: {
     testCount: number;

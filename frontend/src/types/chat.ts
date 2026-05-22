@@ -58,6 +58,26 @@ export type ChatMessage =
       timestamp: string;
       activityEntryId?: string;
       jiraEpicKey?: string;
+      /**
+       * Chat event-log (2026-05-22) — surfaces the iteration counter when the
+       * message originated from a `proto_completed` / `trace_completed`
+       * event-log entry. Older snapshot-derived messages omit this.
+       */
+      iteration?: number;
+      /**
+       * Proto F-6 (2026-05-22): when this row comes from a Proto stage
+       * (`proto_completed` event or proto_result snapshot), `summary` carries
+       * the LLM-generated Turkish narration ("Sayaç için React projesi
+       * hazırladım…") and the renderer leads with it. `content` becomes a
+       * fallback for legacy pipelines without `protoOutput.summary`.
+       * Metadata fields (totalFiles/totalLines/branch) render as a smaller
+       * secondary line beneath the summary. All optional — non-Proto rows
+       * (Scribe/Trace narrators) omit them.
+       */
+      summary?: string;
+      totalFiles?: number;
+      totalLines?: number;
+      branch?: string;
     }
   | {
       type: 'clarification';
@@ -105,6 +125,8 @@ export type ChatMessage =
       uncoveredCriteria?: string[];
       timestamp: string;
       jiraEpicKey?: string;
+      /** Iteration counter from event-log `trace_completed` (2026-05-22). */
+      iteration?: number;
     }
   | {
       type: 'error';
@@ -171,6 +193,20 @@ export type ChatMessage =
       streaming?: boolean;
       /** The original user question — surfaced for the optional [BUILD] CTA. */
       sourceMessage?: string;
+      timestamp: string;
+    }
+  | {
+      /**
+       * Chat event-log (2026-05-22) — Trace stage failed during this
+       * iteration. Distinguishes from generic `error` ChatMessage so
+       * downstream components (TraceFailureMessage in T8) can render
+       * iteration-aware retry/skip controls.
+       */
+      type: 'trace_failure';
+      errorCode: string;
+      errorMessage: string;
+      recoveryAction?: 'retry' | 'skip';
+      iteration?: number;
       timestamp: string;
     }
   | {

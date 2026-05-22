@@ -14,13 +14,33 @@ export const STAGE_ORDER: CinemaStage[] = ['scribe', 'proto', 'trace'];
 
 export interface StageView {
   stage: CinemaStage;
-  state: 'pending' | 'active' | 'complete';
+  /**
+   * 'failed' added in T9 follow-up (F-1, 2026-05-22): when the Reconciler
+   * sweeps a stuck pipeline to `pipeline.stage='failed'`,
+   * `mapPipelineToWorkflow` writes `workflow.stages.<X>.status='failed'`
+   * + `.error=<label>`. The Rail forwards this as `failedStages` to
+   * `reduceStageViews`, which flips the targeted stage's state to
+   * `'failed'` and overrides `latest.message` with the label so the card
+   * stops showing its stale running text ("Test senaryolarını
+   * hazırlıyor..."). Without this override the Trace card kept its last
+   * running message even though the upper banner offered "Tekrar Dene".
+   */
+  state: 'pending' | 'active' | 'complete' | 'failed';
   latest: PipelineActivity | null;
   progress: number;
   reasoning: PipelineActivity['reasoning'] | undefined;
   /** PR-F: Trace iterate-loop retry rozetinden parse edilen meta. */
   meta?: StageMeta;
 }
+
+/**
+ * F-1 (2026-05-22) — per-stage failure labels sourced from
+ * `workflow.stages.{scribe,proto,trace}.error` (populated by T9's
+ * `mapPipelineToWorkflow` change). Map a stage to a short user-visible
+ * label ("Zaman aşımı" for PIPELINE_TIMEOUT, the error message otherwise).
+ * Stages absent from the map render normally.
+ */
+export type FailedStagesMap = Partial<Record<CinemaStage, string>>;
 
 // PR-F: Trace retry badge için stage view'a opsiyonel meta ekleniyor.
 // `retryCount` ve `maxRetries` Trace iterate-loop'tan (`step: 'retry-trigger'`)
@@ -65,7 +85,15 @@ function activeStageFor(uiState: ConversationUIState | undefined): CinemaStage |
 export function reduceStageViews(
   activities: PipelineActivity[],
   current: PipelineActivity | null,
-  uiState?: ConversationUIState
+  uiState?: ConversationUIState,
+  /**
+   * F-1: optional per-stage failure override. When a stage appears in this
+   * map, its `state` becomes `'failed'` and `latest.message` is replaced
+   * with the label so the card stops rendering its last running text.
+   * Sourced from `workflow.stages.<X>.status === 'failed'` + `.error` by
+   * the rail (which gets the values from T9's mapper).
+   */
+  failedStages?: FailedStagesMap
 ): StageView[] {
   // PR-F: Critic guardrail mode — critic_spec aktiviteleri Scribe column'una,
   // critic_code aktiviteleri Proto column'una map'lenir. `protoSeenSoFar`
@@ -232,7 +260,7 @@ export function reduceStageViews(
     // hiç native activity yoksa column "complete" yerine "pending" görünmemeli.
     const native = nativeLastFor.get(stage);
     const combined = lastFor.get(stage);
-    const latest = native ?? null;
+    let latest = native ?? null;
     const progress = progressFor.get(stage) ?? 0;
     const reasoning = reasoningFor.get(stage);
     const meta = metaFor.get(stage);
@@ -260,6 +288,27 @@ export function reduceStageViews(
       state = 'complete';
     } else {
       state = 'pending';
+    }
+    // F-1 (2026-05-22): failed-state override beats every other rule.
+    // When the rail tells us a stage is failed (sourced from T9's
+    // `mapPipelineToWorkflow` writing `workflow.stages.<X>.status='failed'`),
+    // we replace the card's state + display message so the user no longer
+    // sees the stale running text ("Test senaryolarını hazırlıyor...")
+    // alongside the failure banner.
+    const failureLabel = failedStages?.[stage];
+    if (failureLabel) {
+      state = 'failed';
+      // Synthesize a minimal activity that carries the label as `message`
+      // so the existing StageColumn `latest.message` render path picks it
+      // up without any column-specific branch.
+      const stamp = latest?.timestamp ?? new Date(0).toISOString();
+      latest = {
+        pipelineId: latest?.pipelineId ?? 'failed',
+        stage: stage,
+        step: 'failed',
+        message: failureLabel,
+        timestamp: stamp,
+      };
     }
     return { stage, state, latest, progress, reasoning, meta };
   });
