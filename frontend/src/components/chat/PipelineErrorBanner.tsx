@@ -117,6 +117,13 @@ export function PipelineErrorBanner({
               {error.message}
             </span>
           )}
+          {/* Stage-specific detail (e.g. "trace_testing aşamasında 15 dk..."): the
+              most informative line. Hidden when missing or duplicating message. */}
+          {error.technicalDetail && error.technicalDetail !== error.message && (
+            <span className="text-[11px] text-ak-text-muted" data-testid="banner-stage-detail">
+              {error.technicalDetail}
+            </span>
+          )}
         </div>
         {/* Error code chip */}
         <span

@@ -7,7 +7,7 @@ import type { PipelineError } from '../../../types/pipeline';
 
 const retryableError: PipelineError = {
   code: 'PROTO_PUSH_FAILED',
-  message: 'GitHub\'a kod gönderilemedi. Lütfen bağlantınızı kontrol edin.',
+  message: "GitHub'a kod gönderilemedi. Lütfen bağlantınızı kontrol edin.",
   retryable: true,
   recoveryAction: 'retry',
 };
@@ -27,7 +27,8 @@ const nonRetryableError: PipelineError = {
 
 const reconnectGitHubError: PipelineError = {
   code: 'GITHUB_TOKEN_INVALID',
-  message: "GitHub bağlantınızın süresi dolmuş veya geçersiz. Devam etmek için GitHub hesabınızı yeniden bağlayın.",
+  message:
+    'GitHub bağlantınızın süresi dolmuş veya geçersiz. Devam etmek için GitHub hesabınızı yeniden bağlayın.',
   retryable: false,
   recoveryAction: 'reconnect_github',
 };
@@ -107,7 +108,7 @@ describe('PipelineErrorBanner', () => {
 
   it('renders neither button for non-retryable error with no recoveryAction', () => {
     render(
-      <PipelineErrorBanner error={nonRetryableError} onRetry={vi.fn()} onSkipTrace={vi.fn()} />,
+      <PipelineErrorBanner error={nonRetryableError} onRetry={vi.fn()} onSkipTrace={vi.fn()} />
     );
 
     expect(screen.queryByTestId('retry-button')).not.toBeInTheDocument();
@@ -133,9 +134,7 @@ describe('PipelineErrorBanner', () => {
       retryable: true,
       recoveryAction: 'skip-trace',
     };
-    render(
-      <PipelineErrorBanner error={bothError} onRetry={vi.fn()} onSkipTrace={vi.fn()} />,
-    );
+    render(<PipelineErrorBanner error={bothError} onRetry={vi.fn()} onSkipTrace={vi.fn()} />);
 
     expect(screen.getByTestId('retry-button')).toBeInTheDocument();
     expect(screen.getByTestId('skip-trace-button')).toBeInTheDocument();
@@ -167,9 +166,7 @@ describe('PipelineErrorBanner', () => {
 
   describe('#490 BUG-N — retry-in-flight state', () => {
     it('swaps the retry button with a disabled loader when isRetrying=true', () => {
-      render(
-        <PipelineErrorBanner error={retryableError} onRetry={vi.fn()} isRetrying />,
-      );
+      render(<PipelineErrorBanner error={retryableError} onRetry={vi.fn()} isRetrying />);
 
       const button = screen.getByTestId('retry-button');
       expect(button).toBeDisabled();
@@ -180,9 +177,7 @@ describe('PipelineErrorBanner', () => {
 
     it('does NOT call onRetry when the disabled retrying button is clicked', () => {
       const onRetry = vi.fn();
-      render(
-        <PipelineErrorBanner error={retryableError} onRetry={onRetry} isRetrying />,
-      );
+      render(<PipelineErrorBanner error={retryableError} onRetry={onRetry} isRetrying />);
 
       fireEvent.click(screen.getByTestId('retry-button'));
       expect(onRetry).not.toHaveBeenCalled();
@@ -214,13 +209,11 @@ describe('PipelineErrorBanner', () => {
       // Backend raw message must NOT live in the primary detail line (only
       // on the smaller technical-detail line). Assert by data-testid so a
       // text match on the technical line does not give a false negative.
-      expect(screen.getByTestId('banner-detail')).not.toHaveTextContent(
-        'rate limit exceeded',
-      );
+      expect(screen.getByTestId('banner-detail')).not.toHaveTextContent('rate limit exceeded');
       // Banner severity attribute drives the warn (amber) palette.
       expect(screen.getByTestId('pipeline-error-banner')).toHaveAttribute(
         'data-error-severity',
-        'warn',
+        'warn'
       );
     });
 
@@ -237,7 +230,7 @@ describe('PipelineErrorBanner', () => {
       expect(screen.getByText('AI kotası tükendi')).toBeInTheDocument();
       expect(screen.getByTestId('pipeline-error-banner')).toHaveAttribute(
         'data-error-severity',
-        'error',
+        'error'
       );
     });
 
@@ -254,7 +247,7 @@ describe('PipelineErrorBanner', () => {
       expect(screen.getByTestId('retry-button')).toBeInTheDocument();
       expect(screen.getByTestId('pipeline-error-banner')).toHaveAttribute(
         'data-error-severity',
-        'warn',
+        'warn'
       );
     });
 
@@ -270,7 +263,7 @@ describe('PipelineErrorBanner', () => {
       expect(screen.getByText('Ağ bağlantısı hatası')).toBeInTheDocument();
       expect(screen.getByTestId('pipeline-error-banner')).toHaveAttribute(
         'data-error-severity',
-        'error',
+        'error'
       );
     });
 
@@ -297,9 +290,9 @@ describe('PipelineErrorBanner', () => {
       render(<PipelineErrorBanner error={rateError} onRetry={vi.fn()} />);
 
       // Technical line carries the raw backend message verbatim.
-      expect(
-        screen.getByTestId('banner-technical-detail'),
-      ).toHaveTextContent('AI provider openai is rate limited');
+      expect(screen.getByTestId('banner-technical-detail')).toHaveTextContent(
+        'AI provider openai is rate limited'
+      );
     });
 
     it('does NOT render technical-detail line when fallback path is taken', () => {
@@ -310,9 +303,7 @@ describe('PipelineErrorBanner', () => {
       };
       render(<PipelineErrorBanner error={unknown} />);
 
-      expect(
-        screen.queryByTestId('banner-technical-detail'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('banner-technical-detail')).not.toBeInTheDocument();
     });
 
     it('preserves the error code chip across friendly and fallback paths', () => {
@@ -330,13 +321,50 @@ describe('PipelineErrorBanner', () => {
       render(<PipelineErrorBanner error={reconnectGitHubError} />);
 
       // Friendly title from the helper map.
-      expect(
-        screen.getByText('GitHub bağlantısının süresi doldu'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('GitHub bağlantısının süresi doldu')).toBeInTheDocument();
       // Reconnect button still wired.
-      expect(
-        screen.getByTestId('reconnect-github-button'),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId('reconnect-github-button')).toBeInTheDocument();
+    });
+  });
+
+  // ── Task 5 — failed-state-holistic — stage-detail (technicalDetail) ──────
+
+  describe('Task 5 — error.technicalDetail rendering', () => {
+    it('renders error.technicalDetail in the stage-detail line when present', () => {
+      const error: PipelineError = {
+        code: 'PIPELINE_TIMEOUT',
+        message: 'Bir adım yanıt vermedi.',
+        technicalDetail: 'Pipeline trace_testing aşamasında 15 dakikadır yanıt vermiyor.',
+        retryable: true,
+        recoveryAction: 'retry',
+      };
+      render(<PipelineErrorBanner error={error} />);
+      expect(screen.getByTestId('banner-stage-detail')).toHaveTextContent(
+        /trace_testing aşamasında 15 dakika/
+      );
+    });
+
+    it('omits banner-stage-detail when technicalDetail is undefined', () => {
+      const error: PipelineError = {
+        code: 'AI_RATE_LIMITED',
+        message: 'AI servisi yoğun.',
+        retryable: true,
+        recoveryAction: 'retry',
+      };
+      render(<PipelineErrorBanner error={error} />);
+      expect(screen.queryByTestId('banner-stage-detail')).toBeNull();
+    });
+
+    it('omits banner-stage-detail when technicalDetail equals message (no duplicate)', () => {
+      const error: PipelineError = {
+        code: 'PIPELINE_TIMEOUT',
+        message: 'Bir adım yanıt vermedi.',
+        technicalDetail: 'Bir adım yanıt vermedi.', // identical
+        retryable: true,
+        recoveryAction: 'retry',
+      };
+      render(<PipelineErrorBanner error={error} />);
+      expect(screen.queryByTestId('banner-stage-detail')).toBeNull();
     });
   });
 });
