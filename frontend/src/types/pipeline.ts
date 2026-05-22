@@ -104,6 +104,26 @@ export type ScribeMessageType =
         recoveryAction?: 'retry' | 'skip';
       };
       timestamp?: string;
+    }
+  | {
+      type: 'scribe_failed';
+      content: {
+        stageStuck: PipelineStage;
+        errorCode: string;
+        errorMessage: string;
+        recoveryAction?: 'retry';
+      };
+      timestamp?: string;
+    }
+  | {
+      type: 'proto_failed';
+      content: {
+        iteration?: number;
+        errorCode: string;
+        errorMessage: string;
+        recoveryAction?: 'retry';
+      };
+      timestamp?: string;
     };
 
 export interface VerificationReport {

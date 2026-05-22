@@ -86,7 +86,9 @@ export interface ConversationMessage {
     | 'error'
     | 'proto_started'
     | 'trace_started'
-    | 'trace_failed';
+    | 'trace_failed'
+    | 'scribe_failed'
+    | 'proto_failed';
   content: string;
   timestamp: string;
   // Clarification
@@ -127,6 +129,8 @@ export interface ConversationMessage {
   errorCode?: string;
   errorMessage?: string;
   recoveryAction?: 'retry' | 'skip';
+  /** scribe_failed only — backend PipelineStage; widened to string on FE. */
+  stageStuck?: string;
   // Trace result
   traceResult?: {
     testCount: number;
