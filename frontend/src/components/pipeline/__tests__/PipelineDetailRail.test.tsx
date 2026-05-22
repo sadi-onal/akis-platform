@@ -653,7 +653,7 @@ describe('PipelineDetailRail — PR-V2 Critic findings summary chip', () => {
     );
     const chip = screen.getByTestId('critic-findings-summary-chip');
     expect(chip).toBeInTheDocument();
-    expect(chip).toHaveTextContent('1 Critic bulgusu');
+    expect(chip).toHaveTextContent('1 Değerlendirme bulgusu');
   });
 
   it('renders the chip with a large count (10+) without truncating the number', () => {
@@ -678,7 +678,7 @@ describe('PipelineDetailRail — PR-V2 Critic findings summary chip', () => {
       />
     );
     const chip = screen.getByTestId('critic-findings-summary-chip');
-    expect(chip).toHaveTextContent('12 Critic bulgusu');
+    expect(chip).toHaveTextContent('12 Değerlendirme bulgusu');
   });
 
   it('does NOT render the chip when criticGateActive (awaiting_critic_resolution) — avoids duplicate with CriticResolutionGate', () => {

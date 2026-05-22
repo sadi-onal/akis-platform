@@ -1329,6 +1329,26 @@ export const integrationCredentialsRelations = relations(integrationCredentials,
 }));
 
 /**
+ * MCP OAuth client registrations (Dynamic Client Registration per RFC 7591).
+ * One row per MCP server URL — shared across all AKIS users since DCR registers
+ * the *AKIS instance* as the client, not individual users. User-specific tokens
+ * live in oauth_accounts. Token cache decouples DCR (boot-time, ~once) from
+ * per-request OAuth dances.
+ */
+export const mcpOauthClients = pgTable('mcp_oauth_clients', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  serverUrl: text('server_url').notNull().unique(),
+  clientId: text('client_id').notNull(),
+  clientSecret: text('client_secret'),
+  registrationMetadata: jsonb('registration_metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type McpOauthClient = typeof mcpOauthClients.$inferSelect;
+export type NewMcpOauthClient = typeof mcpOauthClients.$inferInsert;
+
+/**
  * Agent configs - stores per-user, per-agent configuration
  * S0.4.6: Persistent Scribe configuration storage
  */

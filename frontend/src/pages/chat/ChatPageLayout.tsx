@@ -88,7 +88,9 @@ export interface ChatPageLayoutProps {
   onFeedback: (content: string) => void;
   onChat: (content: string) => void;
   onCancel: () => Promise<void> | void;
-  onApprove: () => Promise<void> | void;
+  onApprove: (
+    jiraConfig?: import('../../components/chat/PlanCard').JiraApproveConfig
+  ) => Promise<void> | void;
   onReject: () => Promise<void> | void;
   onRetry: () => Promise<void> | void;
   onSkip: () => Promise<void> | void;
@@ -315,6 +317,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                       criticReview={activeWorkflow?.criticReview}
                       acCoverage={activeWorkflow?.acCoverage}
                       traceDryRunStatus={activeWorkflow?.traceDryRunStatus}
+                      traceDryRunErrorCode={activeWorkflow?.traceDryRunErrorCode}
                       // PR-V6 — thread full Scribe spec to the rail so the
                       // Açıklama tab's Scribe card surfaces AC + user stories
                       // + problem statement as disclosures.

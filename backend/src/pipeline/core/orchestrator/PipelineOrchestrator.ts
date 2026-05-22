@@ -11,7 +11,7 @@ import type {
   TraceOutput,
 } from '../contracts/PipelineTypes.js';
 import { JiraMCPService } from '../../../services/mcp/adapters/JiraMCPService.js';
-import { atlassianOAuthService } from '../../../services/atlassian/AtlassianOAuthService.js';
+import { getConnectionStatus as getAtlassianStatus } from '../../../services/atlassian/AtlassianMcpClient.js';
 import {
   createJiraEpicFromSpec,
   commentJiraWithProtoResult,
@@ -1229,6 +1229,18 @@ export class PipelineOrchestrator {
     });
     this.emitEvent(pipelineId, 'stage_change', 'proto_building');
 
+    // Jira hook: create the Epic now that the user has approved + opted in.
+    // The old hook on Scribe completion never fires for our chat-driven flow
+    // because the picker lives on the PlanCard (which only appears after
+    // Scribe is done) — by the time the user opts in, that hook has long
+    // since passed. Running here means Epic creation happens in parallel
+    // with Proto, and Proto's completion comment lands on the same Epic.
+    if (jiraConfig?.enabled && jiraConfig.projectKey) {
+      this.runJiraEpicCreation(pipelineId, pipeline.userId, jiraConfig.projectKey, spec).catch(
+        (err) => logger.warn({ err }, '[Pipeline] Jira Epic creation kicked off')
+      );
+    }
+
     // Create per-user GitHub adapter and run Proto + Trace in background
     const userGithubService = this.createGitHubService(userGitHubToken);
     this.runProtoAndTrace(
@@ -1770,7 +1782,7 @@ export class PipelineOrchestrator {
       const criticCodeEmit = createActivityEmitter(pipelineId, 'critic', { criticPhase: 'code' });
       criticCodeEmit(
         'start',
-        'Üretilen kod inceleniyor (adversarial review)...',
+        'Üretilen kod inceleniyor...',
         10,
         undefined,
         undefined,
@@ -1823,15 +1835,13 @@ export class PipelineOrchestrator {
         // ("Critic %52 → %67 → %84 — agent kendi kendine iyileşiyor")
         // instead of only showing the final iteration's score.
         //
-        // Iteration number derives from the existing
-        // `criticIterateRetryCount` (0-indexed retry → 1-indexed iter).
-        // Existing `criticCodeOutput` keeps tracking the latest iteration so
-        // every downstream consumer (gate, score bar, attention chip) stays
-        // backward-compatible.
-        const currentRetry =
-          typeof existingIntermediate.criticIterateRetryCount === 'number'
-            ? (existingIntermediate.criticIterateRetryCount as number)
-            : 0;
+        // Iteration number derives from existing history length so manual
+        // iterations (iterateProtoFromFeedback) get the next sequential
+        // number too — driving from `criticIterateRetryCount` would skip
+        // user-driven iterations since that counter only tracks the auto
+        // critic-iterate loop. Existing `criticCodeOutput` keeps tracking
+        // the latest iteration so every downstream consumer (gate, score
+        // bar, attention chip) stays backward-compatible.
         const protoVerification = (
           protoResult.data as { verificationReport?: { confidenceScore?: number } }
         ).verificationReport;
@@ -1840,8 +1850,11 @@ export class PipelineOrchestrator {
             ? protoVerification.confidenceScore
             : null;
         const findings = criticResult.findings ?? [];
+        const existingHistory = Array.isArray(existingIntermediate.iterationHistory)
+          ? (existingIntermediate.iterationHistory as Array<Record<string, unknown>>)
+          : [];
         const newIterationEntry = {
-          iteration: currentRetry + 1,
+          iteration: existingHistory.length + 1,
           protoConfidence,
           criticScore: criticResult.overallScore ?? null,
           criticFindingsCount: findings.length,
@@ -1849,9 +1862,6 @@ export class PipelineOrchestrator {
           timestamp: new Date().toISOString(),
           decision: criticResult.approved ? 'approved' : 'rejected',
         };
-        const existingHistory = Array.isArray(existingIntermediate.iterationHistory)
-          ? (existingIntermediate.iterationHistory as Array<Record<string, unknown>>)
-          : [];
         const nextHistory = [...existingHistory, newIterationEntry];
 
         await this.store.update(pipelineId, {
@@ -2805,6 +2815,14 @@ export class PipelineOrchestrator {
     const existingIntermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
     const existingBlock = (existingIntermediate.criticBlock ?? {}) as Record<string, unknown>;
 
+    // PR-fix (2026-05-21): Critic override skips Trace dryRun entirely —
+    // pipeline jumps from awaiting_critic_resolution → awaiting_push_confirm
+    // without ever entering trace_testing. Without a `traceDryRunStatus`
+    // value the push gate defaults to 'pending' and shows
+    // "Testler hazırlanıyor…" forever (Trace will never run for this
+    // pipeline). Persist `traceDryRunStatus: 'failed'` so the gate surfaces
+    // the truthful "tests not produced" banner and the push button remains
+    // actionable.
     const updated = await this.store.update(
       pipelineId,
       {
@@ -2816,6 +2834,8 @@ export class PipelineOrchestrator {
             manuallyOverridden: true,
             overriddenAt: new Date().toISOString(),
           },
+          traceDryRunStatus: 'failed',
+          traceDryRunErrorCode: 'TRACE_SKIPPED_AFTER_CRITIC_OVERRIDE',
         },
       },
       { expectedStageVersion: pipeline.stageVersion }
@@ -2994,7 +3014,7 @@ export class PipelineOrchestrator {
         });
         criticSpecEmit(
           'start',
-          'Spesifikasyon inceleniyor (adversarial review)...',
+          'Spesifikasyon inceleniyor...',
           10,
           undefined,
           undefined,
@@ -4003,13 +4023,17 @@ export class PipelineOrchestrator {
     const jira = await JiraMCPService.fromOAuth(userId);
     if (!jira) return;
 
-    await commentJiraWithFailure(jira, epicKey, {
-      stage: label,
-      errorCode: error.code,
-      errorMessage: error.message,
-      retryable: error.retryable,
-      pipelineId,
-    });
+    try {
+      await commentJiraWithFailure(jira, epicKey, {
+        stage: label,
+        errorCode: error.code,
+        errorMessage: error.message,
+        retryable: error.retryable,
+        pipelineId,
+      });
+    } finally {
+      await jira.close();
+    }
   }
 
   private emitEvent(
@@ -4042,23 +4066,26 @@ export class PipelineOrchestrator {
     projectKey: string,
     spec: StructuredSpec
   ): Promise<void> {
+    const jira = await JiraMCPService.fromOAuth(userId);
+    if (!jira) return;
     try {
-      const jira = await JiraMCPService.fromOAuth(userId);
-      if (!jira) return;
       const epicKey = await createJiraEpicFromSpec(jira, projectKey, spec);
       if (epicKey) {
         // T2: stamp siteUrl alongside the epicKey so the UI can render a
-        // clickable link without an extra round-trip. getStatus is cheap
-        // (single DB read) and only runs once per Epic creation.
-        let siteUrl: string | undefined;
-        try {
-          const status = await atlassianOAuthService.getStatus(userId);
-          siteUrl = status.siteUrl;
-        } catch (err) {
-          logger.warn(
-            { err, userId },
-            '[Pipeline] Jira siteUrl resolve failed (Epic still linked, link will be missing)'
-          );
+        // clickable link without an extra round-trip. With MCP authv2,
+        // siteUrl is already cached on the JiraMCPService instance; fall
+        // back to the OAuth row only if instance lacks it.
+        let siteUrl = jira.siteUrl;
+        if (!siteUrl) {
+          try {
+            const status = await getAtlassianStatus(userId);
+            siteUrl = status.siteUrl;
+          } catch (err) {
+            logger.warn(
+              { err, userId },
+              '[Pipeline] Jira siteUrl resolve failed (Epic still linked, link will be missing)'
+            );
+          }
         }
         await this.store.update(pipelineId, {
           jiraConfig: { projectKey, enabled: true, epicKey, siteUrl },
@@ -4067,6 +4094,8 @@ export class PipelineOrchestrator {
       }
     } catch (err) {
       logger.warn({ err }, '[Pipeline] Jira Epic creation failed (non-fatal)');
+    } finally {
+      await jira.close();
     }
   }
 
@@ -4075,12 +4104,14 @@ export class PipelineOrchestrator {
     epicKey: string,
     result: { branch: string; repo: string; prUrl?: string; filesCreated: number }
   ): Promise<void> {
+    const jira = await JiraMCPService.fromOAuth(userId);
+    if (!jira) return;
     try {
-      const jira = await JiraMCPService.fromOAuth(userId);
-      if (!jira) return;
       await commentJiraWithProtoResult(jira, epicKey, result);
     } catch (err) {
       logger.warn({ err }, '[Pipeline] Jira Proto comment failed (non-fatal)');
+    } finally {
+      await jira.close();
     }
   }
 
@@ -4089,12 +4120,14 @@ export class PipelineOrchestrator {
     epicKey: string,
     result: { totalTests: number; coveragePercentage: number; passed: boolean }
   ): Promise<void> {
+    const jira = await JiraMCPService.fromOAuth(userId);
+    if (!jira) return;
     try {
-      const jira = await JiraMCPService.fromOAuth(userId);
-      if (!jira) return;
       await commentJiraWithTraceResult(jira, epicKey, result);
     } catch (err) {
       logger.warn({ err }, '[Pipeline] Jira Trace comment failed (non-fatal)');
+    } finally {
+      await jira.close();
     }
   }
 

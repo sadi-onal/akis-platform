@@ -1,43 +1,34 @@
-import { HttpClient } from '../../http/HttpClient.js';
-import { atlassianOAuthService } from '../../atlassian/index.js';
-import { getEnv } from '../../../config/env.js';
+/**
+ * JiraMCPService — Jira adapter on top of Atlassian's remote MCP server
+ * (https://mcp.atlassian.com/v1/mcp/authv2), using the official MCP SDK +
+ * Dynamic Client Registration + OAuth 2.1 via `AtlassianMcpClient`.
+ *
+ * Public surface (createIssue, linkIssues, addComment, getTransitions,
+ * transitionIssue) is kept stable so `jiraIntegration.ts` and the pipeline
+ * orchestrator don't need to change.
+ *
+ * Internally every call goes through SDK's `client.callTool(name, args)`.
+ * Atlassian tools need a `cloudId` on each call — we resolve it once via
+ * `getAccessibleAtlassianResources`, cache it on the oauth_accounts row, and
+ * inject it transparently.
+ */
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { eq, and } from 'drizzle-orm';
+import { db } from '../../../db/client.js';
+import { oauthAccounts } from '../../../db/schema.js';
+import { openMcpClient } from '../../atlassian/AtlassianMcpClient.js';
 import { logger } from '../../../lib/logger.js';
 
-/**
- * JiraMCPService - MCP client adapter for Jira
- * Phase 10: Full MCP JSON-RPC 2.0 implementation
- * Provides high-level methods that internally use JSON-RPC 2.0 to Jira MCP endpoint
- * 
- * Supports OAuth 2.0 (3LO) tokens via fromOAuth factory method
- */
+// =============================================================================
+// Public types (preserved for consumers — do not rename without sweep)
+// =============================================================================
 
 export interface JiraMCPServiceOptions {
-  baseUrl: string;
-  token?: string;
-  httpClient?: HttpClient;
+  client: Client;
+  cloudId: string;
+  /** OPTIONAL: siteUrl is for human-facing URL building (`/browse/${key}`). */
+  siteUrl?: string;
 }
-
-interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  method: string;
-  params: unknown;
-  id: string | number;
-}
-
-interface JsonRpcResponse<T> {
-  jsonrpc: '2.0';
-  result?: T;
-  error?: {
-    code: number;
-    message: string;
-    data?: unknown;
-  };
-  id: string | number;
-}
-
-// =============================================================================
-// Jira Types
-// =============================================================================
 
 export interface JiraIssue {
   key: string;
@@ -73,207 +64,224 @@ export interface JiraComment {
 }
 
 // =============================================================================
-// JiraMCPService Class
+// MCP result-shape helpers
 // =============================================================================
 
+// Use SDK's actual inferred return type so Zod schema variance doesn't bite us.
+type ClientCallResult = Awaited<ReturnType<Client['callTool']>>;
+
 /**
- * Jira MCP Service - adapter for Jira MCP server
- * Used by Trace agent for issue tracking
+ * Atlassian MCP tools return their payload as JSON-stringified text inside
+ * `content[0].text`. Some newer tools also fill `structuredContent` — prefer
+ * that when present. Throws if the tool reported `isError`.
  */
+function unwrap<T = unknown>(result: ClientCallResult, toolName: string): T {
+  if (result.isError) {
+    const first = Array.isArray(result.content) ? result.content[0] : undefined;
+    const msg =
+      first && (first as { type?: string; text?: string }).type === 'text'
+        ? (first as { text: string }).text
+        : 'unknown';
+    throw new Error(`[${toolName}] tool returned error: ${msg}`);
+  }
+  if (result.structuredContent !== undefined) {
+    return result.structuredContent as T;
+  }
+  const first = Array.isArray(result.content) ? result.content[0] : undefined;
+  if (!first || (first as { type?: string }).type !== 'text') {
+    throw new Error(`[${toolName}] unexpected MCP result shape`);
+  }
+  const text = (first as { text: string }).text;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // Some tools return plain text (e.g. confirmations). Return raw string.
+    return text as unknown as T;
+  }
+}
+
+// =============================================================================
+// JiraMCPService
+// =============================================================================
+
 export class JiraMCPService {
-  private baseUrl: string;
-  private token?: string;
-  private httpClient: HttpClient;
-  private requestId: number = 1;
+  private client: Client;
+  private cloudId: string;
+  public readonly siteUrl?: string;
 
   constructor(opts: JiraMCPServiceOptions) {
-    this.baseUrl = opts.baseUrl.replace(/\/$/, ''); // Remove trailing slash
-    this.token = opts.token;
-    this.httpClient = opts.httpClient || new HttpClient();
+    this.client = opts.client;
+    this.cloudId = opts.cloudId;
+    this.siteUrl = opts.siteUrl;
   }
 
   /**
-   * Factory method to create JiraMCPService using Atlassian OAuth tokens
-   * @param userId - AKIS user ID
-   * @returns JiraMCPService instance or null if OAuth is not available
+   * Factory: build a JiraMCPService for the given user, or null if the user
+   * has not connected Atlassian. Resolves cloudId once (cached on the
+   * oauth_accounts row after first resolution). Caller is responsible for
+   * `service.close()` — typically a try/finally inside the orchestrator.
    */
   static async fromOAuth(userId: string): Promise<JiraMCPService | null> {
-    const env = getEnv();
+    const client = await openMcpClient(userId);
+    if (!client) return null;
 
-    if (!env.ATLASSIAN_MCP_BASE_URL) {
-      // Server is not configured for Jira at all — silent skip is fine here,
-      // it's a deploy-time fact, not a per-request anomaly.
-      return null;
-    }
-
-    let token: string | null = null;
+    let cloudId: string | undefined;
+    let siteUrl: string | undefined;
     try {
-      token = await atlassianOAuthService.getValidToken(userId);
-    } catch (err) {
-      // Token decryption / refresh failed. The pipeline is best-effort with
-      // Jira; surface the reason in logs so prod regressions are debuggable.
-      logger.warn(
-        { userId, err: err instanceof Error ? err.message : String(err) },
-        '[Jira] fromOAuth: getValidToken threw — returning null'
-      );
-      return null;
-    }
+      const row = await db.query.oauthAccounts.findFirst({
+        where: and(eq(oauthAccounts.userId, userId), eq(oauthAccounts.provider, 'atlassian')),
+      });
+      cloudId = row?.cloudId ?? undefined;
+      siteUrl = row?.siteUrl ?? undefined;
 
-    if (!token) {
-      logger.warn(
-        { userId },
-        '[Jira] fromOAuth: no valid token (user likely never connected Atlassian, or token rotation failed) — returning null'
-      );
-      return null;
-    }
-
-    return new JiraMCPService({
-      baseUrl: env.ATLASSIAN_MCP_BASE_URL,
-      token,
-    });
-  }
-
-  /**
-   * Make a JSON-RPC 2.0 call to the Jira MCP server
-   */
-  private async callMcp<T>(method: string, params: unknown): Promise<T> {
-    const payload: JsonRpcRequest = {
-      jsonrpc: '2.0',
-      method: `jira/${method}`, // Namespaced method
-      params,
-      id: this.requestId++,
-    };
-
-    const response = await this.httpClient.post(this.baseUrl, payload, this.token);
-
-    if (!response.ok) {
-      throw new Error(`Jira MCP Request failed: ${response.status} ${response.statusText}`);
-    }
-
-    const json = (await response.json()) as JsonRpcResponse<T>;
-
-    if (json.error) {
-      throw new Error(`Jira MCP Error [${json.error.code}]: ${json.error.message}`);
-    }
-
-    return json.result as T;
-  }
-
-  /**
-   * Get a Jira issue by key
-   * @param issueKey - Issue key (e.g., PROJ-123)
-   */
-  async getIssue(issueKey: string): Promise<JiraIssue> {
-    return this.callMcp<JiraIssue>('getIssue', { issueKey });
-  }
-
-  /**
-   * List issues for a project
-   * @param projectKey - Project key
-   * @param options - Query options
-   */
-  async listIssues(
-    projectKey: string,
-    options?: {
-      jql?: string;
-      maxResults?: number;
-      startAt?: number;
-      fields?: string[];
-    }
-  ): Promise<{ issues: JiraIssue[]; total: number; startAt: number; maxResults: number }> {
-    // Build JQL if not provided
-    const jql = options?.jql || `project = ${projectKey} ORDER BY created DESC`;
-    
-    return this.callMcp<{ issues: JiraIssue[]; total: number; startAt: number; maxResults: number }>(
-      'searchIssues',
-      {
-        jql,
-        maxResults: options?.maxResults || 50,
-        startAt: options?.startAt || 0,
-        fields: options?.fields || ['summary', 'description', 'status', 'assignee', 'priority'],
+      if (!cloudId) {
+        // First post-OAuth call — discover the user's primary site.
+        const resources = unwrap<AccessibleResource[]>(
+          await client.callTool({ name: 'getAccessibleAtlassianResources', arguments: {} }),
+          'getAccessibleAtlassianResources'
+        );
+        if (!Array.isArray(resources) || resources.length === 0) {
+          logger.warn({ userId }, '[Jira] user has no accessible Atlassian sites');
+          await client.close();
+          return null;
+        }
+        // TODO Phase 2: surface multi-site picker if resources.length > 1.
+        cloudId = resources[0].id;
+        siteUrl = resources[0].url;
+        await db
+          .update(oauthAccounts)
+          .set({ cloudId, siteUrl, providerAccountId: cloudId, updatedAt: new Date() })
+          .where(and(eq(oauthAccounts.userId, userId), eq(oauthAccounts.provider, 'atlassian')));
       }
+    } catch (err) {
+      logger.warn({ userId, err }, '[Jira] cloudId resolution failed');
+      await client.close();
+      return null;
+    }
+
+    return new JiraMCPService({ client, cloudId, siteUrl });
+  }
+
+  async close(): Promise<void> {
+    await this.client.close().catch(() => {
+      /* close is best-effort */
+    });
+  }
+
+  // ───── Public methods (preserved signatures) ─────
+
+  /**
+   * List projects the user can create issues in (used by the chat-side picker
+   * shown on the spec-approval card so the user can opt-in to a Jira Epic).
+   * Capped at 50 since the dropdown is human-scale; consumers needing more
+   * should call the underlying tool directly with pagination.
+   */
+  async listProjects(): Promise<Array<{ key: string; name: string }>> {
+    const result = unwrap<
+      | {
+          values?: Array<{ key: string; name: string }>;
+          projects?: Array<{ key: string; name: string }>;
+        }
+      | Array<{ key: string; name: string }>
+    >(
+      await this.client.callTool({
+        name: 'getVisibleJiraProjects',
+        arguments: { cloudId: this.cloudId, action: 'create', maxResults: 50 },
+      }),
+      'getVisibleJiraProjects'
     );
+    // Atlassian shape can be { values: [...] }, { projects: [...] }, or a bare array.
+    const rows = Array.isArray(result) ? result : (result.values ?? result.projects ?? []);
+    return rows.map((p) => ({ key: p.key, name: p.name }));
   }
 
-  /**
-   * Create a Jira issue
-   * @param projectKey - Project key
-   * @param fields - Issue fields
-   */
-  async createIssue(projectKey: string, fields: JiraIssueCreateFields): Promise<{ key: string; id: string }> {
-    return this.callMcp<{ key: string; id: string }>('createIssue', {
-      projectKey,
-      fields,
-    });
+  async createIssue(
+    projectKey: string,
+    fields: JiraIssueCreateFields
+  ): Promise<{ key: string; id: string }> {
+    const result = unwrap<{ key: string; id: string }>(
+      await this.client.callTool({
+        name: 'createJiraIssue',
+        arguments: {
+          cloudId: this.cloudId,
+          projectKey,
+          issueTypeName: fields.issueType,
+          summary: fields.summary,
+          description: fields.description,
+          ...(fields.assignee ? { assignee_account_id: fields.assignee } : {}),
+          ...(fields.labels?.length || fields.customFields
+            ? {
+                additional_fields: {
+                  ...(fields.labels?.length ? { labels: fields.labels } : {}),
+                  ...(fields.customFields ?? {}),
+                },
+              }
+            : {}),
+        },
+      }),
+      'createJiraIssue'
+    );
+    return { key: result.key, id: result.id };
   }
 
-  /**
-   * Update a Jira issue
-   * @param issueKey - Issue key
-   * @param fields - Fields to update
-   */
-  async updateIssue(issueKey: string, fields: Partial<JiraIssueCreateFields>): Promise<{ success: boolean }> {
-    return this.callMcp<{ success: boolean }>('updateIssue', {
-      issueKey,
-      fields,
-    });
+  async addComment(issueKey: string, body: string): Promise<JiraComment> {
+    const result = unwrap<JiraComment>(
+      await this.client.callTool({
+        name: 'addCommentToJiraIssue',
+        arguments: {
+          cloudId: this.cloudId,
+          issueIdOrKey: issueKey,
+          commentBody: body,
+          contentFormat: 'markdown',
+        },
+      }),
+      'addCommentToJiraIssue'
+    );
+    return result;
   }
 
-  /**
-   * Add a comment to a Jira issue
-   * @param issueKey - Issue key
-   * @param comment - Comment text
-   */
-  async addComment(issueKey: string, comment: string): Promise<JiraComment> {
-    return this.callMcp<JiraComment>('addComment', {
-      issueKey,
-      body: comment,
-    });
+  async getTransitions(
+    issueKey: string
+  ): Promise<{ transitions: Array<{ id: string; name: string }> }> {
+    const result = unwrap<{ transitions: Array<{ id: string; name: string }> }>(
+      await this.client.callTool({
+        name: 'getTransitionsForJiraIssue',
+        arguments: { cloudId: this.cloudId, issueIdOrKey: issueKey },
+      }),
+      'getTransitionsForJiraIssue'
+    );
+    return result;
   }
 
-  /**
-   * Get comments for a Jira issue
-   * @param issueKey - Issue key
-   */
-  async getComments(issueKey: string): Promise<{ comments: JiraComment[] }> {
-    return this.callMcp<{ comments: JiraComment[] }>('getComments', { issueKey });
-  }
-
-  /**
-   * Transition an issue to a new status
-   * @param issueKey - Issue key
-   * @param transitionId - Transition ID or name
-   */
   async transitionIssue(issueKey: string, transitionId: string): Promise<{ success: boolean }> {
-    return this.callMcp<{ success: boolean }>('transitionIssue', {
-      issueKey,
-      transitionId,
+    // transitionJiraIssue returns 204/empty on success → unwrap may yield ''.
+    await this.client.callTool({
+      name: 'transitionJiraIssue',
+      arguments: {
+        cloudId: this.cloudId,
+        issueIdOrKey: issueKey,
+        transition: { id: transitionId },
+      },
     });
+    return { success: true };
   }
 
-  /**
-   * Get available transitions for an issue
-   * @param issueKey - Issue key
-   */
-  async getTransitions(issueKey: string): Promise<{ transitions: Array<{ id: string; name: string }> }> {
-    return this.callMcp<{ transitions: Array<{ id: string; name: string }> }>('getTransitions', { issueKey });
-  }
-
-  /**
-   * Link two issues
-   * @param inwardIssueKey - Source issue
-   * @param outwardIssueKey - Target issue
-   * @param linkType - Link type (e.g., "blocks", "relates to")
-   */
   async linkIssues(
     inwardIssueKey: string,
     outwardIssueKey: string,
     linkType: string
   ): Promise<{ success: boolean }> {
-    return this.callMcp<{ success: boolean }>('linkIssues', {
-      inwardIssueKey,
-      outwardIssueKey,
-      linkType,
+    await this.client.callTool({
+      name: 'createIssueLink',
+      arguments: {
+        cloudId: this.cloudId,
+        inwardIssue: inwardIssueKey,
+        outwardIssue: outwardIssueKey,
+        type: linkType,
+      },
     });
+    return { success: true };
   }
 }
+
+type AccessibleResource = { id: string; url: string; name?: string };

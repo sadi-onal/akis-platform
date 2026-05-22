@@ -31,6 +31,10 @@ backend/.env.staging
 backend/.env.*.local
 !backend/.env.example
 
+# Phase 0 Atlassian MCP spike artefacts (contain user tokens — never commit)
+backend/.atlassian-mcp-spike-cache.json
+backend/atlassian-mcp-tools.json
+
 # Frontend env files
 frontend/.env
 frontend/.env.local

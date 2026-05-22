@@ -257,16 +257,16 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
     // PR-T3 S4: protoOutput sadece son iterasyonu saklıyor (backend overwrite
     // ediyor); manuel testte kullanıcı "scaffold 14 dosya" gördükten sonra
     // sayfa yenileyince "10 dosya"ya dönüştüğünü farkedip iterasyon olduğunu
-    // anlamamıştı. `intermediateState.criticIterateRetryCount` Critic-Proto
-    // loop tetiklendiyse > 0 oluyor — bu sayıyı mesajın altına net bir not
-    // olarak ekliyoruz ki kullanıcı bir öncekinin Critic geri bildirimine
-    // göre yenilendiğini bilsin.
-    const criticIter =
-      typeof pipeline.intermediateState?.criticIterateRetryCount === 'number'
-        ? (pipeline.intermediateState.criticIterateRetryCount as number)
-        : 0;
+    // anlamamıştı. `iterationHistory` her tamamlanan Proto+Değerlendirme
+    // turunu içeriyor — uzunluğu o anki iterasyon numarasını veriyor.
+    // criticIterateRetryCount sadece otomatik döngüyü sayıyordu, manuel
+    // iterasyonları kaçırıyordu; trajectory ile aynı kaynaktan beslesin.
+    const iterHistory = pipeline.intermediateState?.iterationHistory;
+    const iterCount = Array.isArray(iterHistory) ? iterHistory.length : 0;
     const iterNote =
-      criticIter > 0 ? `\n\n_Critic geri bildirimi sonrası ${criticIter}. iterasyon._` : '';
+      iterCount > 1
+        ? `\n\n_Değerlendirme geri bildirimi sonrası ${iterCount}. iterasyon._`
+        : '';
     const stat = `Scaffold oluşturuldu — ${pipeline.protoOutput.metadata.filesCreated} dosya, ${pipeline.protoOutput.metadata.totalLinesOfCode} satır${iterNote}`;
     const summary = pipeline.protoOutput.summary;
     messages.push({
@@ -332,11 +332,21 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
       pipeline.stage === 'completed' ||
       pipeline.stage === 'completed_partial')
   ) {
+    // PR-fix (2026-05-21): when Critic was manually overridden, Trace was
+    // intentionally skipped (not failed). Use a different message so the
+    // user understands the cause instead of seeing a misleading
+    // "model output couldn't be parsed" claim.
+    const criticBlock = pipeline.intermediateState?.criticBlock as
+      | { manuallyOverridden?: boolean }
+      | undefined;
+    const traceSkippedByOverride =
+      criticBlock?.manuallyOverridden === true && !pipeline.traceOutput;
     messages.push({
       role: 'system',
       type: 'message',
-      content:
-        'Trace test üretimi tamamlanamadı (modelin çıktısı bütünleşmedi). Önizleme + scaffold hazır — testsiz devam edebilir veya iyileştirme isteyebilirsin.',
+      content: traceSkippedByOverride
+        ? 'Test üretimi atlandı — Değerlendirme bulguları geçildiği için Trace çalıştırılmadı. Önizleme + scaffold hazır.'
+        : 'Trace test üretimi tamamlanamadı (modelin çıktısı bütünleşmedi). Önizleme + scaffold hazır — testsiz devam edebilir veya iyileştirme isteyebilirsin.',
       timestamp: pipeline.metrics?.protoCompletedAt || new Date().toISOString(),
     });
   }

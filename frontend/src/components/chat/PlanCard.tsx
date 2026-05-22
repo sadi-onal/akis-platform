@@ -1,15 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
 import type { UserFriendlyPlan, ChangePlan, PlanStatus } from '../../types/plan';
 import type { StructuredSpec } from '../../types/workflow';
 import { ScribeOutputDisclosures } from '../pipeline/ScribeOutputDisclosures';
+
+export type JiraApproveConfig = { projectKey: string };
 
 interface PlanCardProps {
   plan: UserFriendlyPlan | ChangePlan;
   version: number;
   status: PlanStatus;
   isChangeRequest: boolean;
-  onApprove?: () => void;
+  /**
+   * Called when the user clicks Onayla. The optional `jiraConfig` carries the
+   * Jira project the user opted into (via the picker). Undefined when:
+   * Atlassian not connected, picker toggle off, or this is a change-request
+   * card (no Jira flow on those).
+   */
+  onApprove?: (jiraConfig?: JiraApproveConfig) => void;
   onReject?: () => void;
   /**
    * PR-V6 — full Scribe structured spec. When present, the card renders
@@ -88,6 +96,45 @@ export function PlanCard({
 }: PlanCardProps) {
   const [expanded, setExpanded] = useState(status === 'active');
   const isActive = status === 'active';
+
+  // Jira project picker — only relevant on the spec-approval card. Fetches
+  // once when the card becomes active. Renders different states depending on
+  // the user's Jira setup, so they know what to do when the picker isn't
+  // populated (vs the old behaviour of silent hide which looked like a bug).
+  type JiraPickerStatus =
+    | 'loading'
+    | 'not_connected'
+    | 'jira_not_installed'
+    | 'jira_not_granted'
+    | 'no_projects'
+    | 'ok'
+    | 'error';
+  const [jiraStatus, setJiraStatus] = useState<JiraPickerStatus>('loading');
+  const [jiraProjects, setJiraProjects] = useState<Array<{ key: string; name: string }>>([]);
+  const [jiraEnabled, setJiraEnabled] = useState(false);
+  const [jiraProjectKey, setJiraProjectKey] = useState<string>('');
+  const showJiraPicker = isActive && !isChangeRequest;
+  useEffect(() => {
+    if (!showJiraPicker) return;
+    let cancelled = false;
+    fetch('/api/integrations/jira/projects', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : { status: 'error', projects: [] }))
+      .then(
+        (data: { status?: JiraPickerStatus; projects?: Array<{ key: string; name: string }> }) => {
+          if (cancelled) return;
+          const projects = data.projects ?? [];
+          setJiraProjects(projects);
+          setJiraStatus(data.status ?? 'error');
+          if (projects.length > 0) setJiraProjectKey(projects[0].key);
+        }
+      )
+      .catch(() => {
+        if (!cancelled) setJiraStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showJiraPicker]);
 
   return (
     <div
@@ -290,11 +337,87 @@ export function PlanCard({
         </div>
       )}
 
+      {/* Jira section — surfaces the picker when ready and explains the
+          situation when it's not (rather than silently hiding, which looks
+          like a bug). Hidden entirely only when the user hasn't connected
+          Atlassian at all — that's the explicit "no Jira workflow" choice. */}
+      {showJiraPicker && jiraStatus !== 'loading' && jiraStatus !== 'not_connected' && (
+        <div className="border-t border-ak-border-subtle px-4 py-3 space-y-2">
+          {jiraStatus === 'ok' && (
+            <>
+              <label className="flex items-center gap-2 text-xs text-ak-text-secondary cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={jiraEnabled}
+                  onChange={(e) => setJiraEnabled(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-ak-primary"
+                />
+                <span>Bu pipeline'ı Jira'ya bağla</span>
+              </label>
+              {jiraEnabled && (
+                <select
+                  value={jiraProjectKey}
+                  onChange={(e) => setJiraProjectKey(e.target.value)}
+                  className="w-full rounded-md border border-ak-border bg-ak-bg px-2 py-1.5 text-xs text-ak-text-primary focus:border-ak-primary focus:outline-none"
+                >
+                  {jiraProjects.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.name} ({p.key})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </>
+          )}
+          {jiraStatus === 'jira_not_installed' && (
+            <p className="text-[11px] text-ak-text-tertiary">
+              <span className="font-medium text-ak-text-secondary">Jira bağlantısı:</span> Atlassian
+              site'ında Jira yüklü değil.{' '}
+              <a
+                href="https://www.atlassian.com/software/jira/free"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-ak-primary hover:underline"
+              >
+                Önce site'a Jira ekle
+              </a>
+              , sonra Ayarlar'dan Atlassian'ı yeniden bağla.
+            </p>
+          )}
+          {jiraStatus === 'jira_not_granted' && (
+            <p className="text-[11px] text-ak-text-tertiary">
+              <span className="font-medium text-ak-text-secondary">Jira bağlantısı:</span> Bağlandın
+              ama Jira erişimi yok — büyük olasılıkla Jira siteye sonradan eklendi.{' '}
+              <a href="/settings?tab=integrations" className="text-ak-primary hover:underline">
+                Ayarlar'dan Disconnect → Connect
+              </a>{' '}
+              ile yeni izin ver.
+            </p>
+          )}
+          {jiraStatus === 'no_projects' && (
+            <p className="text-[11px] text-ak-text-tertiary">
+              <span className="font-medium text-ak-text-secondary">Jira bağlantısı:</span> Jira'da
+              henüz bir proje yok. Atlassian site'ında bir proje aç, sonra bu sayfayı yenile.
+            </p>
+          )}
+          {jiraStatus === 'error' && (
+            <p className="text-[11px] text-ak-text-tertiary">
+              Jira proje listesi alınamadı. Bağlantı kontrol edilemedi — Onayla ile devam
+              edebilirsin, Jira'ya bağlanmadan çalışır.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Action Buttons — only for active plan */}
       {isActive && (
         <div className="flex gap-2 border-t border-ak-border-subtle px-4 py-3">
           <button
-            onClick={onApprove}
+            onClick={() =>
+              onApprove?.(
+                jiraEnabled && jiraProjectKey ? { projectKey: jiraProjectKey } : undefined
+              )
+            }
             className={cn(
               'flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-ak-primary px-4 py-2 text-sm font-semibold text-[color:var(--ak-on-primary)]',
               'hover:brightness-110 hover:-translate-y-px hover:shadow-lg hover:shadow-ak-primary/20',

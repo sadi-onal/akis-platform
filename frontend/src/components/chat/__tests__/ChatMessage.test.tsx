@@ -526,7 +526,7 @@ describe('ChatMessage — agent_started (PR-F1 critic filter)', () => {
     const criticLeak = {
       type: 'agent_started',
       agent: 'critic',
-      task: 'Spesifikasyon inceleniyor (adversarial review)...',
+      task: 'Spesifikasyon inceleniyor...',
       state: 'running',
       timestamp: TS,
     } as unknown as ChatMessageType;

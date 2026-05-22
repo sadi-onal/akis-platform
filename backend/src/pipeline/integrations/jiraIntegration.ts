@@ -13,7 +13,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
   Promise.race([
     promise,
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Jira timeout after ${ms}ms`)), ms),
+      setTimeout(() => reject(new Error(`Jira timeout after ${ms}ms`)), ms)
     ),
   ]);
 
@@ -28,7 +28,7 @@ const JIRA_CALL_TIMEOUT = 5_000;
 export async function createJiraEpicFromSpec(
   jira: JiraMCPService,
   projectKey: string,
-  spec: StructuredSpec,
+  spec: StructuredSpec
 ): Promise<string | null> {
   try {
     const epic = await withTimeout(
@@ -38,30 +38,52 @@ export async function createJiraEpicFromSpec(
         issueType: 'Epic',
         labels: ['akis-pipeline'],
       }),
-      JIRA_CALL_TIMEOUT,
+      JIRA_CALL_TIMEOUT
     );
 
-    // Create sub-tasks from user stories
+    // Create child issues from user stories. Issue type fallback order:
+    // 'Story' (Scrum template default) → 'Task' (Kanban default) → 'Hikaye'
+    // (Jira-tr "Story") → 'Görev' (Jira-tr "Task"). The first that the
+    // project accepts wins; we only fall through on the specific "invalid
+    // issue type" error message, not on other failures.
+    const CHILD_TYPE_FALLBACK = ['Story', 'Task', 'Hikaye', 'Görev'] as const;
     for (const story of spec.userStories) {
+      let child: { key: string; id: string } | null = null;
+      let lastErr: unknown;
+      for (const issueType of CHILD_TYPE_FALLBACK) {
+        try {
+          child = await withTimeout(
+            jira.createIssue(projectKey, {
+              summary: `${story.persona}: ${story.action}`,
+              description: `**Benefit:** ${story.benefit}`,
+              issueType,
+              labels: ['akis-pipeline'],
+            }),
+            JIRA_CALL_TIMEOUT
+          );
+          break;
+        } catch (err) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          // Only retry on the "invalid issue type" path; any other failure
+          // is genuine — log and move on to the next story.
+          if (!/issuetype|konu türü|issue.?type/i.test(msg)) break;
+        }
+      }
       try {
-        const child = await withTimeout(
-          jira.createIssue(projectKey, {
-            summary: `${story.persona}: ${story.action}`,
-            description: `**Benefit:** ${story.benefit}`,
-            issueType: 'Task',
-            labels: ['akis-pipeline'],
-          }),
-          JIRA_CALL_TIMEOUT,
-        );
+        if (!child) throw lastErr ?? new Error('all issue type fallbacks failed');
         // Link child to epic
         await withTimeout(
           jira.linkIssues(child.key, epic.key, 'is child of'),
-          JIRA_CALL_TIMEOUT,
+          JIRA_CALL_TIMEOUT
         ).catch(() => {
           // Link type may vary — non-fatal
         });
       } catch (storyErr) {
-        logger.warn({ err: storyErr }, `[Jira] Failed to create sub-task for story "${story.action}"`);
+        logger.warn(
+          { err: storyErr },
+          `[Jira] Failed to create sub-task for story "${story.action}"`
+        );
       }
     }
 
@@ -79,7 +101,7 @@ export async function createJiraEpicFromSpec(
 export async function commentJiraWithProtoResult(
   jira: JiraMCPService,
   epicKey: string,
-  result: { branch: string; repo: string; prUrl?: string; filesCreated: number },
+  result: { branch: string; repo: string; prUrl?: string; filesCreated: number }
 ): Promise<void> {
   try {
     const lines = [
@@ -120,23 +142,23 @@ export async function commentJiraWithFailure(
     errorMessage?: string;
     retryable?: boolean;
     pipelineId?: string;
-  },
+  }
 ): Promise<void> {
   try {
-    const lines = [
-      `*AKIS pipeline failed*`,
-      `- Stage: ${result.stage}`,
-    ];
+    const lines = [`*AKIS pipeline failed*`, `- Stage: ${result.stage}`];
     if (result.errorCode) lines.push(`- Error code: \`${result.errorCode}\``);
     if (result.errorMessage) {
       // Trim long error messages so Jira doesn't reject the comment payload.
-      const trimmed = result.errorMessage.length > 500
-        ? `${result.errorMessage.slice(0, 500)}…`
-        : result.errorMessage;
+      const trimmed =
+        result.errorMessage.length > 500
+          ? `${result.errorMessage.slice(0, 500)}…`
+          : result.errorMessage;
       lines.push(`- Error: ${trimmed}`);
     }
     if (typeof result.retryable === 'boolean') {
-      lines.push(`- Retryable: ${result.retryable ? 'yes — can be restarted from AKIS' : 'no — manual intervention required'}`);
+      lines.push(
+        `- Retryable: ${result.retryable ? 'yes — can be restarted from AKIS' : 'no — manual intervention required'}`
+      );
     }
     if (result.pipelineId) lines.push(`- Pipeline: \`${result.pipelineId}\``);
 
@@ -154,7 +176,7 @@ export async function commentJiraWithFailure(
 export async function commentJiraWithTraceResult(
   jira: JiraMCPService,
   epicKey: string,
-  result: { totalTests: number; coveragePercentage: number; passed: boolean },
+  result: { totalTests: number; coveragePercentage: number; passed: boolean }
 ): Promise<void> {
   try {
     const status = result.passed ? 'All tests passed' : 'Some tests failed';
@@ -172,7 +194,7 @@ export async function commentJiraWithTraceResult(
       try {
         const { transitions } = await withTimeout(jira.getTransitions(epicKey), JIRA_CALL_TIMEOUT);
         const done = transitions.find(
-          (t) => t.name.toLowerCase() === 'done' || t.name.toLowerCase() === 'tamamlandı',
+          (t) => t.name.toLowerCase() === 'done' || t.name.toLowerCase() === 'tamamlandı'
         );
         if (done) {
           await withTimeout(jira.transitionIssue(epicKey, done.id), JIRA_CALL_TIMEOUT);

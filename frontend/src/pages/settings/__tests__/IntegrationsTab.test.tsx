@@ -47,11 +47,13 @@ vi.mock('react-router-dom', () => ({
 
 // ---------- Helpers ----------
 
-function makeFetch(opts: {
-  githubConnected?: boolean;
-  githubLogin?: string;
-  atlassianConnected?: boolean;
-} = {}) {
+function makeFetch(
+  opts: {
+    githubConnected?: boolean;
+    githubLogin?: string;
+    atlassianConnected?: boolean;
+  } = {}
+) {
   return vi.fn().mockImplementation((url: string) => {
     if (url === '/api/integrations/github/status') {
       return Promise.resolve({
@@ -60,7 +62,7 @@ function makeFetch(opts: {
           Promise.resolve(
             opts.githubConnected
               ? { connected: true, login: opts.githubLogin ?? 'octocat', avatarUrl: null }
-              : { connected: false },
+              : { connected: false }
           ),
       });
     }
@@ -70,8 +72,13 @@ function makeFetch(opts: {
         json: () =>
           Promise.resolve(
             opts.atlassianConnected
-              ? { connected: true, configured: true, jiraAvailable: true, confluenceAvailable: false }
-              : { connected: false, configured: false },
+              ? {
+                  connected: true,
+                  configured: true,
+                  jiraAvailable: true,
+                  confluenceAvailable: false,
+                }
+              : { connected: false, configured: false }
           ),
       });
     }
@@ -104,7 +111,10 @@ describe('IntegrationsTab — GitHub Section', () => {
   });
 
   it('shows login username when GitHub is connected', async () => {
-    globalThis.fetch = makeFetch({ githubConnected: true, githubLogin: 'OmerYasir' }) as unknown as typeof fetch;
+    globalThis.fetch = makeFetch({
+      githubConnected: true,
+      githubLogin: 'OmerYasir',
+    }) as unknown as typeof fetch;
     render(<SettingsPage />);
 
     await waitFor(() => {
@@ -122,7 +132,10 @@ describe('IntegrationsTab — GitHub Section', () => {
   });
 
   it('shows "connectedAs" text when connected', async () => {
-    globalThis.fetch = makeFetch({ githubConnected: true, githubLogin: 'testuser' }) as unknown as typeof fetch;
+    globalThis.fetch = makeFetch({
+      githubConnected: true,
+      githubLogin: 'testuser',
+    }) as unknown as typeof fetch;
     render(<SettingsPage />);
 
     await waitFor(() => {
@@ -131,7 +144,10 @@ describe('IntegrationsTab — GitHub Section', () => {
   });
 
   it('shows disconnect button when connected', async () => {
-    globalThis.fetch = makeFetch({ githubConnected: true, githubLogin: 'octocat' }) as unknown as typeof fetch;
+    globalThis.fetch = makeFetch({
+      githubConnected: true,
+      githubLogin: 'octocat',
+    }) as unknown as typeof fetch;
     render(<SettingsPage />);
 
     await waitFor(() => {
@@ -153,7 +169,7 @@ describe('IntegrationsTab — GitHub Section', () => {
     await waitFor(() => {
       const deleteCall = fetchMock.mock.calls.find(
         (c: [string, RequestInit?]) =>
-          c[0] === '/api/integrations/github' && c[1]?.method === 'DELETE',
+          c[0] === '/api/integrations/github' && c[1]?.method === 'DELETE'
       );
       expect(deleteCall).toBeDefined();
     });
@@ -188,50 +204,6 @@ describe('IntegrationsTab — Jira Section', () => {
     });
   });
 
-  it('shows connected status when backend reports Jira PAT connected', async () => {
-    // PAT credentials now stored on backend, not localStorage
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/jira/status')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ connected: true, siteUrl: 'https://mysite.atlassian.net' }) });
-      }
-      if (typeof url === 'string' && url.includes('/atlassian/status')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ connected: false }) });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    }) as unknown as typeof fetch;
-    render(<SettingsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('integrations.jira.disconnect')).toBeInTheDocument();
-    });
-  });
-
-  it('PAT disconnect calls backend API', async () => {
-    const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/jira/status')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ connected: true, siteUrl: 'https://mysite.atlassian.net' }) });
-      }
-      if (typeof url === 'string' && url.includes('/jira/disconnect')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
-      }
-      if (typeof url === 'string' && url.includes('/atlassian/status')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ connected: false }) });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-    render(<SettingsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('integrations.jira.disconnect')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText('integrations.jira.disconnect'));
-
-    // Should NOT use localStorage anymore
-    expect(localStorage.getItem('akis_jira_pat')).toBeNull();
-  });
-
   it('calls POST /api/integrations/atlassian/disconnect for OAuth disconnect', async () => {
     const fetchMock = makeFetch({ atlassianConnected: true });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -246,10 +218,9 @@ describe('IntegrationsTab — Jira Section', () => {
     await waitFor(() => {
       const disconnectCall = fetchMock.mock.calls.find(
         (c: [string, RequestInit?]) =>
-          c[0] === '/api/integrations/atlassian/disconnect' && c[1]?.method === 'POST',
+          c[0] === '/api/integrations/atlassian/disconnect' && c[1]?.method === 'POST'
       );
       expect(disconnectCall).toBeDefined();
     });
   });
 });
-

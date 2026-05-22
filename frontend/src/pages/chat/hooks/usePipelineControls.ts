@@ -70,25 +70,31 @@ export function usePipelineControls(
 
   // Approve uses an in-flight ref so a double-click can't double-submit.
   const approveRef = useRef(false);
-  const handleApprove = useCallback(async () => {
-    if (!conversationId || !activeWorkflow || approveRef.current) return;
-    approveRef.current = true;
-    try {
-      const cucumberEnabled = localStorage.getItem('akis_cucumber_enabled') === 'true';
-      await workflowsApi.approve(
-        conversationId,
-        sanitizeRepoName(activeWorkflow.title ?? 'project'),
-        'private',
-        { cucumberEnabled }
-      );
-      await refreshWorkflow();
-      toast('Spec onaylandı, Proto başlatılıyor…', 'success');
-    } catch (e) {
-      toast(localizeError(e), 'error');
-    } finally {
-      approveRef.current = false;
-    }
-  }, [conversationId, activeWorkflow, refreshWorkflow, approveRef]);
+  const handleApprove = useCallback(
+    async (jiraConfig?: { projectKey: string }) => {
+      if (!conversationId || !activeWorkflow || approveRef.current) return;
+      approveRef.current = true;
+      try {
+        const cucumberEnabled = localStorage.getItem('akis_cucumber_enabled') === 'true';
+        await workflowsApi.approve(
+          conversationId,
+          sanitizeRepoName(activeWorkflow.title ?? 'project'),
+          'private',
+          {
+            cucumberEnabled,
+            ...(jiraConfig ? { jiraConfig: { ...jiraConfig, enabled: true } } : {}),
+          }
+        );
+        await refreshWorkflow();
+        toast('Spec onaylandı, Proto başlatılıyor…', 'success');
+      } catch (e) {
+        toast(localizeError(e), 'error');
+      } finally {
+        approveRef.current = false;
+      }
+    },
+    [conversationId, activeWorkflow, refreshWorkflow, approveRef]
+  );
 
   const handleReject = useCallback(async () => {
     if (!conversationId) return;

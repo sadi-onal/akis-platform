@@ -30,8 +30,8 @@ for (const [key, value] of Object.entries(shellExports)) {
 }
 
 /**
- * Environment schema validation (fail-fast)
- * Atlassian vars are optional in development unless MCP_ATLASSIAN_ENABLED=true
+ * Environment schema validation (fail-fast).
+ * Atlassian integration uses MCP authv2 + DCR; no client_id/secret env vars.
  */
 const envSchema = z
   .object({
@@ -98,23 +98,14 @@ const envSchema = z
     ),
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
-    // Atlassian OAuth 2.0 (3LO) Configuration
-    // For Jira + Confluence integration via OAuth
-    ATLASSIAN_OAUTH_CLIENT_ID: z.string().optional(),
-    ATLASSIAN_OAUTH_CLIENT_SECRET: z.string().optional(),
-    ATLASSIAN_OAUTH_CALLBACK_URL: z
-      .string()
-      .url()
-      .optional()
-      .default('http://localhost:3000/api/integrations/atlassian/oauth/callback'),
+    // Atlassian: no client_id/secret env vars needed — DCR self-registers AKIS
+    // with the Atlassian remote MCP server (https://mcp.atlassian.com/v1/mcp/authv2)
+    // on first OAuth attempt. Per-user tokens live in oauth_accounts, the
+    // shared DCR registration in mcp_oauth_clients.
     // GitHub App Configuration (MCP Integration)
     // These are for GitHub App installation, NOT for OAuth user login
     // Preprocess empty strings to undefined to handle test environments
     GITHUB_MCP_BASE_URL: z.preprocess(
-      (val) => (val === '' || val === undefined ? undefined : val),
-      z.string().url().optional()
-    ),
-    ATLASSIAN_MCP_BASE_URL: z.preprocess(
       (val) => (val === '' || val === undefined ? undefined : val),
       z.string().url().optional()
     ),
@@ -124,10 +115,6 @@ const envSchema = z
     GITHUB_TOKEN: z.string().optional(), // Personal Access Token for MVP/Dev
     SCRIBE_DEV_GITHUB_BOOTSTRAP: z.enum(['true', 'false']).default('false'),
     SCRIBE_DEV_BOOTSTRAP_GITHUB_TOKEN: z.string().optional(),
-    MCP_ATLASSIAN_ENABLED: z.string().default('false'),
-    ATLASSIAN_ORG_ID: z.string().optional(),
-    ATLASSIAN_API_TOKEN: z.string().optional(),
-    ATLASSIAN_EMAIL: z.string().optional(),
     // AI Provider configuration. PR-A removed 'openrouter'; P1a lit up
     // 'openai' at runtime; P1c added 'google' (Gemini direct).
     // AIService factory routes 'openai', 'anthropic', and 'google' to
@@ -289,10 +276,6 @@ const envSchema = z
   .superRefine((data, ctx) => {
     const isProduction = data.NODE_ENV === 'production';
     const isTestMode = data.NODE_ENV === 'test' || process.env.CI === 'true';
-    const isAtlassianEnabled = data.MCP_ATLASSIAN_ENABLED === 'true';
-    // Atlassian credentials are only required when explicitly enabled, not just because we're in production
-    // This allows staging/prod deployments without Atlassian integration
-    const isAtlassianStrictMode = isAtlassianEnabled;
 
     // AUTH_JWT_SECRET is required except in test/CI mode
     if (!isTestMode && !data.AUTH_JWT_SECRET) {
@@ -446,62 +429,9 @@ const envSchema = z
         path: ['GOOGLE_OAUTH_CLIENT_ID'],
       });
     }
-    // Atlassian OAuth 2.0 (3LO) validation
-    if (data.ATLASSIAN_OAUTH_CLIENT_ID && !data.ATLASSIAN_OAUTH_CLIENT_SECRET) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          'ATLASSIAN_OAUTH_CLIENT_SECRET is required when ATLASSIAN_OAUTH_CLIENT_ID is provided',
-        path: ['ATLASSIAN_OAUTH_CLIENT_SECRET'],
-      });
-    }
-    if (!data.ATLASSIAN_OAUTH_CLIENT_ID && data.ATLASSIAN_OAUTH_CLIENT_SECRET) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          'ATLASSIAN_OAUTH_CLIENT_ID is required when ATLASSIAN_OAUTH_CLIENT_SECRET is provided',
-        path: ['ATLASSIAN_OAUTH_CLIENT_ID'],
-      });
-    }
-
-    if (isAtlassianStrictMode) {
-      // When Atlassian integration is explicitly enabled, require all Atlassian vars
-      if (!data.ATLASSIAN_ORG_ID) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'ATLASSIAN_ORG_ID is required when MCP_ATLASSIAN_ENABLED=true',
-          path: ['ATLASSIAN_ORG_ID'],
-        });
-      }
-
-      if (!data.ATLASSIAN_API_TOKEN) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'ATLASSIAN_API_TOKEN is required when MCP_ATLASSIAN_ENABLED=true',
-          path: ['ATLASSIAN_API_TOKEN'],
-        });
-      }
-
-      if (!data.ATLASSIAN_EMAIL) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'ATLASSIAN_EMAIL is required when MCP_ATLASSIAN_ENABLED=true',
-          path: ['ATLASSIAN_EMAIL'],
-        });
-      } else {
-        // Validate email format when required
-        const emailSchema = z.string().email();
-        const emailResult = emailSchema.safeParse(data.ATLASSIAN_EMAIL);
-        if (!emailResult.success) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'ATLASSIAN_EMAIL must be a valid email address',
-            path: ['ATLASSIAN_EMAIL'],
-          });
-        }
-      }
-    }
-    // In development with MCP_ATLASSIAN_ENABLED=false, all Atlassian vars are optional (no validation)
+    // Atlassian OAuth is handled by MCP SDK + DCR — no env-level validation
+    // is needed. Client registration happens at first connect (mcp_oauth_clients
+    // table). See services/atlassian/AtlassianMcpClient.ts.
   });
 
 export type Env = z.infer<typeof envSchema>;
@@ -634,8 +564,7 @@ export function getAIConfig(env: Env): AIConfig {
   } else if (provider === 'google') {
     // P1c: only accept an env override that points at the official Google host.
     const envUrl = env.GOOGLE_BASE_URL || env.AI_BASE_URL;
-    baseUrl =
-      envUrl && envUrl.includes('googleapis.com') ? envUrl : GOOGLE_DEFAULTS.baseUrl;
+    baseUrl = envUrl && envUrl.includes('googleapis.com') ? envUrl : GOOGLE_DEFAULTS.baseUrl;
   } else {
     baseUrl = 'mock://localhost';
   }

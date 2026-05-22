@@ -193,7 +193,7 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
         stage: 'critic',
         criticPhase: 'spec',
         progress: 100,
-        message: 'Spesifikasyon inceleniyor (adversarial review)...',
+        message: 'Spesifikasyon inceleniyor...',
       }),
     ];
     const views = reduceStageViews(acts, acts[1]!);

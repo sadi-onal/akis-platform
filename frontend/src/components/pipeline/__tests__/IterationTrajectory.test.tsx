@@ -5,8 +5,8 @@ import { render, screen } from '@testing-library/react';
 // rendered Turkish text, not on un-interpolated keys.
 const TEMPLATES: Record<string, string> = {
   'pipeline.iteration.trajectory.title': 'İterasyon geçmişi',
-  'pipeline.iteration.trajectory.iterRow': 'İter {n}: Proto %{p} · Critic %{c}',
-  'pipeline.iteration.trajectory.iterRowNoProto': 'İter {n}: Critic %{c}',
+  'pipeline.iteration.trajectory.iterRow': 'İter {n}: Proto %{p} · Değerlendirme %{c}',
+  'pipeline.iteration.trajectory.iterRowNoProto': 'İter {n}: Değerlendirme %{c}',
   'pipeline.iteration.trajectory.approved': 'onaylandı',
   'pipeline.iteration.trajectory.rejected': 'reddedildi',
   'pipeline.iteration.trajectory.blocked': 'engellendi',
@@ -62,7 +62,7 @@ describe('IterationTrajectory — render gating', () => {
 });
 
 describe('IterationTrajectory — full variant', () => {
-  it('renders one row per iteration with Proto + Critic scores and decision', () => {
+  it('renders one row per iteration with Proto + Değerlendirme scores and decision', () => {
     render(
       <IterationTrajectory
         variant="full"
@@ -98,13 +98,13 @@ describe('IterationTrajectory — full variant', () => {
       />
     );
     expect(screen.getByTestId('iteration-trajectory-row-1')).toHaveTextContent(
-      /Proto %62.*Critic %52/
+      /Proto %62.*Değerlendirme %52/
     );
     expect(screen.getByTestId('iteration-trajectory-row-2')).toHaveTextContent(
-      /Proto %78.*Critic %67/
+      /Proto %78.*Değerlendirme %67/
     );
     expect(screen.getByTestId('iteration-trajectory-row-3')).toHaveTextContent(
-      /Proto %91.*Critic %84/
+      /Proto %91.*Değerlendirme %84/
     );
     expect(screen.getByTestId('iteration-trajectory-row-3')).toHaveTextContent(/onaylandı/);
   });
@@ -126,7 +126,7 @@ describe('IterationTrajectory — full variant', () => {
         ])}
       />
     );
-    expect(screen.getByTestId('iteration-trajectory-row-1')).toHaveTextContent(/Critic %70/);
+    expect(screen.getByTestId('iteration-trajectory-row-1')).toHaveTextContent(/Değerlendirme %70/);
     expect(screen.getByTestId('iteration-trajectory-row-1').textContent).not.toMatch(/Proto/);
   });
 

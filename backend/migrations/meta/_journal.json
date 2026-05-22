@@ -393,6 +393,13 @@
       "when": 1780012800000,
       "tag": "0054_ai_calls_pipeline_id",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1780099200000,
+      "tag": "0055_mcp_oauth_clients",
+      "breakpoints": true
     }
   ]
 }

@@ -99,6 +99,12 @@ export interface PipelineDetailRailProps {
    */
   traceDryRunStatus?: 'success' | 'failed' | 'pending';
   /**
+   * PR-fix (2026-05-21) — distinguishes "Trace skipped after critic override"
+   * (TRACE_SKIPPED_AFTER_CRITIC_OVERRIDE) from a real Trace failure so
+   * PushConfirmGate can render an accurate banner.
+   */
+  traceDryRunErrorCode?: string;
+  /**
    * PR-V6 — full Scribe structured spec from `workflow.stages.scribe.spec`.
    * Forwarded to ExplanationPanel so the Scribe reasoning card surfaces
    * AC / user stories / problem statement / out-of-scope as disclosures.
@@ -212,6 +218,7 @@ export function PipelineDetailRail({
   onCriticResolved,
   acCoverage,
   traceDryRunStatus,
+  traceDryRunErrorCode,
   scribeSpec,
   scribeAssumptions,
   jiraConfig,
@@ -700,6 +707,7 @@ export function PipelineDetailRail({
                 previewOpen={showPreview ?? false}
                 onOpenPreview={() => onTogglePreview?.()}
                 traceDryRunStatus={traceDryRunStatus}
+                traceDryRunErrorCode={traceDryRunErrorCode}
               />
             </div>
           )}
@@ -736,12 +744,12 @@ export function PipelineDetailRail({
                   type="button"
                   onClick={() => setTab('why')}
                   className="mt-3 inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/10 px-2.5 py-0.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-500/20 dark:text-rose-300"
-                  aria-label={`${findingCount} Critic bulgusu — Açıklama sekmesinde göster`}
-                  title="Açıklama sekmesine geç ve Critic bulgularını gör"
+                  aria-label={`${findingCount} Değerlendirme bulgusu — Açıklama sekmesinde göster`}
+                  title="Açıklama sekmesine geç ve Değerlendirme bulgularını gör"
                   data-testid="critic-findings-summary-chip"
                 >
                   <span aria-hidden="true">⚠</span>
-                  {findingCount} Critic bulgusu — Açıklama'da
+                  {findingCount} Değerlendirme bulgusu — Açıklama'da
                 </button>
               );
             })()}

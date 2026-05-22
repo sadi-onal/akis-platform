@@ -1492,41 +1492,21 @@ function JiraSection() {
   const { t } = useI18n();
   const [atlStatus, setAtlStatus] = useState<{
     connected: boolean;
-    configured: boolean;
-    jiraAvailable?: boolean;
-    confluenceAvailable?: boolean;
+    siteUrl?: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [showPatFallback, setShowPatFallback] = useState(false);
-
-  // PAT fallback state (stored securely on backend, not localStorage)
-  const [patUrl, setPatUrl] = useState('');
-  const [patToken, setPatToken] = useState('');
-  const [patStatus, setPatStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>('idle');
-  const [patError, setPatError] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const [atlRes, jiraRes] = await Promise.all([
-        fetch('/api/integrations/atlassian/status', { credentials: 'include' }).catch((err) => {
-          if (import.meta.env.DEV) console.warn('[Settings] Atlassian status fetch failed:', err);
-          return null;
-        }),
-        fetch('/api/settings/integrations/jira/status', { credentials: 'include' }).catch((err) => {
-          if (import.meta.env.DEV) console.warn('[Settings] Jira status fetch failed:', err);
-          return null;
-        }),
-      ]);
-      if (atlRes?.ok) setAtlStatus(await atlRes.json());
-      if (jiraRes?.ok) {
-        const jiraData = await jiraRes.json();
-        if (jiraData.connected) {
-          setPatUrl(jiraData.siteUrl ?? '');
-          setPatStatus('connected');
-        }
-      }
+      const res = await fetch('/api/integrations/atlassian/status', {
+        credentials: 'include',
+      }).catch((err) => {
+        if (import.meta.env.DEV) console.warn('[Settings] Atlassian status fetch failed:', err);
+        return null;
+      });
+      if (res?.ok) setAtlStatus(await res.json());
     } catch {
       // treat as not connected
     } finally {
@@ -1538,91 +1518,25 @@ function JiraSection() {
     fetchStatus();
   }, [fetchStatus]);
 
-  const oauthConnected = atlStatus?.connected === true;
-  const patConnected = patStatus === 'connected';
-  const isConnected = oauthConnected || patConnected;
+  const isConnected = atlStatus?.connected === true;
 
-  const handleOAuthConnect = () => {
+  const handleConnect = () => {
     window.location.href = '/api/integrations/atlassian/oauth/start';
   };
 
-  const handleOAuthDisconnect = async () => {
+  const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
       await fetch('/api/integrations/atlassian/disconnect', {
         method: 'POST',
         credentials: 'include',
       });
-      setAtlStatus({ connected: false, configured: atlStatus?.configured ?? false });
+      setAtlStatus({ connected: false });
     } catch {
       // silent
     } finally {
       setDisconnecting(false);
     }
-  };
-
-  const handlePatTest = async () => {
-    const trimmedUrl = patUrl.trim();
-    const trimmedToken = patToken.trim();
-    if (!trimmedUrl || !trimmedToken) return;
-
-    setPatStatus('testing');
-    setPatError(null);
-
-    try {
-      const res = await fetch('/api/integrations/jira/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ url: trimmedUrl, token: trimmedToken }),
-      });
-
-      if (res.ok) {
-        // Store securely on backend instead of localStorage
-        await fetch('/api/settings/integrations/jira/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ siteUrl: trimmedUrl, email: 'user@jira', token: trimmedToken }),
-        });
-        setPatStatus('connected');
-      } else {
-        setPatStatus('error');
-        const data = await res.json().catch(() => ({}));
-        setPatError(data.message ?? t('integrations.jira.testError'));
-      }
-    } catch {
-      if (trimmedUrl.startsWith('https://') && trimmedToken.length >= 8) {
-        // Store securely on backend
-        await fetch('/api/settings/integrations/jira/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ siteUrl: trimmedUrl, email: 'user@jira', token: trimmedToken }),
-        }).catch((err) => {
-          if (import.meta.env.DEV) console.warn('[Settings] Jira connect save failed:', err);
-        });
-        setPatStatus('connected');
-      } else {
-        setPatStatus('error');
-        setPatError(t('integrations.jira.testError'));
-      }
-    }
-  };
-
-  const handlePatDisconnect = async () => {
-    try {
-      await fetch('/api/settings/integrations/jira/disconnect', {
-        method: 'POST',
-        credentials: 'include',
-      });
-    } catch {
-      /* best-effort */
-    }
-    setPatUrl('');
-    setPatToken('');
-    setPatStatus('idle');
-    setPatError(null);
   };
 
   return (
@@ -1651,41 +1565,25 @@ function JiraSection() {
         <StatusBadge status={loading ? 'loading' : isConnected ? 'connected' : 'disconnected'} />
       </div>
 
-      {/* OAuth connected state */}
-      {oauthConnected && (
+      {/* Connected state — show site URL */}
+      {isConnected && (
         <div className="rounded-lg bg-ak-surface-2 p-3 space-y-2">
           <span className="text-[10px] font-medium text-ak-text-tertiary uppercase tracking-wide">
             {t('integrations.jira.oauthLabel')}
           </span>
-          {atlStatus?.jiraAvailable && (
+          {atlStatus?.siteUrl && (
             <div className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="text-xs text-ak-text-secondary">Jira</span>
-            </div>
-          )}
-          {atlStatus?.confluenceAvailable && (
-            <div className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="text-xs text-ak-text-secondary">Confluence</span>
+              <span className="text-xs text-ak-text-secondary font-mono">{atlStatus.siteUrl}</span>
             </div>
           )}
         </div>
       )}
 
-      {/* PAT connected state */}
-      {!oauthConnected && patConnected && (
-        <div className="rounded-lg bg-ak-surface-2 p-3">
-          <div className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            <span className="text-xs text-ak-text-secondary">{patUrl}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Action buttons */}
-      {oauthConnected ? (
+      {/* Action button */}
+      {isConnected ? (
         <button
-          onClick={handleOAuthDisconnect}
+          onClick={handleDisconnect}
           disabled={disconnecting}
           className={cn(
             'w-full rounded-lg border border-red-500/30 bg-red-500/5 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors',
@@ -1694,82 +1592,13 @@ function JiraSection() {
         >
           {disconnecting ? '...' : t('integrations.jira.disconnect')}
         </button>
-      ) : patConnected ? (
-        <button
-          onClick={handlePatDisconnect}
-          className="w-full rounded-lg border border-red-500/30 bg-red-500/5 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors"
-        >
-          {t('integrations.jira.disconnect')}
-        </button>
       ) : !loading ? (
-        <div className="space-y-2">
-          <button
-            onClick={handleOAuthConnect}
-            className="w-full rounded-lg bg-ak-primary/10 py-2 text-xs font-medium text-ak-primary hover:bg-ak-primary/20 transition-colors"
-          >
-            {t('integrations.jira.oauthConnect')}
-          </button>
-
-          {/* PAT fallback toggle */}
-          <button
-            onClick={() => setShowPatFallback(!showPatFallback)}
-            className="w-full text-center text-[10px] text-ak-text-tertiary hover:text-ak-text-secondary transition-colors"
-          >
-            {showPatFallback
-              ? t('integrations.jira.hidePatFallback')
-              : t('integrations.jira.showPatFallback')}
-          </button>
-
-          {/* PAT fallback form */}
-          {showPatFallback && (
-            <div className="rounded-lg border border-ak-border bg-ak-surface-2 p-3 space-y-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-ak-text-secondary">
-                  {t('integrations.jira.instanceUrl')}
-                </label>
-                <input
-                  type="url"
-                  value={patUrl}
-                  onChange={(e) => {
-                    setPatUrl(e.target.value);
-                    if (patStatus !== 'idle') setPatStatus('idle');
-                  }}
-                  placeholder={t('integrations.jira.instanceUrlPlaceholder')}
-                  className="w-full rounded-lg border border-ak-border bg-ak-bg px-3 py-2 text-xs text-ak-text-primary font-mono placeholder:text-ak-text-tertiary focus:border-ak-primary focus:outline-none focus:ring-1 focus:ring-ak-primary/30"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-ak-text-secondary">
-                  {t('integrations.jira.apiToken')}
-                </label>
-                <input
-                  type="password"
-                  value={patToken}
-                  onChange={(e) => {
-                    setPatToken(e.target.value);
-                    if (patStatus !== 'idle') setPatStatus('idle');
-                  }}
-                  placeholder={t('integrations.jira.apiTokenPlaceholder')}
-                  className="w-full rounded-lg border border-ak-border bg-ak-bg px-3 py-2 text-xs text-ak-text-primary font-mono placeholder:text-ak-text-tertiary focus:border-ak-primary focus:outline-none focus:ring-1 focus:ring-ak-primary/30"
-                />
-              </div>
-              {patError && <p className="text-xs text-red-400">{patError}</p>}
-              <button
-                onClick={handlePatTest}
-                disabled={!patUrl.trim() || !patToken.trim() || patStatus === 'testing'}
-                className={cn(
-                  'w-full rounded-lg bg-ak-primary/10 py-2 text-xs font-medium text-ak-primary hover:bg-ak-primary/20 transition-colors',
-                  (!patUrl.trim() || !patToken.trim() || patStatus === 'testing') &&
-                    'opacity-50 cursor-not-allowed'
-                )}
-              >
-                {patStatus === 'testing'
-                  ? t('integrations.jira.testing')
-                  : t('integrations.jira.testConnection')}
-              </button>
-            </div>
-          )}
-        </div>
+        <button
+          onClick={handleConnect}
+          className="w-full rounded-lg bg-ak-primary/10 py-2 text-xs font-medium text-ak-primary hover:bg-ak-primary/20 transition-colors"
+        >
+          {t('integrations.jira.oauthConnect')}
+        </button>
       ) : null}
     </div>
   );

@@ -18,6 +18,14 @@ export interface PushConfirmGateProps {
    *   - 'pending': spinner banner, gönderim butonu devre dışı
    */
   traceDryRunStatus?: 'success' | 'failed' | 'pending';
+  /**
+   * PR-fix (2026-05-21) — when set, distinguishes "Trace skipped after
+   * Değerlendirme override" from a real Trace dryRun failure. The amber
+   * banner shows a more accurate explanation in the override case so the
+   * user isn't told a Trace agent error occurred when in fact Trace was
+   * intentionally bypassed.
+   */
+  traceDryRunErrorCode?: string;
 }
 
 /**
@@ -39,6 +47,7 @@ export function PushConfirmGate({
   previewOpen,
   onOpenPreview,
   traceDryRunStatus = 'success',
+  traceDryRunErrorCode,
 }: PushConfirmGateProps) {
   const { t } = useI18n();
 
@@ -79,16 +88,26 @@ export function PushConfirmGate({
 
       {/* PR-U3 M3: mode-specific banner above the standard description so
           the user always knows what state Trace is in before they push. */}
-      {traceDryRunStatus === 'failed' && (
-        <div
-          role="alert"
-          className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs leading-relaxed text-amber-900 dark:text-amber-100"
-        >
-          <strong>Test üretimi başarısız oldu.</strong> Kod hazır, ancak Trace ajanı testleri
-          otomatik oluşturamadı. Gönderdiğiniz kodun testleri olmayacak — yine de devam etmek için
-          aşağıdaki onayı verin.
-        </div>
-      )}
+      {traceDryRunStatus === 'failed' &&
+        (traceDryRunErrorCode === 'TRACE_SKIPPED_AFTER_CRITIC_OVERRIDE' ? (
+          <div
+            role="alert"
+            className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs leading-relaxed text-amber-900 dark:text-amber-100"
+          >
+            <strong>Test üretimi atlandı.</strong> Değerlendirme bulgularını geçtiğin için Trace
+            çalıştırılmadı. Gönderdiğiniz kodun testleri olmayacak — yine de devam etmek için
+            aşağıdaki onayı verin.
+          </div>
+        ) : (
+          <div
+            role="alert"
+            className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs leading-relaxed text-amber-900 dark:text-amber-100"
+          >
+            <strong>Test üretimi başarısız oldu.</strong> Kod hazır, ancak Trace ajanı testleri
+            otomatik oluşturamadı. Gönderdiğiniz kodun testleri olmayacak — yine de devam etmek
+            için aşağıdaki onayı verin.
+          </div>
+        ))}
       {traceDryRunStatus === 'pending' && (
         <div
           role="status"

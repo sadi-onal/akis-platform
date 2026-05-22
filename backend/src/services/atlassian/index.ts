@@ -1,12 +1,14 @@
 /**
- * Atlassian services - OAuth 2.0 (3LO) support for Jira + Confluence
+ * Atlassian services — OAuth 2.1 + DCR via MCP SDK against Atlassian's
+ * remote MCP authv2 endpoint. See AtlassianMcpClient.ts for the full flow.
  */
 
 export {
-  AtlassianOAuthService,
-  atlassianOAuthService,
-  type AtlassianTokenResponse,
-  type AtlassianAccessibleResource,
-  type AtlassianOAuthStatus,
-  type StoredAtlassianOAuth,
-} from './AtlassianOAuthService.js';
+  ATLASSIAN_MCP_SERVER_URL,
+  getAuthorizationUrl,
+  finishOAuth,
+  openMcpClient,
+  getConnectionStatus,
+  deleteUserTokens,
+  type AtlassianConnectionStatus,
+} from './AtlassianMcpClient.js';

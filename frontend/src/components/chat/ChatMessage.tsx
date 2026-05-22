@@ -72,9 +72,11 @@ function SimpleMarkdown({ text }: { text: string }) {
   return <div className="whitespace-pre-wrap text-sm text-ak-text-secondary">{parts}</div>;
 }
 
+import type { JiraApproveConfig } from './PlanCard';
+
 interface ChatMessageProps {
   message: ChatMessageType;
-  onApprove?: () => void;
+  onApprove?: (jiraConfig?: JiraApproveConfig) => void;
   onReject?: () => void;
   onRetry?: () => void;
   onSkip?: () => void;

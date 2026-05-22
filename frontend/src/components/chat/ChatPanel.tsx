@@ -44,7 +44,7 @@ interface ChatPanelProps {
   inputPlaceholder: string;
   onSend: (message: string, attachments?: import('./ChatInput').ChatAttachment[]) => void;
   onCancel: () => void;
-  onApprove: () => void;
+  onApprove: (jiraConfig?: import('./PlanCard').JiraApproveConfig) => void;
   onReject: () => void;
   onRetry: () => void;
   onSkip: () => void;
@@ -105,6 +105,12 @@ interface ChatPanelProps {
    * can render success/failed/pending banners.
    */
   traceDryRunStatus?: 'success' | 'failed' | 'pending';
+  /**
+   * PR-fix (2026-05-21): error code from intermediateState that lets the
+   * push gate distinguish "Trace skipped after critic override" from a
+   * normal Trace failure.
+   */
+  traceDryRunErrorCode?: string;
   /**
    * PR-V6: full Scribe structured spec from `workflow.stages.scribe.spec`.
    * Threaded through to PipelineDetailRail → ExplanationPanel so the Scribe
@@ -176,6 +182,7 @@ export const ChatPanel = memo(function ChatPanel({
   onCriticResolved,
   acCoverage,
   traceDryRunStatus,
+  traceDryRunErrorCode,
   scribeSpec,
   scribeAssumptions,
   jiraConfig,
@@ -291,6 +298,7 @@ export const ChatPanel = memo(function ChatPanel({
           onCriticResolved={onCriticResolved}
           acCoverage={acCoverage}
           traceDryRunStatus={traceDryRunStatus}
+          traceDryRunErrorCode={traceDryRunErrorCode}
           scribeSpec={scribeSpec}
           scribeAssumptions={scribeAssumptions}
           jiraConfig={jiraConfig}
