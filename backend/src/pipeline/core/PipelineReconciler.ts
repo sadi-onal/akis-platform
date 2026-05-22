@@ -10,6 +10,7 @@
 import type { PipelineStore } from './orchestrator/PipelineOrchestrator.js';
 import type { PipelineStage, ScribeMessageType } from './contracts/PipelineTypes.js';
 import { createPipelineError, PipelineErrorCode } from './contracts/PipelineErrors.js';
+import { stageLabelTR } from './utils/stageLabels.js';
 import { logger } from '../../lib/logger.js';
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -21,14 +22,6 @@ const RUNNING_STAGES: PipelineStage[] = [
   'proto_building',
   'trace_testing',
 ];
-
-// Inline Turkish label map (extracted to a helper in Task 6 — keep inline for now)
-const stageLabelTR: Partial<Record<PipelineStage, string>> = {
-  scribe_clarifying: 'Fikir analiz adımı',
-  scribe_generating: 'Fikir analiz adımı',
-  proto_building: 'Kod üretim adımı',
-  trace_testing: 'Test üretim adımı',
-};
 
 type StuckEventKind = 'trace_failed' | 'scribe_failed' | 'proto_failed';
 const eventKindByStage: Partial<Record<PipelineStage, StuckEventKind>> = {
@@ -44,7 +37,7 @@ function buildStuckEvent(
   prevConversation: ScribeMessageType[],
   stuckMinutes: number
 ): ScribeMessageType {
-  const label = stageLabelTR[stage] ?? 'İşlem';
+  const label = stageLabelTR(stage);
   const errorMessage = `${label} ${stuckMinutes} dakika boyunca yanıt vermedi. Otomatik olarak durduruldu.`;
   const timestamp = new Date().toISOString();
   if (kind === 'trace_failed') {
