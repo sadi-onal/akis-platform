@@ -1,5 +1,6 @@
+import { createElement, StrictMode, type ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
 
 import { useConversationLoader } from '../useConversationLoader';
 
@@ -278,6 +279,103 @@ describe('useConversationLoader', () => {
 
     await waitFor(() => expect(result.current.activeWorkflow?.id).toBe('A'));
     expect(result.current.isRunning).toBe(false);
+  });
+
+  // ── T9-fix regression (2026-05-23) ─────────────────
+  // Under React StrictMode the load effect runs twice on mount: mount →
+  // cleanup → mount. Before the fix, the first run set `loadedIdRef.current
+  // = conversationId` BEFORE issuing the fetch. The cleanup aborted the
+  // controller; the second run then saw `loadedIdRef.current === conversationId`
+  // and returned early without re-issuing. The first fetch's `.then` checked
+  // `controller.signal.aborted` and returned silently, so `activeWorkflow`
+  // and `messages` were never populated — `ChatPanel` rendered `ChatSkeleton`
+  // forever. Healthy pipelines were unaffected only because the SSE/activity
+  // stream eventually triggered `refreshWorkflow()` as a recovery path;
+  // failed pipelines whose last activity isn't `pipeline_complete` /
+  // `gate_open` never got that recovery and stayed on the skeleton.
+  //
+  // The failing-symptom reproduction needs two things the prior tests
+  // missed:
+  //   1. StrictMode wrapping (so the effect runs twice on mount).
+  //   2. The first mount's fetch must NOT resolve before the cleanup +
+  //      second mount run; otherwise React commits the first-mount state
+  //      and the bug is masked. We use a deferred promise: the first call
+  //      stays pending until *after* both mount cycles, and is then
+  //      resolved. With the bug present, the second mount returns early
+  //      (ref already === id) and the first promise's .then is silenced
+  //      by the abort check, so `activeWorkflow` stays null.
+  it('survives StrictMode double-mount and still populates state', async () => {
+    // mockReset clears implementations + queues + history; clearAllMocks
+    // (run in beforeEach) only clears history. Without this reset, queued
+    // mockResolvedValueOnce values from prior tests can leak in.
+    mockedGet.mockReset();
+
+    const wf = buildWorkflow('SM-1', 'hello from strict mode');
+
+    // Hold the FIRST fetch pending until after StrictMode has run cleanup +
+    // the second mount. Any subsequent call (the second-mount fetch, under
+    // the fix) resolves immediately with the workflow.
+    let resolveFirst: (w: ReturnType<typeof buildWorkflow>) => void = () => {};
+    let callIdx = 0;
+    mockedGet.mockImplementation(() => {
+      callIdx += 1;
+      if (callIdx === 1) {
+        return new Promise((res) => {
+          resolveFirst = res as typeof resolveFirst;
+        });
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return Promise.resolve(wf as any);
+    });
+
+    const navigate = vi.fn();
+    const syncFromStage = vi.fn();
+    const onWorkflowSnapshot = vi.fn();
+
+    // Capture hook output via a probe component so we can render it under
+    // <StrictMode> directly with `render`. (`renderHook` + wrapper does
+    // not always trigger the StrictMode double-mount of useEffect in the
+    // testing-library + React 19 combo.)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let latest: any = null;
+    function Probe() {
+      latest = useConversationLoader({
+        conversationId: 'SM-1',
+        isConnected: false,
+        syncFromStage,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onWorkflowSnapshot: onWorkflowSnapshot as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        navigate: navigate as any,
+      });
+      return null;
+    }
+
+    render(createElement(StrictMode, null, createElement(Probe)));
+
+    // After mount completes (both Strict mounts done), state should be
+    // populated from the SECOND fetch — which is what the fix enables.
+    // Without the fix, the second mount returns early via the loadedIdRef
+    // guard and the first (pending) fetch's .then is later silenced by
+    // the abort check, so activeWorkflow stays null.
+    await waitFor(() => expect(latest?.activeWorkflow?.id).toBe('SM-1'), { timeout: 1000 });
+
+    // Sanity: the bug presented as messages.length === 0 (skeleton-forever
+    // symptom in ChatPanel).
+    expect(latest.messages.length).toBeGreaterThan(0);
+    expect(syncFromStage).toHaveBeenCalledWith('completed');
+    // StrictMode invokes the effect twice — both calls should hit the API.
+    expect(callIdx).toBeGreaterThanOrEqual(2);
+
+    // Belt-and-braces: resolve the now-orphaned first fetch and assert
+    // state didn't get clobbered — its in-flight controller was aborted
+    // by the StrictMode cleanup so the .then early-returns on the abort
+    // check.
+    await act(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      resolveFirst(wf as any);
+    });
+    expect(latest.activeWorkflow?.id).toBe('SM-1');
   });
 
   it('exposes mutable lastMessagesKeyRef + loadedIdRef so external callers can reset them', async () => {
