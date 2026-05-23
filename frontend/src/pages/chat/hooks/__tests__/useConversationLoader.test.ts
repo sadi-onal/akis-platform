@@ -1,4 +1,4 @@
-import { createElement, StrictMode, type ReactNode } from 'react';
+import { createElement, StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, renderHook, waitFor } from '@testing-library/react';
 
