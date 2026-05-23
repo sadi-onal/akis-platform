@@ -34,33 +34,26 @@ export interface FriendlyErrorMessage {
  * errors.ts`) için bilinen sınıflar. Tablo backend'le senkron olmalı —
  * yeni bir code eklendiğinde buraya da ekleyin.
  */
-const KNOWN_MESSAGES: Record<
-  string,
-  Omit<FriendlyErrorMessage, 'matched'>
-> = {
+const KNOWN_MESSAGES: Record<string, Omit<FriendlyErrorMessage, 'matched'>> = {
   // ── AI sağlayıcı hataları ──────────────────────────────────────────────
   AI_RATE_LIMITED: {
     title: 'AI sağlayıcısı yoğun',
-    detail:
-      'AI sağlayıcısı şu an çok istek alıyor; kısa bir süre sonra tekrar denenecek.',
+    detail: 'AI sağlayıcısı şu an çok istek alıyor; kısa bir süre sonra tekrar denenecek.',
     severity: 'warn',
   },
   AI_PROVIDER_ERROR: {
     title: 'AI sağlayıcısı hata döndürdü',
-    detail:
-      'AI sağlayıcısı geçici bir hata yaşıyor. Birkaç saniye sonra tekrar deneyebilirsiniz.',
+    detail: 'AI sağlayıcısı geçici bir hata yaşıyor. Birkaç saniye sonra tekrar deneyebilirsiniz.',
     severity: 'error',
   },
   AI_INVALID_RESPONSE: {
     title: 'AI beklenmedik yanıt verdi',
-    detail:
-      'AI yanıtı çözümlenemedi; tekrar denemek için "Tekrar Dene" butonunu kullanın.',
+    detail: 'AI yanıtı çözümlenemedi; tekrar denemek için "Tekrar Dene" butonunu kullanın.',
     severity: 'warn',
   },
   AI_NETWORK_ERROR: {
     title: 'Ağ bağlantısı hatası',
-    detail:
-      'AI sağlayıcısına ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+    detail: 'AI sağlayıcısına ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
     severity: 'error',
   },
   AI_AUTH_ERROR: {
@@ -71,20 +64,17 @@ const KNOWN_MESSAGES: Record<
   },
   AI_KEY_MISSING: {
     title: 'AI anahtarı eksik',
-    detail:
-      'Devam etmek için AI anahtarınızı Ayarlar > AI Anahtarları menüsünden ekleyin.',
+    detail: 'Devam etmek için AI anahtarınızı Ayarlar > AI Anahtarları menüsünden ekleyin.',
     severity: 'error',
   },
   AI_MODEL_NOT_FOUND: {
     title: 'Model bulunamadı',
-    detail:
-      'Seçili model şu an kullanılamıyor. Sohbet ayarlarından farklı bir model seçin.',
+    detail: 'Seçili model şu an kullanılamıyor. Sohbet ayarlarından farklı bir model seçin.',
     severity: 'error',
   },
   MODEL_NOT_ALLOWED: {
     title: 'Model izin listesinde değil',
-    detail:
-      'Seçilen model bu hesap için izinli değil. Sohbet ayarlarından izinli bir model seçin.',
+    detail: 'Seçilen model bu hesap için izinli değil. Sohbet ayarlarından izinli bir model seçin.',
     severity: 'error',
   },
 
@@ -98,51 +88,44 @@ const KNOWN_MESSAGES: Record<
   PIPELINE_TIMEOUT: {
     title: 'İşlem zaman aşımına uğradı',
     detail:
-      'İşlem beklenenden uzun sürdü ve duraklatıldı. Tekrar deneyebilirsiniz.',
+      'Bir adım yanıt vermedi. Aşağıdaki teknik detay hangi adımın ne kadar süredir durduğunu gösterir.',
     severity: 'warn',
   },
   NETWORK_ERROR: {
     title: 'Bağlantı kesildi',
-    detail:
-      'İnternet bağlantısı kesildi; bağlantı geri gelince otomatik olarak devam edilecek.',
+    detail: 'İnternet bağlantısı kesildi; bağlantı geri gelince otomatik olarak devam edilecek.',
     severity: 'warn',
   },
 
   // ── GitHub hataları (info — yardım butonu zaten yönlendiriyor) ─────────
   GITHUB_NOT_CONNECTED: {
     title: 'GitHub bağlı değil',
-    detail:
-      'Kod üretimi için GitHub hesabınızı bağlamanız gerekiyor.',
+    detail: 'Kod üretimi için GitHub hesabınızı bağlamanız gerekiyor.',
     severity: 'info',
   },
   GITHUB_TOKEN_INVALID: {
     title: 'GitHub bağlantısının süresi doldu',
-    detail:
-      'GitHub bağlantınızı yenilemeniz gerekiyor.',
+    detail: 'GitHub bağlantınızı yenilemeniz gerekiyor.',
     severity: 'warn',
   },
   GITHUB_PERMISSION_DENIED: {
     title: 'GitHub izinleri yetersiz',
-    detail:
-      'GitHub bağlantınızı yenileyip depo izinlerini onaylayın.',
+    detail: 'GitHub bağlantınızı yenileyip depo izinlerini onaylayın.',
     severity: 'warn',
   },
   GITHUB_REPO_EXISTS: {
     title: 'Bu isimde depo var',
-    detail:
-      'Aynı isimde bir GitHub deposu zaten var. Farklı bir isim seçin.',
+    detail: 'Aynı isimde bir GitHub deposu zaten var. Farklı bir isim seçin.',
     severity: 'warn',
   },
   GITHUB_API_ERROR: {
     title: 'GitHub geçici hata verdi',
-    detail:
-      "GitHub'a bağlanırken bir sorun oluştu. Birkaç dakika sonra tekrar deneyin.",
+    detail: "GitHub'a bağlanırken bir sorun oluştu. Birkaç dakika sonra tekrar deneyin.",
     severity: 'warn',
   },
   GITHUB_RATE_LIMITED: {
     title: 'GitHub kullanım sınırı aşıldı',
-    detail:
-      'GitHub kullanım sınırına ulaşıldı; sınır sıfırlanınca tekrar deneyebilirsiniz.',
+    detail: 'GitHub kullanım sınırına ulaşıldı; sınır sıfırlanınca tekrar deneyebilirsiniz.',
     severity: 'warn',
   },
 } as const;
@@ -180,13 +163,10 @@ const QUOTA_MESSAGE: Omit<FriendlyErrorMessage, 'matched'> = {
  */
 export function errorCodeToFriendlyMessage(
   code: string | undefined,
-  fallbackMessage?: string,
+  fallbackMessage?: string
 ): FriendlyErrorMessage {
   // Kota sezgisi — backend henüz ayrı code üretmediği için mesaj sniff'i.
-  if (
-    code === 'AI_PROVIDER_ERROR' &&
-    looksLikeQuotaExhaustion(fallbackMessage)
-  ) {
+  if (code === 'AI_PROVIDER_ERROR' && looksLikeQuotaExhaustion(fallbackMessage)) {
     return { ...QUOTA_MESSAGE, matched: true };
   }
 
@@ -202,8 +182,7 @@ export function errorCodeToFriendlyMessage(
   // Bilinmeyen code — eski davranışa düş: jenerik başlık + ham mesaj.
   return {
     title: 'Akış başarısız',
-    detail:
-      fallbackMessage ?? 'Beklenmedik bir hata oluştu. Tekrar deneyebilirsiniz.',
+    detail: fallbackMessage ?? 'Beklenmedik bir hata oluştu. Tekrar deneyebilirsiniz.',
     severity: 'error',
     matched: false,
   };

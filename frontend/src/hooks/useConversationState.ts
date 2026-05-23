@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { ConversationUIState } from '../types/chat';
 import type { PipelineStage } from '../types/pipeline';
 import { mapStageToUIState, getRunningAgentName } from '../utils/mapPipelineEvent';
@@ -26,11 +26,20 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
     initialStage ? mapStageToUIState(initialStage) : 'idle'
   );
 
-  // Track the raw pipeline stage so we can distinguish terminal-idle from empty-idle
-  const currentStageRef = useRef<PipelineStage | undefined>(initialStage);
+  // Track the raw pipeline stage so we can distinguish terminal-idle (failed/
+  // completed/cancelled — should show stage-specific placeholder) from
+  // empty-idle (no pipeline yet — default placeholder).
+  //
+  // B4 (2026-05-23): turned this from `useRef` → `useState` so the
+  // `inputPlaceholder` useMemo dependency triggers re-render when only the
+  // stage changes (uiState stays 'idle' for all terminal stages, so without
+  // a state change the placeholder would stick on the initial-mount value).
+  // User-reported: direct URL → failed pipeline → placeholder stuck as
+  // "Projenizi anlatın..." instead of "Pipeline başarısız oldu...".
+  const [currentStage, setCurrentStage] = useState<PipelineStage | undefined>(initialStage);
 
   const syncFromStage = useCallback((stage: PipelineStage) => {
-    currentStageRef.current = stage;
+    setCurrentStage(stage);
     setUIState(mapStageToUIState(stage));
   }, []);
 
@@ -61,16 +70,16 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
     if (uiState === 'trace_running') return 'Trace test yazıyor... Mesaj bırakabilirsiniz.';
     if (uiState === 'ci_running') return 'CI çalışıyor... Mesaj bırakabilirsiniz.';
     // Terminal states
-    if (uiState === 'idle' && currentStageRef.current) {
-      if (currentStageRef.current === 'completed')
+    if (uiState === 'idle' && currentStage) {
+      if (currentStage === 'completed')
         return 'Projeniz hazır! Değişiklik isteği yazarak yeni iterasyon başlatın.';
-      if (currentStageRef.current === 'completed_partial')
+      if (currentStage === 'completed_partial')
         return 'Pipeline kısmen tamamlandı. Değişiklik isteği yazabilirsiniz.';
-      if (currentStageRef.current === 'failed')
+      if (currentStage === 'failed')
         return 'Pipeline başarısız oldu. Yeniden deneyebilir veya sorununuzu yazabilirsiniz.';
     }
     return 'Projenizi anlatın...';
-  }, [uiState]);
+  }, [uiState, currentStage]);
 
   return {
     uiState,

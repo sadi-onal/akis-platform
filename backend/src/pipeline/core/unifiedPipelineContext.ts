@@ -212,13 +212,16 @@ export function formatScribeConversationTranscript(messages: ScribeMessageType[]
         );
         break;
       // Chat event-log types (proto_started, proto_completed, trace_started,
-      // trace_completed, trace_failed) are system-level events, not conversation
-      // turns. Skip them in transcript formatting.
+      // trace_completed, trace_failed, scribe_failed, proto_failed) are
+      // system-level events, not conversation turns. Skip them in transcript
+      // formatting.
       case 'proto_started':
       case 'proto_completed':
       case 'trace_started':
       case 'trace_completed':
       case 'trace_failed':
+      case 'scribe_failed':
+      case 'proto_failed':
         break;
       default: {
         const _exhaustive: never = m;

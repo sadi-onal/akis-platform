@@ -24,7 +24,7 @@ describe('errorCodeToFriendlyMessage', () => {
   it('routes AI_PROVIDER_ERROR with "insufficient credits" message to quota class', () => {
     const friendly = errorCodeToFriendlyMessage(
       'AI_PROVIDER_ERROR',
-      'OpenAI account has insufficient credits. Please add credits or update your API key.',
+      'OpenAI account has insufficient credits. Please add credits or update your API key.'
     );
 
     expect(friendly.title).toBe('AI kotası tükendi');
@@ -33,19 +33,13 @@ describe('errorCodeToFriendlyMessage', () => {
   });
 
   it('routes AI_PROVIDER_ERROR with billing/balance keyword to quota class', () => {
-    const friendly = errorCodeToFriendlyMessage(
-      'AI_PROVIDER_ERROR',
-      'Anthropic balance exhausted',
-    );
+    const friendly = errorCodeToFriendlyMessage('AI_PROVIDER_ERROR', 'Anthropic balance exhausted');
 
     expect(friendly.title).toBe('AI kotası tükendi');
   });
 
   it('keeps AI_PROVIDER_ERROR as generic provider error when no quota hint', () => {
-    const friendly = errorCodeToFriendlyMessage(
-      'AI_PROVIDER_ERROR',
-      'Unexpected server error',
-    );
+    const friendly = errorCodeToFriendlyMessage('AI_PROVIDER_ERROR', 'Unexpected server error');
 
     expect(friendly.title).toBe('AI sağlayıcısı hata döndürdü');
   });
@@ -64,6 +58,8 @@ describe('errorCodeToFriendlyMessage', () => {
 
     expect(friendly.title).toContain('zaman aşımına');
     expect(friendly.matched).toBe(true);
+    expect(friendly.detail).toMatch(/teknik detay/);
+    expect(friendly.detail).not.toMatch(/Tekrar deneyebilirsiniz/);
   });
 
   // ── 4. NETWORK_ERROR → "Ağ bağlantısı hatası" ───────────────────────────
@@ -85,7 +81,7 @@ describe('errorCodeToFriendlyMessage', () => {
   it('falls back to a generic title + raw message for an unknown code', () => {
     const friendly = errorCodeToFriendlyMessage(
       'SOMETHING_NEW_BACKEND_NEVER_SHIPPED',
-      'Hata mesajı: bilinmeyen sorun.',
+      'Hata mesajı: bilinmeyen sorun.'
     );
 
     expect(friendly.matched).toBe(false);

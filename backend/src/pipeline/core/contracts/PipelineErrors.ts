@@ -176,7 +176,7 @@ const ERROR_DEFINITIONS: Record<
     recoveryAction: 'configure_ai_key',
   },
   [PipelineErrorCode.PIPELINE_TIMEOUT]: {
-    message: 'İşlem beklenenden uzun sürdü. Akış duraklatıldı.',
+    message: 'Bir adım yanıt vermedi. Teknik detay aşağıdaki satırda.',
     retryable: true,
     recoveryAction: 'retry',
   },

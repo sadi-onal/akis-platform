@@ -817,5 +817,73 @@ describe('workflowsApi', () => {
       expect(trace?.iteration).toBe(2);
       expect(trace?.traceResult?.testCount).toBe(12);
     });
+
+    // Task 4 (failed-state-holistic): backend now persists `scribe_failed` and
+    // `proto_failed` event-log entries when the Reconciler sweeps a stuck
+    // pipeline at the Scribe or Proto stage. Mirror the existing `trace_failed`
+    // mapping so the chat timeline can render dedicated failure messages.
+    it('maps scribe_failed events to ConversationMessage', () => {
+      const pipeline = makePipeline({
+        id: 'p1',
+        stage: 'failed',
+        scribeConversation: [
+          { type: 'user_idea', content: 'idea' },
+          {
+            type: 'scribe_failed',
+            content: {
+              stageStuck: 'scribe_generating',
+              errorCode: 'PIPELINE_TIMEOUT',
+              errorMessage:
+                'Fikir analiz adımı 15 dakika boyunca yanıt vermedi. Otomatik olarak durduruldu.',
+              recoveryAction: 'retry',
+            },
+            timestamp: '2026-05-22T10:00:00.000Z',
+          },
+        ] as unknown as ScribeMessageType[],
+        error: { code: 'PIPELINE_TIMEOUT', message: 'X', retryable: true },
+        metrics: { startedAt: '2026-05-22T10:00:00Z', clarificationRounds: 0, retryCount: 0 },
+      });
+
+      const w = mapPipelineToWorkflow(pipeline);
+      const msgs = w.conversation ?? [];
+      const failed = msgs.find((m) => m.type === 'scribe_failed');
+      expect(failed).toBeDefined();
+      expect(failed?.stageStuck).toBe('scribe_generating');
+      expect(failed?.errorCode).toBe('PIPELINE_TIMEOUT');
+      expect(failed?.errorMessage).toContain('Fikir analiz adımı');
+      expect(failed?.recoveryAction).toBe('retry');
+    });
+
+    it('maps proto_failed events to ConversationMessage', () => {
+      const pipeline = makePipeline({
+        id: 'p1',
+        stage: 'failed',
+        scribeConversation: [
+          { type: 'user_idea', content: 'idea' },
+          { type: 'proto_started', content: { iteration: 1 }, timestamp: '2026-05-22T10:50:00Z' },
+          {
+            type: 'proto_failed',
+            content: {
+              iteration: 1,
+              errorCode: 'PIPELINE_TIMEOUT',
+              errorMessage: 'Kod üretim adımı 20 dakika boyunca yanıt vermedi.',
+              recoveryAction: 'retry',
+            },
+            timestamp: '2026-05-22T11:00:00.000Z',
+          },
+        ] as unknown as ScribeMessageType[],
+        error: { code: 'PIPELINE_TIMEOUT', message: 'X', retryable: true },
+        metrics: { startedAt: '2026-05-22T10:00:00Z', clarificationRounds: 0, retryCount: 0 },
+      });
+
+      const w = mapPipelineToWorkflow(pipeline);
+      const msgs = w.conversation ?? [];
+      const failed = msgs.find((m) => m.type === 'proto_failed');
+      expect(failed).toBeDefined();
+      expect(failed?.iteration).toBe(1);
+      expect(failed?.errorCode).toBe('PIPELINE_TIMEOUT');
+      expect(failed?.errorMessage).toContain('Kod üretim adımı');
+      expect(failed?.recoveryAction).toBe('retry');
+    });
   });
 });

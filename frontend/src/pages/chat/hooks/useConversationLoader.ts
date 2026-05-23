@@ -104,6 +104,14 @@ export function useConversationLoader(
   const prevConvLenRef = useRef(0);
   const activeStageRef = useRef<PipelineStage | undefined>(activeWorkflow?.currentStage);
   activeStageRef.current = activeWorkflow?.currentStage;
+  // T9-fix (2026-05-23): track the id we have actually populated `activeWorkflow`
+  // for. Distinct from `loadedIdRef` (which is set optimistically before the
+  // fetch and is also writable by external callers) so the StrictMode
+  // double-mount can detect "ref claims this id, but no data yet" and proceed
+  // with a fresh fetch instead of returning early. See the load effect comment
+  // for the full story.
+  const activeWorkflowIdRef = useRef<string | undefined>(activeWorkflow?.id);
+  activeWorkflowIdRef.current = activeWorkflow?.id;
   // SSE provides real-time updates — polling is a fallback, so use longer interval
   const consecutiveErrorsRef = useRef(0);
   const backoffRef = useRef(8000);
@@ -136,19 +144,43 @@ export function useConversationLoader(
       return;
     }
 
-    // Same chat — skip
-    if (loadedIdRef.current === conversationId) return;
+    // Already have data for this chat — skip. This must NOT trigger on a
+    // StrictMode double-mount where the first mount's fetch was aborted by
+    // cleanup before data arrived. T9-fix (2026-05-23): previously this
+    // guard used `loadedIdRef` directly, which got set BEFORE the fetch
+    // ran. Under StrictMode the second mount saw the ref already matched,
+    // returned early, and the first mount's aborted fetch never produced
+    // state. Result: skeleton forever for any pipeline that didn't trigger
+    // the SSE/activity `refreshWorkflow()` recovery path (notably
+    // `stage='failed'` pipelines whose last activity is not
+    // `pipeline_complete` / `gate_open`).
+    //
+    // Now we gate on the actual populated `activeWorkflow.id` (via ref) so
+    // the "already loaded" state is grounded in real data, not an
+    // optimistic flag. External callers that pre-populate state (e.g.
+    // useHandleSend) call `setActiveWorkflow(w)` before navigating, which
+    // propagates to `activeWorkflowIdRef` and prevents the redundant
+    // re-fetch this effect would otherwise issue on the new conversationId.
+    if (activeWorkflowIdRef.current === conversationId) return;
 
     // Different chat — clear the previous conversation's surface
     // synchronously, then load the new one. Without this clear, the old
     // messages stay on screen for the full fetch round-trip (~3–5s on
     // slow connections), which reads as a stale-state bug.
-    setActiveWorkflow(null);
-    setMessages([]);
-    lastMessagesKeyRef.current = '';
-    prevConvLenRef.current = 0;
+    // Only clear when this is genuinely a different conversation; clearing
+    // on the StrictMode re-run (same id, no data yet) would needlessly
+    // thrash state.
+    if (loadedIdRef.current !== conversationId) {
+      setActiveWorkflow(null);
+      setMessages([]);
+      lastMessagesKeyRef.current = '';
+      prevConvLenRef.current = 0;
+    }
 
-    // Mark immediately to prevent double-fetch on rapid navigation
+    // Mark optimistically so external callers (and rapid-navigation
+    // handlers reading `loadedIdRef.current`) see the in-progress id.
+    // `activeWorkflowIdRef` (set when state actually populates) is what
+    // gates effect re-entry — see the StrictMode guard above.
     const targetId = conversationId;
     loadedIdRef.current = targetId;
 
@@ -173,6 +205,9 @@ export function useConversationLoader(
           setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
         }
         syncFromStageRef.current(w.currentStage ?? 'completed');
+        // `activeWorkflowIdRef` updates synchronously on the next render
+        // (driven by the `setActiveWorkflow(w)` above), which is what gates
+        // the StrictMode re-run guard at the top of this effect.
       })
       .catch((err: unknown) => {
         // AbortError surfaces as DOMException with name 'AbortError' or

@@ -267,7 +267,12 @@ export function ModelPicker({
           // daha yüksek bir liste için max-h ve iç scroll var. Sticky group
           // header'lar scroll sırasında "şu an Anthropic'tesin / OpenAI'desin"
           // bilgisini görünür tutar.
-          className="absolute right-0 bottom-full z-20 mb-1 w-max min-w-[260px] max-h-[60vh] overflow-y-auto rounded-lg border border-ak-border bg-ak-surface-2 p-1 shadow-lg"
+          //
+          // B1 (2026-05-23): `left-0` (was `right-0`) — trigger sol-altta;
+          // sağa doğru açılırsa chat alanına genişler, sola açılırsa sidebar'ı
+          // siler (sidebar wrapper'ı transform stacking context oluşturuyor →
+          // dropdown arkada kalıyordu). `z-50` z-fight'a karşı tampon.
+          className="absolute left-0 bottom-full z-50 mb-1 w-max min-w-[260px] max-h-[60vh] overflow-y-auto rounded-lg border border-ak-border bg-ak-surface-2 p-1 shadow-lg"
         >
           {loading && (
             <div className="px-3 py-2 text-[11px] text-ak-text-tertiary">
