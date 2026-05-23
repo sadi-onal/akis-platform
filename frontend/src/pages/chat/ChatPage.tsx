@@ -71,6 +71,17 @@ export default function ChatPage() {
     setSidebarOpen(false);
   }, [conversationId]);
 
+  // B3 (2026-05-23): clear pendingConv when we land on an existing chat via
+  // sidebar click. Without this, the "Trace açık" toggle + unlocked ModelPicker
+  // + "Projenizi anlatın..." placeholder leak from the new-chat flow into
+  // already-run pipelines (user-reported: Image #10). pendingConv is only
+  // valid while we're on `/chat` composing a new idea.
+  useEffect(() => {
+    if (conversationId) {
+      setPendingConv(null);
+    }
+  }, [conversationId]);
+
   // Auto-collapse sidebar on tablet resize + re-sync on mount/navigation
   useEffect(() => {
     const syncCollapse = () => {

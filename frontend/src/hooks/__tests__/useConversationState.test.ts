@@ -173,6 +173,32 @@ describe('useConversationState', () => {
       expect(result.current.inputPlaceholder).toContain('Projeniz hazır');
     });
 
+    // B4 (2026-05-23) regression: syncFromStage('failed') on a no-initial-stage
+    // hook used to leave the placeholder stuck on "Projenizi anlatın..." because
+    // currentStageRef was a ref (not a useState dep) and uiState='idle' stayed
+    // unchanged. The placeholder should now switch to the failed-state copy.
+    it('updates terminal placeholder when syncFromStage transitions from initial idle to failed', () => {
+      const { result } = renderHook(() => useConversationState());
+      expect(result.current.inputPlaceholder).toBe('Projenizi anlatın...');
+
+      act(() => {
+        result.current.syncFromStage('failed');
+      });
+
+      expect(result.current.inputPlaceholder).toContain('Pipeline başarısız');
+    });
+
+    it('updates terminal placeholder when syncFromStage transitions from initial idle to completed', () => {
+      const { result } = renderHook(() => useConversationState());
+      expect(result.current.inputPlaceholder).toBe('Projenizi anlatın...');
+
+      act(() => {
+        result.current.syncFromStage('completed');
+      });
+
+      expect(result.current.inputPlaceholder).toContain('Projeniz hazır');
+    });
+
     // P8 — critic hard-block placeholder
     it('shows critic-resolution prompt when blocked', () => {
       const { result } = renderHook(() =>
