@@ -150,15 +150,50 @@ describe('LandingPage', () => {
   });
 });
 
-describe('LandingPage — auth redirect', () => {
-  it('redirects to /chat when user is logged in', () => {
+describe('LandingPage — authenticated nav', () => {
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({
+      user: { id: '1', name: 'Test User', email: 'test@test.com', role: 'member' },
+      loading: false,
+    });
+  });
+
+  it('does NOT auto-redirect to /chat (landing stays browsable for logged-in users)', () => {
+    renderWithRouter(<LandingPage />);
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('swaps "Giriş Yap" for "Sohbete Git"', () => {
+    renderWithRouter(<LandingPage />);
+    expect(screen.queryByText('Giriş Yap')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Sohbete dön')).toBeInTheDocument();
+  });
+
+  it('renders the user initials in the nav', () => {
+    renderWithRouter(<LandingPage />);
+    // "Test User" → "T". Title attribute holds the full name for tooltip.
+    expect(screen.getByLabelText('Test User')).toHaveTextContent('T');
+  });
+
+  it('bottom CTA navigates to /chat (not /signup)', () => {
+    renderWithRouter(<LandingPage />);
+    screen.getByLabelText('Sohbete git').click();
+    expect(navigateMock).toHaveBeenCalledWith('/chat');
+  });
+});
+
+describe('HeroSection — authenticated CTA', () => {
+  it('swaps "Hemen Başla" for "Sohbete Git" and targets /chat', () => {
     useAuthMock.mockReturnValueOnce({
       user: { id: '1', name: 'Test', email: 'test@test.com', role: 'member' },
       loading: false,
     });
 
-    renderWithRouter(<LandingPage />);
-    expect(navigateMock).toHaveBeenCalledWith('/chat', { replace: true });
+    renderWithRouter(<HeroSection />);
+    expect(screen.queryByText(/Hemen Başla/)).not.toBeInTheDocument();
+    const cta = screen.getByText('Sohbete Git');
+    cta.click();
+    expect(navigateMock).toHaveBeenCalledWith('/chat');
   });
 });
 

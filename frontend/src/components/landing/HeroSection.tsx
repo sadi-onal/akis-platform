@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { LOGO_MARK_SVG } from '../../theme/brand';
+import { useAuth } from '../../contexts/AuthContext';
 
 const WORDS = ['Üç', 'Ajan.'];
 const ACCENT_WORDS = ['Fikirden', 'Test', 'Edilmiş', 'Koda.'];
@@ -18,6 +19,7 @@ const wordVariants = {
 export function HeroSection() {
   const navigate = useNavigate();
   const reduced = useReducedMotion();
+  const { user } = useAuth();
 
   return (
     <section className="relative flex min-h-[calc(100vh-72px)] flex-col items-center justify-center px-4 sm:px-6 lg:px-8 pb-20 text-center overflow-hidden">
@@ -59,7 +61,11 @@ export function HeroSection() {
         ))}
         <br className="sm:hidden" />
         {ACCENT_WORDS.map((word, i) => (
-          <motion.span key={`a-${i}`} className="inline-block mr-3 text-[#07D1AF]" variants={reduced ? {} : wordVariants}>
+          <motion.span
+            key={`a-${i}`}
+            className="inline-block mr-3 text-[#07D1AF]"
+            variants={reduced ? {} : wordVariants}
+          >
             {word}
           </motion.span>
         ))}
@@ -72,9 +78,9 @@ export function HeroSection() {
         animate={{ y: 0 }}
         transition={{ duration: 0.5, delay: 0.8 }}
       >
-        AKIS, düz metin fikirlerinizi yapılandırılmış spec'e, scaffold edilmiş kod'a
-        ve otomatik Playwright testlerine dönüştürür. Üç agent — Scribe, Proto, Trace —
-        bir arada çalışır; spec'i siz onaylarsınız.
+        AKIS, düz metin fikirlerinizi yapılandırılmış spec'e, scaffold edilmiş kod'a ve otomatik
+        Playwright testlerine dönüştürür. Üç agent — Scribe, Proto, Trace — bir arada çalışır;
+        spec'i siz onaylarsınız.
       </motion.p>
 
       {/* Pipeline mini-flow */}
@@ -87,7 +93,12 @@ export function HeroSection() {
             key={agent}
             className="rounded-full px-3 py-1 font-medium"
             style={{
-              background: i === 0 ? 'rgba(59,130,246,0.12)' : i === 1 ? 'rgba(245,158,11,0.12)' : 'rgba(139,92,246,0.12)',
+              background:
+                i === 0
+                  ? 'rgba(59,130,246,0.12)'
+                  : i === 1
+                    ? 'rgba(245,158,11,0.12)'
+                    : 'rgba(139,92,246,0.12)',
               color: i === 0 ? '#3b82f6' : i === 1 ? '#f59e0b' : '#8b5cf6',
             }}
             initial={reduced ? {} : { x: -10 }}
@@ -107,12 +118,12 @@ export function HeroSection() {
         transition={{ delay: 1.5, duration: 0.5 }}
       >
         <motion.button
-          onClick={() => navigate('/signup')}
+          onClick={() => navigate(user ? '/chat' : '/signup')}
           className="rounded-xl bg-[#07D1AF] px-8 py-3.5 text-sm font-bold text-[#0A1215] shadow-lg shadow-[#07D1AF]/20"
           whileHover={reduced ? {} : { scale: 1.05, boxShadow: '0 0 30px rgba(7,209,175,0.35)' }}
           whileTap={{ scale: 0.97 }}
         >
-          Hemen Başla
+          {user ? 'Sohbete Git' : 'Hemen Başla'}
         </motion.button>
         <motion.button
           onClick={() => navigate('/docs')}

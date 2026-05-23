@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useEffect } from 'react';
 import { LazyMotion, domMax, motion, useReducedMotion } from 'framer-motion';
 import { LOGO_MARK_SVG } from '../theme/brand';
 import { HeroSection } from '../components/landing/HeroSection';
@@ -9,23 +8,15 @@ import { FeaturesSection } from '../components/landing/FeaturesSection';
 import { StatsSection } from '../components/landing/StatsSection';
 
 export default function LandingPage() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const reduced = useReducedMotion();
 
-  useEffect(() => {
-    if (!loading && user) {
-      navigate('/chat', { replace: true });
-    }
-  }, [user, loading, navigate]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-ak-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#07D1AF] border-t-transparent" />
-      </div>
-    );
-  }
+  // Landing is publicly browsable even when authenticated — the nav swaps
+  // "Giriş Yap" for an avatar + "Sohbete Git" so the user can both see the
+  // marketing page and reach the app. Auto-redirecting to /chat would make
+  // the AKIS logo (which links to /) a no-op from inside chat.
+  const initials = user?.name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?';
 
   return (
     <LazyMotion features={domMax}>
@@ -50,15 +41,36 @@ export default function LandingPage() {
             >
               Dokümantasyon
             </button>
-            <motion.button
-              onClick={() => navigate('/login')}
-              aria-label="Giriş yap sayfasına git"
-              className="rounded-lg bg-[#07D1AF] px-4 py-2 text-sm font-semibold text-[#0A1215]"
-              whileHover={reduced ? {} : { scale: 1.05 }}
-              whileTap={{ scale: 0.97 }}
-            >
-              Giriş Yap
-            </motion.button>
+            {user ? (
+              <>
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-ak-primary/20 text-xs font-semibold text-ak-primary"
+                  title={user.name ?? user.email}
+                  aria-label={user.name ?? user.email}
+                >
+                  {initials}
+                </div>
+                <motion.button
+                  onClick={() => navigate('/chat')}
+                  aria-label="Sohbete dön"
+                  className="rounded-lg bg-[#07D1AF] px-4 py-2 text-sm font-semibold text-[#0A1215]"
+                  whileHover={reduced ? {} : { scale: 1.05 }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  Sohbete Git
+                </motion.button>
+              </>
+            ) : (
+              <motion.button
+                onClick={() => navigate('/login')}
+                aria-label="Giriş yap sayfasına git"
+                className="rounded-lg bg-[#07D1AF] px-4 py-2 text-sm font-semibold text-[#0A1215]"
+                whileHover={reduced ? {} : { scale: 1.05 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                Giriş Yap
+              </motion.button>
+            )}
           </div>
         </motion.nav>
 
@@ -79,18 +91,20 @@ export default function LandingPage() {
             >
               <h2 className="text-2xl font-bold mb-3">Hemen Deneyin</h2>
               <p className="text-sm text-ak-text-secondary mb-6">
-                Hesap oluşturun ve ilk pipeline'ınızı dakikalar içinde başlatın.
+                {user
+                  ? 'Sohbete dön ve yeni bir pipeline başlat.'
+                  : "Hesap oluşturun ve ilk pipeline'ınızı dakikalar içinde başlatın."}
               </p>
               <motion.button
-                onClick={() => navigate('/signup')}
-                aria-label="Ücretsiz hesap oluştur"
+                onClick={() => navigate(user ? '/chat' : '/signup')}
+                aria-label={user ? 'Sohbete git' : 'Ücretsiz hesap oluştur'}
                 className="rounded-xl bg-[#07D1AF] px-10 py-4 text-sm font-bold text-[#0A1215] shadow-lg shadow-[#07D1AF]/20"
                 whileHover={
                   reduced ? {} : { scale: 1.05, boxShadow: '0 0 40px rgba(7,209,175,0.3)' }
                 }
                 whileTap={{ scale: 0.97 }}
               >
-                Ücretsiz Başla
+                {user ? 'Sohbete Git' : 'Ücretsiz Başla'}
               </motion.button>
             </motion.div>
           </section>

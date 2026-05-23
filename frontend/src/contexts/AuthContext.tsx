@@ -4,11 +4,9 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { useLocation } from 'react-router-dom';
 import { AuthAPI, type AuthUser } from '../services/api/auth';
 
 type User = (AuthUser & { role: 'member' }) | null;
@@ -31,19 +29,9 @@ const AuthContext = createContext<AuthContextValue>({
   setUser: () => {},
 });
 
-// Routes that require an authenticated session. /chat and /settings are
-// the only protected surfaces in the chat-centric SPA; the legacy
-// /dashboard, /agents and /pipeline trees were retired in v0.6.5.
-const AUTH_REQUIRED_PREFIXES = ['/chat', '/settings'];
-
-function requiresAuthResolve(pathname: string): boolean {
-  return AUTH_REQUIRED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User>(null);
   const [loading, setLoading] = useState(true);
-  const location = useLocation();
 
   const mapUser = useCallback((payload: AuthUser): NonNullable<User> => {
     return {
@@ -52,48 +40,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Auth check — only on initial load or when navigating to a protected route
-  // for the first time. Once authenticated, don't re-check on every pathname change.
-  const resolvedRef = useRef(false);
-
+  // Resolve session once on mount, regardless of route. Skipping this on
+  // public routes (PR #285) saved a cosmetic 401 in the console but caused
+  // a real bug: a logged-in user who hits /, /login, /signup, /docs etc.
+  // via direct URL or refresh would see the app as anonymous — landing
+  // wouldn't bounce them to /chat, RedirectIfAuthenticated wouldn't fire.
   useEffect(() => {
-    // Already resolved — skip re-check on route changes
-    if (resolvedRef.current) {
-      setLoading(false);
-      return;
-    }
-
-    if (!requiresAuthResolve(location.pathname)) {
-      setLoading(false);
-      return;
-    }
-
     let active = true;
-    setLoading(true);
 
     AuthAPI.me()
       .then((currentUser) => {
-        if (active) {
-          setUser(mapUser(currentUser));
-          resolvedRef.current = true;
-        }
+        if (active) setUser(mapUser(currentUser));
       })
       .catch(() => {
-        if (active) {
-          setUser(null);
-          resolvedRef.current = true;
-        }
+        if (active) setUser(null);
       })
       .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [location.pathname, mapUser]);
+  }, [mapUser]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -114,12 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await AuthAPI.logout();
     setUser(null);
-    resolvedRef.current = false;
   }, []);
 
-  const setUserWrapped = useCallback((nextUser: AuthUser | null) => {
-    setUser(nextUser ? mapUser(nextUser) : null);
-  }, [mapUser]);
+  const setUserWrapped = useCallback(
+    (nextUser: AuthUser | null) => {
+      setUser(nextUser ? mapUser(nextUser) : null);
+    },
+    [mapUser]
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({
