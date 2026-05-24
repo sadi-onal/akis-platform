@@ -32,6 +32,7 @@ const sanitizeUser = (user: User) => ({
   id: user.id,
   name: user.name,
   email: user.email,
+  role: user.role ?? 'member',
   // Avatar priority: user-uploaded > GitHub-cached > null (UI falls back to initials).
   // Issue #385 / BUG-05.
   avatarUrl: user.avatarUrl ?? user.githubAvatarUrl ?? null,
@@ -150,6 +151,10 @@ export async function authRoutes(fastify: FastifyInstance) {
     const isValid = await verifyPassword(body.password, user.passwordHash);
     if (!isValid) {
       return sendError(reply, request, 'INVALID_CREDENTIALS', 'Invalid credentials');
+    }
+
+    if (user.status !== 'active') {
+      return reply.code(403).send({ error: { code: 'USER_NOT_ACTIVE', message: 'Account is not active' } });
     }
 
     const jwt = await sign({ sub: user.id, email: user.email, name: user.name });

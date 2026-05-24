@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { AuthAPI, type AuthUser } from '../services/api/auth';
 
-type User = (AuthUser & { role: 'member' }) | null;
+type User = (AuthUser & { role: 'admin' | 'member' }) | null;
 
 type AuthContextValue = {
   user: User;
@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const mapUser = useCallback((payload: AuthUser): NonNullable<User> => {
     return {
       ...payload,
-      role: 'member',
+      role: payload.role ?? 'member',
     };
   }, []);
 

@@ -4,11 +4,11 @@ import type {
   CriticReviewOutput,
 } from './CriticTypes.js';
 import {
-  SPEC_REVIEW_SYSTEM_PROMPT,
+  buildSpecReviewSystemPrompt,
   buildSpecReviewUserPrompt,
 } from './prompts/spec-review.js';
 import {
-  CODE_REVIEW_SYSTEM_PROMPT,
+  buildCodeReviewSystemPrompt,
   buildCodeReviewUserPrompt,
 } from './prompts/code-review.js';
 import { parseAIJson } from '../../core/json-extract.js';
@@ -85,7 +85,10 @@ export class CriticAgent {
 
     let responseText: string;
     try {
-      responseText = await this.ai.generateText(this.enhance(SPEC_REVIEW_SYSTEM_PROMPT), userPrompt);
+      responseText = await this.ai.generateText(
+        this.enhance(buildSpecReviewSystemPrompt(this.approvalThreshold)),
+        userPrompt,
+      );
     } catch {
       return {
         type: 'error',
@@ -124,7 +127,10 @@ export class CriticAgent {
 
     let responseText: string;
     try {
-      responseText = await this.ai.generateText(this.enhance(CODE_REVIEW_SYSTEM_PROMPT), userPrompt);
+      responseText = await this.ai.generateText(
+        this.enhance(buildCodeReviewSystemPrompt(this.approvalThreshold)),
+        userPrompt,
+      );
     } catch {
       return {
         type: 'error',

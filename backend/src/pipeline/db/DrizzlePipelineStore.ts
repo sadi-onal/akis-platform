@@ -66,6 +66,9 @@ function rowToState(row: typeof pipelines.$inferSelect): PipelineState {
     metrics: parseMetrics(row.metrics as Record<string, unknown> | null),
     error: row.error as PipelineState['error'],
     intermediateState: row.intermediateState as PipelineState['intermediateState'],
+    // H-7: Extract autoApprove fields from intermediateState JSONB
+    autoApproveEnabled: (row.intermediateState as Record<string, unknown> | null)?.autoApproveEnabled as boolean | undefined,
+    autoApproveThreshold: (row.intermediateState as Record<string, unknown> | null)?.autoApproveThreshold as number | undefined,
     attemptCount: row.attemptCount,
     stageVersion: row.stageVersion,
     createdAt: row.createdAt,
@@ -182,6 +185,19 @@ export class DrizzlePipelineStore implements PipelineStore {
     if (data.repoContext !== undefined) updateData.repoContext = data.repoContext;
     if (data.traceEnabled !== undefined) updateData.traceEnabled = data.traceEnabled;
     if (data.attemptCount !== undefined) updateData.attemptCount = data.attemptCount;
+
+    // H-7: Persist autoApprove fields — no dedicated DB columns, so merge
+    // into the intermediateState JSONB alongside any existing payload.
+    if (data.autoApproveEnabled !== undefined || data.autoApproveThreshold !== undefined) {
+      const existingIntermediate =
+        (updateData.intermediateState as Record<string, unknown> | undefined) ??
+        (data.intermediateState as Record<string, unknown> | undefined) ??
+        {};
+      const merged = { ...existingIntermediate };
+      if (data.autoApproveEnabled !== undefined) merged.autoApproveEnabled = data.autoApproveEnabled;
+      if (data.autoApproveThreshold !== undefined) merged.autoApproveThreshold = data.autoApproveThreshold;
+      updateData.intermediateState = merged;
+    }
 
     // Optimistic locking: when stage changes, require version match + increment
     const isStageChange = data.stage !== undefined;

@@ -195,6 +195,11 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/api/jobs', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await requireAuth(request);
+    } catch {
+      return sendError(reply, request, 'UNAUTHORIZED', 'Authentication required');
+    }
     const query = jobsQuerySchema.parse(request.query);
 
     const [items, totalRows] = await Promise.all([

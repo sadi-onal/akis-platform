@@ -1,7 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useConversationState } from '../useConversationState';
 import type { PipelineStage } from '../../types/pipeline';
+
+vi.mock('../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: () => {},
+  }),
+}));
 
 describe('useConversationState', () => {
   // ── uiState mapping ──────────────────────────────
@@ -23,7 +33,7 @@ describe('useConversationState', () => {
       // T5: display-only rename — Critic → Değerlendirme
       expect(result.current.runningAgentName).toBe('Değerlendirme');
       expect(result.current.showCancelButton).toBe(true);
-      expect(result.current.inputPlaceholder).toContain('Değerlendirme');
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.criticRunning');
     });
 
     it('maps awaiting_approval to awaiting_approval', () => {
@@ -154,62 +164,52 @@ describe('useConversationState', () => {
   describe('inputPlaceholder', () => {
     it('shows clarification prompt when scribe is asking questions', () => {
       const { result } = renderHook(() => useConversationState('scribe_clarifying'));
-      expect(result.current.inputPlaceholder).toContain('Soruları yanıtlayın');
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.scribeClarifying');
     });
 
     it('shows approval prompt when awaiting approval', () => {
       const { result } = renderHook(() => useConversationState('awaiting_approval'));
-      expect(result.current.inputPlaceholder).toContain('onaylayın');
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.awaitingApproval');
     });
 
     it('shows agent running message when scribe is generating', () => {
       const { result } = renderHook(() => useConversationState('scribe_generating'));
-      expect(result.current.inputPlaceholder).toContain('Scribe');
-      expect(result.current.inputPlaceholder).toContain('çalışıyor');
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.scribeRunning');
     });
 
     it('shows terminal-state placeholder after completion', () => {
       const { result } = renderHook(() => useConversationState('completed'));
-      expect(result.current.inputPlaceholder).toContain('Projeniz hazır');
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.completed');
     });
 
-    // B4 (2026-05-23) regression: syncFromStage('failed') on a no-initial-stage
-    // hook used to leave the placeholder stuck on "Projenizi anlatın..." because
-    // currentStageRef was a ref (not a useState dep) and uiState='idle' stayed
-    // unchanged. The placeholder should now switch to the failed-state copy.
     it('updates terminal placeholder when syncFromStage transitions from initial idle to failed', () => {
       const { result } = renderHook(() => useConversationState());
-      expect(result.current.inputPlaceholder).toBe('Projenizi anlatın...');
+      expect(result.current.inputPlaceholder).toBe('chat.input.placeholder');
 
       act(() => {
         result.current.syncFromStage('failed');
       });
 
-      expect(result.current.inputPlaceholder).toContain('Pipeline başarısız');
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.failed');
     });
 
     it('updates terminal placeholder when syncFromStage transitions from initial idle to completed', () => {
       const { result } = renderHook(() => useConversationState());
-      expect(result.current.inputPlaceholder).toBe('Projenizi anlatın...');
+      expect(result.current.inputPlaceholder).toBe('chat.input.placeholder');
 
       act(() => {
         result.current.syncFromStage('completed');
       });
 
-      expect(result.current.inputPlaceholder).toContain('Projeniz hazır');
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.completed');
     });
 
-    // P8 — critic hard-block placeholder
     it('shows critic-resolution prompt when blocked', () => {
       const { result } = renderHook(() =>
         useConversationState('awaiting_critic_resolution' as PipelineStage)
       );
       expect(result.current.uiState).toBe('awaiting_critic_resolution');
-      expect(result.current.inputPlaceholder).toContain('Kritik bulgu');
-      // PR-A Fix 2: 'sağdaki butonu' was ambiguous — now the placeholder
-      // names both the location ('sağ panel') and the button label.
-      expect(result.current.inputPlaceholder).toContain('sağ paneldeki');
-      expect(result.current.inputPlaceholder).toContain("'Yine de devam et'");
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.awaitingCriticResolution');
     });
   });
 

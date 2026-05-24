@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import type { ConversationUIState } from '../types/chat';
 import type { PipelineStage } from '../types/pipeline';
 import { mapStageToUIState, getRunningAgentName } from '../utils/mapPipelineEvent';
+import { useI18n } from '../i18n/useI18n';
 
 interface ConversationStateReturn {
   uiState: ConversationUIState;
@@ -22,6 +23,7 @@ const RUNNING_STATES: ConversationUIState[] = [
 ];
 
 export function useConversationState(initialStage?: PipelineStage): ConversationStateReturn {
+  const { t } = useI18n();
   const [uiState, setUIState] = useState<ConversationUIState>(
     initialStage ? mapStageToUIState(initialStage) : 'idle'
   );
@@ -49,37 +51,32 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
   const runningAgentName = getRunningAgentName(uiState);
 
   const inputPlaceholder = useMemo(() => {
-    if (uiState === 'scribe_clarifying') return 'Soruları yanıtlayın...';
-    if (uiState === 'awaiting_approval') return 'Planı düzenlemek için yazın veya onaylayın...';
+    if (uiState === 'scribe_clarifying') return t('chat.placeholder.scribeClarifying');
+    if (uiState === 'awaiting_approval') return t('chat.placeholder.awaitingApproval');
     if (uiState === 'awaiting_push_confirm')
       // PDP-3 T3 (preview-unify): the right Preview Panel hosts the
       // confirm/cancel buttons; the chat is the primary surface for
       // free-form corrections (FEEDBACK intent → iterateWithFeedback).
-      return "Ne değişsin? Örn: 'renkleri pembe yap'. Veya sağdaki butonla GitHub'a gönder.";
+      return t('chat.placeholder.awaitingPushConfirm');
     if (uiState === 'awaiting_critic_resolution')
-      // P8 + PR-A Fix 2: critic flagged bulgu(s) — chat-driven düzelt or the
-      // right-pane 'Yine de devam et' override are the two ways forward.
-      // Spell out which panel and which button so users find the action
-      // without scanning the whole screen.
-      return "Kritik bulgu bulundu — düzeltmek için chat'e yaz ya da sağ paneldeki 'Yine de devam et' butonuna bas.";
+      // P8 + PR-A Fix 2: critic flagged bulgu(s) — chat-driven fix or the
+      // right-pane override button are the two ways forward.
+      return t('chat.placeholder.awaitingCriticResolution');
     if (uiState === 'scribe_running' || uiState === 'scribe_revise')
-      return 'Scribe çalışıyor... Mesaj bırakabilirsiniz.';
-    // T5: display-only rename — Critic → Değerlendirme
-    if (uiState === 'critic_running') return 'Değerlendirme inceliyor... Mesaj bırakabilirsiniz.';
-    if (uiState === 'proto_running') return 'Proto scaffold oluşturuyor... Mesaj bırakabilirsiniz.';
-    if (uiState === 'trace_running') return 'Trace test yazıyor... Mesaj bırakabilirsiniz.';
-    if (uiState === 'ci_running') return 'CI çalışıyor... Mesaj bırakabilirsiniz.';
+      return t('chat.placeholder.scribeRunning');
+    // T5: display-only rename — Critic → Evaluator
+    if (uiState === 'critic_running') return t('chat.placeholder.criticRunning');
+    if (uiState === 'proto_running') return t('chat.placeholder.protoRunning');
+    if (uiState === 'trace_running') return t('chat.placeholder.traceRunning');
+    if (uiState === 'ci_running') return t('chat.placeholder.ciRunning');
     // Terminal states
     if (uiState === 'idle' && currentStage) {
-      if (currentStage === 'completed')
-        return 'Projeniz hazır! Değişiklik isteği yazarak yeni iterasyon başlatın.';
-      if (currentStage === 'completed_partial')
-        return 'Pipeline kısmen tamamlandı. Değişiklik isteği yazabilirsiniz.';
-      if (currentStage === 'failed')
-        return 'Pipeline başarısız oldu. Yeniden deneyebilir veya sorununuzu yazabilirsiniz.';
+      if (currentStage === 'completed') return t('chat.placeholder.completed');
+      if (currentStage === 'completed_partial') return t('chat.placeholder.completedPartial');
+      if (currentStage === 'failed') return t('chat.placeholder.failed');
     }
-    return 'Projenizi anlatın...';
-  }, [uiState, currentStage]);
+    return t('chat.input.placeholder');
+  }, [uiState, currentStage, t]);
 
   return {
     uiState,

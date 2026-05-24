@@ -543,11 +543,11 @@ class RealAIService implements AIService {
   ): { endpoint: string; headers: Record<string, string>; body: Record<string, unknown> } {
     const apiKey = this.config.apiKey!;
     const endpoint =
-      `${this.config.baseUrl}/models/${encodeURIComponent(model)}:generateContent` +
-      `?key=${encodeURIComponent(apiKey)}`;
+      `${this.config.baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
     };
 
     // Separate system prompts (Gemini puts them in `systemInstruction`, not contents[]).
@@ -1656,17 +1656,34 @@ export function createToolCallingClient(
       ...(systemForBody !== undefined && { system: systemForBody }),
     };
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': resolvedConfig.apiKey!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(body),
-    });
+    const MAX_TOOL_RETRIES = 3;
+    const RETRY_DELAY_MS = 1000;
 
-    if (!response.ok) {
+    for (let attempt = 0; attempt <= MAX_TOOL_RETRIES; attempt++) {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': resolvedConfig.apiKey!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.ok) {
+        return (await response.json()) as AnthropicResponse;
+      }
+
+      const isRetryable = [429, 500, 502, 503, 504].includes(response.status);
+      if (isRetryable && attempt < MAX_TOOL_RETRIES) {
+        const retryAfter = response.headers.get('retry-after');
+        const delay = retryAfter
+          ? parseInt(retryAfter) * 1000
+          : RETRY_DELAY_MS * Math.pow(2, attempt);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+
       const errorText = await response.text().catch(() => 'Unknown error');
       throw new AIProviderError(
         'AI_PROVIDER_ERROR',
@@ -1676,7 +1693,13 @@ export function createToolCallingClient(
       );
     }
 
-    return (await response.json()) as AnthropicResponse;
+    // Should not reach here, but satisfy TypeScript
+    throw new AIProviderError(
+      'AI_PROVIDER_ERROR',
+      'Tool-calling request failed after retries',
+      resolvedConfig.provider,
+      500
+    );
   };
 }
 
