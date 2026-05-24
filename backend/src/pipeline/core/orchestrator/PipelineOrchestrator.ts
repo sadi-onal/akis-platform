@@ -1845,7 +1845,7 @@ export class PipelineOrchestrator {
           undefined,
           'pipeline.critic.code.done',
           {
-            decision: criticResult.approved ? 'Kod onaylandı' : 'Kod reddedildi',
+            decision: criticResult.approved ? 'Kod uygun bulundu' : 'Kod düzeltme gerekli',
             snippet: criticResult.summary,
             confidence: criticResult.overallScore ?? 0,
           }
@@ -1972,11 +1972,7 @@ export class PipelineOrchestrator {
           // Chat narrator: emit proto_completed for THIS rejected iteration
           // before dispatching the retry. The next iteration's
           // `runProtoAndTrace` will append its own pair of proto events.
-          await this.emitProtoCompletedForIteration(
-            pipelineId,
-            protoIteration,
-            protoResult.data
-          );
+          await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
           // Activity emit — Critic retry-trigger surfaces on Proto column
           // ("Critic düzeltiyor (n/max)" badge).
           const criticIterateEmit = createActivityEmitter(pipelineId, 'critic', {
@@ -2029,11 +2025,7 @@ export class PipelineOrchestrator {
         // Chat narrator: emit proto_completed for the iteration that
         // triggered the hard-block so the user sees the gate-causing
         // Proto bubble with critic findings as sub-steps.
-        await this.emitProtoCompletedForIteration(
-          pipelineId,
-          protoIteration,
-          protoResult.data
-        );
+        await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
         this.emitEvent(pipelineId, 'stage_change', 'awaiting_critic_resolution');
         // PR-T3 S1: aynı `gate_open` pattern'i — frontend SSE üzerinden
         // bu transition'ı kaçırmasın diye sentetik bir activity yayınla.
@@ -3140,7 +3132,7 @@ export class PipelineOrchestrator {
             undefined,
             'pipeline.critic.spec.done',
             {
-              decision: criticResult.approved ? 'Spec onaylandı' : 'Spec reddedildi',
+              decision: criticResult.approved ? 'Spec uygun bulundu' : 'Spec düzeltme gerekli',
               snippet: criticResult.summary,
               confidence: criticResult.overallScore ?? 0,
             }
@@ -3156,7 +3148,10 @@ export class PipelineOrchestrator {
         // Store critic output in intermediateState (merge with existing keys)
         if (criticResult) {
           const currentPipelineForCritic = await this.store.getById(pipelineId);
-          const existingCriticState = (currentPipelineForCritic?.intermediateState ?? {}) as Record<string, unknown>;
+          const existingCriticState = (currentPipelineForCritic?.intermediateState ?? {}) as Record<
+            string,
+            unknown
+          >;
           await this.store.update(pipelineId, {
             intermediateState: { ...existingCriticState, criticSpecOutput: criticResult },
           });
@@ -3190,8 +3185,7 @@ export class PipelineOrchestrator {
           // Chat narrator (2026-05-23): emit scribe_completed event into the
           // same conversation snapshot. subSteps include Critic findings.
           // Iteration counter = prior scribe_completed events + 1.
-          const scribeIterationAuto =
-            this.countPriorEvents(conversation, 'scribe_completed') + 1;
+          const scribeIterationAuto = this.countPriorEvents(conversation, 'scribe_completed') + 1;
           const scribeSubStepsAuto = this.buildSubStepsForStage(
             {
               ...currentPipeline,
@@ -3901,7 +3895,8 @@ export class PipelineOrchestrator {
 
     // Clear stale traceDryRun status from the previous failed attempt
     const existingTraceState = (p.intermediateState ?? {}) as Record<string, unknown>;
-    const { traceDryRunStatus, traceDryRunErrorCode, traceDryRunErrorAt, ...cleanTraceState } = existingTraceState;
+    const { traceDryRunStatus, traceDryRunErrorCode, traceDryRunErrorAt, ...cleanTraceState } =
+      existingTraceState;
     if (traceDryRunStatus || traceDryRunErrorCode || traceDryRunErrorAt) {
       await this.store.update(pipelineId, { intermediateState: cleanTraceState });
     }
@@ -4871,7 +4866,12 @@ export class PipelineOrchestrator {
    * fresh state right before the update; bail out if terminal.
    */
   private isTerminalStage(stage: PipelineStage): boolean {
-    return stage === 'cancelled' || stage === 'failed' || stage === 'completed' || stage === 'completed_partial';
+    return (
+      stage === 'cancelled' ||
+      stage === 'failed' ||
+      stage === 'completed' ||
+      stage === 'completed_partial'
+    );
   }
 
   private async dispatchTraceIterate(pipelineId: string, feedback: string): Promise<void> {

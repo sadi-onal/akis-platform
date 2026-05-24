@@ -84,7 +84,7 @@ export function buildProtoReasoning(
         : []),
       ...(output.summary ? [output.summary] : []),
     ],
-    assumptions: ['Spec onaylandı ve iskelet için yeterli ayrıntıdaydı'],
+    assumptions: ['Spec uygun bulundu ve iskelet için yeterli ayrıntıdaydı'],
     confidence: {
       score: confidenceScore,
       factors: [
@@ -142,11 +142,11 @@ export function buildCriticReasoning(
   const decisionLabel =
     opts.reviewType === 'spec'
       ? result.approved
-        ? 'Spec onaylandı'
-        : 'Spec reddedildi'
+        ? 'Spec uygun bulundu'
+        : 'Spec düzeltme gerekli'
       : result.approved
-        ? 'Kod onaylandı'
-        : 'Kod reddedildi';
+        ? 'Kod uygun bulundu'
+        : 'Kod düzeltme gerekli';
   const criticalAndMajor =
     result.findings
       ?.filter((f) => f.severity === 'critical' || f.severity === 'major')
@@ -270,9 +270,7 @@ export function buildIterationTrajectory(
   const firstScore = sorted[0]?.criticScore;
   const lastScore = sorted[sorted.length - 1]?.criticScore;
   const criticScoreDelta =
-    typeof firstScore === 'number' && typeof lastScore === 'number'
-      ? lastScore - firstScore
-      : null;
+    typeof firstScore === 'number' && typeof lastScore === 'number' ? lastScore - firstScore : null;
   const finalDecision = sorted[sorted.length - 1]?.decision ?? null;
   return {
     entries: sorted,
@@ -280,4 +278,3 @@ export function buildIterationTrajectory(
     finalDecision: finalDecision ?? null,
   };
 }
-

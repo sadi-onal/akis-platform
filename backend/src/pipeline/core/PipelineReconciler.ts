@@ -19,8 +19,12 @@ const STUCK_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 const RUNNING_STAGES: PipelineStage[] = [
   'scribe_generating',
   'scribe_clarifying', // only if genuinely abandoned (user never answered)
+  'critic_reviewing_spec',
+  'critic_reviewing_code',
   'proto_building',
   'trace_testing',
+  'fix_loop_iteration',
+  'ci_running',
 ];
 
 type StuckEventKind = 'trace_failed' | 'scribe_failed' | 'proto_failed';

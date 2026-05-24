@@ -370,12 +370,12 @@ describe('buildTraceReasoning', () => {
 describe('buildCriticReasoning', () => {
   it('uses spec-specific decision label for spec review', () => {
     const r = buildCriticReasoning(makeCriticResult({ approved: true }), { reviewType: 'spec' });
-    assert.equal(r.decision, 'Spec onaylandı');
+    assert.equal(r.decision, 'Spec uygun bulundu');
   });
 
   it('uses code-specific decision label for code review', () => {
     const r = buildCriticReasoning(makeCriticResult({ approved: false }), { reviewType: 'code' });
-    assert.equal(r.decision, 'Kod reddedildi');
+    assert.equal(r.decision, 'Kod düzeltme gerekli');
   });
 
   it('elevates critical and major findings to risks', () => {
