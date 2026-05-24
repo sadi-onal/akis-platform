@@ -388,7 +388,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         await requireAdmin(request);
-        const { id } = (request.params as { id: string });
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
 
         const [source] = await db
           .select()
@@ -429,7 +429,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         await requireAdmin(request);
-        const { id } = (request.params as { id: string });
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
         const body = updateSourceSchema.parse(request.body);
 
         const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -468,7 +468,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         await requireAdmin(request);
-        const { id } = (request.params as { id: string });
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
 
         const [deactivated] = await db
           .update(knowledgeSources)
@@ -819,7 +819,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
         throw err;
       }
 
-      const { id } = request.params as { id: string };
+      const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
       const approved = await repoDocsIngester.approveDocument(id);
       if (!approved) {
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Knowledge document not found' } });
@@ -854,7 +854,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
         throw err;
       }
 
-      const { id } = request.params as { id: string };
+      const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
       const deprecated = await repoDocsIngester.deprecateDocument(id);
       if (!deprecated) {
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Knowledge document not found' } });

@@ -55,7 +55,7 @@ interface UsePipelineStreamResult {
 
 export function usePipelineStream(
   pipelineId: string | undefined,
-  isActive: boolean
+  _isActive: boolean
 ): UsePipelineStreamResult {
   const [activities, setActivities] = useState<PipelineActivity[]>([]);
   const [createdFiles, setCreatedFiles] = useState<string[]>([]);
@@ -92,9 +92,6 @@ export function usePipelineStream(
       if (activity.step === 'file_created' && activity.detail) {
         setCreatedFiles((prev) => [...prev, activity.detail!]);
       }
-      if (activity.stage !== 'proto') {
-        setCreatedFiles([]);
-      }
     };
 
     // Always hydrate buffered activities for the pipeline — even when
@@ -122,7 +119,6 @@ export function usePipelineStream(
     // backend manages connection lifecycle (heartbeat + 30-min max-age) so
     // dangling connections are bounded. `isActive` is now informational
     // only — we still hydrate buffered activities first.
-    void isActive;
 
     function connect() {
       if (cancelled) return;
@@ -166,7 +162,17 @@ export function usePipelineStream(
       esRef.current = null;
       setIsConnected(false);
     };
-  }, [pipelineId, isActive]);
+  }, [pipelineId]);
+
+  // Close SSE when pipeline becomes inactive (completed/failed/cancelled)
+  // to avoid zombie connections hitting browser connection limits.
+  useEffect(() => {
+    if (!_isActive && esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+      setIsConnected(false);
+    }
+  }, [_isActive]);
 
   const currentStep = activities.length > 0 ? activities[activities.length - 1] : null;
 

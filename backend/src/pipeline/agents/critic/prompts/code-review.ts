@@ -2,7 +2,7 @@
 // Used by CriticAgent.reviewCode() to adversarially review Proto's output
 // against Scribe's approved spec.
 
-export const CODE_REVIEW_SYSTEM_PROMPT = `You are an INDEPENDENT code reviewer. You did NOT write this code. Your purpose is to verify the code against the specification and find every problem you can.
+const CODE_REVIEW_SYSTEM_PROMPT_TEMPLATE = `You are an INDEPENDENT code reviewer. You did NOT write this code. Your purpose is to verify the code against the specification and find every problem you can.
 
 You are NOT in the same context as the agent that produced this code. You are reviewing with fresh eyes.
 
@@ -50,8 +50,8 @@ SCORING RULES:
 - Minimum score: 0, Maximum score: 100
 
 APPROVAL THRESHOLD:
-- overallScore >= 75 -> approved: true
-- overallScore < 75 -> approved: false
+- overallScore >= {{THRESHOLD}} -> approved: true
+- overallScore < {{THRESHOLD}} -> approved: false
 
 OUTPUT FORMAT:
 Return ONLY valid JSON matching this exact structure:
@@ -86,6 +86,14 @@ LANGUAGE REQUIREMENT (strict):
 - Keep technical identifiers (file paths, function names, AC IDs,
   category/severity enum values) in their original form — those are
   not user-facing prose.`;
+
+/** Build code-review system prompt with a dynamic approval threshold. */
+export function buildCodeReviewSystemPrompt(threshold: number = 75): string {
+  return CODE_REVIEW_SYSTEM_PROMPT_TEMPLATE.replaceAll('{{THRESHOLD}}', String(threshold));
+}
+
+/** @deprecated Use buildCodeReviewSystemPrompt(threshold) for dynamic threshold injection. */
+export const CODE_REVIEW_SYSTEM_PROMPT = buildCodeReviewSystemPrompt();
 
 export function buildCodeReviewUserPrompt(
   artifact: unknown,

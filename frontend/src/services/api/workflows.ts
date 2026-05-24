@@ -63,16 +63,33 @@ function mapStageStatus(
       stages.scribe.status = 'running';
       workflowStatus = 'running';
       break;
+    case 'critic_reviewing_spec':
+      stages.scribe.status = 'completed';
+      workflowStatus = 'running';
+      break;
     case 'awaiting_approval':
       stages.scribe.status = 'completed';
       stages.approve.status = 'pending';
       workflowStatus = 'awaiting_approval';
       break;
     case 'proto_building':
+    case 'fix_loop_iteration':
       stages.scribe.status = 'completed';
       stages.approve.status = 'completed';
       stages.proto.status = 'running';
       workflowStatus = 'running';
+      break;
+    case 'critic_reviewing_code':
+      stages.scribe.status = 'completed';
+      stages.approve.status = 'completed';
+      stages.proto.status = 'completed';
+      workflowStatus = 'running';
+      break;
+    case 'awaiting_critic_resolution':
+      stages.scribe.status = 'completed';
+      stages.approve.status = 'completed';
+      stages.proto.status = 'completed';
+      workflowStatus = 'awaiting_approval';
       break;
     case 'awaiting_push_confirm':
       // PDP-3 B4: Proto generated the scaffold but is awaiting the user's
@@ -89,6 +106,13 @@ function mapStageStatus(
       stages.approve.status = 'completed';
       stages.proto.status = 'completed';
       stages.trace.status = 'running';
+      workflowStatus = 'running';
+      break;
+    case 'ci_running':
+      stages.scribe.status = 'completed';
+      stages.approve.status = 'completed';
+      stages.proto.status = 'completed';
+      stages.trace.status = 'completed';
       workflowStatus = 'running';
       break;
     case 'completed':

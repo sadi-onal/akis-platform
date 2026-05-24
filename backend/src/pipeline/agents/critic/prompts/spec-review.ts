@@ -1,7 +1,7 @@
 // ─── Spec Review Prompt ──────────────────────────
 // Used by CriticAgent.reviewSpec() to adversarially review Scribe's output.
 
-export const SPEC_REVIEW_SYSTEM_PROMPT = `You are an INDEPENDENT spec reviewer. You did NOT write this spec. Your purpose is to find every problem you can.
+const SPEC_REVIEW_SYSTEM_PROMPT_TEMPLATE = `You are an INDEPENDENT spec reviewer. You did NOT write this spec. Your purpose is to find every problem you can.
 
 You are NOT in the same context as the agent that produced this spec. You are reviewing with fresh eyes.
 
@@ -71,8 +71,8 @@ SCORING RULES:
 - Minimum score: 0, Maximum score: 100
 
 APPROVAL THRESHOLD:
-- overallScore >= 75 -> approved: true
-- overallScore < 75 -> approved: false
+- overallScore >= {{THRESHOLD}} -> approved: true
+- overallScore < {{THRESHOLD}} -> approved: false
 
 OUTPUT FORMAT:
 Return ONLY valid JSON matching this exact structure:
@@ -111,6 +111,14 @@ LANGUAGE REQUIREMENT (strict):
   alır' ifadesi belirsiz; otomatik test için tek bir görsel kontrol
   seçilmeli.", "suggestion": "Hangi seçeneğin baseline olduğunu
   belirtin: 'üzeri çizili' VEYA 'gri renk', ikisi birden değil."}`;
+
+/** Build spec-review system prompt with a dynamic approval threshold. */
+export function buildSpecReviewSystemPrompt(threshold: number = 75): string {
+  return SPEC_REVIEW_SYSTEM_PROMPT_TEMPLATE.replaceAll('{{THRESHOLD}}', String(threshold));
+}
+
+/** @deprecated Use buildSpecReviewSystemPrompt(threshold) for dynamic threshold injection. */
+export const SPEC_REVIEW_SYSTEM_PROMPT = buildSpecReviewSystemPrompt();
 
 export function buildSpecReviewUserPrompt(
   artifact: unknown,

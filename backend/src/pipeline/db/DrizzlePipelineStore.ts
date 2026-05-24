@@ -66,6 +66,9 @@ function rowToState(row: typeof pipelines.$inferSelect): PipelineState {
     metrics: parseMetrics(row.metrics as Record<string, unknown> | null),
     error: row.error as PipelineState['error'],
     intermediateState: row.intermediateState as PipelineState['intermediateState'],
+    // H-7: Extract autoApprove fields from intermediateState JSONB
+    autoApproveEnabled: (row.intermediateState as Record<string, unknown> | null)?.autoApproveEnabled as boolean | undefined,
+    autoApproveThreshold: (row.intermediateState as Record<string, unknown> | null)?.autoApproveThreshold as number | undefined,
     attemptCount: row.attemptCount,
     stageVersion: row.stageVersion,
     createdAt: row.createdAt,
@@ -182,6 +185,25 @@ export class DrizzlePipelineStore implements PipelineStore {
     if (data.repoContext !== undefined) updateData.repoContext = data.repoContext;
     if (data.traceEnabled !== undefined) updateData.traceEnabled = data.traceEnabled;
     if (data.attemptCount !== undefined) updateData.attemptCount = data.attemptCount;
+
+    // H-7: Persist autoApprove fields — no dedicated DB columns, so merge
+    // into the intermediateState JSONB alongside any existing payload.
+    if (data.autoApproveEnabled !== undefined || data.autoApproveThreshold !== undefined) {
+      // Read current DB row's intermediateState to avoid overwriting existing keys
+      const [currentRow] = await this.db
+        .select({ intermediateState: pipelines.intermediateState })
+        .from(pipelines)
+        .where(eq(pipelines.id, id))
+        .limit(1);
+      const existingIntermediate =
+        (updateData.intermediateState as Record<string, unknown> | undefined) ??
+        (currentRow?.intermediateState as Record<string, unknown> | null) ??
+        {};
+      const merged = { ...existingIntermediate };
+      if (data.autoApproveEnabled !== undefined) merged.autoApproveEnabled = data.autoApproveEnabled;
+      if (data.autoApproveThreshold !== undefined) merged.autoApproveThreshold = data.autoApproveThreshold;
+      updateData.intermediateState = merged;
+    }
 
     // Optimistic locking: when stage changes, require version match + increment
     const isStageChange = data.stage !== undefined;

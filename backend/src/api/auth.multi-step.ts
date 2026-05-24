@@ -418,7 +418,7 @@ export async function registerMultiStepAuthRoutes(
       // Send verification code using existing service
       await verificationService.sendVerificationCode(user.id, user.email);
 
-      return { ok: true, userId: user.id, message: 'Sifre sifirlama kodu gonderildi.' };
+      return { ok: true, message: 'Eger bu e-posta kayitliysa, sifre sifirlama kodu gonderildi.' };
     } catch (err) {
       if (err instanceof z.ZodError) {
         return sendError(reply, request, 'VALIDATION_ERROR', 'Gecersiz e-posta adresi');

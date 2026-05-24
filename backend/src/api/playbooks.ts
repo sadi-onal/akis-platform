@@ -1,14 +1,16 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getAllPlaybooks, getPlaybook } from '../core/agents/playbooks/index.js';
+import { requireAuth } from '../utils/auth.js';
 
 export async function registerPlaybookRoutes(app: FastifyInstance) {
-  app.get('/api/agents/playbooks', async () => {
+  app.get('/api/agents/playbooks', { preHandler: requireAuth }, async () => {
     return { playbooks: getAllPlaybooks() };
   });
 
   app.get(
     '/api/agents/playbooks/:type',
     {
+      preHandler: requireAuth,
       schema: {
         params: {
           type: 'object',

@@ -54,6 +54,7 @@ export type AuthUser = {
   id: string;
   name: string;
   email: string;
+  role?: 'admin' | 'member';
   /** User-uploaded avatar or cached GitHub avatar; null → UI renders initials. Issue #385. */
   avatarUrl?: string | null;
   status?: string;

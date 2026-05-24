@@ -194,7 +194,8 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
     });
   });
 
-  fastify.get('/api/jobs', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/jobs', { preHandler: [requireAuth] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    // Job postings are intentionally visible to all authenticated users (marketplace)
     const query = jobsQuerySchema.parse(request.query);
 
     const [items, totalRows] = await Promise.all([

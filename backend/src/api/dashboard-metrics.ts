@@ -23,7 +23,6 @@ export async function dashboardMetricsRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/dashboard/metrics',
     {
-      preHandler: [requireAuth],
       schema: {
         description: 'Get dashboard quality and reliability metrics',
         tags: ['dashboard'],
@@ -51,11 +50,14 @@ export async function dashboardMetricsRoutes(fastify: FastifyInstance) {
       },
     },
     async (request) => {
+      const user = await requireAuth(request);
       const query = request.query as { period?: '7d' | '30d' } | undefined;
       const period = query?.period || '7d';
       const daysAgo = period === '30d' ? 30 : 7;
       const since = new Date();
       since.setDate(since.getDate() - daysAgo);
+
+      const userIdFilter = eq(sql`(${jobs.payload}->>'userId')::text`, user.id);
 
       // Get aggregate stats
       const [stats] = await db
@@ -66,7 +68,7 @@ export async function dashboardMetricsRoutes(fastify: FastifyInstance) {
           avgQualityScore: sql<number | null>`avg(${jobs.qualityScore})::float`,
         })
         .from(jobs)
-        .where(gte(jobs.createdAt, since));
+        .where(and(gte(jobs.createdAt, since), userIdFilter));
 
       // Get top failure reason
       const failureReasons = await db
@@ -78,7 +80,8 @@ export async function dashboardMetricsRoutes(fastify: FastifyInstance) {
         .where(
           and(
             gte(jobs.createdAt, since),
-            eq(jobs.state, 'failed')
+            eq(jobs.state, 'failed'),
+            userIdFilter
           )
         )
         .groupBy(jobs.errorCode)

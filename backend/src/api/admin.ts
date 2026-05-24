@@ -3,13 +3,13 @@
  * GET /api/admin/logs returns recent in-memory log buffer.
  */
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../utils/auth.js';
+import { requireAdmin } from '../utils/auth.js';
 import { getLogs } from '../lib/logBuffer.js';
 
 export async function adminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/logs',
-    { preHandler: requireAuth },
+    { preHandler: requireAdmin },
     async (request, reply) => {
       const query = request.query as { level?: string; limit?: string; since?: string };
       const level = query.level ?? 'info';

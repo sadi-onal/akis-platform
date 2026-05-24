@@ -4826,7 +4826,7 @@ export class PipelineOrchestrator {
    * fresh state right before the update; bail out if terminal.
    */
   private isTerminalStage(stage: PipelineStage): boolean {
-    return stage === 'cancelled' || stage === 'failed' || stage === 'completed';
+    return stage === 'cancelled' || stage === 'failed' || stage === 'completed' || stage === 'completed_partial';
   }
 
   private async dispatchTraceIterate(pipelineId: string, feedback: string): Promise<void> {

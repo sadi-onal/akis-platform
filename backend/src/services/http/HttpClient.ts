@@ -94,12 +94,11 @@ export class HttpClient {
       }
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.defaultTimeout);
-
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= this.defaultRetries; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.defaultTimeout);
       try {
         const response = await fetch(url, {
           ...init,
@@ -109,6 +108,7 @@ export class HttpClient {
         clearTimeout(timeoutId);
         return response;
       } catch (error) {
+        clearTimeout(timeoutId);
         lastError = error instanceof Error ? error : new Error(String(error));
         if (attempt < this.defaultRetries) {
           // Exponential backoff
@@ -118,7 +118,6 @@ export class HttpClient {
       }
     }
 
-    clearTimeout(timeoutId);
     throw lastError || new Error('Request failed after retries');
   }
 }
