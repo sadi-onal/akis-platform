@@ -225,6 +225,9 @@ AKIS_*_PLAN.md
 # Worktrees (superpowers)
 .worktrees/
 
+# Brainstorming companion mockups (superpowers)
+.superpowers/
+
 # Coverage outputs (PDP-3 tooling)
 frontend/coverage/
 backend/coverage/

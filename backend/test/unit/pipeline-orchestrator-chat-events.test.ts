@@ -36,6 +36,8 @@ import type {
 import type { ProtoAgent } from '../../src/pipeline/agents/proto/ProtoAgent.js';
 import type { TraceAgent } from '../../src/pipeline/agents/trace/TraceAgent.js';
 import type { ScribeAgent } from '../../src/pipeline/agents/scribe/ScribeAgent.js';
+import type { CriticAgent } from '../../src/pipeline/agents/critic/CriticAgent.js';
+import type { CriticReviewOutput } from '../../src/pipeline/agents/critic/CriticTypes.js';
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 
@@ -309,8 +311,17 @@ describe('Orchestrator — chat event log: proto events (Task 2)', () => {
 
     assert.strictEqual(started.content.iteration, 1, 'proto_started iteration should be 1');
     assert.strictEqual(completed.content.iteration, 1, 'proto_completed iteration should be 1');
-    assert.strictEqual(completed.content.filesCreated, 5, 'filesCreated should match ProtoOutput');
-    assert.strictEqual(completed.content.totalLines, 150, 'totalLines should match ProtoOutput');
+    // Code-review follow-up 2026-05-23: appendProtoCompleted now runs AFTER
+    // applyArtifactInjection (PRD.md + TECHNICAL-ANALYSIS.md), so the chat
+    // event reflects the post-injection file count (5 user-files + 2 docs).
+    assert.ok(
+      completed.content.filesCreated >= 5,
+      `filesCreated should reflect post-injection count (got ${completed.content.filesCreated})`
+    );
+    assert.ok(
+      typeof completed.content.totalLines === 'number' && completed.content.totalLines > 0,
+      'totalLines should be a positive number'
+    );
     assert.strictEqual(
       completed.content.summary,
       'Sayaç hazır.',
@@ -511,6 +522,89 @@ describe('Orchestrator — chat event log: trace events (Task 3)', () => {
         .iteration,
       1,
       'trace_started iteration should be 1'
+    );
+  });
+});
+
+// ─── Code-review follow-up 2026-05-23 (Issue 8) ─────────────────────
+//
+// Behavioral test for Task 5's `buildSubStepsForStage` → `scribe_completed`
+// wiring. The existing shape-only tests would pass even if `appendProtoCompleted`
+// was never called or `buildSubStepsForStage` returned `[]`; this asserts the
+// actual end-to-end behavior: when Critic flags findings on Scribe's output,
+// the persisted `scribe_completed` event has a sub-step row sourced from the
+// critic and the label mentions the finding count.
+
+describe('Orchestrator — chat narrator: Scribe sub-steps reflect criticSpecOutput', () => {
+  it('Scribe completion: subSteps from buildSubStepsForStage reflect criticSpecOutput', async () => {
+    const CRITIC_SPEC_OUTPUT: CriticReviewOutput = {
+      approved: true,
+      overallScore: 78,
+      findings: [
+        {
+          severity: 'minor',
+          category: 'completeness',
+          description: 'Tasarım sistemi tanımlanmamış',
+          suggestion: 'Renk paletini netleştir',
+        },
+        {
+          severity: 'minor',
+          category: 'ambiguity',
+          description: 'Mobil davranış belirsiz',
+          suggestion: 'Responsive davranışı sabitle',
+        },
+      ],
+      summary: 'Spec genel olarak iyi, küçük eksiklikler var.',
+      reviewType: 'spec_review',
+      iteration: 1,
+      hasCriticalFinding: false,
+      maxSeverity: 'minor',
+    };
+
+    const mockCritic = {
+      reviewSpec: async () => ({ type: 'review' as const, data: CRITIC_SPEC_OUTPUT }),
+      reviewCode: async () => ({ type: 'review' as const, data: CRITIC_SPEC_OUTPUT }),
+      getApprovalThreshold: () => 75,
+    } as unknown as CriticAgent;
+
+    const { orchestrator, store } = createOrchestrator();
+    orchestrator.setCriticAgent(mockCritic);
+
+    // startPipeline → runScribeAnalysis → handleScribeResult; criticAgent
+    // injects CRITIC_SPEC_OUTPUT into intermediateState; auto-approve threshold
+    // (default 85) NOT met (score=78) → pipeline halts at awaiting_approval
+    // with the scribe_completed event persisted.
+    const created = await orchestrator.startPipeline('user-substep-1', { idea: 'Sayaç yap.' });
+
+    const final = await waitForStage(
+      store,
+      created.id,
+      ['awaiting_approval', 'failed', 'completed'],
+      5_000
+    );
+
+    const conv = final.scribeConversation;
+    const completedEvents = conv.filter((m) => m.type === 'scribe_completed');
+    assert.strictEqual(
+      completedEvents.length,
+      1,
+      'should have exactly 1 scribe_completed event'
+    );
+
+    const completed = completedEvents[0] as Extract<
+      ScribeMessageType,
+      { type: 'scribe_completed' }
+    >;
+    assert.ok(
+      Array.isArray(completed.content.subSteps) && completed.content.subSteps.length > 0,
+      'scribe_completed should have non-empty subSteps'
+    );
+
+    const criticStep = completed.content.subSteps!.find((s) => s.source === 'critic');
+    assert.ok(criticStep, 'subSteps should include a critic-sourced row');
+    assert.ok(
+      criticStep!.label.includes('2'),
+      `critic substep label should reference the 2 findings (got "${criticStep!.label}")`
     );
   });
 });

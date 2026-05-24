@@ -679,19 +679,21 @@ describe('ChatMessage — agent (Proto F-6 summary leads metadata)', () => {
     expect(screen.queryByTestId('proto-meta-secondary')).not.toBeInTheDocument();
   });
 
-  it('does NOT apply Proto layout to Scribe rows even with summary-like fields', () => {
-    // Scribe narration rows must keep the legacy single-paragraph rendering.
+  it('Scribe rows with summary show the summary, but NOT Proto-specific meta', () => {
+    // Chat narrator (2026-05-23): all agents now render summary when present.
+    // Proto-specific metadata (totalFiles/totalLines/branch shown as a
+    // secondary line) should still NOT appear on Scribe rows — the
+    // `proto-meta-secondary` testid is scoped to agent === 'proto'.
     const msg = {
       type: 'agent',
       agent: 'scribe',
       content: 'Spec hazırlanıyor',
-      summary: 'this should be ignored on scribe',
+      summary: 'Scribe özeti burada',
       totalFiles: 7,
       timestamp: TS,
     } as unknown as ChatMessageType;
     render(<ChatMessage message={msg} />);
-    expect(screen.getByText('Spec hazırlanıyor')).toBeInTheDocument();
-    expect(screen.queryByTestId('proto-summary-primary')).not.toBeInTheDocument();
+    expect(screen.getByText('Scribe özeti burada')).toBeInTheDocument();
     expect(screen.queryByTestId('proto-meta-secondary')).not.toBeInTheDocument();
   });
 

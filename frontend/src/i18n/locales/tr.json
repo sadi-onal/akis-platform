@@ -1165,5 +1165,13 @@
   "sidebar.group.thisWeek": "Bu Hafta",
   "sidebar.group.older": "Daha Eski",
 
-  "app.loading": "Yükleniyor…"
+  "app.loading": "Yükleniyor…",
+
+  "chat.narrator.live_under_one_minute": "1 dakikadan az",
+  "chat.narrator.live_minutes_running_one": "1 dakikadır çalışıyor",
+  "chat.narrator.live_minutes_running_n": "{{count}} dakikadır çalışıyor",
+  "chat.narrator.iteration_badge": "İterasyon {{n}}",
+  "chat.narrator.substep_toggle": "{{count}} adım",
+  "chat.narrator.unit_files": "{{n}} dosya",
+  "chat.narrator.unit_lines": "{{n}} satır"
 }

@@ -55,6 +55,14 @@ export function conversationToChatMessages(
 ): ChatMessage[] {
   const msgs: ChatMessage[] = [];
   let specSeen = false;
+  // Chat narrator (2026-05-23) — when the event-log already contains a
+  // `scribe_completed` row, the rendered Scribe bubble embeds the plan card
+  // (`embeddedPlan`) directly. Suppress the legacy standalone `'plan'`
+  // ChatMessage in that case so the user doesn't see the same plan twice.
+  // Older pipelines (without scribe_completed) keep the standalone fallback.
+  const scribeCompletedExists = conv.some(
+    (m) => (m as { type?: string }).type === 'scribe_completed'
+  );
   // Track whether we've already emitted a marker for each agent in this render
   // so we don't duplicate when the conversation already contained a transition
   // signal (e.g. spec_approved → proto marker).
@@ -105,6 +113,25 @@ export function conversationToChatMessages(
       case 'scribe':
       case 'proto':
       case 'trace':
+        // Chat narrator (2026-05-23) — `scribe_completed` row builds a Scribe
+        // agent bubble with embedded plan, summary, sub-steps, and a
+        // server-truth `durationMs`. Handled ahead of the legacy spec /
+        // clarification / trace_result branches because its `role` is
+        // 'scribe' but its `type` doesn't match any of them.
+        if (m.type === 'scribe_completed') {
+          msgs.push({
+            type: 'agent',
+            agent: 'scribe',
+            content: m.summary ?? m.content ?? 'Plan hazırlandı.',
+            timestamp: ts,
+            ...(m.summary ? { summary: m.summary } : {}),
+            ...(m.iteration !== undefined ? { iteration: m.iteration } : {}),
+            ...(m.durationMs !== undefined ? { durationMs: m.durationMs } : {}),
+            ...(m.subSteps && m.subSteps.length > 0 ? { subSteps: m.subSteps } : {}),
+            ...(m.embeddedPlan ? { embeddedPlan: m.embeddedPlan } : {}),
+          } as ChatMessage);
+          break;
+        }
         if (m.type === 'trace_result' && m.traceResult) {
           const tr = m.traceResult;
           msgs.push({
@@ -135,6 +162,14 @@ export function conversationToChatMessages(
             // originated from a `trace_completed` event so the UI can show
             // "İterasyon N" badges. Snapshot-derived messages omit this.
             ...(m.iteration !== undefined ? { iteration: m.iteration } : {}),
+            // Chat narrator (2026-05-23) — LLM Türkçe summary + server-truth
+            // duration + collapsed sub-step disclosure (includes Critic +
+            // Validator entries tagged via `source`). All optional — older
+            // pipelines (snapshot-derived rows) omit them and the renderer
+            // falls back to the numeric pass/fail/coverage block.
+            ...(m.summary ? { summary: m.summary } : {}),
+            ...(m.durationMs !== undefined ? { durationMs: m.durationMs } : {}),
+            ...(m.subSteps && m.subSteps.length > 0 ? { subSteps: m.subSteps } : {}),
           });
           // Append BDD/Gherkin spec message if features were generated
           if (tr.gherkinFeatures?.length) {
@@ -158,6 +193,14 @@ export function conversationToChatMessages(
           });
         } else if (m.type === 'spec' && m.spec) {
           specSeen = true;
+          // Chat narrator (2026-05-23) — when the conversation also contains
+          // a `scribe_completed` event, the rendered Scribe bubble embeds the
+          // plan card (DL-7). Suppress the standalone plan ChatMessage so the
+          // user doesn't see the same plan twice. Older pipelines (without
+          // `scribe_completed`) keep the snapshot-derived fallback.
+          if (scribeCompletedExists) {
+            break;
+          }
           const plan = specToUserFriendlyPlan(m.spec);
           let planStatus: 'active' | 'approved' | 'rejected' = 'active';
           if (currentStage && !PRE_APPROVAL_STAGES.includes(currentStage)) {
@@ -192,6 +235,12 @@ export function conversationToChatMessages(
                   ? { totalLines: m.protoResult.totalLines }
                   : {}),
                 ...(m.protoResult?.branch ? { branch: m.protoResult.branch } : {}),
+                // Chat narrator (2026-05-23) — server-truth duration + sub-step
+                // disclosure piggyback on the event-log payload. Older
+                // pipelines (snapshot fallback) omit them; renderer treats
+                // the absent state as "skip the footer / disclosure".
+                ...(m.durationMs !== undefined ? { durationMs: m.durationMs } : {}),
+                ...(m.subSteps && m.subSteps.length > 0 ? { subSteps: m.subSteps } : {}),
               }
             : {};
           msgs.push({
@@ -262,6 +311,19 @@ export function conversationToChatMessages(
   if (narrator && !agentMarked.has(narrator.agent)) {
     pushAgentStarted(narrator.agent, 'running', new Date().toISOString(), narrator.taskKey);
   }
+
+  // Chat narrator (2026-05-23, F-6) — stable timestamp sort so out-of-order
+  // event-log entries (system chips inserted mid-stream, late-arriving
+  // proto_completed) render in chronological order. JS Array.sort is stable
+  // (ES2019+) so ties keep their original push order. Indexed bucket-sort
+  // keys decode each timestamp once.
+  msgs.sort((a, b) => {
+    const ta = new Date((a as { timestamp: string }).timestamp).getTime();
+    const tb = new Date((b as { timestamp: string }).timestamp).getTime();
+    if (!Number.isFinite(ta) || !Number.isFinite(tb)) return 0;
+    if (ta === tb) return 0;
+    return ta - tb;
+  });
 
   return msgs;
 }

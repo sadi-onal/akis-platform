@@ -24,6 +24,20 @@ import type {
   AiCallEntry,
 } from '../../types/pipeline';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
+import { specToUserFriendlyPlan } from '../../utils/conversationToChatMessages';
+
+/**
+ * Chat narrator (2026-05-23) — Scribe spec stages where the plan card
+ * should be in `active` status (user hasn't approved yet). Used by
+ * `scribe_completed` embedded-plan assembly to decide whether to label
+ * the card as `'active'` or `'approved'`.
+ */
+const PRE_APPROVAL_STAGES: PipelineStage[] = [
+  'scribe_clarifying',
+  'scribe_generating',
+  'critic_reviewing_spec',
+  'awaiting_approval',
+];
 
 const http = new HttpClient(getApiBaseUrl());
 
@@ -183,6 +197,13 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
     const t = (m as { type?: string })?.type;
     return t === 'trace_completed' || t === 'trace_failed';
   });
+  // Chat narrator (2026-05-23) — when `scribe_completed` is present in the
+  // event log, the plan card will be embedded in the Scribe bubble instead
+  // of rendered as a standalone `spec_draft` → plan ChatMessage. Use this
+  // flag to suppress the duplicate.
+  const hasNarratedScribe = scribeConv.some(
+    (m: unknown) => (m as { type?: string })?.type === 'scribe_completed'
+  );
 
   for (const entry of scribeConv) {
     const msg = entry as ScribeMessageType;
@@ -203,7 +224,7 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
           type: 'clarification',
           content: 'Fikrini daha iyi anlayabilmem için birkaç sorum var:',
           questions: clarification?.questions ?? [],
-          timestamp: new Date().toISOString(),
+          timestamp: msg.timestamp ?? new Date().toISOString(),
         });
         break;
       }
@@ -213,12 +234,17 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
           role: 'user',
           type: 'message',
           content: typeof msg.content === 'string' ? msg.content : String(msg.content ?? ''),
-          timestamp: new Date().toISOString(),
+          timestamp: msg.timestamp ?? new Date().toISOString(),
         });
         break;
       case 'spec_draft': {
         const specOutput = msg.content as ScribeOutput | undefined;
         if (!specOutput?.spec) break;
+        // Chat narrator (2026-05-23) — when the event log contains a
+        // scribe_completed entry, the plan card is embedded inside the
+        // Scribe agent bubble (DL-7). Skip the standalone spec message
+        // to avoid duplicate rendering.
+        if (hasNarratedScribe) break;
         messages.push({
           role: 'scribe',
           type: 'spec',
@@ -246,11 +272,22 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
         break;
       }
       case 'spec_approved':
+        // Gap-1 fix (2026-05-23): `metrics.approvedAt` is missing on some
+        // pipelines (backend serialisation bug — `new Date()` vs ISO string).
+        // Fall back to the event's own `timestamp`, then `scribeCompletedAt`
+        // (chronologically just before approval), then `pipeline.createdAt`
+        // as a last resort. Using `new Date().toISOString()` would place
+        // this chip at the BOTTOM on every re-render because the sort at
+        // conversationToChatMessages would see it as the newest message.
         messages.push({
           role: 'system',
           type: 'message',
           content: 'Spec onaylandı — Proto aşamasına geçiliyor.',
-          timestamp: pipeline.metrics?.approvedAt || new Date().toISOString(),
+          timestamp:
+            msg.timestamp ??
+            pipeline.metrics?.approvedAt ??
+            pipeline.metrics?.scribeCompletedAt ??
+            pipeline.createdAt,
         });
         break;
       case 'spec_rejected': {
@@ -259,8 +296,45 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
           role: 'system',
           type: 'message',
           content: `Spec reddedildi: ${rejection.feedback}`,
-          timestamp: new Date().toISOString(),
+          timestamp:
+            msg.timestamp ??
+            pipeline.metrics?.approvedAt ??
+            pipeline.metrics?.scribeCompletedAt ??
+            pipeline.createdAt,
         });
+        break;
+      }
+      case 'scribe_completed': {
+        // Chat narrator (2026-05-23) — assemble the embedded plan for the
+        // Scribe bubble. The plan card source comes from the pipeline's
+        // approved spec snapshot (or the pending draft if still pre-approval).
+        const sc = msg.content;
+        const scribeSpec = pipeline.approvedSpec ?? pipeline.scribeOutput?.spec ?? null;
+        const stage: PipelineStage = (pipeline.stage as PipelineStage) ?? 'idle';
+        let planStatus: 'active' | 'approved' | 'rejected' = 'active';
+        if (PRE_APPROVAL_STAGES.indexOf(stage) === -1) {
+          planStatus = 'approved';
+        }
+        const embeddedPlan = scribeSpec
+          ? {
+              plan: specToUserFriendlyPlan(scribeSpec),
+              version: 1,
+              status: planStatus as 'active' | 'edited' | 'approved' | 'rejected' | 'cancelled',
+              spec: scribeSpec,
+              assumptions: pipeline.scribeOutput?.assumptions,
+            }
+          : undefined;
+        messages.push({
+          role: 'scribe',
+          type: 'scribe_completed',
+          content: sc.summary ?? 'Plan hazırlandı.',
+          summary: sc.summary,
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+          iteration: sc.iteration,
+          ...(sc.durationMs !== undefined ? { durationMs: sc.durationMs } : {}),
+          ...(sc.subSteps && sc.subSteps.length > 0 ? { subSteps: sc.subSteps } : {}),
+          ...(embeddedPlan ? { embeddedPlan } : {}),
+        } as ConversationMessage);
         break;
       }
       case 'proto_started':
@@ -294,6 +368,12 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
             summary: msg.content.summary,
             ...(po?.verificationReport ? { verificationReport: po.verificationReport } : {}),
           },
+          // Chat narrator (2026-05-23) — server-truth duration + sub-step
+          // disclosure from the event-log payload.
+          ...(msg.content.durationMs !== undefined ? { durationMs: msg.content.durationMs } : {}),
+          ...(msg.content.subSteps && msg.content.subSteps.length > 0
+            ? { subSteps: msg.content.subSteps }
+            : {}),
         });
         break;
       }
@@ -310,7 +390,9 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
         messages.push({
           role: 'trace',
           type: 'trace_result',
-          content: `Test yazıldı — ${msg.content.totalTests} test, %${msg.content.coverage}`,
+          content:
+            msg.content.summary ??
+            `Test yazıldı — ${msg.content.totalTests} test, %${msg.content.coverage}`,
           timestamp: msg.timestamp ?? new Date().toISOString(),
           iteration: msg.content.iteration,
           traceResult: {
@@ -321,6 +403,13 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
             duration: '',
             testFiles: [],
           },
+          // Chat narrator (2026-05-23) — LLM summary + server-truth
+          // duration + sub-step disclosure from the event-log payload.
+          ...(msg.content.summary ? { summary: msg.content.summary } : {}),
+          ...(msg.content.durationMs !== undefined ? { durationMs: msg.content.durationMs } : {}),
+          ...(msg.content.subSteps && msg.content.subSteps.length > 0
+            ? { subSteps: msg.content.subSteps }
+            : {}),
         });
         break;
       case 'trace_failed':

@@ -98,6 +98,11 @@ export const ScribeOutputSchema = z.object({
   clarificationsAsked: z.number().int().min(0).max(3),
   reviewNotes: ReviewNotesSchema,
   assumptions: z.array(z.string()).optional(),
+  /**
+   * 1-3 sentence Turkish conversational summary — chat narrator (2026-05-23).
+   * Optional so older pipelines stay valid.
+   */
+  summary: z.string().optional(),
 });
 
 export const ScribeMessageSchema = z.discriminatedUnion('type', [

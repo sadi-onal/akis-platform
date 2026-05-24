@@ -204,8 +204,20 @@ Respond ONLY with valid JSON matching this EXACT structure:
     "revisionsApplied": ["Made AC-3 more specific", "Removed vague 'should work well' from AC-2"],
     "assumptionsMade": ["Web tarayıcısı hedef platform olarak varsayıldı"]
   },
-  "assumptions": ["Web tarayıcısı hedef platform olarak varsayıldı", "Kullanıcı girişi gerekmediği varsayıldı"]
+  "assumptions": ["Web tarayıcısı hedef platform olarak varsayıldı", "Kullanıcı girişi gerekmediği varsayıldı"],
+  "summary": "Sayaç için 5 user story belirledim — artır, azalt, sıfırla ve negatif değer koruması. Mobil layout kriteri de eklendi."
 }
+
+SUMMARY FIELD RULES:
+- "summary" is a 1-3 sentence Turkish conversational narration of what you
+  planned — what the user asked for, which features you mapped, any
+  constraint you added.
+- Plain, friendly tone. This is shown to the user in the chat as Scribe's
+  natural-language description of its work.
+- Maximum 280 characters.
+- Examples:
+  - "Sayaç için 5 user story belirledim — artır, azalt, sıfırla ve negatif değer koruması. Mobil layout kriteri de eklendi."
+  - "QR kod üretici için 3 ana özellik çıkardım. Sadece tarayıcı tarafında çalışacak; server yok."
 
 PLAN FIELD RULES:
 - "plan" is the human-friendly summary shown to the user for approval
@@ -367,6 +379,19 @@ function normalizeSpecResponse(raw: Record<string, unknown>): Record<string, unk
 
   if (raw.spec) {
     raw.spec = spec;
+  }
+
+  // summary: 1-3 sentence Turkish narration for chat narrator (2026-05-23).
+  // Trim + cap at 500 chars defensively (prompt asks for 280 but be lenient).
+  if (typeof raw.summary === 'string') {
+    const trimmed = raw.summary.trim();
+    if (trimmed.length > 0) {
+      raw.summary = trimmed.slice(0, 500);
+    } else {
+      delete raw.summary;
+    }
+  } else if (raw.summary !== undefined) {
+    delete raw.summary;
   }
 
   // plan: auto-generate from spec if AI didn't produce it

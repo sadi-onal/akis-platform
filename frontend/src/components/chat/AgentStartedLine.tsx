@@ -57,7 +57,7 @@ export function AgentStartedLine({
     <div
       className={cn(
         'flex items-center gap-2 px-3 py-1.5 text-xs text-ak-text-secondary',
-        'border-l-2',
+        'border-l-2 rounded-md bg-ak-surface-2/30',
         agent === 'scribe' && 'border-blue-400/60',
         agent === 'proto' && 'border-orange-400/60',
         agent === 'trace' && 'border-purple-400/60',

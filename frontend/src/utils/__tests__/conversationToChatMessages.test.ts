@@ -534,6 +534,208 @@ describe('conversationToChatMessages — event-log entries (2026-05-22)', () => 
   });
 });
 
+describe('conversationToChatMessages — chat narrator (2026-05-23)', () => {
+  it('scribe_completed emits agent ChatMessage with summary + subSteps + durationMs', () => {
+    const conv = [
+      { role: 'user', type: 'message', content: 'sayaç', timestamp: '2026-05-23T22:25:00Z' },
+      {
+        role: 'scribe',
+        type: 'scribe_completed',
+        content: 'Sayaç için 5 user story belirledim.',
+        summary: 'Sayaç için 5 user story belirledim.',
+        timestamp: '2026-05-23T22:27:14Z',
+        iteration: 1,
+        durationMs: 134000,
+        subSteps: [
+          { label: '5 user story çıkarıldı', status: 'done', source: 'agent' },
+          { label: 'Değerlendirme: 2 eksik nokta', status: 'done', source: 'critic' },
+        ],
+      },
+    ] as unknown as ConversationMessage[];
+    const out = conversationToChatMessages(conv, 'awaiting_approval');
+    const scribeMsg = out.find((m) => m.type === 'agent' && m.agent === 'scribe');
+    expect(scribeMsg).toBeDefined();
+    expect(scribeMsg).toMatchObject({
+      type: 'agent',
+      agent: 'scribe',
+      summary: 'Sayaç için 5 user story belirledim.',
+      durationMs: 134000,
+    });
+    expect((scribeMsg as { subSteps?: unknown[] }).subSteps).toHaveLength(2);
+  });
+
+  it('proto_result with durationMs + subSteps pass them through to ChatMessage', () => {
+    const conv = [
+      {
+        role: 'proto',
+        type: 'proto_result',
+        content: 'React + Vite ile sayaç hazır.',
+        timestamp: '2026-05-23T22:28:00Z',
+        iteration: 1,
+        protoResult: {
+          branch: 'feat/sayac',
+          repo: '',
+          files: [],
+          totalFiles: 13,
+          totalLines: 440,
+          summary: 'React + Vite ile sayaç hazır.',
+        },
+        durationMs: 98000,
+        subSteps: [
+          { label: 'İskelet üretildi', status: 'done', source: 'agent' },
+          { label: 'Statik kontrol: ✓ temiz', status: 'done', source: 'validator' },
+        ],
+      },
+    ] as unknown as ConversationMessage[];
+    const out = conversationToChatMessages(conv, 'proto_building');
+    const protoMsg = out.find((m) => m.type === 'agent' && m.agent === 'proto');
+    expect(protoMsg).toMatchObject({
+      summary: 'React + Vite ile sayaç hazır.',
+      totalFiles: 13,
+      totalLines: 440,
+      durationMs: 98000,
+    });
+    expect((protoMsg as { subSteps?: unknown[] }).subSteps).toHaveLength(2);
+  });
+
+  it('trace_result with summary + durationMs + subSteps surface them on test_result', () => {
+    const conv = [
+      {
+        role: 'trace',
+        type: 'trace_result',
+        content: '21 test yazdım, 3 fonksiyon kapsanıyor.',
+        timestamp: '2026-05-23T22:33:00Z',
+        iteration: 1,
+        traceResult: {
+          testCount: 21,
+          passing: 21,
+          failing: 0,
+          coverage: '100%',
+          duration: '',
+          testFiles: [],
+        },
+        summary: '21 test yazdım, 3 fonksiyon kapsanıyor.',
+        durationMs: 47000,
+        subSteps: [{ label: '21 test yazıldı', status: 'done', source: 'agent' }],
+      },
+    ] as unknown as ConversationMessage[];
+    const out = conversationToChatMessages(conv, 'completed');
+    const traceMsg = out.find((m) => m.type === 'test_result');
+    expect(traceMsg).toBeDefined();
+    expect((traceMsg as { summary?: string }).summary).toBe(
+      '21 test yazdım, 3 fonksiyon kapsanıyor.'
+    );
+    expect((traceMsg as { durationMs?: number }).durationMs).toBe(47000);
+    expect((traceMsg as { subSteps?: unknown[] }).subSteps).toHaveLength(1);
+  });
+
+  it('embeddedPlan is carried through from scribe_completed ConversationMessage', () => {
+    const conv = [
+      {
+        role: 'scribe',
+        type: 'scribe_completed',
+        content: 'Plan hazır.',
+        summary: 'Plan hazır.',
+        timestamp: '2026-05-23T22:30:00Z',
+        iteration: 1,
+        embeddedPlan: {
+          plan: {
+            projectName: 'Sayaç',
+            summary: '',
+            features: [],
+            techChoices: [],
+            estimatedFiles: 5,
+            requiresTests: true,
+          },
+          version: 1,
+          status: 'active',
+        },
+      },
+    ] as unknown as ConversationMessage[];
+    const out = conversationToChatMessages(conv, 'awaiting_approval');
+    const scribeMsg = out.find((m) => m.type === 'agent' && m.agent === 'scribe');
+    expect(scribeMsg).toBeDefined();
+    expect(
+      (scribeMsg as { embeddedPlan?: { plan: { projectName: string } } }).embeddedPlan?.plan
+        .projectName
+    ).toBe('Sayaç');
+  });
+
+  it('when scribe_completed is present, standalone plan ChatMessage is NOT emitted', () => {
+    // DL-7: plan card lives inside Scribe's last bubble, not as a separate
+    // plan row. The legacy spec snapshot path is suppressed when the event
+    // log already carried scribe_completed.
+    const conv = [
+      {
+        role: 'scribe',
+        type: 'spec',
+        content: 'Spec hazır.',
+        spec: spec(),
+        timestamp: '2026-05-23T22:24:00Z',
+      },
+      {
+        role: 'scribe',
+        type: 'scribe_completed',
+        content: 'Plan hazır.',
+        summary: 'Plan hazır.',
+        timestamp: '2026-05-23T22:25:00Z',
+        embeddedPlan: {
+          plan: {
+            projectName: 'Bakkal stoğu',
+            summary: '',
+            features: [],
+            techChoices: [],
+            estimatedFiles: 5,
+            requiresTests: true,
+          },
+          version: 1,
+          status: 'active',
+        },
+      },
+    ] as unknown as ConversationMessage[];
+    const out = conversationToChatMessages(conv, 'awaiting_approval');
+    const standalonePlan = out.find((m) => m.type === 'plan');
+    expect(standalonePlan).toBeUndefined();
+    const scribeAgentMsg = out.find((m) => m.type === 'agent' && m.agent === 'scribe');
+    expect(scribeAgentMsg).toBeDefined();
+    expect((scribeAgentMsg as { embeddedPlan?: unknown }).embeddedPlan).toBeDefined();
+  });
+
+  it('sorts messages by timestamp (stable) so out-of-order events line up correctly', () => {
+    // Regression: F-6 chip ordering — system rows added late shouldn't
+    // appear after the agent bubble that completed before them.
+    const conv = [
+      {
+        role: 'scribe',
+        type: 'scribe_completed',
+        content: 'Plan',
+        summary: 'Plan',
+        timestamp: '2026-05-23T10:05:00Z',
+      },
+      {
+        role: 'user',
+        type: 'message',
+        content: 'önce',
+        timestamp: '2026-05-23T10:00:00Z',
+      },
+      {
+        role: 'system',
+        type: 'message',
+        content: 'arada',
+        timestamp: '2026-05-23T10:02:30Z',
+      },
+    ] as unknown as ConversationMessage[];
+    const out = conversationToChatMessages(conv);
+    const timestamps = out.map((m) => (m as { timestamp: string }).timestamp);
+    // Sorted ascending — user (10:00) → info (10:02:30) → scribe (10:05).
+    expect(timestamps).toEqual([
+      '2026-05-23T10:00:00Z',
+      '2026-05-23T10:02:30Z',
+      '2026-05-23T10:05:00Z',
+    ]);
+  });
+});
+
 describe('specToUserFriendlyPlan (via conversationToChatMessages) — edge cases', () => {
   // The exported helper is consumed indirectly through the spec branch; we
   // smoke-test the corner cases on the rendered plan payload.

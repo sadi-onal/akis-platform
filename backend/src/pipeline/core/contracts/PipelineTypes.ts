@@ -83,6 +83,22 @@ export interface ScribeOutput {
   clarificationsAsked: number;
   reviewNotes?: string | ReviewNotes;
   assumptions?: string[];
+  /**
+   * 1-3 cümle Türkçe konuşma-dili özet — chat'te Scribe baloncuğunun ilk
+   * satırı olarak çıkar. ProtoOutput.summary pattern'i taklit eder.
+   * Opsiyonel — eski pipeline'lar bu field olmadan da çalışır.
+   */
+  summary?: string;
+}
+
+// Sub-step stream — her ajan baloncuğunda collapsed listenin payload'u.
+// Critic ve Validator etkileri bu listede insan-dili satır olarak yansır
+// (ayrı chat bubble açılmaz — bkz. spec DL-2/DL-3).
+export interface SubStep {
+  label: string; // "Acceptance criteria yazıldı"
+  durationMs?: number; // tek-step süresi (opsiyonel)
+  status: 'done' | 'live' | 'failed';
+  source?: 'critic' | 'validator' | 'agent';
 }
 
 export type ScribeMessageType =
@@ -112,6 +128,8 @@ export type ScribeMessageType =
         filesCreated: number;
         totalLines: number;
         branch?: string;
+        durationMs?: number; // YENİ — opsiyonel (NF-2: yoksa render yok)
+        subSteps?: SubStep[]; // YENİ — opsiyonel
       };
       timestamp: string;
     }
@@ -127,6 +145,9 @@ export type ScribeMessageType =
         totalTests: number;
         coverage: number;
         passed: boolean;
+        summary?: string; // YENİ — Trace'in LLM Türkçe özeti
+        durationMs?: number; // YENİ
+        subSteps?: SubStep[]; // YENİ
       };
       timestamp: string;
     }
@@ -137,6 +158,18 @@ export type ScribeMessageType =
         errorCode: string;
         errorMessage: string;
         recoveryAction?: 'retry' | 'skip';
+      };
+      timestamp: string;
+    }
+  | {
+      type: 'scribe_completed';
+      content: {
+        iteration: number;
+        summary: string; // LLM 1-3 cümle Türkçe özet
+        storyCount: number;
+        acCount: number;
+        durationMs?: number;
+        subSteps?: SubStep[];
       };
       timestamp: string;
     }
@@ -274,6 +307,12 @@ export interface TraceOutput {
     filePath: string;
     content: string;
   }>;
+  /**
+   * 1-3 cümle Türkçe konuşma-dili özet — chat'te Trace baloncuğunun ilk
+   * satırı olarak çıkar. ProtoOutput.summary pattern'i taklit eder.
+   * Opsiyonel — eski pipeline'lar bu field olmadan da çalışır.
+   */
+  summary?: string;
 }
 
 // ─── PIPELINE ─────────────────────────────────────

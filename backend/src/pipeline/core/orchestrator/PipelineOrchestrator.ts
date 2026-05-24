@@ -9,6 +9,7 @@ import type {
   StructuredSpec,
   ProtoOutput,
   TraceOutput,
+  SubStep,
 } from '../contracts/PipelineTypes.js';
 import { JiraMCPService } from '../../../services/mcp/adapters/JiraMCPService.js';
 import { getConnectionStatus as getAtlassianStatus } from '../../../services/atlassian/AtlassianMcpClient.js';
@@ -299,6 +300,18 @@ export class PipelineOrchestrator {
 
   // ─── Chat memory (issue #462) ────────────────────
   private chatMemory: ChatMemoryContextService = chatMemoryContextService;
+
+  // ─── Chat narrator: stage-start timestamps (2026-05-23) ──
+  /**
+   * In-memory started-at timestamps per stage per pipeline. Server-truth
+   * source for `durationMs` calc on completion events (spec NF-2).
+   * Key format: `${pipelineId}:${stage}`. Entries are cleared either:
+   *   - per-stage on success via `getStageDurationMs` (one-shot read+delete);
+   *   - per-pipeline on terminal transition via `clearStageStarts`, called
+   *     from `failPipeline` and `_cancelPipeline` (code-review follow-up
+   *     2026-05-23 — prevents unbounded growth in long-running backends).
+   */
+  private stageStartedAt = new Map<string, number>();
 
   /**
    * PR-V-github-401-graceful — optional hook to clear stale GitHub tokens
@@ -853,6 +866,12 @@ export class PipelineOrchestrator {
     pipelineCallContext.enterWith({ pipelineId });
     const emit = createActivityEmitter(pipelineId, 'scribe');
     emit('start', 'Kullanıcı fikri analiz ediliyor...', 5);
+    // Chat narrator (2026-05-23): snapshot stage start for server-truth
+    // durationMs on the eventual `scribe_completed` event. Idempotent —
+    // calling markStageStarted twice just refreshes the start (e.g. when
+    // clarification rounds prolong Scribe — we treat the latest restart as
+    // the wall-clock for the next completion).
+    this.markStageStarted(pipelineId, 'scribe');
 
     // ─── Repo Context: fetch if existingRepo is set ───
     const pipeline = await this.getPipeline(pipelineId);
@@ -1624,8 +1643,12 @@ export class PipelineOrchestrator {
       specCompliance: 0.85, // Proto succeeded → base compliance
     });
 
-    // Append proto_completed event to chat timeline (immutable event log)
-    await this.appendProtoCompleted(pipelineId, protoIteration, protoResult.data);
+    // Chat narrator (2026-05-23, code-review follow-up): `proto_completed`
+    // event is emitted AFTER the Validator + Critic-code block runs so
+    // sub-steps reflect those agents' findings for THIS iteration (AC-2,
+    // spec 2026-05-23-chat-agent-narrator-pattern-a-design.md §5). See the
+    // three `emitProtoCompletedForThisIteration` call sites below — iterate-
+    // retry return, hard-block return, and the happy path.
 
     const pipeline = await this.getPipeline(pipelineId);
 
@@ -1651,6 +1674,10 @@ export class PipelineOrchestrator {
           totalDurationMs: Date.now() - toEpoch(protoCompletedMetrics.startedAt),
         },
       });
+      // Chat narrator: emit proto_completed before returning. Validator +
+      // Critic-code haven't run on the no-Trace fast path, so sub-steps will
+      // contain only the agent-sourced rows (files written / iskelet üretildi).
+      await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
       this.emitEvent(pipelineId, 'stage_change', 'completed');
       return;
     }
@@ -1768,6 +1795,11 @@ export class PipelineOrchestrator {
             recoveryAction: 'retry',
           },
         });
+        // Chat narrator: emit proto_completed for the iteration that the
+        // validator rejected. validationResult is already persisted to
+        // intermediateState (line above), so the sub-step row will show
+        // the validator error count.
+        await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
         this.emitEvent(pipelineId, 'error', 'failed');
         return;
       }
@@ -1937,6 +1969,14 @@ export class PipelineOrchestrator {
               criticCodeOutput: criticResult,
             },
           });
+          // Chat narrator: emit proto_completed for THIS rejected iteration
+          // before dispatching the retry. The next iteration's
+          // `runProtoAndTrace` will append its own pair of proto events.
+          await this.emitProtoCompletedForIteration(
+            pipelineId,
+            protoIteration,
+            protoResult.data
+          );
           // Activity emit — Critic retry-trigger surfaces on Proto column
           // ("Critic düzeltiyor (n/max)" badge).
           const criticIterateEmit = createActivityEmitter(pipelineId, 'critic', {
@@ -1986,6 +2026,14 @@ export class PipelineOrchestrator {
             },
           },
         });
+        // Chat narrator: emit proto_completed for the iteration that
+        // triggered the hard-block so the user sees the gate-causing
+        // Proto bubble with critic findings as sub-steps.
+        await this.emitProtoCompletedForIteration(
+          pipelineId,
+          protoIteration,
+          protoResult.data
+        );
         this.emitEvent(pipelineId, 'stage_change', 'awaiting_critic_resolution');
         // PR-T3 S1: aynı `gate_open` pattern'i — frontend SSE üzerinden
         // bu transition'ı kaçırmasın diye sentetik bir activity yayınla.
@@ -2013,6 +2061,14 @@ export class PipelineOrchestrator {
       // (yukarıdaki `criticCodeOutput` yazımı). severity<critical ise akış
       // doğal olarak Trace / push-gate'e devam eder.
     }
+
+    // Chat narrator (2026-05-23): emit proto_completed AFTER validator +
+    // critic-code have written their results to intermediateState, so the
+    // sub-step rows on the Proto bubble reflect THIS iteration's findings
+    // (AC-2). For early-return paths (Trace disabled, validator hard-fail,
+    // critic iterate-retry, critic hard-block) the emit happens at the
+    // dedicated site before each `return` instead.
+    await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
 
     // Level 4: Explainability — record Proto reasoning
     this.recordProtoReasoning(pipelineId, protoResult.data, pipeline.scribeOutput);
@@ -2165,6 +2221,11 @@ export class PipelineOrchestrator {
       { expectedStageVersion: pipeline.stageVersion }
     );
 
+    // Chat narrator (2026-05-23): reset scribe stage start so the
+    // regenerated draft's `scribe_completed` event reports an accurate
+    // durationMs for *this* attempt (not the original Scribe pass).
+    this.markStageStarted(pipelineId, 'scribe');
+
     const agents = this.getAgents(pipeline.model);
     const result = await withTimeout(
       agents.scribe.regenerateSpec(scribeState, feedback),
@@ -2178,6 +2239,34 @@ export class PipelineOrchestrator {
       // handleScribeResult's spec branch. Emit before the awaiting_approval
       // transition so SSE consumers see Scribe close cleanly.
       this.emitStageCompleted(pipelineId, 'scribe');
+      // Chat narrator (2026-05-23): scribe_completed event for the
+      // regenerated spec — iteration counter increments so the chat shows
+      // a fresh Scribe baloncuğu.
+      const scribeIterationRegen = this.countPriorEvents(conversation, 'scribe_completed') + 1;
+      // Code-review follow-up 2026-05-23: drop the previous Scribe pass's
+      // `criticSpecOutput` from the snapshot before computing sub-steps.
+      // The regen path doesn't re-run Critic (architecture: regenerate-only,
+      // no automatic critique pass), so leaving the old findings in place
+      // would label the v2 draft with v1's stale criticism. Mutating just
+      // the local snapshot — DB row is untouched so a future re-critique
+      // (if architecture changes) still has its anchor.
+      const cleanPipelineForRegen = {
+        ...pipeline,
+        scribeOutput: result.data,
+        intermediateState: {
+          ...(pipeline.intermediateState ?? {}),
+          criticSpecOutput: undefined,
+        },
+      } as PipelineState;
+      const scribeSubStepsRegen = this.buildSubStepsForStage(cleanPipelineForRegen, 'scribe');
+      conversation.push(
+        this.buildScribeCompletedEvent(
+          pipelineId,
+          scribeIterationRegen,
+          result.data,
+          scribeSubStepsRegen.length > 0 ? scribeSubStepsRegen : undefined
+        )
+      );
       const updated = await this.store.update(pipelineId, {
         stage: 'awaiting_approval',
         scribeConversation: conversation,
@@ -2281,6 +2370,10 @@ export class PipelineOrchestrator {
       { stage: 'cancelled' },
       { expectedStageVersion: pipeline.stageVersion }
     );
+    // Terminal state — prune any stage-start entries left behind by a
+    // cancel that interrupted the success path (chat narrator durationMs
+    // tracker, code-review follow-up 2026-05-23).
+    this.clearStageStarts(pipelineId);
     this.emitEvent(pipelineId, 'stage_change', 'cancelled');
     return updated;
   }
@@ -2641,6 +2734,9 @@ export class PipelineOrchestrator {
       },
       { expectedStageVersion: pipeline.stageVersion }
     );
+    // Terminal state — prune leftover stage-start entries (chat narrator
+    // durationMs tracker, code-review follow-up 2026-05-23).
+    this.clearStageStarts(pipelineId);
     this.emitEvent(pipelineId, 'completed', 'completed_partial');
     logger.info(
       { pipelineId },
@@ -3089,6 +3185,30 @@ export class PipelineOrchestrator {
             { pipelineId, criticScore: criticResult.overallScore, threshold: autoThreshold },
             '[Pipeline] Auto-approved: critic score meets adaptive autonomy threshold'
           );
+          // Chat narrator (2026-05-23): emit scribe_completed event into the
+          // same conversation snapshot. subSteps include Critic findings.
+          // Iteration counter = prior scribe_completed events + 1.
+          const scribeIterationAuto =
+            this.countPriorEvents(conversation, 'scribe_completed') + 1;
+          const scribeSubStepsAuto = this.buildSubStepsForStage(
+            {
+              ...currentPipeline,
+              scribeOutput: result.data,
+              intermediateState: {
+                ...(currentPipeline?.intermediateState ?? {}),
+                criticSpecOutput: criticResult,
+              },
+            } as PipelineState,
+            'scribe'
+          );
+          conversation.push(
+            this.buildScribeCompletedEvent(
+              pipelineId,
+              scribeIterationAuto,
+              result.data,
+              scribeSubStepsAuto.length > 0 ? scribeSubStepsAuto : undefined
+            )
+          );
           await this.store.update(pipelineId, {
             scribeConversation: conversation,
             scribeOutput: result.data,
@@ -3138,6 +3258,28 @@ export class PipelineOrchestrator {
           return (await this.store.getById(pipelineId)) as PipelineState;
         }
       }
+
+      // Chat narrator (2026-05-23): emit scribe_completed into the same
+      // conversation snapshot so the chat baloncuğu shows summary + plan
+      // card + critic-derived sub-steps. Iteration counter = prior
+      // scribe_completed events + 1.
+      const scribePipelineForSubSteps = await this.store.getById(pipelineId);
+      const scribeIteration = this.countPriorEvents(conversation, 'scribe_completed') + 1;
+      const scribeSubSteps = this.buildSubStepsForStage(
+        {
+          ...(scribePipelineForSubSteps ?? {}),
+          scribeOutput: result.data,
+        } as PipelineState,
+        'scribe'
+      );
+      conversation.push(
+        this.buildScribeCompletedEvent(
+          pipelineId,
+          scribeIteration,
+          result.data,
+          scribeSubSteps.length > 0 ? scribeSubSteps : undefined
+        )
+      );
 
       const updated = await this.store.update(pipelineId, {
         stage: 'awaiting_approval',
@@ -3615,7 +3757,19 @@ export class PipelineOrchestrator {
         : {}),
     });
     // Chat event-log (Task 3): append after traceOutput is persisted (data-consistency).
-    await this.appendTraceCompleted(pipelineId, traceIteration, traceResult.data);
+    // Chat narrator (2026-05-23): build trace sub-steps from the persisted
+    // traceOutput so the chat baloncuğu shows test/coverage counts.
+    const tracePipelineForSubSteps = await this.getPipeline(pipelineId);
+    const traceSubSteps = this.buildSubStepsForStage(
+      { ...tracePipelineForSubSteps, traceOutput: traceResult.data } as PipelineState,
+      'trace'
+    );
+    await this.appendTraceCompleted(
+      pipelineId,
+      traceIteration,
+      traceResult.data,
+      traceSubSteps.length > 0 ? traceSubSteps : undefined
+    );
     if (postSuccessStage === 'awaiting_push_confirm') {
       this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
       // PR-T3 S1: state desync fix — `emitEvent` yalnızca dahili event-bus'a
@@ -3919,14 +4073,58 @@ export class PipelineOrchestrator {
 
   private countPriorEvents(
     conv: ScribeMessageType[],
-    type: 'proto_completed' | 'trace_completed'
+    type: 'proto_completed' | 'trace_completed' | 'scribe_completed'
   ): number {
     return conv.filter((m) => m.type === type).length;
+  }
+
+  // ─── Stage start/duration tracking (chat narrator, 2026-05-23) ──
+
+  private markStageStarted(pipelineId: string, stage: 'scribe' | 'proto' | 'trace'): number {
+    const now = Date.now();
+    this.stageStartedAt.set(`${pipelineId}:${stage}`, now);
+    return now;
+  }
+
+  /**
+   * Compute and clear `durationMs` for the given stage. One-shot — the
+   * tracker entry is deleted after read so a stale value cannot leak into
+   * a later completion. Returns `undefined` when no start was recorded
+   * (e.g. legacy pipelines that started before this code shipped).
+   */
+  private getStageDurationMs(
+    pipelineId: string,
+    stage: 'scribe' | 'proto' | 'trace'
+  ): number | undefined {
+    const startedAt = this.stageStartedAt.get(`${pipelineId}:${stage}`);
+    if (!startedAt) return undefined;
+    const duration = Date.now() - startedAt;
+    this.stageStartedAt.delete(`${pipelineId}:${stage}`);
+    return duration >= 0 ? duration : undefined;
+  }
+
+  /**
+   * Remove all stage-start entries for a pipeline. Called on terminal
+   * transitions (failure, cancellation) so the in-memory `stageStartedAt`
+   * map doesn't accumulate dead keys in long-running backends. Per-stage
+   * success entries are already pruned by `getStageDurationMs`; this is
+   * the cleanup path for the "no successful read" cases (failure mid-stage,
+   * user cancel before completion, etc.). Code-review follow-up
+   * 2026-05-23.
+   */
+  private clearStageStarts(pipelineId: string): void {
+    const prefix = `${pipelineId}:`;
+    for (const key of this.stageStartedAt.keys()) {
+      if (key.startsWith(prefix)) {
+        this.stageStartedAt.delete(key);
+      }
+    }
   }
 
   private async appendProtoStarted(pipelineId: string): Promise<number> {
     const pipeline = await this.getPipeline(pipelineId);
     const iteration = this.countPriorEvents(pipeline.scribeConversation, 'proto_completed') + 1;
+    this.markStageStarted(pipelineId, 'proto');
     await this.store.update(pipelineId, {
       scribeConversation: [
         ...pipeline.scribeConversation,
@@ -3936,12 +4134,41 @@ export class PipelineOrchestrator {
     return iteration;
   }
 
-  private async appendProtoCompleted(
+  /**
+   * Emit the `proto_completed` chat event for the current Proto iteration.
+   * Reads the freshly-persisted `intermediateState` (validator +
+   * criticCodeOutput) so the sub-step rows reflect THIS iteration's
+   * findings. Caller is responsible for sequencing — must run AFTER both
+   * the deterministic Validator step and the Critic-code review have
+   * written their results to `intermediateState`. AC-2 (spec
+   * 2026-05-23-chat-agent-narrator-pattern-a-design.md §5).
+   */
+  private async emitProtoCompletedForIteration(
     pipelineId: string,
     iteration: number,
     output: ProtoOutput
   ): Promise<void> {
+    const pipelineSnapshot = await this.getPipeline(pipelineId);
+    const subSteps = this.buildSubStepsForStage(
+      { ...pipelineSnapshot, protoOutput: output } as PipelineState,
+      'proto'
+    );
+    await this.appendProtoCompleted(
+      pipelineId,
+      iteration,
+      output,
+      subSteps.length > 0 ? subSteps : undefined
+    );
+  }
+
+  private async appendProtoCompleted(
+    pipelineId: string,
+    iteration: number,
+    output: ProtoOutput,
+    subSteps?: SubStep[]
+  ): Promise<void> {
     const pipeline = await this.getPipeline(pipelineId);
+    const durationMs = this.getStageDurationMs(pipelineId, 'proto');
     await this.store.update(pipelineId, {
       scribeConversation: [
         ...pipeline.scribeConversation,
@@ -3953,6 +4180,8 @@ export class PipelineOrchestrator {
             filesCreated: output.metadata.filesCreated,
             totalLines: output.metadata.totalLinesOfCode,
             branch: output.branch,
+            ...(durationMs !== undefined ? { durationMs } : {}),
+            ...(subSteps && subSteps.length > 0 ? { subSteps } : {}),
           },
           timestamp: new Date().toISOString(),
         },
@@ -3965,6 +4194,7 @@ export class PipelineOrchestrator {
   private async appendTraceStarted(pipelineId: string): Promise<number> {
     const pipeline = await this.getPipeline(pipelineId);
     const iteration = this.countPriorEvents(pipeline.scribeConversation, 'trace_completed') + 1;
+    this.markStageStarted(pipelineId, 'trace');
     await this.store.update(pipelineId, {
       scribeConversation: [
         ...pipeline.scribeConversation,
@@ -3981,9 +4211,14 @@ export class PipelineOrchestrator {
   private async appendTraceCompleted(
     pipelineId: string,
     iteration: number,
-    output: { testSummary: { totalTests: number; coveragePercentage: number } }
+    output: {
+      testSummary: { totalTests: number; coveragePercentage: number };
+      summary?: string;
+    },
+    subSteps?: SubStep[]
   ): Promise<void> {
     const pipeline = await this.getPipeline(pipelineId);
+    const durationMs = this.getStageDurationMs(pipelineId, 'trace');
     await this.store.update(pipelineId, {
       scribeConversation: [
         ...pipeline.scribeConversation,
@@ -3994,11 +4229,150 @@ export class PipelineOrchestrator {
             totalTests: output.testSummary.totalTests,
             coverage: output.testSummary.coveragePercentage,
             passed: true,
+            ...(output.summary ? { summary: output.summary } : {}),
+            ...(durationMs !== undefined ? { durationMs } : {}),
+            ...(subSteps && subSteps.length > 0 ? { subSteps } : {}),
           },
           timestamp: new Date().toISOString(),
         },
       ],
     });
+  }
+
+  /**
+   * Build SubStep list for a completion event. Reads `scribeOutput` /
+   * `protoOutput` / `traceOutput` plus `intermediateState.criticSpecOutput`,
+   * `criticCodeOutput`, and `validationResult` from the pipeline state and
+   * translates them into human-language sub-step rows. Critic ve Validator
+   * yansımaları burada `source` field'i ile etiketlenir — chat'te ayrı
+   * bubble açmaz, sub-step satırı olarak görünür (spec DL-2/DL-3).
+   *
+   * Returns an empty array when the stage has no inputs yet — caller is
+   * responsible for falling back to `undefined` (we keep the contract:
+   * `subSteps` is `undefined` on the event when there's nothing to show).
+   */
+  private buildSubStepsForStage(
+    pipeline: PipelineState,
+    stage: 'scribe' | 'proto' | 'trace'
+  ): SubStep[] {
+    const steps: SubStep[] = [];
+
+    if (stage === 'scribe') {
+      if (pipeline.scribeOutput) {
+        const storyCount = pipeline.scribeOutput.spec.userStories?.length ?? 0;
+        const acCount = pipeline.scribeOutput.spec.acceptanceCriteria?.length ?? 0;
+        steps.push({
+          label: `${storyCount} user story çıkarıldı`,
+          status: 'done',
+          source: 'agent',
+        });
+        steps.push({
+          label: `${acCount} kabul kriteri yazıldı`,
+          status: 'done',
+          source: 'agent',
+        });
+      }
+      // Critic spec review yansıması — pipeline.intermediateState.criticSpecOutput
+      const criticSpecOutput = pipeline.intermediateState?.criticSpecOutput as
+        | CriticReviewOutput
+        | undefined;
+      if (criticSpecOutput && (criticSpecOutput.findings?.length ?? 0) > 0) {
+        steps.push({
+          label: `Değerlendirme: ${criticSpecOutput.findings.length} eksik nokta tespit edildi`,
+          status: 'done',
+          source: 'critic',
+        });
+      }
+    }
+
+    if (stage === 'proto') {
+      if (pipeline.protoOutput) {
+        steps.push({
+          label: 'Proje iskeleti üretildi',
+          status: 'done',
+          source: 'agent',
+        });
+        steps.push({
+          label: `${pipeline.protoOutput.files.length} dosya yazıldı`,
+          status: 'done',
+          source: 'agent',
+        });
+      }
+      // Validator (statik kontrol) — pipeline.intermediateState.validationResult
+      // (confirmed field name; shape: { passed, score, summary: { errors, warnings, ... } }).
+      const validatorResult = pipeline.intermediateState?.validationResult as
+        | { passed?: boolean; summary?: { errors?: number; warnings?: number } }
+        | undefined;
+      if (validatorResult) {
+        const errorCount = validatorResult.summary?.errors ?? 0;
+        steps.push({
+          label:
+            errorCount === 0
+              ? 'Statik kontrol: temiz'
+              : `Statik kontrol: ${errorCount} hata raporlandı`,
+          status: 'done',
+          source: 'validator',
+        });
+      }
+      // Critic code review yansıması — pipeline.intermediateState.criticCodeOutput
+      const criticCodeOutput = pipeline.intermediateState?.criticCodeOutput as
+        | CriticReviewOutput
+        | undefined;
+      if (criticCodeOutput && (criticCodeOutput.findings?.length ?? 0) > 0) {
+        steps.push({
+          label: `Değerlendirme: ${criticCodeOutput.findings.length} öneri uygulandı`,
+          status: 'done',
+          source: 'critic',
+        });
+      }
+    }
+
+    if (stage === 'trace') {
+      if (pipeline.traceOutput) {
+        steps.push({
+          label: `${pipeline.traceOutput.testSummary?.totalTests ?? 0} test senaryosu yazıldı`,
+          status: 'done',
+          source: 'agent',
+        });
+        if (pipeline.traceOutput.testSummary?.coveragePercentage !== undefined) {
+          steps.push({
+            label: `%${pipeline.traceOutput.testSummary.coveragePercentage} kapsam doğrulandı`,
+            status: 'done',
+            source: 'agent',
+          });
+        }
+      }
+    }
+
+    return steps;
+  }
+
+  /**
+   * Builds a `scribe_completed` event in memory without persisting. The
+   * caller appends it to the same `conversation` array that is being
+   * written by a follow-up `store.update`, avoiding a redundant DB round
+   * trip. Mirrors `appendScribeCompleted` semantics: consumes the
+   * `markStageStarted('scribe')` snapshot so duration accounting matches.
+   */
+  private buildScribeCompletedEvent(
+    pipelineId: string,
+    iteration: number,
+    output: ScribeOutput,
+    subSteps?: SubStep[]
+  ): Extract<ScribeMessageType, { type: 'scribe_completed' }> {
+    const durationMs = this.getStageDurationMs(pipelineId, 'scribe');
+    return {
+      type: 'scribe_completed',
+      content: {
+        iteration,
+        summary: output.summary ?? 'Plan hazırlandı.',
+        storyCount: output.spec.userStories?.length ?? 0,
+        acCount: output.spec.acceptanceCriteria?.length ?? 0,
+        ...(durationMs !== undefined ? { durationMs } : {}),
+        ...(subSteps && subSteps.length > 0 ? { subSteps } : {}),
+      },
+      timestamp: new Date().toISOString(),
+    };
   }
 
   private async appendTraceFailed(
@@ -4118,6 +4492,9 @@ export class PipelineOrchestrator {
         );
       });
     }
+    // Terminal state — prune any stage-start entries left behind by a
+    // failure that interrupted the success path.
+    this.clearStageStarts(pipelineId);
   }
 
   /**

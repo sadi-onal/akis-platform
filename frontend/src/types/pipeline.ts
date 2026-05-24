@@ -68,14 +68,28 @@ export interface ScribeOutput {
   assumptions?: string[];
 }
 
+/**
+ * Chat agent narrator (2026-05-23) — Hat 1/Hat 2 added sub-step disclosure
+ * to the chat agent bubbles. `SubStep` mirrors the backend contract; chat
+ * never renders Critic/Validator as a separate bubble — they ride along as
+ * sub-steps tagged by `source` instead (spec DL-2/DL-3).
+ */
+export interface SubStep {
+  label: string;
+  durationMs?: number;
+  status: 'done' | 'live' | 'failed';
+  source?: 'critic' | 'validator' | 'agent';
+}
+
 export type ScribeMessageType =
-  | { type: 'user_idea'; content: string }
-  | { type: 'clarification'; content: ScribeClarification }
-  | { type: 'user_answer'; content: string }
-  | { type: 'spec_draft'; content: ScribeOutput }
-  | { type: 'spec_approved'; content: StructuredSpec }
-  | { type: 'spec_rejected'; content: { feedback: string } }
-  | { type: 'user_note'; content: string }
+  | { type: 'user_idea'; content: string; timestamp?: string }
+  | { type: 'clarification'; content: ScribeClarification; timestamp?: string }
+  | { type: 'user_answer'; content: string; timestamp?: string }
+  | { type: 'spec_draft'; content: ScribeOutput; timestamp?: string }
+  | { type: 'spec_approved'; content: StructuredSpec; timestamp?: string }
+  | { type: 'spec_rejected'; content: { feedback: string }; timestamp?: string }
+  | { type: 'user_note'; content: string; timestamp?: string }
+  | { type: 'user_feedback'; content: string; timestamp?: string }
   // Chat event-log types (2026-05-22)
   | { type: 'proto_started'; content: { iteration: number }; timestamp?: string }
   | {
@@ -86,13 +100,25 @@ export type ScribeMessageType =
         filesCreated: number;
         totalLines: number;
         branch?: string;
+        // Chat narrator (2026-05-23) — backend Hat 1.
+        durationMs?: number;
+        subSteps?: SubStep[];
       };
       timestamp?: string;
     }
   | { type: 'trace_started'; content: { iteration: number }; timestamp?: string }
   | {
       type: 'trace_completed';
-      content: { iteration: number; totalTests: number; coverage: number; passed: boolean };
+      content: {
+        iteration: number;
+        totalTests: number;
+        coverage: number;
+        passed: boolean;
+        // Chat narrator (2026-05-23) — backend Hat 1.
+        summary?: string;
+        durationMs?: number;
+        subSteps?: SubStep[];
+      };
       timestamp?: string;
     }
   | {
@@ -122,6 +148,23 @@ export type ScribeMessageType =
         errorCode: string;
         errorMessage: string;
         recoveryAction?: 'retry';
+      };
+      timestamp?: string;
+    }
+  /**
+   * Chat narrator (2026-05-23) — Hat 1 emits this once Scribe finishes a
+   * tour so the chat bubble can show iteration counter, the LLM Turkish
+   * summary, and sub-step disclosure (including Critic review entries).
+   */
+  | {
+      type: 'scribe_completed';
+      content: {
+        iteration: number;
+        summary: string;
+        storyCount: number;
+        acCount: number;
+        durationMs?: number;
+        subSteps?: SubStep[];
       };
       timestamp?: string;
     };

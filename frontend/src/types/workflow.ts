@@ -2,6 +2,8 @@
  * Workflow types — frontend wrapper around pipeline backend contracts.
  * "Workflow" is the UI term; backend still uses "pipeline".
  */
+import type { SubStep } from './pipeline';
+import type { UserFriendlyPlan } from './plan';
 
 export type WorkflowStatus =
   | 'pending'
@@ -88,7 +90,15 @@ export interface ConversationMessage {
     | 'trace_started'
     | 'trace_failed'
     | 'scribe_failed'
-    | 'proto_failed';
+    | 'proto_failed'
+    /**
+     * Chat narrator (2026-05-23) — `mapConversation` synthesises this row
+     * when the backend emits a `scribe_completed` event-log entry. The
+     * ChatMessage path renders it as a Scribe agent bubble carrying the LLM
+     * Turkish summary, sub-step disclosure, duration footer, and optionally
+     * the embedded plan card.
+     */
+    | 'scribe_completed';
   content: string;
   timestamp: string;
   // Clarification
@@ -131,6 +141,32 @@ export interface ConversationMessage {
   recoveryAction?: 'retry' | 'skip';
   /** scribe_failed only — backend PipelineStage; widened to string on FE. */
   stageStuck?: string;
+  /**
+   * Chat narrator (2026-05-23) — `mapConversation` lifts the new server-truth
+   * narrator fields to the conversation row so `conversationToChatMessages`
+   * can pass them through to the rendered ChatMessage:
+   *
+   * - `durationMs`: completed runtime (server-truth, NF-2). Absent ⇒ no footer.
+   * - `subSteps`:   collapsed disclosure rows (includes Critic + Validator).
+   * - `summary`:    Trace LLM summary (Proto's `summary` lives under
+   *                 `protoResult.summary`; this is the spot for Trace + Scribe).
+   * - `embeddedPlan`: only set for `scribe_completed` rows — the plan card the
+   *                 chat embeds inside Scribe's last bubble (DL-7). Older
+   *                 pipelines still rely on the standalone `'plan'`
+   *                 ChatMessage; both paths cannot coexist for the same run
+   *                 because `conversationToChatMessages` guards on the
+   *                 presence of `scribe_completed`.
+   */
+  durationMs?: number;
+  subSteps?: SubStep[];
+  summary?: string;
+  embeddedPlan?: {
+    plan: UserFriendlyPlan;
+    version: number;
+    status: 'active' | 'edited' | 'approved' | 'rejected' | 'cancelled';
+    spec?: StructuredSpec;
+    assumptions?: string[];
+  };
   // Trace result
   traceResult?: {
     testCount: number;

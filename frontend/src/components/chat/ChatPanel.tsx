@@ -367,29 +367,30 @@ export const ChatPanel = memo(function ChatPanel({
           <ChatSkeleton />
         </div>
       ) : (
-        <div ref={scrollRef} className="relative flex-1 overflow-y-auto min-h-0">
-          {/* Spacer pushes the conversation toward the composer when there
+        <div className="relative flex-1 min-h-0">
+          <div ref={scrollRef} className="absolute inset-0 overflow-y-auto">
+            {/* Spacer pushes the conversation toward the composer when there
               are only a few messages — fills the otherwise-empty bottom
               gap that made the chat feel "floating in the middle". */}
-          <div aria-hidden="true" className="min-h-[40%]" />
-          <div className="mx-auto max-w-3xl space-y-4 px-4 py-4 sm:px-6">
-            {messages.map((msg, i) => (
-              <div
-                key={`${msg.type}-${msg.timestamp ?? ''}-${i}`}
-                style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 80px' }}
-              >
-                <ChatMessage
-                  message={msg}
-                  onApprove={onApprove}
-                  onReject={onReject}
-                  onRetry={onRetry}
-                  onSkip={onSkip}
-                  onSuggestBuild={onSuggestBuild}
-                />
-              </div>
-            ))}
+            <div aria-hidden="true" className="min-h-[40%]" />
+            <div className="mx-auto max-w-3xl space-y-4 px-4 py-4 sm:px-6">
+              {messages.map((msg, i) => (
+                <div
+                  key={`${msg.type}-${msg.timestamp ?? ''}-${i}`}
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 80px' }}
+                >
+                  <ChatMessage
+                    message={msg}
+                    onApprove={onApprove}
+                    onReject={onReject}
+                    onRetry={onRetry}
+                    onSkip={onSkip}
+                    onSuggestBuild={onSuggestBuild}
+                  />
+                </div>
+              ))}
 
-            {/* Activity indicator for running agents.
+              {/* Activity indicator for running agents.
                 PR-F1 (2026-05-19): critic_running uiState'i kasıtlı olarak
                 listenin DIŞINDA — Critic guardrail chat akışında satır
                 üretmiyor. Manuel test bulgusu (image #40): backend
@@ -397,127 +398,130 @@ export const ChatPanel = memo(function ChatPanel({
                 eskiden burada 'Critic …' olarak görünüyordu. Modern stack
                 pattern: Critic invisible, bulgular CriticFindingsInline
                 + ExplanationPanel'de açık kalır. */}
-            {(uiState === 'scribe_running' ||
-              uiState === 'scribe_revise' ||
-              uiState === 'proto_running' ||
-              uiState === 'trace_running' ||
-              uiState === 'ci_running') &&
-              (() => {
-                const { label: agentLabel, color: agentColor } = getAgentInfo(uiState);
-                const progress = currentStep?.progress;
-                const retryCount = currentStep?.retryCount ?? 0;
-                const completedSteps = activities
-                  ?.filter((a) => a.step !== 'complete' && a.step !== 'error' && a !== currentStep)
-                  .slice(-3);
-                const showTraceStepper = uiState === 'trace_running';
+              {(uiState === 'scribe_running' ||
+                uiState === 'scribe_revise' ||
+                uiState === 'proto_running' ||
+                uiState === 'trace_running' ||
+                uiState === 'ci_running') &&
+                (() => {
+                  const { label: agentLabel, color: agentColor } = getAgentInfo(uiState);
+                  const progress = currentStep?.progress;
+                  const retryCount = currentStep?.retryCount ?? 0;
+                  const completedSteps = activities
+                    ?.filter(
+                      (a) => a.step !== 'complete' && a.step !== 'error' && a !== currentStep
+                    )
+                    .slice(-3);
+                  const showTraceStepper = uiState === 'trace_running';
 
-                return (
-                  <div key={uiState} className="flex gap-2.5 animate-in fade-in duration-200">
-                    <div
-                      className={cn(
-                        'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition-colors duration-300',
-                        uiState.includes('scribe')
-                          ? 'border-ak-scribe/30 bg-ak-scribe/10'
-                          : uiState === 'proto_running'
-                            ? 'border-ak-proto/30 bg-ak-proto/10'
-                            : uiState === 'ci_running'
-                              ? 'border-yellow-400/30 bg-yellow-400/10'
-                              : 'border-ak-trace/30 bg-ak-trace/10'
-                      )}
-                    >
-                      <span
-                        className="h-2 w-2 rounded-full animate-pulse"
-                        style={{ backgroundColor: agentColor }}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {showTraceStepper && (activities?.length ?? 0) > 0 ? (
-                        <TraceProgressStepper
-                          activities={activities ?? []}
-                          currentStep={currentStep ?? null}
+                  return (
+                    <div key={uiState} className="flex gap-2.5 animate-in fade-in duration-200">
+                      <div
+                        className={cn(
+                          'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition-colors duration-300',
+                          uiState.includes('scribe')
+                            ? 'border-ak-scribe/30 bg-ak-scribe/10'
+                            : uiState === 'proto_running'
+                              ? 'border-ak-proto/30 bg-ak-proto/10'
+                              : uiState === 'ci_running'
+                                ? 'border-yellow-400/30 bg-yellow-400/10'
+                                : 'border-ak-trace/30 bg-ak-trace/10'
+                        )}
+                      >
+                        <span
+                          className="h-2 w-2 rounded-full animate-pulse"
+                          style={{ backgroundColor: agentColor }}
                         />
-                      ) : currentStep ? (
-                        <>
-                          <div className="text-sm leading-snug flex items-center gap-1.5 flex-wrap">
-                            {/*
-                             * Skip the agent label when the activity message
-                             * already starts with that name (otherwise we end
-                             * up with "Scribe Scribe analizi başarısız oldu").
-                             */}
-                            {!currentStep.message
-                              ?.toLowerCase()
-                              .startsWith(agentLabel.toLowerCase()) && (
-                              <span className="font-semibold" style={{ color: agentColor }}>
-                                {agentLabel}
-                              </span>
-                            )}
-                            <span className="text-ak-text-primary">{currentStep.message}</span>
-                            {retryCount > 0 && (
-                              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-400">
-                                yeniden deneniyor ({retryCount}/3)
-                              </span>
-                            )}
-                          </div>
-                          {progress != null && progress > 0 && (
-                            <div
-                              className="mt-1.5 w-full h-1 rounded-full overflow-hidden"
-                              style={{
-                                backgroundColor: 'var(--ak-border, rgba(255,255,255,0.08))',
-                              }}
-                            >
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {showTraceStepper && (activities?.length ?? 0) > 0 ? (
+                          <TraceProgressStepper
+                            activities={activities ?? []}
+                            currentStep={currentStep ?? null}
+                          />
+                        ) : currentStep ? (
+                          <>
+                            <div className="text-sm leading-snug flex items-center gap-1.5 flex-wrap">
+                              {/*
+                               * Skip the agent label when the activity message
+                               * already starts with that name (otherwise we end
+                               * up with "Scribe Scribe analizi başarısız oldu").
+                               */}
+                              {!currentStep.message
+                                ?.toLowerCase()
+                                .startsWith(agentLabel.toLowerCase()) && (
+                                <span className="font-semibold" style={{ color: agentColor }}>
+                                  {agentLabel}
+                                </span>
+                              )}
+                              <span className="text-ak-text-primary">{currentStep.message}</span>
+                              {retryCount > 0 && (
+                                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-400">
+                                  yeniden deneniyor ({retryCount}/3)
+                                </span>
+                              )}
+                            </div>
+                            {progress != null && progress > 0 && (
                               <div
-                                className="h-full rounded-full transition-all duration-500 ease-out"
-                                style={{ width: `${progress}%`, backgroundColor: agentColor }}
-                              />
-                            </div>
-                          )}
-                          {completedSteps && completedSteps.length > 0 && (
-                            <div className="mt-1 space-y-0.5">
-                              {completedSteps.map((a, i) => (
-                                <div key={i} className="text-xs text-ak-text-tertiary truncate">
-                                  {'✓ '}
-                                  {a.message}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {createdFiles &&
-                            createdFiles.length > 0 &&
-                            currentStep?.stage === 'proto' && (
-                              <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
-                                {createdFiles.slice(-5).map((f) => (
-                                  <div
-                                    key={f}
-                                    className="flex items-center gap-2 text-xs text-ak-text-secondary animate-fade-in"
-                                  >
-                                    <span className="text-green-500">&#10003;</span>
-                                    <span className="font-mono truncate">{f}</span>
-                                  </div>
-                                ))}
-                                {createdFiles.length > 5 && (
-                                  <span className="text-xs text-ak-text-tertiary">
-                                    +{createdFiles.length - 5} daha...
-                                  </span>
-                                )}
+                                className="mt-1.5 w-full h-1 rounded-full overflow-hidden"
+                                style={{
+                                  backgroundColor: 'var(--ak-border, rgba(255,255,255,0.08))',
+                                }}
+                              >
+                                <div
+                                  className="h-full rounded-full transition-all duration-500 ease-out"
+                                  style={{ width: `${progress}%`, backgroundColor: agentColor }}
+                                />
                               </div>
                             )}
-                        </>
-                      ) : (
-                        <div className="flex gap-0.5 pt-2">
-                          <span className="h-1 w-1 animate-bounce rounded-full bg-ak-text-tertiary [animation-delay:0ms]" />
-                          <span className="h-1 w-1 animate-bounce rounded-full bg-ak-text-tertiary [animation-delay:150ms]" />
-                          <span className="h-1 w-1 animate-bounce rounded-full bg-ak-text-tertiary [animation-delay:300ms]" />
-                        </div>
-                      )}
+                            {completedSteps && completedSteps.length > 0 && (
+                              <div className="mt-1 space-y-0.5">
+                                {completedSteps.map((a, i) => (
+                                  <div key={i} className="text-xs text-ak-text-tertiary truncate">
+                                    {'✓ '}
+                                    {a.message}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {createdFiles &&
+                              createdFiles.length > 0 &&
+                              currentStep?.stage === 'proto' && (
+                                <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                                  {createdFiles.slice(-5).map((f) => (
+                                    <div
+                                      key={f}
+                                      className="flex items-center gap-2 text-xs text-ak-text-secondary animate-fade-in"
+                                    >
+                                      <span className="text-green-500">&#10003;</span>
+                                      <span className="font-mono truncate">{f}</span>
+                                    </div>
+                                  ))}
+                                  {createdFiles.length > 5 && (
+                                    <span className="text-xs text-ak-text-tertiary">
+                                      +{createdFiles.length - 5} daha...
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                          </>
+                        ) : (
+                          <div className="flex gap-0.5 pt-2">
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-ak-text-tertiary [animation-delay:0ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-ak-text-tertiary [animation-delay:150ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-ak-text-tertiary [animation-delay:300ms]" />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
-            <div ref={bottomRef} />
+              <div ref={bottomRef} />
+            </div>
           </div>
 
-          {/* Scroll-to-bottom button */}
+          {/* Scroll-to-bottom button — outside scroll container, inside relative wrapper */}
           {showScrollDown && (
             <button
               onClick={scrollToBottom}
@@ -530,7 +534,7 @@ export const ChatPanel = memo(function ChatPanel({
                   scrollToBottom();
                 }
               }}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-ak-border bg-ak-surface px-4 py-1.5 text-xs font-medium text-ak-text-secondary shadow-lg hover:text-ak-text-primary transition-colors animate-in fade-in slide-in-from-bottom-2 duration-200"
+              className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-ak-border bg-ak-surface px-4 py-1.5 text-xs font-medium text-ak-text-secondary shadow-lg hover:text-ak-text-primary transition-colors animate-in fade-in slide-in-from-bottom-2 duration-200"
             >
               ↓ Yeni mesajlar
             </button>

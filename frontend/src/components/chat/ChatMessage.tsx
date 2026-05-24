@@ -4,6 +4,8 @@ import type { ChatMessage as ChatMessageType, AgentName, UserMessageImage } from
 import { PlanCard } from './PlanCard';
 import { AgentStartedLine } from './AgentStartedLine';
 import { TraceFailureMessage } from './TraceFailureMessage';
+import { formatDuration } from '../../utils/formatDuration';
+import { useRelativeDuration } from '../../hooks/useRelativeDuration';
 
 /** Lightweight inline markdown renderer — no external deps, handles code blocks, bold, inline code */
 function SimpleMarkdown({ text }: { text: string }) {
@@ -320,6 +322,167 @@ function UserImagePreviewModal({
   );
 }
 
+/**
+ * Chat agent narrator (2026-05-23) — unified agent bubble for Scribe, Proto,
+ * and Trace. Renders:
+ *
+ * 1. **Summary** (LLM Turkish narration) or live narrator italic label
+ * 2. **Embedded PlanCard** (only Scribe's last completed bubble, DL-7)
+ * 3. **Sub-step disclosure** (collapsed `<details>` toggle, includes
+ *    Critic + Validator entries — DL-2/DL-3 "no separate bubble")
+ * 4. **Footer meta** — iteration badge, file/line counts, duration
+ *
+ * Backward-compatible: when `summary` is missing (legacy pipelines) the
+ * bubble falls through to `SimpleMarkdown(content)`.
+ */
+function AgentBubble({
+  message,
+  onApprove,
+  onReject,
+}: {
+  message: Extract<ChatMessageType, { type: 'agent' }>;
+  onApprove?: (jiraConfig?: JiraApproveConfig) => void;
+  onReject?: () => void;
+}) {
+  const c = AGENT_COLORS[message.agent];
+
+  // Chat narrator: prefer summary over raw content for display + copy
+  const hasSummary = !!message.summary;
+  const copyText = message.summary ?? message.content;
+
+  // Duration rendering (NF-2: absent durationMs → no footer)
+  const liveText = useRelativeDuration(message.startedAt ?? null, message.isLive ?? false);
+  const completedText = formatDuration(message.durationMs);
+  const durationText = message.isLive ? liveText : completedText;
+
+  // Proto-specific metadata line (backward-compat with F-6 2026-05-22)
+  const hasProtoMeta =
+    message.agent === 'proto' &&
+    (message.totalFiles !== undefined || message.totalLines !== undefined || !!message.branch);
+
+  // Footer meta — any piece present triggers the footer row
+  const showFooter =
+    !!durationText ||
+    (message.iteration !== undefined && message.iteration > 1) ||
+    message.totalFiles !== undefined;
+
+  return (
+    <div className="group flex gap-2.5 animate-in fade-in slide-in-from-left-2 duration-200">
+      <AgentAvatar agent={message.agent} />
+      <div
+        className={cn(
+          'min-w-0 flex-1 rounded-lg border-l-[3px] px-3.5 py-2.5',
+          'bg-ak-surface-2/40 backdrop-blur-sm',
+          c.border.replace('/30', '/60')
+        )}
+      >
+        {/* Header — agent badge + timestamp + copy */}
+        <div className="mb-0.5 flex items-center gap-2">
+          <span className={cn('text-xs font-semibold', c.text)}>{c.label}</span>
+          <span className="text-[10px] text-ak-text-tertiary">{formatTime(message.timestamp)}</span>
+          <JiraBadge epicKey={message.jiraEpicKey} />
+          <button
+            onClick={() => navigator.clipboard.writeText(copyText)}
+            title="Kopyala"
+            aria-label="Mesajı kopyala"
+            className="ml-auto rounded p-1 text-ak-text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ak-surface-2 hover:text-ak-primary"
+          >
+            <svg
+              className="h-3.5 w-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+              />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body — live narrator italic OR summary OR raw content */}
+        {message.isLive && message.liveLabel ? (
+          <div className="text-sm italic text-ak-text-tertiary">
+            <span className="text-green-400">●</span> {message.liveLabel}
+          </div>
+        ) : hasSummary ? (
+          <div data-testid="proto-summary-primary" className="space-y-1">
+            <p className="whitespace-pre-wrap text-sm text-ak-text-secondary">{message.summary}</p>
+            {hasProtoMeta && (
+              <p data-testid="proto-meta-secondary" className="text-xs text-ak-text-tertiary">
+                {[
+                  message.totalFiles !== undefined ? `${message.totalFiles} dosya` : null,
+                  message.totalLines !== undefined ? `${message.totalLines} satır` : null,
+                  message.branch ? message.branch : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
+          </div>
+        ) : (
+          <SimpleMarkdown text={message.content} />
+        )}
+
+        {/* Embedded plan card — only on Scribe's completed bubble (DL-7) */}
+        {message.embeddedPlan ? (
+          <div className="mt-2">
+            <PlanCard
+              plan={message.embeddedPlan.plan}
+              version={message.embeddedPlan.version}
+              status={message.embeddedPlan.status}
+              isChangeRequest={false}
+              onApprove={message.embeddedPlan.status === 'active' ? onApprove : undefined}
+              onReject={message.embeddedPlan.status === 'active' ? onReject : undefined}
+              spec={message.embeddedPlan.spec}
+              assumptions={message.embeddedPlan.assumptions}
+            />
+          </div>
+        ) : null}
+
+        {/* Sub-step disclosure — collapsed by default (DL-2/DL-3) */}
+        {message.subSteps && message.subSteps.length > 0 ? (
+          <details className="mt-2 text-xs text-ak-text-tertiary">
+            <summary className="cursor-pointer hover:text-ak-text-secondary transition-colors">
+              ▾ {message.subSteps.length} adım
+            </summary>
+            <ul className="mt-1 ml-4 space-y-1">
+              {message.subSteps.map((step, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <span>{step.status === 'done' ? '✓' : step.status === 'live' ? '●' : '✗'}</span>
+                  <span>{step.label}</span>
+                  {step.durationMs ? (
+                    <span className="text-ak-text-tertiary text-[10px]">
+                      {formatDuration(step.durationMs)}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+
+        {/* Footer meta — duration + iteration badge + file/line counts */}
+        {showFooter ? (
+          <div className="mt-2 flex items-center gap-2 text-xs text-ak-text-tertiary">
+            {message.iteration !== undefined && message.iteration > 1 ? (
+              <span className="rounded bg-ak-surface-2 px-1.5 py-0.5 text-[10px] font-medium">
+                İterasyon {message.iteration}
+              </span>
+            ) : null}
+            {message.totalFiles !== undefined ? <span>{message.totalFiles} dosya</span> : null}
+            {message.totalLines !== undefined ? <span>· {message.totalLines} satır</span> : null}
+            {durationText ? <span className="text-green-400">· {durationText}</span> : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function ChatMessage({
   message,
   onApprove,
@@ -333,73 +496,7 @@ export function ChatMessage({
       return <UserBubble message={message} />;
 
     case 'agent': {
-      const c = AGENT_COLORS[message.agent];
-      // F-6 (2026-05-22): Proto rows lead with the LLM-generated human-language
-      // `summary` ("Sayaç için React projesi hazırladım…") and demote technical
-      // metadata (dosya/satır/branch) to a smaller secondary line. Bakkal
-      // persona (non-developer) reads narration first, numbers second.
-      // Other agents (Scribe/Trace narration) and legacy pipelines without
-      // `summary` fall through to the original SimpleMarkdown(content) path.
-      const hasProtoSummary = message.agent === 'proto' && !!message.summary;
-      const hasProtoMeta =
-        message.agent === 'proto' &&
-        (message.totalFiles !== undefined || message.totalLines !== undefined || !!message.branch);
-      // Copy text: prefer summary (what the user reads); fall back to content.
-      const copyText = hasProtoSummary ? (message.summary as string) : message.content;
-      return (
-        <div className="group flex gap-2.5 animate-in fade-in slide-in-from-left-2 duration-200">
-          <AgentAvatar agent={message.agent} />
-          <div className="min-w-0 flex-1">
-            <div className="mb-0.5 flex items-center gap-2">
-              <span className={cn('text-xs font-semibold', c.text)}>{c.label}</span>
-              <span className="text-[10px] text-ak-text-tertiary">
-                {formatTime(message.timestamp)}
-              </span>
-              <JiraBadge epicKey={message.jiraEpicKey} />
-              <button
-                onClick={() => navigator.clipboard.writeText(copyText)}
-                title="Kopyala"
-                aria-label="Mesajı kopyala"
-                className="ml-auto rounded p-1 text-ak-text-tertiary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ak-surface-2 hover:text-ak-primary"
-              >
-                <svg
-                  className="h-3.5 w-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                  />
-                </svg>
-              </button>
-            </div>
-            {hasProtoSummary ? (
-              <div data-testid="proto-summary-primary" className="space-y-1">
-                <p className="whitespace-pre-wrap text-sm text-ak-text-secondary">
-                  {message.summary}
-                </p>
-                {hasProtoMeta && (
-                  <p data-testid="proto-meta-secondary" className="text-xs text-ak-text-tertiary">
-                    {[
-                      message.totalFiles !== undefined ? `${message.totalFiles} dosya` : null,
-                      message.totalLines !== undefined ? `${message.totalLines} satır` : null,
-                      message.branch ? message.branch : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <SimpleMarkdown text={message.content} />
-            )}
-          </div>
-        </div>
-      );
+      return <AgentBubble message={message} onApprove={onApprove} onReject={onReject} />;
     }
 
     case 'clarification':
@@ -469,6 +566,14 @@ export function ChatMessage({
             <span className="text-sm font-semibold text-ak-text-primary">Test Sonuçları</span>
             <JiraBadge epicKey={message.jiraEpicKey} />
           </div>
+          {/* Chat narrator (2026-05-23, Gap-3 fix) — LLM Turkish summary above
+              the numeric pass/fail/coverage block. Older pipelines (no summary)
+              skip this paragraph and fall through to the existing layout. */}
+          {message.summary && (
+            <p className="mb-3 whitespace-pre-wrap text-sm text-ak-text-secondary">
+              {message.summary}
+            </p>
+          )}
           <div className="flex gap-4 text-xs">
             <div>
               <span className="text-lg font-bold text-green-400">{message.passed}</span>
@@ -572,6 +677,45 @@ export function ChatMessage({
                 })}
               </div>
             </details>
+          )}
+
+          {/* Chat narrator (2026-05-23, Gap-3 fix) — sub-step disclosure
+              (Critic + Validator entries tagged via `source`). Mirrors the
+              AgentBubble pattern but inside the test_result card. */}
+          {message.subSteps && message.subSteps.length > 0 && (
+            <details className="mt-3 text-xs text-ak-text-tertiary">
+              <summary className="cursor-pointer hover:text-ak-text-secondary transition-colors">
+                ▾ {message.subSteps.length} adım
+              </summary>
+              <ul className="mt-1 ml-4 space-y-1">
+                {message.subSteps.map((step, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <span>{step.status === 'done' ? '✓' : step.status === 'live' ? '●' : '✗'}</span>
+                    <span>{step.label}</span>
+                    {step.durationMs ? (
+                      <span className="text-ak-text-tertiary text-[10px]">
+                        {formatDuration(step.durationMs)}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          {/* Chat narrator (2026-05-23, Gap-3 fix) — duration + iteration footer */}
+          {(message.durationMs !== undefined ||
+            (message.iteration !== undefined && message.iteration > 1)) && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-ak-text-tertiary">
+              {message.iteration !== undefined && message.iteration > 1 ? (
+                <span className="rounded bg-ak-surface-2 px-1.5 py-0.5 text-[10px] font-medium">
+                  İterasyon {message.iteration}
+                </span>
+              ) : null}
+              {message.durationMs !== undefined ? (
+                <span className="text-green-400">{formatDuration(message.durationMs)}</span>
+              ) : null}
+            </div>
           )}
 
           {message.failed > 0 && (

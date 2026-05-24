@@ -220,6 +220,7 @@ export function formatScribeConversationTranscript(messages: ScribeMessageType[]
       case 'trace_started':
       case 'trace_completed':
       case 'trace_failed':
+      case 'scribe_completed':
       case 'scribe_failed':
       case 'proto_failed':
         break;

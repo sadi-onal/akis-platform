@@ -1,5 +1,18 @@
 import type { StructuredSpec } from './workflow';
-import type { UserFriendlyPlan } from './plan';
+import type { UserFriendlyPlan, PlanStatus } from './plan';
+
+/**
+ * Sub-step stream — chat ajan baloncuğunda collapsed listede yer alan
+ * insan-dili satırlar. Backend `SubStep` ile bire bir aynı. Critic ve
+ * Validator etkileri burada source ile etiketlenir; chat'te ayrı bubble
+ * yok (spec DL-2/DL-3).
+ */
+export interface SubStep {
+  label: string;
+  durationMs?: number;
+  status: 'done' | 'live' | 'failed';
+  source?: 'critic' | 'validator' | 'agent';
+}
 
 /* ─── UI State Machine ──────────────────────────── */
 
@@ -78,6 +91,27 @@ export type ChatMessage =
       totalFiles?: number;
       totalLines?: number;
       branch?: string;
+      /**
+       * Chat agent narrator (2026-05-23) — yeni field'lar:
+       * - isLive: çalışmakta olan ajan baloncuğu mu?
+       * - liveLabel: italic narrator metni ("Acceptance criteria yazıyor")
+       * - startedAt: useRelativeDuration için
+       * - durationMs: completed duration (server-truth)
+       * - subSteps: collapsed sub-step listesi
+       * - embeddedPlan: sadece Scribe son tur'da plan kartı için
+       */
+      isLive?: boolean;
+      liveLabel?: string;
+      startedAt?: string;
+      durationMs?: number;
+      subSteps?: SubStep[];
+      embeddedPlan?: {
+        plan: UserFriendlyPlan;
+        version: number;
+        status: PlanStatus;
+        spec?: StructuredSpec;
+        assumptions?: string[];
+      };
     }
   | {
       type: 'clarification';
@@ -127,6 +161,16 @@ export type ChatMessage =
       jiraEpicKey?: string;
       /** Iteration counter from event-log `trace_completed` (2026-05-22). */
       iteration?: number;
+      /**
+       * Chat narrator (2026-05-23) — Trace `trace_completed` event-log payload
+       * carries an LLM Turkish summary, a server-truth `durationMs`, and a
+       * sub-step disclosure list. The renderer (ChatMessage `test_result` case)
+       * surfaces these alongside the numeric pass/fail/coverage block — when
+       * missing the existing pipeline header keeps its old shape.
+       */
+      summary?: string;
+      durationMs?: number;
+      subSteps?: SubStep[];
     }
   | {
       type: 'error';

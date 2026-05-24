@@ -1165,5 +1165,13 @@
   "sidebar.group.thisWeek": "This Week",
   "sidebar.group.older": "Older",
 
-  "app.loading": "Loading…"
+  "app.loading": "Loading…",
+
+  "chat.narrator.live_under_one_minute": "less than 1 minute",
+  "chat.narrator.live_minutes_running_one": "running for 1 minute",
+  "chat.narrator.live_minutes_running_n": "running for {{count}} minutes",
+  "chat.narrator.iteration_badge": "Iteration {{n}}",
+  "chat.narrator.substep_toggle": "{{count}} steps",
+  "chat.narrator.unit_files": "{{n}} files",
+  "chat.narrator.unit_lines": "{{n}} lines"
 }

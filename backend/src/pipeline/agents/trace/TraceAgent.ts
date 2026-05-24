@@ -162,7 +162,8 @@ Output Format — respond ONLY with valid JSON:
     "coveragePercentage": 80,
     "coveredCriteria": ["ac-1", "ac-2"],
     "uncoveredCriteria": ["ac-5"]
-  }
+  },
+  "summary": "1-3 sentences in Turkish, conversational tone, describing what you tested — which acceptance criteria are covered, total tests produced, any uncovered criteria. Max 280 characters. Example: '21 test yazdım — sayacın artırma, azaltma ve sıfırlama akışlarını uçtan uca kapsıyor. Mobil layout kriteri için iki ek senaryo eklendi.'"
 }
 
 Also generate a playwright.config.ts file in the testFiles array.
@@ -373,7 +374,7 @@ export class TraceAgent {
       return testsResult;
     }
 
-    const { testFiles, coverageMatrix, testSummary } = testsResult.data;
+    const { testFiles, coverageMatrix, testSummary, summary } = testsResult.data;
     emit?.('parsing', `${testFiles.length} test dosyası hazırlandı`, 75);
 
     // Generate BDD/Gherkin feature files from spec (only when Cucumber is enabled)
@@ -392,6 +393,7 @@ export class TraceAgent {
           testSummary,
           gherkinFeatures: gherkinResult.features,
           stepDefinitions: gherkinResult.stepDefinitions,
+          ...(summary ? { summary } : {}),
         },
       };
     }
@@ -455,6 +457,7 @@ export class TraceAgent {
         ciWorkflowPath: AKIS_E2E_WORKFLOW_PATH,
         gherkinFeatures: gherkinResult.features,
         stepDefinitions: gherkinResult.stepDefinitions,
+        ...(summary ? { summary } : {}),
       },
     };
   }
@@ -543,7 +546,8 @@ After pushing, respond with a JSON summary:
 {
   "testFiles": [{"filePath": "...", "testCount": N}],
   "coverageMatrix": {"AC-1": ["test-file.spec.ts"], ...},
-  "testSummary": {"totalTests": N, "coveragePercentage": N, "coveredCriteria": [...], "uncoveredCriteria": [...]}
+  "testSummary": {"totalTests": N, "coveragePercentage": N, "coveredCriteria": [...], "uncoveredCriteria": [...]},
+  "summary": "1-3 sentences in Turkish, conversational tone, describing what you tested — which acceptance criteria are covered, total tests produced, any uncovered criteria. Max 280 characters. Example: '21 test yazdım — sayacın artırma, azaltma ve sıfırlama akışlarını uçtan uca kapsıyor. Mobil layout kriteri için iki ek senaryo eklendi.'"
 }`;
 
     const traceTools = [...TRACE_TOOLS];
@@ -599,7 +603,13 @@ After pushing, respond with a JSON summary:
             coveredCriteria: string[];
             uncoveredCriteria: string[];
           };
+          summary?: string;
         };
+
+        // Chat narrator (2026-05-23): pick up optional Turkish summary;
+        // trim + cap defensively. Missing/blank → undefined (NF-2 contract).
+        const rawSummary = typeof parsed.summary === 'string' ? parsed.summary.trim() : undefined;
+        const summary = rawSummary && rawSummary.length > 0 ? rawSummary.slice(0, 500) : undefined;
 
         emit?.(
           'complete',
@@ -626,6 +636,7 @@ After pushing, respond with a JSON summary:
             ciWorkflowPath: AKIS_E2E_WORKFLOW_PATH,
             gherkinFeatures: gherkin.features,
             stepDefinitions: gherkin.stepDefinitions,
+            ...(summary ? { summary } : {}),
           },
         };
       }
@@ -756,7 +767,10 @@ After pushing, respond with a JSON summary:
     knowledgeContext?: string,
     imageBlocks?: readonly AnthropicImageBlock[]
   ): Promise<
-    | { type: 'output'; data: Pick<TraceOutput, 'testFiles' | 'coverageMatrix' | 'testSummary'> }
+    | {
+        type: 'output';
+        data: Pick<TraceOutput, 'testFiles' | 'coverageMatrix' | 'testSummary' | 'summary'>;
+      }
     | { type: 'error'; error: PipelineError }
   > {
     const codebaseContext = files.map((f) => `--- ${f.filePath} ---\n${f.content}`).join('\n\n');
@@ -836,6 +850,10 @@ After pushing, respond with a JSON summary:
       const testFiles = obj.testFiles as TraceOutput['testFiles'] | undefined;
       const coverageMatrix = obj.coverageMatrix as Record<string, string[]> | undefined;
       const testSummary = obj.testSummary as TraceOutput['testSummary'] | undefined;
+      // Chat narrator (2026-05-23): pick up optional Turkish summary; trim +
+      // cap defensively. Missing/blank → undefined (NF-2 contract).
+      const rawSummary = typeof obj.summary === 'string' ? obj.summary.trim() : undefined;
+      const summary = rawSummary && rawSummary.length > 0 ? rawSummary.slice(0, 500) : undefined;
 
       if (!testFiles || !Array.isArray(testFiles) || testFiles.length === 0) {
         if (attempt < RETRY_CONFIG.specValidationMaxRetries) continue;
@@ -905,6 +923,7 @@ After pushing, respond with a JSON summary:
             coveredCriteria,
             uncoveredCriteria,
           },
+          ...(summary ? { summary } : {}),
         },
       };
     }
