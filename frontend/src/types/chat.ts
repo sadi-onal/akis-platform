@@ -50,7 +50,10 @@ export interface UserMessageImage {
   /** Original filename for alt text + modal caption. */
   name: string;
   /** URL usable by <img src>. In the current client this is the blob URL
-   * created from `URL.createObjectURL(file)` so it renders without re-fetching. */
+   * created from `URL.createObjectURL(file)` so it renders without re-fetching.
+   * TODO(L-17): If attachment creation is re-enabled, ensure blob URLs are
+   * revoked (URL.revokeObjectURL) when messages leave the viewport or the
+   * conversation unmounts to prevent memory leaks. */
   previewUrl: string;
   /** MIME type (kept for future format-specific rendering). */
   mimeType: string;

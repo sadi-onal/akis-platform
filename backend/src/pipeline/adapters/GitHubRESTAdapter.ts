@@ -278,11 +278,28 @@ export function createGitHubRESTAdapter(opts: GitHubRESTAdapterOptions): GitHubS
         'GET',
         `/repos/${owner}/${repo}/git/ref/heads/${base}`
       );
-      // Create the new branch
-      await ghFetch(token, 'POST', `/repos/${owner}/${repo}/git/refs`, {
-        ref: `refs/heads/${branch}`,
-        sha: ref.object.sha,
-      });
+      // Create the new branch — handle "already exists" gracefully for
+      // idempotent retries (422 with "Reference already exists").
+      try {
+        await ghFetch(token, 'POST', `/repos/${owner}/${repo}/git/refs`, {
+          ref: `refs/heads/${branch}`,
+          sha: ref.object.sha,
+        });
+      } catch (err) {
+        if (
+          err instanceof GitHubAPIError &&
+          err.statusCode === 422 &&
+          err.message.includes('Reference already exists')
+        ) {
+          // Branch already exists — treat as success for idempotent retries
+          logger.info(
+            { owner, repo, branch },
+            '[GitHubRESTAdapter] createBranch: branch already exists — treating as success'
+          );
+          return;
+        }
+        throw err;
+      }
     },
 
     async commitFile(

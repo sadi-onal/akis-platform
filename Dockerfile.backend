@@ -55,6 +55,9 @@ RUN pnpm run build
 # Remove devDependencies
 RUN pnpm prune --prod
 
+# NOTE: @xenova/transformers ships onnxruntime-node binaries for all platforms (~30MB).
+# For production ARM64 images, consider adding: RUN rm -rf node_modules/onnxruntime-node/bin/napi-v3/{win32,darwin}*
+
 # =============================================================================
 # Stage 2: Production
 # =============================================================================

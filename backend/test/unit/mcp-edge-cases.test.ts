@@ -845,10 +845,10 @@ describe('GitHub REST Adapter — createBranch', () => {
     }
   });
 
-  it('throws when branch already exists (422)', async () => {
-    let _callCount = 0;
+  it('succeeds silently when branch already exists (422 idempotent)', async () => {
+    let callCount = 0;
     const restore = stubFetch(async (_url, init) => {
-      _callCount += 1;
+      callCount += 1;
       if (init.method === 'GET') {
         return jsonResponse({ object: { sha: 'sha-abc' } });
       }
@@ -858,13 +858,9 @@ describe('GitHub REST Adapter — createBranch', () => {
 
     try {
       const adapter = createGitHubRESTAdapter({ token: 'ghp_exists' });
-      await assert.rejects(
-        () => adapter.createBranch('user', 'repo', 'existing-branch'),
-        (err: Error) => {
-          assert.ok(err.message.includes('422') || err.message.includes('already exists'));
-          return true;
-        },
-      );
+      // Should NOT throw — "Reference already exists" is treated as idempotent success
+      await adapter.createBranch('user', 'repo', 'existing-branch');
+      assert.ok(callCount >= 2, 'Should have made GET + POST calls');
     } finally {
       restore();
     }

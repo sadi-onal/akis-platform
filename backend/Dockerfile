@@ -1,4 +1,9 @@
-# AKIS Backend Dockerfile
+# DEPRECATED: This Dockerfile is stale. The production Dockerfile is
+# Dockerfile.backend at the repo root (used by docker-compose.yml and CI).
+# This file is only still referenced by .github/workflows/deploy-prod.yml
+# which should be migrated to use Dockerfile.backend instead.
+#
+# AKIS Backend Dockerfile (legacy)
 # Multi-stage build for minimal production image
 # Optimized for OCI Free Tier ARM64 (Ampere A1)
 

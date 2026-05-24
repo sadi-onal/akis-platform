@@ -116,7 +116,8 @@ export class DrizzlePipelineStore implements PipelineStore {
       .select()
       .from(pipelines)
       .where(eq(pipelines.userId, userId))
-      .orderBy(desc(pipelines.updatedAt));
+      .orderBy(desc(pipelines.updatedAt))
+      .limit(200);
 
     return rows.map(rowToState);
   }
@@ -139,7 +140,8 @@ export class DrizzlePipelineStore implements PipelineStore {
                OR ${pipelines.intermediateState} ->> 'parentPipelineId' IS NULL)`,
         ),
       )
-      .orderBy(desc(pipelines.updatedAt));
+      .orderBy(desc(pipelines.updatedAt))
+      .limit(200);
 
     return rows.map(rowToState);
   }

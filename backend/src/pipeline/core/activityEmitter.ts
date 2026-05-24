@@ -13,7 +13,8 @@ import { logger } from '../../lib/logger.js';
 
 // Pipeline-level in-memory event bus for real-time activity tracking
 export const pipelineBus = new EventEmitter();
-pipelineBus.setMaxListeners(50);
+// Each concurrent SSE connection adds a listener; 200 handles ~100 concurrent users
+pipelineBus.setMaxListeners(200);
 
 export interface PipelineActivity {
   pipelineId: string;

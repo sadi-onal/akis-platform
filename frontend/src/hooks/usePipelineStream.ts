@@ -87,7 +87,10 @@ export function usePipelineStream(
       const key = `${activity.stage}:${activity.step}:${activity.timestamp}`;
       if (seenTimestamps.has(key)) return;
       seenTimestamps.add(key);
-      setActivities((prev) => [...prev, activity]);
+      setActivities((prev) => {
+        const next = [...prev, activity];
+        return next.length > 200 ? next.slice(-200) : next;
+      });
 
       if (activity.step === 'file_created' && activity.detail) {
         setCreatedFiles((prev) => [...prev, activity.detail!]);

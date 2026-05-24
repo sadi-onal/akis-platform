@@ -21,8 +21,8 @@ import { relations } from 'drizzle-orm';
 // Both work correctly when the DB server runs in UTC (our standard).
 // Do NOT mix withTimezone settings within a single table's columns.
 
-// pgvector custom type for embedding columns (1536 dimensions for text-embedding-3-small)
-const vector1536 = customType<{ data: number[]; driverData: string }>({
+// pgvector custom type for embedding columns (384 dimensions for all-MiniLM-L6-v2)
+const vector384 = customType<{ data: number[]; driverData: string }>({
   dataType() {
     return 'vector(384)';
   },
@@ -1764,7 +1764,7 @@ export const knowledgeChunks = pgTable(
     chatId: uuid('chat_id'),
     chunkIndex: integer('chunk_index').notNull(),
     content: text('content').notNull(),
-    embedding: vector1536('embedding'),
+    embedding: vector384('embedding'),
     tokenCount: integer('token_count'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },

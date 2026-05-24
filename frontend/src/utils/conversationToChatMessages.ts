@@ -315,15 +315,15 @@ export function conversationToChatMessages(
   // Chat narrator (2026-05-23, F-6) — stable timestamp sort so out-of-order
   // event-log entries (system chips inserted mid-stream, late-arriving
   // proto_completed) render in chronological order. JS Array.sort is stable
-  // (ES2019+) so ties keep their original push order. Indexed bucket-sort
-  // keys decode each timestamp once.
-  msgs.sort((a, b) => {
-    const ta = new Date((a as { timestamp: string }).timestamp).getTime();
-    const tb = new Date((b as { timestamp: string }).timestamp).getTime();
-    if (!Number.isFinite(ta) || !Number.isFinite(tb)) return 0;
-    if (ta === tb) return 0;
-    return ta - tb;
-  });
+  // (ES2019+) so ties keep their original push order. Pre-compute timestamps
+  // to avoid O(n log n) Date allocations inside the comparator.
+  const tsMap = new Map<(typeof msgs)[number], number>();
+  for (const msg of msgs) {
+    const raw = (msg as { timestamp: string }).timestamp;
+    const t = raw ? new Date(raw).getTime() : 0;
+    tsMap.set(msg, Number.isFinite(t) ? t : 0);
+  }
+  msgs.sort((a, b) => (tsMap.get(a) ?? 0) - (tsMap.get(b) ?? 0));
 
   return msgs;
 }
