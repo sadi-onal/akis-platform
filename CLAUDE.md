@@ -109,6 +109,25 @@ If `./scripts/dev-up.sh` complains about missing `backend/.env` or `docker-compo
 
 `scripts/smoke/walkthrough.mjs` already does all of the above end-to-end with Playwright and writes screenshots to `docs/dogfooding/screenshots/`.
 
+## Session discipline
+
+**1 session = 1 concern = 1 PR.** Each AI session tackles exactly one feature, bugfix, or refactor.
+
+- Good: "PR-T1: AI logging persistence" (tek concern, tek PR)
+- Bad: "A1-A4 holistic + chat-history fix + z-index" (3 concern, tek PR)
+
+**Mid-session bulgu yönetimi** — session sırasında farklı bir sorun fark edildiğinde:
+
+| Durum | Aksiyon |
+|---|---|
+| **Blocker** — mevcut işi engelliyor | Inline düzelt, aynı PR'da kabul edilebilir (engeli kaldırmak işin parçası) |
+| **İlişkili ama bağımsız** — aynı alandaki ayrı concern | `/parallel` ile ayrı worktree + PR'a dispatch et. Aynı session, ayrı PR |
+| **İlgisiz** — tamamen farklı alan | `.claude/state/inbox.md`'ye 1 satır not ekle, dokunma |
+
+**Inbox kuralları**: `.claude/state/inbox.md` append-only, her entry `- [ ] {concern} — {context} — {tarih}` formatında. Session başında inbox kontrol edilir; doluysa kullanıcıyla öncelik belirlenir.
+
+The T1-T5 series is the model to follow for parallel concerns.
+
 ## Conventions worth respecting
 
 - Auto-formatting on edit is wired via `.claude/hooks/format-on-edit.sh` (Prettier on `backend/` and `frontend/` files). Don't fight it — write code, let the hook normalize.
