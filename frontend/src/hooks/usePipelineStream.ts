@@ -167,16 +167,6 @@ export function usePipelineStream(
     };
   }, [pipelineId]);
 
-  // Close SSE when pipeline becomes inactive (completed/failed/cancelled)
-  // to avoid zombie connections hitting browser connection limits.
-  useEffect(() => {
-    if (!_isActive && esRef.current) {
-      esRef.current.close();
-      esRef.current = null;
-      setIsConnected(false);
-    }
-  }, [_isActive]);
-
   const currentStep = activities.length > 0 ? activities[activities.length - 1] : null;
 
   const progressByStage = activities.reduce<Record<string, number>>((acc, a) => {
