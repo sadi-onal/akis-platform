@@ -49,7 +49,10 @@ const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
  * Restart-safe: state is self-contained and verified via HMAC signature.
  */
 function getSigningKey(): string {
-  return env.AUTH_JWT_SECRET || 'dev-oauth-state-key';
+  if (!env.AUTH_JWT_SECRET) {
+    throw new Error('AUTH_JWT_SECRET is required for OAuth state signing');
+  }
+  return env.AUTH_JWT_SECRET;
 }
 
 function hmacSign(payload: string): string {

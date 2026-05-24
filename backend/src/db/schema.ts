@@ -16,6 +16,11 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
+// NOTE: Legacy tables (jobs, conversationThreads, users, etc.) use timestamp WITHOUT timezone.
+// Newer tables (pipelines, knowledgeSources, profiles, etc.) use timestamp WITH timezone.
+// Both work correctly when the DB server runs in UTC (our standard).
+// Do NOT mix withTimezone settings within a single table's columns.
+
 // pgvector custom type for embedding columns (1536 dimensions for text-embedding-3-small)
 const vector1536 = customType<{ data: number[]; driverData: string }>({
   dataType() {

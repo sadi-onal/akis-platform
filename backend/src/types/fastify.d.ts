@@ -88,6 +88,7 @@ declare module 'fastify' {
       opts: { port: number; host?: string },
       callback: (err: Error | null) => void
     ): void;
+    close(): Promise<void>;
     log: {
       info: (...args: unknown[]) => void;
       error: (...args: unknown[]) => void;

@@ -10,7 +10,9 @@ name: akis
 services:
   # ── PostgreSQL ──
   db:
-    image: postgres:16-alpine
+    # pgvector image — backend migrations require the `vector` extension
+    # for the embedding-based RAG/knowledge tables.
+    image: pgvector/pgvector:pg16
     container_name: akis-db
     restart: unless-stopped
     environment:
@@ -51,7 +53,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-akis_v2}
-      PORT: 3000
+      AKIS_PORT: 3000
     expose:
       - "3000"
     depends_on:

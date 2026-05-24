@@ -63,7 +63,9 @@ describe('AUTH_COOKIE_DOMAIN — cookie attribute regression', () => {
     const opts = await loadCookieOpts('akisflow.com');
     assert.equal(opts.domain, 'akisflow.com', 'cookieOpts.domain must reflect the env var');
     assert.equal(opts.secure, true);
-    assert.equal(opts.sameSite, 'none', 'secure=true must force sameSite=none for cross-site OAuth redirects');
+    // sameSite now comes from AUTH_COOKIE_SAMESITE (default: Lax) — no longer
+    // forced to 'none' by secure=true. Same-origin deployments use Lax.
+    assert.equal(opts.sameSite, 'lax', 'sameSite defaults to Lax from AUTH_COOKIE_SAMESITE');
   });
 
   it('omits cookieOpts.domain when AUTH_COOKIE_DOMAIN is unset (host-only cookie)', async () => {

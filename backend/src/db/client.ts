@@ -31,3 +31,15 @@ export const db = new Proxy({} as NodePgDatabase<typeof schema>, {
     return getDb()[prop as keyof NodePgDatabase<typeof schema>];
   },
 });
+
+/**
+ * Close the underlying pg Pool. Call during graceful shutdown
+ * (e.g., via a Fastify onClose hook) to release connections cleanly.
+ */
+export async function closePool(): Promise<void> {
+  if (_pool) {
+    await _pool.end();
+    _pool = null;
+    _db = null;
+  }
+}
