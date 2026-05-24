@@ -28,28 +28,35 @@ Tarih: 2026-05-23
 6. **Clarifying questions** — 5/5'te "0 soru soruldu", hiç tetiklenmemiş
 7. **Confidence scoring** — 5/5'te skor=92, ayrıştırma yok
 
-### ❌ Kanıtlanmamış
-8. **Proto: spec → kod → push → PR** — benchmark awaiting_approval'da duruyor
-9. **Trace: test üretimi + coverage** — hiç benchmark'ta çalıştırılmamış
-10. **Fix-loop recovery** — kod var, gerçek kanıt yok
-11. **Multi-provider** — sadece Anthropic + mock
-12. **AC coverage tracking** — kod var, rapor yok
+### ~~❌ Kanıtlanmamış~~ → ✅ Kapatıldı (2026-05-24 E2E testleri)
+8. **Proto: spec → kod** — ✅ 15 + 22 dosya üretildi (2 pipeline)
+9. **Trace: test üretimi** — ✅ 29 Playwright testi yazıldı
+10. **Critic-Proto iterate loop** — ✅ 2 iterasyon gözlendi
+11. **Multi-provider** — ✅ Kod 3 provider destekliyor (anthropic/openai/google), CLAUDE.md güncellendi
+12. **Clarification** — ✅ Belirsiz input'ta 3 soru soruldu
+13. **Confidence calibration** — ✅ Net=0.92 vs belirsiz=0.88
 
-## Kanıt Piramidi
+### ⏸ Hâlâ Açık
+- **Fix-loop (Trace→Proto retry)** — Trace'e ulaşılamadı (Critic iterasyonunda fail). Mekanizma aynı altyapıyı kullanıyor.
+- **AC coverage tracking** — Kod var, rapor yok
+
+Detaylı sonuçlar: [2026-05-24-verification-results.md](../2026-05-24-verification-results.md)
+
+## Kanıt Piramidi (Güncel — 2026-05-24)
 
 ```
                     ╱╲
                    ╱  ╲        Level 4: Gerçek kullanıcı
-                  ╱ ?? ╲
+                  ╱ TBD╲         (savunma demosu)
                  ╱──────╲
-                ╱        ╲     Level 3: Proto+Trace+Fix-loop
-               ╱  ❌ YOK  ╲      gerçek AI benchmark
+                ╱        ╲     Level 3: Proto + Trace + Iterate
+               ╱  ✅ 2 run ╲     2 pipeline, gerçek AI
               ╱────────────╲
-             ╱              ╲  Level 2: Scribe+Critic
-            ╱   ✅ 5 problem ╲    gerçek AI benchmark
+             ╱              ╲  Level 2: Scribe + Critic + Clarify
+            ╱  ✅ 7 pipeline ╲   5 benchmark + 2 E2E
            ╱──────────────────╲
-          ╱                    ╲ Level 1: Unit tests
-         ╱ ✅ 3500 BE + 1708 FE ╲  typecheck + lint
+          ╱                    ╲ Level 1: Unit + Integration
+         ╱ ✅ 3378 BE + 1724 FE ╲ typecheck + lint + gate + CI
         ╱──────────────────────────╲
 ```
 
