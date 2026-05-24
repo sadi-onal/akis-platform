@@ -32,7 +32,11 @@ const eventKindByStage: Partial<Record<PipelineStage, StuckEventKind>> = {
   trace_testing: 'trace_failed',
   scribe_generating: 'scribe_failed',
   scribe_clarifying: 'scribe_failed',
+  critic_reviewing_spec: 'scribe_failed',
   proto_building: 'proto_failed',
+  critic_reviewing_code: 'proto_failed',
+  fix_loop_iteration: 'trace_failed',
+  ci_running: 'trace_failed',
 };
 
 function buildStuckEvent(

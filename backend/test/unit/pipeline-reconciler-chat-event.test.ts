@@ -11,6 +11,7 @@ import type { PipelineStore } from '../../src/pipeline/core/orchestrator/Pipelin
 import type {
   PipelineState,
   PipelineStage,
+  ScribeMessageType,
 } from '../../src/pipeline/core/contracts/PipelineTypes.js';
 
 function makeStuckStore(stage: PipelineStage = 'trace_testing') {
@@ -80,6 +81,33 @@ function makeStuckStore(stage: PipelineStage = 'trace_testing') {
 }
 
 describe('PipelineReconciler — chat event on timeout', () => {
+  it('recovers every active non-gate pipeline stage', async () => {
+    const cases: Array<{ stage: PipelineStage; eventType: ScribeMessageType['type'] }> = [
+      { stage: 'scribe_clarifying', eventType: 'scribe_failed' },
+      { stage: 'scribe_generating', eventType: 'scribe_failed' },
+      { stage: 'critic_reviewing_spec', eventType: 'scribe_failed' },
+      { stage: 'proto_building', eventType: 'proto_failed' },
+      { stage: 'critic_reviewing_code', eventType: 'proto_failed' },
+      { stage: 'trace_testing', eventType: 'trace_failed' },
+      { stage: 'fix_loop_iteration', eventType: 'trace_failed' },
+      { stage: 'ci_running', eventType: 'trace_failed' },
+    ];
+
+    for (const { stage, eventType } of cases) {
+      const store = makeStuckStore(stage);
+      const reconciler = new PipelineReconciler(store as unknown as PipelineStore);
+      const recovered = await reconciler.sweep();
+      assert.equal(recovered, 1, `expected ${stage} to be recovered`);
+
+      const updated = store.states.get(store.stuck.id)!;
+      assert.equal(updated.stage, 'failed');
+      assert.ok(
+        updated.scribeConversation.some((m) => m.type === eventType),
+        `expected ${eventType} event for ${stage}`
+      );
+    }
+  });
+
   it('appends trace_failed event when a pipeline times out in trace_testing', async () => {
     const store = makeStuckStore();
     const reconciler = new PipelineReconciler(store as unknown as PipelineStore);
