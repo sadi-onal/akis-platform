@@ -63,7 +63,10 @@ export interface ChatQADeps {
    * embedding hits before the AI call.
    */
   ragService?: {
-    query?: (question: string, topK?: number) => Promise<{ sources: Array<{ content: string; source: string; score: number }> }>;
+    query?: (
+      question: string,
+      topK?: number
+    ) => Promise<{ sources: Array<{ content: string; source: string; score: number }> }>;
   };
   db: NodePgDatabase<typeof schemaNs>;
   logger: Logger;
@@ -108,9 +111,13 @@ Kurallar:
 export function detectNeedsBuild(answer: string): boolean {
   const text = answer.toLowerCase();
   return (
-    /\b(ekleyebilir(im|iz)|yapabilir(im|iz)|kodlayabilir(im|iz)|oluşturabilir(im|iz)|geliştirebilir(im|iz))\b/.test(text)
-    || /\b(i can (add|build|implement|create)|i could (add|build|implement|create)|let me (add|build|implement|create))\b/.test(text)
-    || /\bbunu (yeni bir )?(özellik|build) olarak\b/.test(text)
+    /\b(ekleyebilir(im|iz)|yapabilir(im|iz)|kodlayabilir(im|iz)|oluşturabilir(im|iz)|geliştirebilir(im|iz))\b/.test(
+      text
+    ) ||
+    /\b(i can (add|build|implement|create)|i could (add|build|implement|create)|let me (add|build|implement|create))\b/.test(
+      text
+    ) ||
+    /\bbunu (yeni bir )?(özellik|build) olarak\b/.test(text)
   );
 }
 
@@ -136,7 +143,7 @@ async function loadPipelineContext(
   db: NodePgDatabase<typeof schemaNs>,
   pipelineId: string,
   userId: string,
-  logger: Logger,
+  logger: Logger
 ): Promise<PipelineContext | null> {
   try {
     const rows = await db
@@ -169,7 +176,7 @@ async function loadPipelineContext(
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },
-      '[ChatQA] failed to load pipeline context',
+      '[ChatQA] failed to load pipeline context'
     );
     return null;
   }
@@ -231,7 +238,10 @@ export function buildCitations(ctx: PipelineContext | null): Citation[] {
       out.push({
         source: 'regression',
         refKey: 'regression:summary',
-        excerpt: truncate(`Regresyon raporu: ${JSON.stringify(m.regression ?? m.regressionConfidence).slice(0, 200)}`, 240),
+        excerpt: truncate(
+          `Regresyon raporu: ${JSON.stringify(m.regression ?? m.regressionConfidence).slice(0, 200)}`,
+          240
+        ),
       });
     }
   }
@@ -257,18 +267,21 @@ export function mockAnswer(message: string, ctx: PipelineContext | null): string
 
   if (/\bdosya\b|\bfile\b|\bkaç\b|\bcount\b/.test(m)) {
     return [
-      'Şu anki proje çıktısında ' + (fileCount > 0 ? `**${fileCount} dosya** üretildi.` : 'henüz dosya üretilmedi.'),
+      'Şu anki proje çıktısında ' +
+        (fileCount > 0 ? `**${fileCount} dosya** üretildi.` : 'henüz dosya üretilmedi.'),
       fileCount > 0
         ? 'Çoğunlukla `src/` altında bileşenler ve config dosyaları var.'
         : 'Önce spec onayını bekliyoruz; sonra Proto kodları yazacak.',
       'Detayları görmek istersen Akış sekmesinde `Proto` adımına bakabilirsin.',
     ].join('\n\n');
   }
-  if (/\bnedir\b|\bnasıl\b|\bne demek\b|\bwhat\b|\bhow\b|\bexplain\b|\baçıkla\b|\banlat\b/.test(m)) {
+  if (
+    /\bnedir\b|\bnasıl\b|\bne demek\b|\bwhat\b|\bhow\b|\bexplain\b|\baçıkla\b|\banlat\b/.test(m)
+  ) {
     return [
       `**${projectName ?? 'Bu proje'}** hakkında kısaca:`,
       ctx?.spec
-        ? 'Spec onaylandı; kabul kriterleri kayıtlı.'
+        ? 'Spec onaylanmış; kabul kriterleri kayıtlı.'
         : 'Henüz onaylı bir spec yok — önce ne istediğini birlikte netleştiriyoruz.',
       'Daha fazla detay istersen sorunu biraz daraltabilir misin?',
     ].join('\n\n');
@@ -341,7 +354,7 @@ export class ChatQAService {
     message: string,
     history: ChatHistoryEntry[],
     ctx: PipelineContext | null,
-    onChunk: ((chunk: string) => void) | undefined,
+    onChunk: ((chunk: string) => void) | undefined
   ): Promise<string> {
     const contextBlock = renderContextBlock(ctx);
     const historyBlock = history
@@ -371,7 +384,7 @@ export class ChatQAService {
     } catch (err) {
       this.logger.warn(
         { err: err instanceof Error ? err.message : String(err) },
-        '[ChatQA] AI call failed',
+        '[ChatQA] AI call failed'
       );
       throw err;
     }

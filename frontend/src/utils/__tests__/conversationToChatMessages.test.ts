@@ -28,27 +28,25 @@ function specMsg(): ConversationMessage {
 }
 
 describe('conversationToChatMessages — plan status by stage', () => {
-  it("keeps the plan card 'active' while Scribe is still clarifying", () => {
+  it("keeps the plan card non-actionable ('edited') while Scribe is still clarifying", () => {
     const msgs = conversationToChatMessages([specMsg()], 'scribe_clarifying');
     const plan = msgs.find((m) => m.type === 'plan');
     expect(plan).toBeDefined();
-    expect(plan && 'status' in plan && plan.status).toBe('active');
+    expect(plan && 'status' in plan && plan.status).toBe('edited');
   });
 
-  it("keeps the plan card 'active' during scribe_generating", () => {
+  it("keeps the plan card non-actionable ('edited') during scribe_generating", () => {
     const msgs = conversationToChatMessages([specMsg()], 'scribe_generating');
     const plan = msgs.find((m) => m.type === 'plan');
-    expect(plan && 'status' in plan && plan.status).toBe('active');
+    expect(plan && 'status' in plan && plan.status).toBe('edited');
   });
 
-  it("keeps the plan card 'active' while Critic is reviewing the spec (regression: Bug A)", () => {
-    // Bug A: previously the plan was flipped to 'approved' as soon as the
-    // stage moved past awaiting_approval / scribe_*, which incorrectly
-    // included critic_reviewing_spec — Critic may have signed off internally
-    // but the user hasn't pressed "Onayla" yet.
+  it("keeps the plan card non-actionable ('edited') while Critic is reviewing the spec", () => {
+    // Plan is visible but approval buttons are hidden — only awaiting_approval
+    // stage enables the buttons. Critic's internal approval ≠ user approval.
     const msgs = conversationToChatMessages([specMsg()], 'critic_reviewing_spec');
     const plan = msgs.find((m) => m.type === 'plan');
-    expect(plan && 'status' in plan && plan.status).toBe('active');
+    expect(plan && 'status' in plan && plan.status).toBe('edited');
   });
 
   it("keeps the plan card 'active' while awaiting_approval", () => {

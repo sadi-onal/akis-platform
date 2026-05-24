@@ -202,9 +202,15 @@ export function conversationToChatMessages(
             break;
           }
           const plan = specToUserFriendlyPlan(m.spec);
-          let planStatus: 'active' | 'approved' | 'rejected' = 'active';
+          let planStatus: 'active' | 'approved' | 'rejected' | 'edited' = 'active';
           if (currentStage && !PRE_APPROVAL_STAGES.includes(currentStage)) {
             planStatus = 'approved';
+          } else if (
+            currentStage &&
+            currentStage !== 'awaiting_approval' &&
+            currentStage !== 'awaiting_critic_resolution'
+          ) {
+            planStatus = 'edited';
           }
           msgs.push({
             type: 'plan',
