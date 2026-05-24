@@ -12,8 +12,8 @@ import {
   threadTrustSnapshots,
 } from '../db/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { conversationEventBus } from '../core/events/ConversationEventBus.js';
-import type { ConversationStreamEvent } from '../core/events/ConversationEventBus.js';
+import { conversationEventBus } from '../lib/ConversationEventBus.js';
+import type { ConversationStreamEvent } from '../lib/ConversationEventBus.js';
 
 const MAX_ACTIVE_RUNS_PER_USER = 3;
 
@@ -164,7 +164,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const now = new Date();
@@ -196,7 +198,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const threads = await db.query.conversationThreads.findMany({
@@ -242,7 +246,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);
@@ -261,7 +267,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);
@@ -291,10 +299,7 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       patch.title = deriveTitleFromPrompt(body.content);
     }
 
-    await db
-      .update(conversationThreads)
-      .set(patch)
-      .where(eq(conversationThreads.id, threadId));
+    await db.update(conversationThreads).set(patch).where(eq(conversationThreads.id, threadId));
 
     conversationEventBus.emitEvent(threadId, 'message', {
       action: 'created',
@@ -314,7 +319,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);
@@ -344,7 +351,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);
@@ -369,7 +378,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);
@@ -411,67 +422,74 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
     });
   });
 
-  fastify.post('/api/conversations/threads/:threadId/plans/:planId/generate-alternatives', async (request, reply) => {
-    const { threadId, planId } = planIdParamsSchema.parse(request.params);
-    const body = generateAlternativesSchema.parse(request.body ?? {});
-    const count = body.count ?? 2;
-    let userId: string;
-    try {
-      const user = await requireAuth(request);
-      userId = user.id;
-    } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+  fastify.post(
+    '/api/conversations/threads/:threadId/plans/:planId/generate-alternatives',
+    async (request, reply) => {
+      const { threadId, planId } = planIdParamsSchema.parse(request.params);
+      const body = generateAlternativesSchema.parse(request.body ?? {});
+      const count = body.count ?? 2;
+      let userId: string;
+      try {
+        const user = await requireAuth(request);
+        userId = user.id;
+      } catch {
+        return reply
+          .code(401)
+          .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      }
+
+      const thread = await getThreadForUser(userId, threadId);
+      if (!thread) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Thread not found' } });
+      }
+
+      const base = await db.query.planCandidates.findFirst({
+        where: and(
+          eq(planCandidates.id, planId),
+          eq(planCandidates.threadId, threadId),
+          eq(planCandidates.userId, userId)
+        ),
+      });
+      if (!base) {
+        return reply
+          .code(404)
+          .send({ error: { code: 'NOT_FOUND', message: 'Plan candidate not found' } });
+      }
+
+      const now = Date.now();
+      const rows = Array.from({ length: count }).map((_, index) => ({
+        threadId,
+        userId,
+        sourceMessageId: base.sourceMessageId,
+        title: `${base.title} Alt ${index + 1}`,
+        summary: `Alternative strategy ${index + 1}`,
+        sourcePrompt: base.sourcePrompt,
+        status: 'unbuilt' as const,
+        selected: false,
+        createdAt: new Date(now + index),
+        updatedAt: new Date(now + index),
+      }));
+
+      const inserted = await db.insert(planCandidates).values(rows).returning();
+      await db
+        .update(conversationThreads)
+        .set({
+          status: 'awaiting_plan_selection',
+          updatedAt: new Date(),
+        })
+        .where(eq(conversationThreads.id, threadId));
+
+      conversationEventBus.emitEvent(threadId, 'plan', {
+        action: 'alternatives_generated',
+        count: inserted.length,
+        basePlanId: planId,
+      });
+
+      return reply.code(201).send({
+        candidates: inserted.map(toPlanCandidateDto),
+      });
     }
-
-    const thread = await getThreadForUser(userId, threadId);
-    if (!thread) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Thread not found' } });
-    }
-
-    const base = await db.query.planCandidates.findFirst({
-      where: and(
-        eq(planCandidates.id, planId),
-        eq(planCandidates.threadId, threadId),
-        eq(planCandidates.userId, userId)
-      ),
-    });
-    if (!base) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Plan candidate not found' } });
-    }
-
-    const now = Date.now();
-    const rows = Array.from({ length: count }).map((_, index) => ({
-      threadId,
-      userId,
-      sourceMessageId: base.sourceMessageId,
-      title: `${base.title} Alt ${index + 1}`,
-      summary: `Alternative strategy ${index + 1}`,
-      sourcePrompt: base.sourcePrompt,
-      status: 'unbuilt' as const,
-      selected: false,
-      createdAt: new Date(now + index),
-      updatedAt: new Date(now + index),
-    }));
-
-    const inserted = await db.insert(planCandidates).values(rows).returning();
-    await db
-      .update(conversationThreads)
-      .set({
-        status: 'awaiting_plan_selection',
-        updatedAt: new Date(),
-      })
-      .where(eq(conversationThreads.id, threadId));
-
-    conversationEventBus.emitEvent(threadId, 'plan', {
-      action: 'alternatives_generated',
-      count: inserted.length,
-      basePlanId: planId,
-    });
-
-    return reply.code(201).send({
-      candidates: inserted.map(toPlanCandidateDto),
-    });
-  });
+  );
 
   fastify.post('/api/conversations/threads/:threadId/plans/build', async (request, reply) => {
     const { threadId } = threadIdParamsSchema.parse(request.params);
@@ -481,7 +499,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);
@@ -497,7 +517,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       ),
     });
     if (!candidate) {
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Plan candidate not found' } });
+      return reply
+        .code(404)
+        .send({ error: { code: 'NOT_FOUND', message: 'Plan candidate not found' } });
     }
     if (candidate.status === 'built' || candidate.status === 'building') {
       return reply.code(409).send({
@@ -615,7 +637,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const task = await db.query.threadTasks.findFirst({
@@ -686,7 +710,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);
@@ -695,7 +721,10 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
     }
 
     const snapshots = await db.query.threadTrustSnapshots.findMany({
-      where: and(eq(threadTrustSnapshots.threadId, threadId), eq(threadTrustSnapshots.userId, userId)),
+      where: and(
+        eq(threadTrustSnapshots.threadId, threadId),
+        eq(threadTrustSnapshots.userId, userId)
+      ),
       orderBy: [desc(threadTrustSnapshots.createdAt)],
       limit: query.limit,
     });
@@ -710,7 +739,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);
@@ -754,7 +785,9 @@ export async function conversationsRoutes(fastify: FastifyInstance) {
       const user = await requireAuth(request);
       userId = user.id;
     } catch {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
 
     const thread = await getThreadForUser(userId, threadId);

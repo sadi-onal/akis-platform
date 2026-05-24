@@ -17,7 +17,15 @@ import {
 } from '../../src/utils/errorHandler.js';
 
 import { ZodError } from 'zod';
-import { JobNotFoundError, InvalidStateTransitionError, DatabaseError, AIProviderError, AIRateLimitedError, MissingAIKeyError, ModelNotAllowedError } from '../../src/core/errors.js';
+import {
+  JobNotFoundError,
+  InvalidStateTransitionError,
+  DatabaseError,
+  AIProviderError,
+  AIRateLimitedError,
+  MissingAIKeyError,
+  ModelNotAllowedError,
+} from '../../src/lib/errors.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -32,8 +40,12 @@ function fakeReply(): {
 } {
   const state = { statusCode: 0, body: null as unknown };
   return {
-    get statusCode() { return state.statusCode; },
-    get body() { return state.body; },
+    get statusCode() {
+      return state.statusCode;
+    },
+    get body() {
+      return state.body;
+    },
     code(c: number) {
       state.statusCode = c;
       return {
@@ -146,7 +158,11 @@ describe('sendError', () => {
       const reply = fakeReply();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       sendError(reply as any, fakeRequest() as any, code, 'test');
-      assert.strictEqual(reply.statusCode, expectedStatus, `${code} should return ${expectedStatus}`);
+      assert.strictEqual(
+        reply.statusCode,
+        expectedStatus,
+        `${code} should return ${expectedStatus}`
+      );
     }
   });
 });
@@ -156,7 +172,13 @@ describe('sendError', () => {
 describe('formatErrorResponse', () => {
   test('maps ZodError to VALIDATION_ERROR', () => {
     const zodError = new ZodError([
-      { code: 'invalid_type', expected: 'string', received: 'number', path: ['email'], message: 'Expected string' },
+      {
+        code: 'invalid_type',
+        expected: 'string',
+        received: 'number',
+        path: ['email'],
+        message: 'Expected string',
+      },
     ]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -318,7 +340,10 @@ describe('Error response security', () => {
   });
 
   test('DatabaseError never leaks connection details', () => {
-    const error = new DatabaseError('FATAL: password authentication failed', new Error('pg: timeout'));
+    const error = new DatabaseError(
+      'FATAL: password authentication failed',
+      new Error('pg: timeout')
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const envelope = formatErrorResponse(fakeRequest() as any, error);
     assert.strictEqual(envelope.error.message, 'Database operation failed');

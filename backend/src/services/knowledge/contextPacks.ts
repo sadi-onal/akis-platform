@@ -4,7 +4,7 @@
  * Context packs are deterministic file bundles assembled from repository
  * content for agent consumption. See docs/agents/CONTEXT_PACKS.md.
  */
-import { contextPackSchema } from '../../core/contracts/ContextPackContract.js';
+import { contextPackSchema } from './ContextPackContract.js';
 
 export interface ContextPackFile {
   path: string;
@@ -74,11 +74,26 @@ export function listPackProfiles(agentType: string): string[] {
 export function detectLanguage(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
   const map: Record<string, string> = {
-    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
-    py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java',
-    json: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown',
-    html: 'html', css: 'css', scss: 'scss', sql: 'sql',
-    sh: 'shell', bash: 'shell', dockerfile: 'dockerfile',
+    ts: 'typescript',
+    tsx: 'typescript',
+    js: 'javascript',
+    jsx: 'javascript',
+    py: 'python',
+    rb: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    json: 'json',
+    yaml: 'yaml',
+    yml: 'yaml',
+    md: 'markdown',
+    html: 'html',
+    css: 'css',
+    scss: 'scss',
+    sql: 'sql',
+    sh: 'shell',
+    bash: 'shell',
+    dockerfile: 'dockerfile',
   };
   const basename = filePath.split('/').pop()?.toLowerCase() ?? '';
   if (basename === 'dockerfile') return 'dockerfile';
@@ -96,7 +111,9 @@ export function validatePack(pack: unknown, agentType: string): ValidatePackResu
   if (!parsed.success) {
     return {
       valid: false,
-      errors: parsed.error.issues.map((issue) => `${issue.path.join('.') || 'pack'}: ${issue.message}`),
+      errors: parsed.error.issues.map(
+        (issue) => `${issue.path.join('.') || 'pack'}: ${issue.message}`
+      ),
     };
   }
 
@@ -115,11 +132,13 @@ export function validatePack(pack: unknown, agentType: string): ValidatePackResu
     if (typeof file.content !== 'string') {
       errors.push(`File ${file.path}: content must be a string`);
     }
-    totalBytes += (file.content?.length ?? 0);
+    totalBytes += file.content?.length ?? 0;
   }
 
   if (totalBytes > limits.maxTotalBytes) {
-    errors.push(`Pack total size ${totalBytes} bytes exceeds limit ${limits.maxTotalBytes} for ${agentType}`);
+    errors.push(
+      `Pack total size ${totalBytes} bytes exceeds limit ${limits.maxTotalBytes} for ${agentType}`
+    );
   }
 
   if (typeof metadata.repo !== 'string' || !metadata.repo.includes('/')) {
@@ -157,7 +176,8 @@ export function assembleContextPack(
     );
   }
   const profile = selection.profile ?? 'default';
-  const packVersion = selection.packVersion && selection.packVersion.length > 0 ? selection.packVersion : 'v1';
+  const packVersion =
+    selection.packVersion && selection.packVersion.length > 0 ? selection.packVersion : 'v1';
 
   let totalBytes = 0;
   let truncated = false;

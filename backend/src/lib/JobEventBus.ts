@@ -1,12 +1,40 @@
 import { EventEmitter } from 'events';
-import type { StreamEvent, StageEvent, PlanEvent, ToolEvent, ArtifactEvent, LogEvent, ErrorEvent, TraceEvent, AiCallEvent } from '../../types/stream-events.js';
-import { formatSSEMessage, redactSensitiveText } from '../../types/stream-events.js';
+import type {
+  StreamEvent,
+  StageEvent,
+  PlanEvent,
+  ToolEvent,
+  ArtifactEvent,
+  LogEvent,
+  ErrorEvent,
+  TraceEvent,
+  AiCallEvent,
+} from '../types/stream-events.js';
+import { formatSSEMessage, redactSensitiveText } from '../types/stream-events.js';
 
 // Re-export stream event types for convenience
-export type { StreamEvent, StageEvent, PlanEvent, ToolEvent, ArtifactEvent, LogEvent, ErrorEvent, TraceEvent, AiCallEvent };
+export type {
+  StreamEvent,
+  StageEvent,
+  PlanEvent,
+  ToolEvent,
+  ArtifactEvent,
+  LogEvent,
+  ErrorEvent,
+  TraceEvent,
+  AiCallEvent,
+};
 
 // Legacy types for backward compatibility
-export type JobPhase = 'thinking' | 'discovery' | 'reading' | 'creating' | 'reviewing' | 'publishing' | 'done' | 'error';
+export type JobPhase =
+  | 'thinking'
+  | 'discovery'
+  | 'reading'
+  | 'creating'
+  | 'reviewing'
+  | 'publishing'
+  | 'done'
+  | 'error';
 
 export interface JobEvent {
   phase: JobPhase;
@@ -309,7 +337,7 @@ class JobEventBusImpl extends EventEmitter {
    */
   getStreamHistoryAfter(jobId: string, afterEventId: number): StreamEvent[] {
     const history = this.streamEventHistory.get(jobId) || [];
-    return history.filter(e => e.eventId > afterEventId);
+    return history.filter((e) => e.eventId > afterEventId);
   }
 
   /**

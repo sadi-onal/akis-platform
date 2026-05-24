@@ -9,7 +9,7 @@ import { writeFile, mkdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { TraceAutomationError } from '../../core/errors.js';
+import { TraceAutomationError } from '../../lib/errors.js';
 
 export interface TraceTestSpec {
   featureName: string;
@@ -47,7 +47,11 @@ function sanitizeBrowser(raw?: string): BrowserTarget {
  * Generate a Playwright test file from parsed specs.
  * Uses JSON.stringify for titles and URL so names with quotes/newlines cannot break TS syntax.
  */
-export function buildTestFileContent(specs: TraceTestSpec[], baseUrl: string, browser: BrowserTarget): string {
+export function buildTestFileContent(
+  specs: TraceTestSpec[],
+  baseUrl: string,
+  browser: BrowserTarget
+): string {
   const lines: string[] = [
     `import { test, expect } from '@playwright/test';`,
     ``,
@@ -58,7 +62,9 @@ export function buildTestFileContent(specs: TraceTestSpec[], baseUrl: string, br
     lines.push(`test.describe(${JSON.stringify(spec.featureName)}, () => {`);
     for (const scenario of spec.scenarios) {
       lines.push(`  test(${JSON.stringify(scenario.name)}, async ({ page }) => {`);
-      lines.push(`    await page.goto(${JSON.stringify(baseUrl)}, { waitUntil: 'domcontentloaded' });`);
+      lines.push(
+        `    await page.goto(${JSON.stringify(baseUrl)}, { waitUntil: 'domcontentloaded' });`
+      );
       lines.push(`    await expect(page.locator('body')).toBeVisible({ timeout: 15_000 });`);
       for (const step of scenario.steps) {
         const safe = String(step).replace(/\r?\n/g, ' ').replace(/\*\//g, '* /');
@@ -75,8 +81,16 @@ export function buildTestFileContent(specs: TraceTestSpec[], baseUrl: string, br
 /**
  * Parse Playwright JSON reporter output into structured results.
  */
-function parseJsonReport(raw: string, specs: TraceTestSpec[]): Omit<TraceRunResult, 'durationMs' | 'generatedTestPath'> {
-  let report: { suites?: { title: string; specs?: { title: string; tests?: { results?: { status: string }[] }[] }[] }[] };
+function parseJsonReport(
+  raw: string,
+  specs: TraceTestSpec[]
+): Omit<TraceRunResult, 'durationMs' | 'generatedTestPath'> {
+  let report: {
+    suites?: {
+      title: string;
+      specs?: { title: string; tests?: { results?: { status: string }[] }[] }[];
+    }[];
+  };
   try {
     report = JSON.parse(raw);
   } catch {
@@ -124,7 +138,10 @@ function parseJsonReport(raw: string, specs: TraceTestSpec[]): Omit<TraceRunResu
   };
 }
 
-function buildFallbackResult(specs: TraceTestSpec[], reason: string): Omit<TraceRunResult, 'durationMs' | 'generatedTestPath'> {
+function buildFallbackResult(
+  specs: TraceTestSpec[],
+  reason: string
+): Omit<TraceRunResult, 'durationMs' | 'generatedTestPath'> {
   const scenarios = specs.flatMap((s) => s.scenarios);
   return {
     runner: 'playwright',
@@ -182,12 +199,22 @@ export async function runTraceAutomation(opts: RunOptions): Promise<TraceRunResu
           '--output',
           outputDir,
         ],
-        { cwd: workDir, shell: false, timeout: timeoutMs, env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile } }
+        {
+          cwd: workDir,
+          shell: false,
+          timeout: timeoutMs,
+          env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile },
+        }
       );
 
       const timer = setTimeout(() => {
         proc.kill('SIGTERM');
-        reject(new TraceAutomationError('TRACE_AUTOMATION_TIMEOUT', `Playwright run exceeded ${timeoutMs}ms timeout`));
+        reject(
+          new TraceAutomationError(
+            'TRACE_AUTOMATION_TIMEOUT',
+            `Playwright run exceeded ${timeoutMs}ms timeout`
+          )
+        );
       }, timeoutMs);
 
       proc.on('close', (code) => {
@@ -196,7 +223,12 @@ export async function runTraceAutomation(opts: RunOptions): Promise<TraceRunResu
       });
       proc.on('error', (err) => {
         clearTimeout(timer);
-        reject(new TraceAutomationError('TRACE_AUTOMATION_LAUNCH_FAILED', `Failed to launch Playwright: ${err.message}`));
+        reject(
+          new TraceAutomationError(
+            'TRACE_AUTOMATION_LAUNCH_FAILED',
+            `Failed to launch Playwright: ${err.message}`
+          )
+        );
       });
     });
 

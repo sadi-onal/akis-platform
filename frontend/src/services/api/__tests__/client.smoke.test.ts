@@ -6,69 +6,57 @@ describe('API Client Smoke Tests', () => {
     vi.clearAllMocks();
   });
 
-  it('should handle getJobs with mock fetch', async () => {
-    // Mock fetch globally
+  it('should handle getRoot with mock fetch', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        items: [
-          {
-            id: 'test-id',
-            type: 'scribe',
-            state: 'completed',
-            createdAt: '2024-01-01T00:00:00Z',
-            updatedAt: '2024-01-01T00:00:00Z',
-          },
-        ],
-        nextCursor: null,
+        name: 'akis-platform',
+        status: 'ok',
+        version: '0.2.0',
       }),
       headers: new Headers({ 'request-id': 'test-request-id' }),
     });
 
-    const result = await api.getJobs();
+    const result = await api.getRoot();
 
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].type).toBe('scribe');
-    expect(result.nextCursor).toBeNull();
+    expect(result.name).toBe('akis-platform');
+    expect(result.status).toBe('ok');
   });
 
-  it('should handle createJob for scribe type', async () => {
+  it('should handle getHealth with mock fetch', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        jobId: 'new-job-id',
-        state: 'pending',
+        status: 'ok',
+        timestamp: '2024-01-01T00:00:00Z',
       }),
-      headers: new Headers({ 'request-id': 'create-request-id' }),
+      headers: new Headers({ 'request-id': 'health-request-id' }),
     });
 
-    const result = await api.createJob({
-      type: 'scribe',
-      payload: { doc: 'Test document' },
-    });
+    const result = await api.getHealth();
 
-    expect(result.jobId).toBe('new-job-id');
-    expect(result.state).toBe('pending');
+    expect(result.status).toBe('ok');
   });
 
-  it('should handle getJob with include params', async () => {
+  it('should handle getDashboardMetrics with mock fetch', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        id: 'test-id',
-        type: 'scribe',
-        state: 'completed',
-        createdAt: '2024-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z',
-        plan: { steps: [], rationale: 'Test plan' },
+        period: '7d',
+        avgQualityScore: 85,
+        successRate: 0.95,
+        totalJobs: 100,
+        completedJobs: 95,
+        failedJobs: 5,
+        topFailureReason: null,
+        topFailureCount: 0,
       }),
-      headers: new Headers({ 'request-id': 'get-request-id' }),
+      headers: new Headers({ 'request-id': 'metrics-request-id' }),
     });
 
-    const result = await api.getJob('test-id', ['plan']);
+    const result = await api.getDashboardMetrics('7d');
 
-    expect(result.id).toBe('test-id');
-    expect(result.plan).toBeDefined();
+    expect(result.period).toBe('7d');
+    expect(result.successRate).toBe(0.95);
   });
 });
-

@@ -10,7 +10,7 @@
  */
 
 import { getEnv, getAIConfig, type AIConfig } from '../../config/env.js';
-import { AIRateLimitedError, AIProviderError } from '../../core/errors.js';
+import { AIRateLimitedError, AIProviderError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { z } from 'zod';
 
@@ -542,8 +542,7 @@ class RealAIService implements AIService {
     options: { temperature?: number; maxTokens?: number }
   ): { endpoint: string; headers: Record<string, string>; body: Record<string, unknown> } {
     const apiKey = this.config.apiKey!;
-    const endpoint =
-      `${this.config.baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
+    const endpoint = `${this.config.baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

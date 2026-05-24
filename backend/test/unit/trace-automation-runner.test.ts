@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { TraceAutomationError } from '../../src/core/errors.js';
+import { TraceAutomationError } from '../../src/lib/errors.js';
 
 // We test the error types and the parse/build helper logic without spawning Playwright
 describe('TraceAutomationRunner error types', () => {
@@ -41,7 +41,7 @@ describe('TraceAutomationRunner JSON report parsing', async () => {
         },
       ],
       'https://staging.example.com/path?q=a&b=2',
-      'chromium',
+      'chromium'
     );
     assert.match(src, /test\.describe\("Screen \\"Home\\"/);
     assert.ok(src.includes(`test("User's dashboard loads"`));
@@ -51,7 +51,12 @@ describe('TraceAutomationRunner JSON report parsing', async () => {
   it('TraceTestSpec interface shape is usable', () => {
     const spec: import('../../src/services/trace/TraceAutomationRunner.js').TraceTestSpec = {
       featureName: 'Login',
-      scenarios: [{ name: 'valid login', steps: ['Given user on login page', 'When enters credentials', 'Then sees dashboard'] }],
+      scenarios: [
+        {
+          name: 'valid login',
+          steps: ['Given user on login page', 'When enters credentials', 'Then sees dashboard'],
+        },
+      ],
     };
     assert.equal(spec.featureName, 'Login');
     assert.equal(spec.scenarios.length, 1);

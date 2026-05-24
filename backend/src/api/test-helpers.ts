@@ -5,8 +5,10 @@ import { db } from '../db/client.js';
 import { oauthAccounts, users } from '../db/schema.js';
 import { requireAuth } from '../utils/auth.js';
 import { getEnv } from '../config/env.js';
-import { DEV_GITHUB_BOOTSTRAP_TOKEN_PLACEHOLDER } from '../core/orchestrator/AgentOrchestrator.js';
 import { hashPassword } from '../services/auth/password.js';
+
+/** Placeholder token used to mark a dev-bootstrapped GitHub connection */
+const DEV_GITHUB_BOOTSTRAP_TOKEN_PLACEHOLDER = '__dev_github_bootstrap__';
 import { sign } from '../services/auth/jwt.js';
 import { cookieOpts, env as authEnv } from '../lib/env.js';
 
@@ -29,7 +31,8 @@ export async function testHelpersRoutes(fastify: FastifyInstance) {
   // E2E === '1' env-var escape hatch was removed (prod-hardening): we don't
   // want a single env var to expose /test/e2e/login in any non-test env.
   const isE2EMode = env.NODE_ENV === 'test';
-  const devBootstrapEnabled = env.NODE_ENV !== 'production' && process.env.SCRIBE_DEV_GITHUB_BOOTSTRAP === 'true';
+  const devBootstrapEnabled =
+    env.NODE_ENV !== 'production' && process.env.SCRIBE_DEV_GITHUB_BOOTSTRAP === 'true';
 
   // E2E login endpoint - ONLY available in test/E2E mode
   if (isE2EMode) {
@@ -176,4 +179,3 @@ export async function testHelpersRoutes(fastify: FastifyInstance) {
     }
   );
 }
-

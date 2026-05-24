@@ -54,16 +54,13 @@ pnpm -C frontend generate:types    # regen OpenAPI types from http://localhost:3
 
 ## Backend architecture notes
 
-Two layers of "agents" coexist — easy to confuse:
-
-- `backend/src/agents/{scribe,trace,proto}` — the legacy single-agent endpoints (Plan → Execute → Reflect → Validate per agent). Each is a self-contained module.
-- `backend/src/pipeline/` — the **newer** orchestrator coordinating the full Scribe→Proto→Trace pipeline as a state machine. Has its own `adapters/`, `agents/`, `api/`, `db/`, `services/`, `templates/`. Pipeline-level changes go here.
+`backend/src/pipeline/` is the orchestrator coordinating the full Scribe→Proto→Trace pipeline as a state machine. Has its own `adapters/`, `agents/`, `api/`, `db/`, `services/`, `templates/`. Pipeline-level changes go here. The legacy single-agent system (`agents/`, `core/`) was removed — only the pipeline remains.
 
 `backend/src/api/` is the public HTTP surface (Fastify routes registered in `index.ts`). Anything user-facing — auth, conversations, agent-configs, billing webhooks, dashboard-metrics, etc. — is wired here. `server.ts` boots, `server.app.ts` builds the app (testable via Fastify `inject`).
 
 `backend/src/services/` holds domain services consumed by routes and pipeline: `ai/` (provider abstraction over OpenRouter/OpenAI/mock), `mcp/` (GitHub MCP gateway client), `auth/`, `billing/` (Stripe), `embedding/`, `rag/`, `knowledge/`, `quality/`, `checks/` (lint/typecheck-as-tool for reflection).
 
-`AI_PROVIDER` env switches between `openrouter | openai | mock` — `mock` is the path to use during dev when you don't want to burn credits. Three model slots: `AI_MODEL_PLANNER`, `AI_MODEL_DEFAULT`, `AI_MODEL_VALIDATION` (different strengths per phase).
+`AI_PROVIDER` env switches between `anthropic | openai | google | mock` — `mock` is the path to use during dev when you don't want to burn credits. Three model slots: `AI_MODEL_PLANNER`, `AI_MODEL_DEFAULT`, `AI_MODEL_VALIDATION` (different strengths per phase).
 
 GitHub MCP is **required for Scribe to function**. Either run the local Docker gateway (`./scripts/mcp-up.sh` if present, with `GITHUB_TOKEN`) and point `GITHUB_MCP_BASE_URL` at it, or use the remote hosted endpoint. Tests gate this behind `SKIP_MCP_TESTS=true`.
 

@@ -7,13 +7,11 @@ import { randomUUID } from 'crypto';
 import { getEnv, getAIConfig } from './config/env.js';
 import { isEncryptionConfigured } from './utils/crypto.js';
 import { isEmailConfigured } from './services/email/index.js';
-import { registerAgents } from './core/agents/registry.js';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import multipart from '@fastify/multipart';
 import { indexRoutes } from './api/index.js';
 import { healthRoutes } from './api/health.js';
-import { agentsRoutes, setOrchestrator } from './api/agents.js';
 import { metricsRoutes, metrics } from './api/metrics.js';
 import { authRoutes } from './api/auth.js';
 import { agentConfigRoutes } from './api/agent-configs.js';
@@ -21,10 +19,8 @@ import { integrationsRoutes } from './api/integrations.js';
 import { testHelpersRoutes } from './api/test-helpers.js';
 import { settingsRoutes } from './api/settings/index.js';
 import { usageRoutes } from './api/usage.js';
-import { jobEventsRoutes } from './api/job-events.js';
-import { webhookRoutes, setWebhookOrchestrator } from './api/webhooks.js';
+import { webhookRoutes } from './api/webhooks.js';
 import { triggersRoutes } from './api/triggers.js';
-import { registerPlaybookRoutes } from './api/playbooks.js';
 import { dashboardMetricsRoutes } from './api/dashboard-metrics.js';
 import { aiModelsRoutes } from './api/ai-models.js';
 import { feedbackRoutes } from './api/feedback.js';
@@ -35,7 +31,6 @@ import { studioRoutes } from './api/studio.js';
 import { knowledgeRoutes } from './api/knowledge.js';
 import { chatAttachRoutes } from './api/chats.attach.js';
 import { marketplaceRoutes } from './api/marketplace.js';
-import { crewRoutes, initCrewRunManager } from './api/crew.js';
 import { ragRoutes } from './api/rag.js';
 import { adminRoutes } from './api/admin.js';
 import { githubRoutes, getGitHubToken } from './api/github.js';
@@ -53,12 +48,9 @@ import { pushLog } from './lib/logBuffer.js';
 import { logger } from './lib/logger.js';
 import { isDevMode } from './config/devMode.js';
 import { initPiriRAGService } from './services/rag/PiriRAGService.js';
-import { AgentOrchestrator } from './core/orchestrator/AgentOrchestrator.js';
 import { createAIService, createToolCallingClient } from './services/ai/AIService.js';
 import { PipelineAiCallRecorder } from './pipeline/core/ai-calls/PipelineAiCallRecorder.js';
-import type { MCPTools } from './services/mcp/adapters/index.js';
 import { GitHubMCPService } from './services/mcp/adapters/GitHubMCPService.js';
-import { StaleJobWatchdog } from './core/watchdog/StaleJobWatchdog.js';
 import {
   FreshnessScheduler,
   setFreshnessSchedulerInstance,
@@ -72,18 +64,11 @@ import { requireAuth } from './utils/auth.js';
 import { cookiesPlugin } from './plugins/security/cookies.js';
 import { ZodError } from 'zod';
 
-const QUIET_ROUTES = new Set([
-  '/api/agents/jobs/running',
-  '/api/agents/configs',
-  '/api/usage/current-month',
-  '/health',
-  '/ready',
-]);
+const QUIET_ROUTES = new Set(['/api/usage/current-month', '/health', '/ready']);
 
 /**
- * Build Fastify app instance (for testing and production)
- * Phase 5.D: Initialize orchestrator with AIService and MCPTools DI
- * Separated from server.listen() to allow testing with inject()
+ * Build Fastify app instance (for testing and production).
+ * Separated from server.listen() to allow testing with inject().
  */
 export async function buildApp() {
   // Boot-time hard guard: DEV_MODE must never be enabled in production.
@@ -97,17 +82,10 @@ export async function buildApp() {
   // Validate environment variables at startup (fail-fast)
   const env = getEnv();
 
-  // Register all agents with the factory
-  registerAgents();
-
-  // Phase 10: Create AIService with resolved configuration
-  // Uses getAIConfig() which handles legacy OPENROUTER_*/OPENAI_* variable fallbacks
-  //
-  // T1: attach PipelineAiCallRecorder so every AI call the pipeline makes
-  // lands in `job_ai_calls` with `pipeline_id` set. The recorder reads the
-  // pipelineId out of AsyncLocalStorage (set by PipelineOrchestrator.run*),
-  // so calls outside a pipeline scope (legacy single-agent, smoke scripts)
-  // silently no-op here — those flows have their own writer in TraceRecorder.
+  // Create AIService with resolved configuration
+  // PipelineAiCallRecorder records every AI call into `job_ai_calls` with
+  // `pipeline_id` set. The recorder reads the pipelineId out of
+  // AsyncLocalStorage (set by PipelineOrchestrator.run*).
   const aiConfig = getAIConfig(env);
   const pipelineAiCallRecorder = new PipelineAiCallRecorder();
   const aiService = createAIService(aiConfig, pipelineAiCallRecorder);
@@ -146,39 +124,6 @@ export async function buildApp() {
       `[buildApp] SMTP: host=${process.env.SMTP_HOST || 'NOT SET'}, port=${process.env.SMTP_PORT || '587'}, from=${process.env.SMTP_FROM_EMAIL || 'NOT SET'}`
     );
   }
-
-  // Phase 5.D: Create MCPTools for the legacy AgentOrchestrator
-  // (single-agent endpoints under /api/agents/*).
-  //
-  // T2: the modern PipelineOrchestrator does NOT consume MCPTools. It uses
-  // per-user factories at runtime: `JiraMCPService.fromOAuth(userId)` reads
-  // the user's Atlassian OAuth token from the DB and returns a scoped
-  // client (or null when env is missing / user hasn't connected). See
-  // PipelineOrchestrator.runJiraEpicCreation / runJiraProtoComment / etc.
-  // for the consumers.
-  //
-  // GitHub MCP is the same pattern — pipeline uses per-user GitHubRESTAdapter
-  // via opts.createGitHubService below, not MCPTools.githubMCP.
-  //
-  // The legacy AgentFactory currently does not actually read any of these
-  // (see AgentFactory.AgentDependencies.tools), so this stays empty until a
-  // legacy consumer needs it.
-  const mcpTools: MCPTools = {};
-
-  // Phase 5.D: Create orchestrator with DI
-  const orchestrator = new AgentOrchestrator({}, aiService, mcpTools);
-  setOrchestrator(orchestrator);
-  setWebhookOrchestrator(orchestrator);
-
-  // M2: Initialize Crew Run Manager (Agent Teams)
-  initCrewRunManager(async (payload) => {
-    const jobId = await orchestrator.submitJob(payload as never);
-    return { id: jobId };
-  });
-
-  // Start stale job watchdog
-  const watchdog = new StaleJobWatchdog();
-  watchdog.start();
 
   // Start knowledge freshness scheduler (M2-FP-1)
   let freshnessScheduler: FreshnessScheduler | null = null;
@@ -323,15 +268,12 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(metricsRoutes);
   await app.register(authRoutes, { prefix: '/auth' });
-  await app.register(agentsRoutes);
   await app.register(agentConfigRoutes);
   await app.register(integrationsRoutes);
   await app.register(settingsRoutes, { prefix: '/api' });
   await app.register(usageRoutes);
-  await app.register(jobEventsRoutes);
   await app.register(webhookRoutes);
   await app.register(triggersRoutes);
-  await app.register(registerPlaybookRoutes);
   await app.register(dashboardMetricsRoutes);
   await app.register(aiModelsRoutes);
   await app.register(feedbackRoutes);
@@ -352,14 +294,9 @@ export async function buildApp() {
   await app.register(knowledgeRoutes);
   await app.register(chatAttachRoutes);
   await app.register(marketplaceRoutes);
-  await app.register(crewRoutes);
   await app.register(ragRoutes);
   await app.register(adminRoutes);
   await app.register(githubRoutes, { prefix: '/api/github' });
-
-  // Agent activities stub (returns empty until full wiring)
-  app.get('/api/agent-activities', async () => ({ activities: [] }));
-  app.get('/api/agent-activities/:id', async () => ({ activities: [] }));
 
   // Pipeline routes (Scribe → Proto → Trace pipeline)
   // Priority: 1) MCP Gateway (if available), 2) REST API, 3) Stub
@@ -604,7 +541,6 @@ export async function buildApp() {
   });
 
   app.addHook('onClose', async () => {
-    watchdog.stop();
     freshnessScheduler?.stop();
     setFreshnessSchedulerInstance(null);
     // Close the DB pool to release connections cleanly on shutdown

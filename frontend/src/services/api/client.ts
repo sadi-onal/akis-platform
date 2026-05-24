@@ -1,62 +1,9 @@
 import { HttpClient } from './HttpClient';
-import type { Job, JobsListResponse, CreateJobRequest, CreateJobResponse, DashboardMetrics } from './types';
+import type { DashboardMetrics } from './types';
 
 const httpClient = new HttpClient();
 
 export const api = {
-  // GET /api/agents/jobs
-  getJobs: async (params?: {
-    type?: 'scribe' | 'trace' | 'proto';
-    state?: 'pending' | 'running' | 'completed' | 'failed';
-    limit?: number;
-    cursor?: string;
-  }): Promise<JobsListResponse> => {
-    const searchParams = new URLSearchParams();
-    if (params?.type) searchParams.set('type', params.type);
-    if (params?.state) searchParams.set('state', params.state);
-    if (params?.limit) searchParams.set('limit', params.limit.toString());
-    if (params?.cursor) searchParams.set('cursor', params.cursor);
-
-    const query = searchParams.toString();
-    return httpClient.get<JobsListResponse>(`/api/agents/jobs${query ? `?${query}` : ''}`);
-  },
-
-  // GET /api/agents/jobs/:id
-  getJob: async (id: string, include?: string[]): Promise<Job & { requestId?: string }> => {
-    const searchParams = new URLSearchParams();
-    if (include && include.length > 0) {
-      searchParams.set('include', include.join(','));
-    }
-
-    const query = searchParams.toString();
-    return httpClient.get<Job & { requestId?: string }>(
-      `/api/agents/jobs/${id}${query ? `?${query}` : ''}`
-    );
-  },
-
-  // POST /api/agents/jobs
-  createJob: async (
-    request: CreateJobRequest
-  ): Promise<CreateJobResponse & { requestId?: string }> => {
-    return httpClient.post<CreateJobResponse & { requestId?: string }>('/api/agents/jobs', request);
-  },
-
-  // POST /api/agents/jobs/:id/approve - S1.2: Approve a job
-  approveJob: async (
-    id: string,
-    comment?: string
-  ): Promise<{ success: boolean; message: string; approvedBy: string; approvedAt: string }> => {
-    return httpClient.post(`/api/agents/jobs/${id}/approve`, { comment });
-  },
-
-  // POST /api/agents/jobs/:id/reject - S1.2: Reject a job
-  rejectJob: async (
-    id: string,
-    comment?: string
-  ): Promise<{ success: boolean; message: string; rejectedBy: string; rejectedAt: string }> => {
-    return httpClient.post(`/api/agents/jobs/${id}/reject`, { comment });
-  },
-
   // GET /
   getRoot: async (): Promise<{ name: string; status: string; version: string }> => {
     return httpClient.get('/');
@@ -83,14 +30,24 @@ export const api = {
   },
 
   // POST /api/feedback
-  submitFeedback: async (data: { rating: number; message: string; page?: string }): Promise<{ id: string; createdAt: string }> => {
+  submitFeedback: async (data: {
+    rating: number;
+    message: string;
+    page?: string;
+  }): Promise<{ id: string; createdAt: string }> => {
     return httpClient.post('/api/feedback', data);
   },
 
   // GET /api/usage/current-month — monthly token/cost analytics (no quota gating)
   getUsage: async (): Promise<{
     period: { start: string; end: string };
-    usage: { inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; jobCount: number };
+    usage: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      estimatedCostUsd: number;
+      jobCount: number;
+    };
     daily?: Array<{ date: string; tokens: number; cost: number; jobs: number }>;
     /** True when the caller is an admin. Admins also receive `breakdown` + `wholesaleCostUsd`. */
     userIsAdmin?: boolean;

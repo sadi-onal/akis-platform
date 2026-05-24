@@ -110,7 +110,10 @@ describe('AI Provider Detection — model name', () => {
   });
 
   test('model with :free suffix → openrouter', () => {
-    assert.strictEqual(detectProviderFromModel('meta-llama/llama-3.3-70b-instruct:free'), 'openrouter');
+    assert.strictEqual(
+      detectProviderFromModel('meta-llama/llama-3.3-70b-instruct:free'),
+      'openrouter'
+    );
   });
 
   test('model with :nitro suffix → openrouter', () => {
@@ -137,7 +140,8 @@ describe('AES-256-GCM Encryption — round-trip', () => {
   const TEST_KEY_HEX = randomBytes(32).toString('hex');
 
   async function loadCrypto() {
-    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/test';
+    process.env.DATABASE_URL =
+      process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/test';
     process.env.AI_KEY_ENCRYPTION_KEY = TEST_KEY_HEX;
     process.env.AI_KEY_ENCRYPTION_KEY_VERSION = 'test-v1';
     // Cache-bust so getEnv() re-parses
@@ -186,7 +190,7 @@ describe('AES-256-GCM Encryption — round-trip', () => {
 
     assert.throws(
       () => decryptSecret(tampered, 'user1:openai'),
-      /Unsupported state|unable to authenticate/i,
+      /Unsupported state|unable to authenticate/i
     );
   });
 
@@ -201,7 +205,7 @@ describe('AES-256-GCM Encryption — round-trip', () => {
 
     assert.throws(
       () => decryptSecret(tampered, 'user1:openai'),
-      /Unsupported state|unable to authenticate/i,
+      /Unsupported state|unable to authenticate/i
     );
   });
 
@@ -250,7 +254,7 @@ describe('AES-256-GCM Encryption — round-trip', () => {
 
     assert.throws(
       () => decryptSecret(encrypted, 'userB:openai'),
-      /Unsupported state|unable to authenticate/i,
+      /Unsupported state|unable to authenticate/i
     );
   });
 
@@ -278,7 +282,7 @@ describe('AES-256-GCM Encryption — round-trip', () => {
 
 // ---------------------------------------------------------------------------
 // 3. AI Service Error Classification
-//    These test the error hierarchy exported from core/errors.ts
+//    These test the error hierarchy exported from lib/errors.ts
 // ---------------------------------------------------------------------------
 
 // Import error classes directly (no side effects)
@@ -287,7 +291,7 @@ import {
   AIRateLimitedError,
   MissingAIKeyError,
   ModelNotAllowedError,
-} from '../../src/core/errors.js';
+} from '../../src/lib/errors.js';
 
 describe('AI Service Error Classification', () => {
   test('AIRateLimitedError → code AI_RATE_LIMITED, statusCode 429', () => {
@@ -313,7 +317,7 @@ describe('AI Service Error Classification', () => {
       'AI_AUTH_ERROR',
       'OpenAI API key is invalid or expired.',
       'openai',
-      401,
+      401
     );
     assert.strictEqual(err.code, 'AI_AUTH_ERROR');
     assert.strictEqual(err.statusCode, 401);
@@ -323,12 +327,7 @@ describe('AI Service Error Classification', () => {
   });
 
   test('AIProviderError with 403 → AI_AUTH_ERROR', () => {
-    const err = new AIProviderError(
-      'AI_AUTH_ERROR',
-      'Access denied.',
-      'anthropic',
-      403,
-    );
+    const err = new AIProviderError('AI_AUTH_ERROR', 'Access denied.', 'anthropic', 403);
     assert.strictEqual(err.code, 'AI_AUTH_ERROR');
     assert.strictEqual(err.statusCode, 403);
   });
@@ -338,7 +337,7 @@ describe('AI Service Error Classification', () => {
       'AI_PROVIDER_ERROR',
       'Internal server error.',
       'openrouter',
-      500,
+      500
     );
     assert.strictEqual(err.code, 'AI_PROVIDER_ERROR');
     assert.strictEqual(err.statusCode, 500);
@@ -349,7 +348,7 @@ describe('AI Service Error Classification', () => {
     const err = new AIProviderError(
       'AI_NETWORK_ERROR',
       'AI chat completion failed after 4 attempts: fetch failed',
-      'anthropic',
+      'anthropic'
     );
     assert.strictEqual(err.code, 'AI_NETWORK_ERROR');
     assert.strictEqual(err.statusCode, undefined);
@@ -357,11 +356,7 @@ describe('AI Service Error Classification', () => {
   });
 
   test('AIProviderError AI_INVALID_RESPONSE for parse errors', () => {
-    const err = new AIProviderError(
-      'AI_INVALID_RESPONSE',
-      'AI API returned no choices',
-      'openai',
-    );
+    const err = new AIProviderError('AI_INVALID_RESPONSE', 'AI API returned no choices', 'openai');
     assert.strictEqual(err.code, 'AI_INVALID_RESPONSE');
     assert.ok(err.message.includes('no choices'));
   });
@@ -381,7 +376,10 @@ describe('AI Service Error Classification', () => {
   });
 
   test('ModelNotAllowedError → MODEL_NOT_ALLOWED', () => {
-    const err = new ModelNotAllowedError('anthropic', 'claude-3-opus', ['claude-haiku-4-5', 'claude-sonnet-4-6']);
+    const err = new ModelNotAllowedError('anthropic', 'claude-3-opus', [
+      'claude-haiku-4-5',
+      'claude-sonnet-4-6',
+    ]);
     assert.strictEqual(err.code, 'MODEL_NOT_ALLOWED');
     assert.strictEqual(err.name, 'ModelNotAllowedError');
     assert.strictEqual(err.model, 'claude-3-opus');
@@ -395,7 +393,7 @@ describe('AI Service Error Classification', () => {
       'AI_MODEL_NOT_FOUND',
       'Model "gpt-5" is not available on OpenAI.',
       'openai',
-      404,
+      404
     );
     assert.strictEqual(err.code, 'AI_MODEL_NOT_FOUND');
     assert.strictEqual(err.statusCode, 404);
@@ -435,7 +433,7 @@ describe('Model Selection', () => {
   test('already-dated model ID passes through unchanged', () => {
     assert.strictEqual(
       resolveAnthropicModel('claude-haiku-4-5-20251001'),
-      'claude-haiku-4-5-20251001',
+      'claude-haiku-4-5-20251001'
     );
   });
 

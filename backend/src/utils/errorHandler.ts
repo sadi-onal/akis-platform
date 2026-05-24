@@ -9,7 +9,7 @@ import {
   TraceAutomationError,
   type AIErrorCode,
   type TraceAutomationErrorCode,
-} from '../core/errors.js';
+} from '../lib/errors.js';
 
 /**
  * Phase 7.E: Unified error model — AGT-6 standardization
@@ -50,10 +50,7 @@ export type AuthErrorCode =
   | 'EMAIL_ALREADY_ACTIVE';
 
 // ── Settings / config error codes ──
-export type SettingsErrorCode =
-  | 'ENCRYPTION_NOT_CONFIGURED'
-  | 'DUPLICATE_KEY'
-  | 'FORBIDDEN';
+export type SettingsErrorCode = 'ENCRYPTION_NOT_CONFIGURED' | 'DUPLICATE_KEY' | 'FORBIDDEN';
 
 // ── Unified error code type ──
 export type ErrorCode = CoreErrorCode | AuthErrorCode | SettingsErrorCode;
@@ -235,7 +232,7 @@ export function sendError(
   code: ErrorCode,
   message: string,
   details?: unknown,
-  statusCodeOverride?: number,
+  statusCodeOverride?: number
 ): FastifyReply {
   const statusCode = statusCodeOverride ?? getStatusCodeForError(code);
   return reply.code(statusCode).send({

@@ -48,12 +48,7 @@ export class AgentContractViolationError extends Error {
   readonly issues: string[];
   readonly retryable: boolean;
 
-  constructor(
-    agentType: string,
-    phase: 'input' | 'output',
-    issues: string[],
-    retryable = false
-  ) {
+  constructor(agentType: string, phase: 'input' | 'output', issues: string[], retryable = false) {
     super(`Agent ${agentType} ${phase} contract violation: ${issues.join('; ')}`);
     this.name = 'AgentContractViolationError';
     this.agentType = agentType;
@@ -71,9 +66,7 @@ export class VerificationGateBlockedError extends Error {
   readonly retryable: boolean;
 
   constructor(agentType: string, rolloutMode: string, failures: string[], retryable = false) {
-    super(
-      `Verification blocked for ${agentType} in mode ${rolloutMode}: ${failures.join(', ')}`
-    );
+    super(`Verification blocked for ${agentType} in mode ${rolloutMode}: ${failures.join(', ')}`);
     this.name = 'VerificationGateBlockedError';
     this.agentType = agentType;
     this.rolloutMode = rolloutMode;
@@ -125,7 +118,7 @@ export class AIProviderError extends Error {
  */
 export class AIRateLimitedError extends AIProviderError {
   constructor(provider: string, retryAfter?: number, rawMessage?: string) {
-    const message = rawMessage 
+    const message = rawMessage
       ? `AI provider ${provider} is rate limited: ${rawMessage}`
       : `AI provider ${provider} is temporarily rate limited. Please try again later.`;
     super('AI_RATE_LIMITED', message, provider, 429, retryAfter);
@@ -137,7 +130,8 @@ export class MissingAIKeyError extends AIProviderError {
   constructor(provider: string, customMessage?: string) {
     super(
       'AI_KEY_MISSING',
-      customMessage || `AI API key is not configured for provider ${provider}. Please add a key in Settings > API Keys.`,
+      customMessage ||
+        `AI API key is not configured for provider ${provider}. Please add a key in Settings > API Keys.`,
       provider
     );
     this.name = 'MissingAIKeyError';

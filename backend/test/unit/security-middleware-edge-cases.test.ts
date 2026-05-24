@@ -17,11 +17,7 @@ import {
   type ErrorCode,
   type ErrorEnvelope,
 } from '../../src/utils/errorHandler.js';
-import {
-  JobNotFoundError,
-  DatabaseError,
-  TraceAutomationError,
-} from '../../src/core/errors.js';
+import { JobNotFoundError, DatabaseError, TraceAutomationError } from '../../src/lib/errors.js';
 import { corsPlugin } from '../../src/plugins/security/cors.js';
 import { cookiesPlugin } from '../../src/plugins/security/cookies.js';
 import { helmetPlugin } from '../../src/plugins/security/helmet.js';
@@ -39,8 +35,12 @@ function fakeReply(): {
 } {
   const state = { statusCode: 0, body: null as unknown };
   return {
-    get statusCode() { return state.statusCode; },
-    get body() { return state.body; },
+    get statusCode() {
+      return state.statusCode;
+    },
+    get body() {
+      return state.body;
+    },
     code(c: number) {
       state.statusCode = c;
       return {
@@ -106,7 +106,7 @@ describe('Security: Request Sanitization', () => {
       { field: "'; DROP TABLE users; --" },
       { field: "1' OR '1'='1" },
       { field: "admin'--" },
-      { field: "UNION SELECT * FROM passwords" },
+      { field: 'UNION SELECT * FROM passwords' },
       { field: "1; EXEC xp_cmdshell('dir')" },
     ];
 
@@ -118,7 +118,11 @@ describe('Security: Request Sanitization', () => {
       });
 
       // Server must not crash; Drizzle ORM parameterizes all queries
-      assert.strictEqual(res.statusCode, 200, `Should handle SQL injection payload: ${payload.field}`);
+      assert.strictEqual(
+        res.statusCode,
+        200,
+        `Should handle SQL injection payload: ${payload.field}`
+      );
       const body = JSON.parse(res.body);
       assert.strictEqual(body.received.field, payload.field);
     }
@@ -127,10 +131,7 @@ describe('Security: Request Sanitization', () => {
   test('Path traversal in URL params — dots and slashes handled by router', async () => {
     // Fastify treats path segments individually; ../../etc/passwd would be
     // routed as a 404 (no matching route), not as a file traversal.
-    const traversalPaths = [
-      '/resource/..%2F..%2Fetc%2Fpasswd',
-      '/resource/....//....//etc/passwd',
-    ];
+    const traversalPaths = ['/resource/..%2F..%2Fetc%2Fpasswd', '/resource/....//....//etc/passwd'];
 
     for (const path of traversalPaths) {
       const res = await app.inject({
@@ -142,7 +143,7 @@ describe('Security: Request Sanitization', () => {
       // Fastify's router will either 400 or match with the encoded value
       assert.ok(
         res.statusCode === 200 || res.statusCode === 400 || res.statusCode === 404,
-        `Path traversal attempt should be safely handled, got ${res.statusCode}`,
+        `Path traversal attempt should be safely handled, got ${res.statusCode}`
       );
 
       // If 200, ensure the response does not contain file system content
@@ -156,9 +157,9 @@ describe('Security: Request Sanitization', () => {
   test('Unicode normalization — consistent handling of special characters', async () => {
     const unicodePayloads = [
       { name: '\u0000null byte' },
-      { name: 'caf\u00E9' },              // pre-composed e-acute
-      { name: 'cafe\u0301' },             // decomposed e-acute
-      { name: '\uFEFFBOM prefix' },       // BOM character
+      { name: 'caf\u00E9' }, // pre-composed e-acute
+      { name: 'cafe\u0301' }, // decomposed e-acute
+      { name: '\uFEFFBOM prefix' }, // BOM character
       { name: '\u200Bzero-width space' }, // zero-width space
       { name: 'normal text' },
     ];
@@ -171,7 +172,11 @@ describe('Security: Request Sanitization', () => {
       });
 
       // Server must handle all unicode inputs without crashing
-      assert.strictEqual(res.statusCode, 200, `Should handle unicode: ${JSON.stringify(payload.name)}`);
+      assert.strictEqual(
+        res.statusCode,
+        200,
+        `Should handle unicode: ${JSON.stringify(payload.name)}`
+      );
     }
   });
 
@@ -187,7 +192,7 @@ describe('Security: Request Sanitization', () => {
     // Otherwise it passes through (routes should validate max lengths)
     assert.ok(
       res.statusCode === 200 || res.statusCode === 413,
-      `Should handle or reject long body, got ${res.statusCode}`,
+      `Should handle or reject long body, got ${res.statusCode}`
     );
   });
 });
@@ -296,7 +301,7 @@ describe('Security: Error Handler Sanitization', () => {
   test('DatabaseError sanitizes message — no internal SQL or connection details', () => {
     const dbError = new DatabaseError(
       'FATAL: role "akis_admin" does not exist',
-      new Error('connection refused at 10.0.0.5:5432'),
+      new Error('connection refused at 10.0.0.5:5432')
     );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -368,7 +373,10 @@ describe('Security: Middleware Global Error Handler', () => {
         });
       }
 
-      if ('validation' in error && Array.isArray((error as { validation?: unknown[] }).validation)) {
+      if (
+        'validation' in error &&
+        Array.isArray((error as { validation?: unknown[] }).validation)
+      ) {
         return reply.code(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -387,7 +395,13 @@ describe('Security: Middleware Global Error Handler', () => {
     // Route that throws various errors
     app.get('/throw-zod', async () => {
       throw new ZodError([
-        { code: 'invalid_type', expected: 'string', received: 'undefined', path: ['id'], message: 'Required' },
+        {
+          code: 'invalid_type',
+          expected: 'string',
+          received: 'undefined',
+          path: ['id'],
+          message: 'Required',
+        },
       ]);
     });
 
@@ -483,7 +497,7 @@ describe('Security: Cookie Configuration', () => {
       name: 'akis_sid',
       maxAge: 604800,
       sameSite: 'strict',
-      secure: true,  // production mode
+      secure: true, // production mode
       domain: 'akisflow.com',
     });
 
@@ -498,7 +512,10 @@ describe('Security: Cookie Configuration', () => {
     const setCookie = res.headers['set-cookie'];
     assert.ok(setCookie, 'set-cookie header must be present');
     const cookieStr = Array.isArray(setCookie) ? setCookie[0] : setCookie;
-    assert.ok(cookieStr.toLowerCase().includes('secure'), 'Cookie must have Secure flag in production');
+    assert.ok(
+      cookieStr.toLowerCase().includes('secure'),
+      'Cookie must have Secure flag in production'
+    );
 
     await app.close();
   });
@@ -527,7 +544,7 @@ describe('Security: Cookie Configuration', () => {
       const cookieStr = Array.isArray(setCookie) ? setCookie[0] : setCookie;
       assert.ok(
         cookieStr.toLowerCase().includes(`samesite=${sameSite}`),
-        `Cookie must have SameSite=${sameSite}`,
+        `Cookie must have SameSite=${sameSite}`
       );
 
       await app.close();
@@ -637,7 +654,7 @@ describe('Security: Cookie Configuration', () => {
     // Clearing sets expiry in the past or maxAge=0
     assert.ok(
       cookieStr.includes('Expires=') || cookieStr.includes('Max-Age=0'),
-      'Cleared cookie must have past expiry',
+      'Cleared cookie must have past expiry'
     );
 
     await app.close();
@@ -670,7 +687,7 @@ describe('Security: CORS Configuration', () => {
 
     assert.ok(
       res.headers['access-control-allow-origin'] === 'https://akisflow.com',
-      'Must allow configured origin',
+      'Must allow configured origin'
     );
 
     await app.close();
@@ -702,7 +719,7 @@ describe('Security: CORS Configuration', () => {
     const allowOrigin = res.headers['access-control-allow-origin'];
     assert.ok(
       !allowOrigin || allowOrigin !== 'https://evil-site.com',
-      'Must NOT allow non-configured origin',
+      'Must NOT allow non-configured origin'
     );
 
     process.env.NODE_ENV = origEnv;
@@ -713,7 +730,7 @@ describe('Security: CORS Configuration', () => {
     const app = Fastify({ logger: false });
 
     await app.register(corsPlugin, {
-      origins: ['https://akisflow.com/'],  // trailing slash
+      origins: ['https://akisflow.com/'], // trailing slash
     });
 
     app.get('/api/test', async () => ({ ok: true }));
@@ -728,7 +745,7 @@ describe('Security: CORS Configuration', () => {
 
     assert.ok(
       res.headers['access-control-allow-origin'] === 'https://akisflow.com',
-      'Must normalize trailing slashes',
+      'Must normalize trailing slashes'
     );
 
     await app.close();
@@ -755,10 +772,7 @@ describe('Security: CORS Configuration', () => {
 
     // With wildcard, credentials should be false (no access-control-allow-credentials: true)
     const allowCreds = res.headers['access-control-allow-credentials'];
-    assert.ok(
-      allowCreds !== 'true',
-      'Wildcard origin must NOT allow credentials (security risk)',
-    );
+    assert.ok(allowCreds !== 'true', 'Wildcard origin must NOT allow credentials (security risk)');
 
     process.env.NODE_ENV = origEnv;
     await app.close();
@@ -808,10 +822,7 @@ describe('Security: Content Security', () => {
     });
 
     // Must be 400 (client error), NOT 500 (server error)
-    assert.ok(
-      res.statusCode === 400,
-      `Invalid JSON should return 400, got ${res.statusCode}`,
-    );
+    assert.ok(res.statusCode === 400, `Invalid JSON should return 400, got ${res.statusCode}`);
 
     await app.close();
   });
@@ -833,7 +844,7 @@ describe('Security: Content Security', () => {
         } catch (err) {
           done(err as Error, undefined);
         }
-      },
+      }
     );
 
     app.post('/api/data', async (request) => {
@@ -880,7 +891,7 @@ describe('Security: Content Security', () => {
 
     assert.ok(
       res.statusCode === 413 || res.statusCode === 400,
-      `Oversized payload should be rejected, got ${res.statusCode}`,
+      `Oversized payload should be rejected, got ${res.statusCode}`
     );
 
     await app.close();
@@ -903,7 +914,7 @@ describe('Security: Helmet Security Headers', () => {
     assert.strictEqual(
       res.headers['x-content-type-options'],
       'nosniff',
-      'X-Content-Type-Options must be nosniff',
+      'X-Content-Type-Options must be nosniff'
     );
 
     await app.close();
@@ -920,7 +931,7 @@ describe('Security: Helmet Security Headers', () => {
     const xfo = res.headers['x-frame-options'];
     assert.ok(
       xfo === 'DENY' || xfo === 'SAMEORIGIN',
-      `X-Frame-Options must be DENY or SAMEORIGIN, got ${xfo}`,
+      `X-Frame-Options must be DENY or SAMEORIGIN, got ${xfo}`
     );
 
     await app.close();
@@ -937,7 +948,7 @@ describe('Security: Helmet Security Headers', () => {
     assert.strictEqual(
       res.headers['cross-origin-resource-policy'],
       'same-origin',
-      'Cross-Origin-Resource-Policy must be same-origin',
+      'Cross-Origin-Resource-Policy must be same-origin'
     );
 
     await app.close();
@@ -953,7 +964,7 @@ describe('Security: Helmet Security Headers', () => {
     const res = await app.inject({ method: 'GET', url: '/test' });
     assert.ok(
       'x-dns-prefetch-control' in res.headers,
-      'X-DNS-Prefetch-Control header must be present',
+      'X-DNS-Prefetch-Control header must be present'
     );
 
     await app.close();
@@ -988,22 +999,46 @@ describe('Security: sendError Middleware Helper', () => {
   test('all ErrorCode values have a mapped HTTP status', () => {
     // Comprehensive check that every known error code resolves to a valid HTTP status
     const allCodes: ErrorCode[] = [
-      'VALIDATION_ERROR', 'NOT_FOUND', 'INVALID_STATE', 'DATABASE_ERROR', 'INTERNAL_ERROR',
-      'AI_RATE_LIMITED', 'AI_PROVIDER_ERROR', 'AI_INVALID_RESPONSE', 'AI_NETWORK_ERROR',
-      'AI_AUTH_ERROR', 'AI_KEY_MISSING', 'MODEL_NOT_ALLOWED',
-      'UNAUTHORIZED', 'INVALID_CREDENTIALS', 'EMAIL_IN_USE', 'EMAIL_DELIVERY_FAILED',
-      'USER_NOT_FOUND', 'EMAIL_NOT_VERIFIED', 'ALREADY_VERIFIED', 'INVALID_CODE',
-      'RATE_LIMITED', 'USER_DISABLED', 'INVALID_PROVIDER', 'OAUTH_NOT_CONFIGURED',
-      'INVITE_INVALID', 'INVITE_EXPIRED', 'EMAIL_ALREADY_ACTIVE',
-      'ENCRYPTION_NOT_CONFIGURED', 'DUPLICATE_KEY', 'FORBIDDEN',
-      'TRACE_AUTOMATION_TIMEOUT', 'TRACE_AUTOMATION_RUN_FAILED', 'TRACE_AUTOMATION_LAUNCH_FAILED',
+      'VALIDATION_ERROR',
+      'NOT_FOUND',
+      'INVALID_STATE',
+      'DATABASE_ERROR',
+      'INTERNAL_ERROR',
+      'AI_RATE_LIMITED',
+      'AI_PROVIDER_ERROR',
+      'AI_INVALID_RESPONSE',
+      'AI_NETWORK_ERROR',
+      'AI_AUTH_ERROR',
+      'AI_KEY_MISSING',
+      'MODEL_NOT_ALLOWED',
+      'UNAUTHORIZED',
+      'INVALID_CREDENTIALS',
+      'EMAIL_IN_USE',
+      'EMAIL_DELIVERY_FAILED',
+      'USER_NOT_FOUND',
+      'EMAIL_NOT_VERIFIED',
+      'ALREADY_VERIFIED',
+      'INVALID_CODE',
+      'RATE_LIMITED',
+      'USER_DISABLED',
+      'INVALID_PROVIDER',
+      'OAUTH_NOT_CONFIGURED',
+      'INVITE_INVALID',
+      'INVITE_EXPIRED',
+      'EMAIL_ALREADY_ACTIVE',
+      'ENCRYPTION_NOT_CONFIGURED',
+      'DUPLICATE_KEY',
+      'FORBIDDEN',
+      'TRACE_AUTOMATION_TIMEOUT',
+      'TRACE_AUTOMATION_RUN_FAILED',
+      'TRACE_AUTOMATION_LAUNCH_FAILED',
     ];
 
     for (const code of allCodes) {
       const status = getStatusCodeForError(code);
       assert.ok(
         status >= 400 && status < 600,
-        `Error code ${code} must map to 4xx/5xx, got ${status}`,
+        `Error code ${code} must map to 4xx/5xx, got ${status}`
       );
     }
   });
