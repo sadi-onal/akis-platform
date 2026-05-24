@@ -27,31 +27,23 @@ export const cookiesPlugin = fp<CookiesPluginOptions>(
       done();
     });
 
+    // NOTE: setAuthCookie/clearAuthCookie are NOT called in production code.
+    // Production auth (auth.oauth.ts, auth.ts) uses reply.setCookie() with
+    // cookieOpts from lib/env.ts directly. These decorators exist for test
+    // ergonomics and plugin-based cookie handling.
+    const pluginCookieOpts = {
+      path: '/',
+      httpOnly: true,
+      secure: options.secure,
+      sameSite: options.sameSite,
+      maxAge: options.maxAge,
+      ...(options.domain ? { domain: options.domain } : {}),
+    };
+
     fastify.decorateReply(
       'setAuthCookie',
       function setAuthCookie(this: FastifyReply, sessionId: string) {
-        // Build cookie options, only including domain if explicitly set
-        // For localhost development, omitting domain is correct behavior
-        const cookieOptions: {
-          httpOnly: boolean;
-          path: string;
-          maxAge: number;
-          sameSite: 'lax' | 'strict' | 'none';
-          secure: boolean;
-          domain?: string;
-        } = {
-          httpOnly: true,
-          path: '/',
-          maxAge: options.maxAge,
-          sameSite: options.sameSite,
-          secure: options.secure,
-        };
-        
-        if (options.domain && options.domain.length > 0) {
-          cookieOptions.domain = options.domain;
-        }
-        
-        this.setCookie(options.name, sessionId, cookieOptions);
+        this.setCookie(options.name, sessionId, pluginCookieOpts);
         return this;
       }
     );
@@ -65,11 +57,11 @@ export const cookiesPlugin = fp<CookiesPluginOptions>(
         path: '/',
         sameSite: options.sameSite,
       };
-      
-      if (options.domain && options.domain.length > 0) {
+
+      if (options.domain) {
         clearOptions.domain = options.domain;
       }
-      
+
       this.clearCookie(options.name, clearOptions);
       return this;
     });
@@ -77,5 +69,3 @@ export const cookiesPlugin = fp<CookiesPluginOptions>(
 );
 
 export type CookiesPlugin = typeof cookiesPlugin;
-
-

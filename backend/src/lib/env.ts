@@ -14,7 +14,7 @@ export const env = {
   AUTH_JWT_SECRET: process.env.AUTH_JWT_SECRET ?? base.AUTH_JWT_SECRET,
 };
 
-const sameSite = env.AUTH_COOKIE_SECURE ? 'none' : env.AUTH_COOKIE_SAMESITE;
+const sameSite = env.AUTH_COOKIE_SAMESITE;
 
 // Build cookie options, omitting domain for localhost compatibility
 const baseCookieOpts: {

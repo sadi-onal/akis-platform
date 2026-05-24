@@ -18,6 +18,9 @@ const RUNNING_STAGES: PipelineStage[] = [
   'proto_building',
   'trace_testing',
   'ci_running',
+  'critic_reviewing_spec',
+  'critic_reviewing_code',
+  'fix_loop_iteration',
 ];
 
 /**
@@ -57,8 +60,8 @@ export interface UseConversationLoaderReturn {
   /** Tracks the id we currently have data for; written by load + refresh. */
   loadedIdRef: React.MutableRefObject<string | undefined>;
   /**
-   * `<id>:<convLen>:<lastTs>` cache key. Exposed so external callers (e.g.
-   * handleNewConversation, handleBack, handleDelete) can reset it before they
+   * `<id>:<convLen>:<lastTs>:<currentStage>` cache key. Exposed so external callers
+   * (e.g. handleNewConversation, handleBack, handleDelete) can reset it before they
    * navigate away — without that reset, re-entering the same chat would find
    * a matching key and skip the setMessages call (F-01 regression).
    */
@@ -199,7 +202,7 @@ export function useConversationLoader(
         setActiveWorkflow(w);
         const convLen = w.conversation?.length ?? 0;
         const lastTs = w.conversation?.[convLen - 1]?.timestamp ?? '';
-        const key = `${targetId}:${convLen}:${lastTs}`;
+        const key = `${targetId}:${convLen}:${lastTs}:${w.currentStage ?? ''}`;
         if (key !== lastMessagesKeyRef.current) {
           lastMessagesKeyRef.current = key;
           setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
@@ -268,7 +271,7 @@ export function useConversationLoader(
           // Keep sidebar list item in sync so status dot reflects failed/running state
           onWorkflowSnapshotRef.current?.(w);
           const lastTs = w.conversation?.[convLen - 1]?.timestamp ?? '';
-          const key = `${conversationId}:${convLen}:${lastTs}`;
+          const key = `${conversationId}:${convLen}:${lastTs}:${w.currentStage ?? ''}`;
           if (key !== lastMessagesKeyRef.current) {
             lastMessagesKeyRef.current = key;
             setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));
@@ -304,7 +307,7 @@ export function useConversationLoader(
     setActiveWorkflow(w);
     const convLen = w.conversation?.length ?? 0;
     const lastTs = w.conversation?.[convLen - 1]?.timestamp ?? '';
-    const key = `${conversationId}:${convLen}:${lastTs}`;
+    const key = `${conversationId}:${convLen}:${lastTs}:${w.currentStage ?? ''}`;
     if (key !== lastMessagesKeyRef.current) {
       lastMessagesKeyRef.current = key;
       setMessages(conversationToChatMessages(w.conversation ?? [], w.currentStage));

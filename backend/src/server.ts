@@ -74,3 +74,12 @@ app.listen({ port, host }, (err) => {
   }
   app.log.info(`Server listening on http://${host}:${port}`);
 });
+
+// Graceful shutdown on SIGTERM/SIGINT
+const shutdown = async () => {
+  app.log.info('Shutting down gracefully...');
+  await app.close();
+  process.exit(0);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

@@ -1034,7 +1034,7 @@ export class PipelineOrchestrator {
       return failed;
     }
 
-    const agents = this.getAgents(pipeline.model);
+    const agents = this.getAgents(pipeline.model, pipelineId);
     const scribeState = this.reconstructScribeState(pipeline);
 
     // Inject accumulated attachment context into scribe state for this continuation
@@ -1093,7 +1093,7 @@ export class PipelineOrchestrator {
     emit('start', 'Kullanıcı yanıtıyla devam ediliyor...', 10);
     scribeState.pipelineId = pipelineId;
 
-    const agents = this.getAgents(model);
+    const agents = this.getAgents(model, pipelineId);
 
     // Issue #462 — inject prior-turn memory for the continuation call. The
     // query is the most recent user answer in the conversation (latest
@@ -2226,7 +2226,7 @@ export class PipelineOrchestrator {
     // durationMs for *this* attempt (not the original Scribe pass).
     this.markStageStarted(pipelineId, 'scribe');
 
-    const agents = this.getAgents(pipeline.model);
+    const agents = this.getAgents(pipeline.model, pipelineId);
     const result = await withTimeout(
       agents.scribe.regenerateSpec(scribeState, feedback),
       STAGE_TIMEOUT,
@@ -3153,10 +3153,12 @@ export class PipelineOrchestrator {
           approved: criticResult?.approved ?? true,
         });
 
-        // Store critic output in intermediateState
+        // Store critic output in intermediateState (merge with existing keys)
         if (criticResult) {
+          const currentPipelineForCritic = await this.store.getById(pipelineId);
+          const existingCriticState = (currentPipelineForCritic?.intermediateState ?? {}) as Record<string, unknown>;
           await this.store.update(pipelineId, {
-            intermediateState: { criticSpecOutput: criticResult },
+            intermediateState: { ...existingCriticState, criticSpecOutput: criticResult },
           });
         }
         // If critic rejected and score < threshold, log but proceed (human gate is next)
@@ -3357,7 +3359,7 @@ export class PipelineOrchestrator {
       `[Trace] Effort: ${traceEffort.score}/10 → Model: ${traceModel} (${traceEffort.reasoning})`
     );
 
-    const agents = this.getAgents(traceModel);
+    const agents = this.getAgents(traceModel, pipelineId);
     await this.writeCheckpoint(pipelineId, 'trace', `${owner}/${repo}@${branch}`);
     // Read cucumberEnabled from pipeline intermediateState
     const pipelineForCucumber = await this.getPipeline(pipelineId);
@@ -3535,7 +3537,7 @@ export class PipelineOrchestrator {
         const fixResult = await this.fixLoopService.runFixLoop(
           spec,
           async (_s, feedback) => {
-            const fixAgents = this.getAgents(model);
+            const fixAgents = this.getAgents(model, pipelineId);
             const pl = await this.getPipeline(pipelineId);
             const baseCtx = buildUnifiedAgentKnowledgeContext(pl, { role: 'proto' });
             const fb = feedback
@@ -3577,7 +3579,7 @@ export class PipelineOrchestrator {
               throw new Error(`SecurityGate: ${gateDecision.reason}`);
             }
 
-            const fixAgents = this.getAgents(model);
+            const fixAgents = this.getAgents(model, pipelineId);
             const plTrace = await this.getPipeline(pipelineId);
             const traceKb = buildUnifiedAgentKnowledgeContext(plTrace, { role: 'trace' });
             // Issue #397: preserve the chat-level Cucumber/BDD toggle across
@@ -3896,6 +3898,14 @@ export class PipelineOrchestrator {
     }
 
     const p = await this.getPipeline(pipelineId);
+
+    // Clear stale traceDryRun status from the previous failed attempt
+    const existingTraceState = (p.intermediateState ?? {}) as Record<string, unknown>;
+    const { traceDryRunStatus, traceDryRunErrorCode, traceDryRunErrorAt, ...cleanTraceState } = existingTraceState;
+    if (traceDryRunStatus || traceDryRunErrorCode || traceDryRunErrorAt) {
+      await this.store.update(pipelineId, { intermediateState: cleanTraceState });
+    }
+
     await this.store.update(
       pipelineId,
       { stage: 'trace_testing' },
@@ -3957,9 +3967,11 @@ export class PipelineOrchestrator {
     const userGithubService = this.createGitHubService(userGitHubToken);
     const agents =
       this.createAgentsForModel?.(pipeline.model ?? '', userGithubService) ??
-      this.getAgents(pipeline.model);
+      this.getAgents(pipeline.model, pipelineId);
     const retryProtoKbRaw = buildUnifiedAgentKnowledgeContext(pipeline, { role: 'proto' });
     const retryProtoKb = retryProtoKbRaw.trim() ? retryProtoKbRaw : undefined;
+    // M-4: Respect preview gate on retry — same logic as the normal Proto path
+    const retryPreviewGateEnabled = process.env.AUTO_PUSH_AFTER_PROTO !== 'true';
     const result = await withTimeout(
       agents.proto.execute({
         spec: pipeline.approvedSpec,
@@ -3968,6 +3980,7 @@ export class PipelineOrchestrator {
         owner,
         pipelineId,
         knowledgeContext: retryProtoKb,
+        dryRun: retryPreviewGateEnabled,
       }),
       STAGE_TIMEOUT,
       'Proto'
@@ -3986,6 +3999,27 @@ export class PipelineOrchestrator {
     });
     this.emitEvent(pipelineId, 'stage_change', 'trace_testing');
 
+    if (retryPreviewGateEnabled) {
+      // Preview gate enabled: run Trace in dryRun mode, then hand off to push gate
+      return this.runTrace(
+        pipelineId,
+        pipeline.metrics,
+        owner,
+        repoName,
+        result.data.branch,
+        pipeline.approvedSpec,
+        pipeline.model,
+        {
+          dryRun: true,
+          inputFiles: result.data.files.map((f) => ({
+            filePath: f.filePath,
+            content: f.content,
+          })),
+          postSuccess: 'awaiting_push_confirm',
+        }
+      );
+    }
+
     return this.runTrace(
       pipelineId,
       pipeline.metrics,
@@ -3998,7 +4032,7 @@ export class PipelineOrchestrator {
   }
 
   private async retryScribe(pipelineId: string, pipeline: PipelineState): Promise<PipelineState> {
-    const agents = this.getAgents(pipeline.model);
+    const agents = this.getAgents(pipeline.model, pipelineId);
     const scribeState = this.reconstructScribeState(pipeline);
     scribeState.pipelineId = pipelineId;
     const current = await this.getPipeline(pipelineId);
@@ -4553,6 +4587,17 @@ export class PipelineOrchestrator {
       // Flush accumulated token usage to DB (best-effort, non-blocking)
       this.flushTokenUsage(pipelineId).catch((err) =>
         logger.warn({ err, pipelineId }, '[Pipeline] Token flush failed')
+      );
+    } else if (
+      // M-12: Periodic flush at intermediate stage completions to prevent data
+      // loss on process crash. These stages represent major AI work boundaries.
+      stage === 'awaiting_approval' ||
+      stage === 'proto_building' ||
+      stage === 'trace_testing' ||
+      stage === 'awaiting_push_confirm'
+    ) {
+      this.flushTokenUsage(pipelineId).catch((err) =>
+        logger.warn({ err, pipelineId }, '[Pipeline] Intermediate token flush failed')
       );
     }
   }

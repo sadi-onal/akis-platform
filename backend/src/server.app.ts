@@ -607,6 +607,9 @@ export async function buildApp() {
     watchdog.stop();
     freshnessScheduler?.stop();
     setFreshnessSchedulerInstance(null);
+    // Close the DB pool to release connections cleanly on shutdown
+    const { closePool } = await import('./db/client.js');
+    await closePool();
   });
 
   return app;
