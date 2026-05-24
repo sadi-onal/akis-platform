@@ -89,7 +89,7 @@ LANGUAGE REQUIREMENT (strict):
 
 /** Build code-review system prompt with a dynamic approval threshold. */
 export function buildCodeReviewSystemPrompt(threshold: number = 75): string {
-  return CODE_REVIEW_SYSTEM_PROMPT_TEMPLATE.replace('{{THRESHOLD}}', String(threshold));
+  return CODE_REVIEW_SYSTEM_PROMPT_TEMPLATE.replaceAll('{{THRESHOLD}}', String(threshold));
 }
 
 /** @deprecated Use buildCodeReviewSystemPrompt(threshold) for dynamic threshold injection. */

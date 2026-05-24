@@ -189,9 +189,15 @@ export class DrizzlePipelineStore implements PipelineStore {
     // H-7: Persist autoApprove fields — no dedicated DB columns, so merge
     // into the intermediateState JSONB alongside any existing payload.
     if (data.autoApproveEnabled !== undefined || data.autoApproveThreshold !== undefined) {
+      // Read current DB row's intermediateState to avoid overwriting existing keys
+      const [currentRow] = await this.db
+        .select({ intermediateState: pipelines.intermediateState })
+        .from(pipelines)
+        .where(eq(pipelines.id, id))
+        .limit(1);
       const existingIntermediate =
         (updateData.intermediateState as Record<string, unknown> | undefined) ??
-        (data.intermediateState as Record<string, unknown> | undefined) ??
+        (currentRow?.intermediateState as Record<string, unknown> | null) ??
         {};
       const merged = { ...existingIntermediate };
       if (data.autoApproveEnabled !== undefined) merged.autoApproveEnabled = data.autoApproveEnabled;

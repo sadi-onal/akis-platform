@@ -23,7 +23,6 @@ export async function dashboardMetricsRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/dashboard/metrics',
     {
-      preHandler: [requireAuth],
       schema: {
         description: 'Get dashboard quality and reliability metrics',
         tags: ['dashboard'],

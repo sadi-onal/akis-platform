@@ -1677,9 +1677,17 @@ export function createToolCallingClient(
       const isRetryable = [429, 500, 502, 503, 504].includes(response.status);
       if (isRetryable && attempt < MAX_TOOL_RETRIES) {
         const retryAfter = response.headers.get('retry-after');
-        const delay = retryAfter
-          ? parseInt(retryAfter) * 1000
-          : RETRY_DELAY_MS * Math.pow(2, attempt);
+        let delay: number;
+        if (retryAfter) {
+          const parsed = parseInt(retryAfter, 10);
+          delay = Number.isNaN(parsed)
+            ? Math.max(0, new Date(retryAfter).getTime() - Date.now())
+            : parsed * 1000;
+        } else {
+          delay = RETRY_DELAY_MS * Math.pow(2, attempt);
+        }
+        // Jitter: ±50% to avoid thundering herd
+        delay = Math.round(delay * (0.5 + Math.random()));
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }

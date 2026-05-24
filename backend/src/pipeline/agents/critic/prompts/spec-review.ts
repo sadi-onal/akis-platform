@@ -114,7 +114,7 @@ LANGUAGE REQUIREMENT (strict):
 
 /** Build spec-review system prompt with a dynamic approval threshold. */
 export function buildSpecReviewSystemPrompt(threshold: number = 75): string {
-  return SPEC_REVIEW_SYSTEM_PROMPT_TEMPLATE.replace('{{THRESHOLD}}', String(threshold));
+  return SPEC_REVIEW_SYSTEM_PROMPT_TEMPLATE.replaceAll('{{THRESHOLD}}', String(threshold));
 }
 
 /** @deprecated Use buildSpecReviewSystemPrompt(threshold) for dynamic threshold injection. */
