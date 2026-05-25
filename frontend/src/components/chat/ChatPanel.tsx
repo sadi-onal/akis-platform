@@ -16,7 +16,8 @@ import type { PipelineError } from '../../types/pipeline';
 function getAgentInfo(uiState: ConversationUIState) {
   if (uiState.includes('scribe')) return { label: 'Scribe', color: 'var(--ak-scribe, #3b82f6)' };
   // T5: display-only rename — Critic → Değerlendirme
-  if (uiState === 'critic_running')
+  // #626: both critic phases share the same agent info.
+  if (uiState === 'critic_reviewing_spec' || uiState === 'critic_reviewing_code')
     return { label: 'Değerlendirme', color: 'var(--ak-critic, #f43f5e)' };
   if (uiState === 'proto_running') return { label: 'Proto', color: 'var(--ak-proto, #f59e0b)' };
   if (uiState === 'trace_running') return { label: 'Trace', color: 'var(--ak-trace, #8b5cf6)' };
@@ -391,12 +392,12 @@ export const ChatPanel = memo(function ChatPanel({
               ))}
 
               {/* Activity indicator for running agents.
-                PR-F1 (2026-05-19): critic_running uiState'i kasıtlı olarak
-                listenin DIŞINDA — Critic guardrail chat akışında satır
-                üretmiyor. Manuel test bulgusu (image #40): backend
-                'Spesifikasyon inceleniyor (adversarial review)...' mesajı
-                eskiden burada 'Critic …' olarak görünüyordu. Modern stack
-                pattern: Critic invisible, bulgular CriticFindingsInline
+                PR-F1 (2026-05-19): critic_reviewing_spec/critic_reviewing_code
+                uiState'leri kasıtlı olarak listenin DIŞINDA — Critic guardrail
+                chat akışında satır üretmiyor. Manuel test bulgusu (image #40):
+                backend 'Spesifikasyon inceleniyor (adversarial review)...'
+                mesajı eskiden burada 'Critic …' olarak görünüyordu. Modern
+                stack pattern: Critic invisible, bulgular CriticFindingsInline
                 + ExplanationPanel'de açık kalır. */}
               {(uiState === 'scribe_running' ||
                 uiState === 'scribe_revise' ||

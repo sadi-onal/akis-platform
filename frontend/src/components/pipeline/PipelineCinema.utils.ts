@@ -66,12 +66,14 @@ function activeStageFor(uiState: ConversationUIState | undefined): CinemaStage |
     case 'scribe_running':
     case 'scribe_revise':
       return 'scribe';
-    case 'critic_running':
-      // PR-F: Critic ana column değil; UI state critic_running ise hangi
-      // faza ait olduğunu chronological context belirler. Spec critic'i
-      // hâlâ Scribe column'unda nabız atar; code critic'i Proto'da.
-      // (Routing reduceStageViews içinde protoSeenSoFar üzerinden yapılır.)
-      return undefined;
+    // #626: critic phase now carries through from the backend via split
+    // ConversationUIState values. Spec critic pulses the Scribe column;
+    // code critic pulses Proto. Previously both collapsed into
+    // `critic_running` which returned undefined → no column pulsed.
+    case 'critic_reviewing_spec':
+      return 'scribe';
+    case 'critic_reviewing_code':
+      return 'proto';
     case 'proto_running':
       return 'proto';
     case 'trace_running':

@@ -20,7 +20,13 @@ export type ConversationUIState =
   | 'idle'
   | 'scribe_clarifying'
   | 'scribe_running'
-  | 'critic_running'
+  // #626: Split critic_running into spec/code so Cinema can pulse the
+  // correct column. Backend emits `critic_reviewing_spec` and
+  // `critic_reviewing_code` as distinct stage_change events; collapsing
+  // them into one `critic_running` lost the phase information that Cinema
+  // needs to decide Scribe-pulse vs Proto-pulse.
+  | 'critic_reviewing_spec'
+  | 'critic_reviewing_code'
   | 'awaiting_approval'
   | 'awaiting_push_confirm'
   // P8 — Critic hard-block: pipeline waits for user to fix or override.

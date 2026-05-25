@@ -16,7 +16,8 @@ interface ConversationStateReturn {
 const RUNNING_STATES: ConversationUIState[] = [
   'scribe_running',
   'scribe_revise',
-  'critic_running',
+  'critic_reviewing_spec',
+  'critic_reviewing_code',
   'proto_running',
   'trace_running',
   'ci_running',
@@ -65,7 +66,9 @@ export function useConversationState(initialStage?: PipelineStage): Conversation
     if (uiState === 'scribe_running' || uiState === 'scribe_revise')
       return t('chat.placeholder.scribeRunning');
     // T5: display-only rename — Critic → Evaluator
-    if (uiState === 'critic_running') return t('chat.placeholder.criticRunning');
+    // #626: both critic phases share the same placeholder text.
+    if (uiState === 'critic_reviewing_spec' || uiState === 'critic_reviewing_code')
+      return t('chat.placeholder.criticRunning');
     if (uiState === 'proto_running') return t('chat.placeholder.protoRunning');
     if (uiState === 'trace_running') return t('chat.placeholder.traceRunning');
     if (uiState === 'ci_running') return t('chat.placeholder.ciRunning');

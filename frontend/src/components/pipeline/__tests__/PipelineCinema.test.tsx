@@ -335,6 +335,30 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
   // Scribe→Proto / Proto→Trace handoff. PR-V5 derives completion ONLY
   // from explicit `status: 'completed'` activities. The two cases below
   // pin down the new contract.
+  // ─── #626: Critic phases map to correct active column ──────────────
+  it('#626: critic_reviewing_spec makes Scribe column active', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, message: 'Spec yazıldı' }),
+      mk({ stage: 'critic', criticPhase: 'spec', progress: 30, message: 'Spec inceleniyor' }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!, 'critic_reviewing_spec');
+    expect(views[0]!.state).toBe('active'); // Scribe pulses
+    expect(views[1]!.state).toBe('pending'); // Proto stays pending
+    expect(views[2]!.state).toBe('pending'); // Trace stays pending
+  });
+
+  it('#626: critic_reviewing_code makes Proto column active', () => {
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', progress: 100, message: 'Kod hazır' }),
+      mk({ stage: 'critic', criticPhase: 'code', progress: 30, message: 'Kod inceleniyor' }),
+    ];
+    const views = reduceStageViews(acts, acts[2]!, 'critic_reviewing_code');
+    expect(views[0]!.state).toBe('complete'); // Scribe stays complete
+    expect(views[1]!.state).toBe('active'); // Proto pulses
+    expect(views[2]!.state).toBe('pending'); // Trace stays pending
+  });
+
   it('PR-V5: completion ONLY derived from explicit completed-status activities', () => {
     // Both Scribe and Proto have in-progress activities. Without an
     // explicit completion signal, Scribe must NOT be marked complete just

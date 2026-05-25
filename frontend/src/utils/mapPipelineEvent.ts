@@ -17,8 +17,9 @@ export function mapStageToUIState(stage: PipelineStage): ConversationUIState {
     case 'scribe_generating':
       return 'scribe_running';
     case 'critic_reviewing_spec':
+      return 'critic_reviewing_spec';
     case 'critic_reviewing_code':
-      return 'critic_running';
+      return 'critic_reviewing_code';
     case 'awaiting_approval':
       return 'awaiting_approval';
     case 'awaiting_push_confirm':
@@ -301,7 +302,8 @@ export function getRunningAgentName(state: ConversationUIState): string | null {
     case 'scribe_running':
     case 'scribe_revise':
       return 'Scribe';
-    case 'critic_running':
+    case 'critic_reviewing_spec':
+    case 'critic_reviewing_code':
       // T5: display-only rename
       return 'Değerlendirme';
     case 'proto_running':

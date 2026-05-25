@@ -209,12 +209,14 @@ describe('mapStageToUIState', () => {
     expect(mapStageToUIState('scribe_generating')).toBe('scribe_running');
   });
 
-  it('maps critic_reviewing_spec to critic_running (Critic owns its own UI state)', () => {
-    expect(mapStageToUIState('critic_reviewing_spec')).toBe('critic_running');
+  // #626: critic phases now pass through as distinct UI states so Cinema
+  // can pulse the correct column (Scribe for spec, Proto for code).
+  it('maps critic_reviewing_spec to critic_reviewing_spec', () => {
+    expect(mapStageToUIState('critic_reviewing_spec')).toBe('critic_reviewing_spec');
   });
 
-  it('maps critic_reviewing_code to critic_running', () => {
-    expect(mapStageToUIState('critic_reviewing_code')).toBe('critic_running');
+  it('maps critic_reviewing_code to critic_reviewing_code', () => {
+    expect(mapStageToUIState('critic_reviewing_code')).toBe('critic_reviewing_code');
   });
 
   it('maps awaiting_approval to awaiting_approval', () => {
@@ -349,8 +351,13 @@ describe('getRunningAgentName', () => {
   });
 
   // T5: display-only rename — Critic → Değerlendirme
-  it('returns Değerlendirme for critic_running', () => {
-    expect(getRunningAgentName('critic_running')).toBe('Değerlendirme');
+  // #626: split into two phases.
+  it('returns Değerlendirme for critic_reviewing_spec', () => {
+    expect(getRunningAgentName('critic_reviewing_spec')).toBe('Değerlendirme');
+  });
+
+  it('returns Değerlendirme for critic_reviewing_code', () => {
+    expect(getRunningAgentName('critic_reviewing_code')).toBe('Değerlendirme');
   });
 
   it('returns Proto for proto_running', () => {

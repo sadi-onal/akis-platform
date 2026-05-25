@@ -27,10 +27,19 @@ describe('useConversationState', () => {
       expect(result.current.uiState).toBe('scribe_running');
     });
 
-    it('maps critic_reviewing_spec to critic_running', () => {
+    // #626: critic phases now pass through as distinct UI states.
+    it('maps critic_reviewing_spec to critic_reviewing_spec', () => {
       const { result } = renderHook(() => useConversationState('critic_reviewing_spec'));
-      expect(result.current.uiState).toBe('critic_running');
+      expect(result.current.uiState).toBe('critic_reviewing_spec');
       // T5: display-only rename — Critic → Değerlendirme
+      expect(result.current.runningAgentName).toBe('Değerlendirme');
+      expect(result.current.showCancelButton).toBe(true);
+      expect(result.current.inputPlaceholder).toBe('chat.placeholder.criticRunning');
+    });
+
+    it('maps critic_reviewing_code to critic_reviewing_code', () => {
+      const { result } = renderHook(() => useConversationState('critic_reviewing_code'));
+      expect(result.current.uiState).toBe('critic_reviewing_code');
       expect(result.current.runningAgentName).toBe('Değerlendirme');
       expect(result.current.showCancelButton).toBe(true);
       expect(result.current.inputPlaceholder).toBe('chat.placeholder.criticRunning');
