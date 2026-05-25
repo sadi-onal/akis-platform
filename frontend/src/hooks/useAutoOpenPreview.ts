@@ -3,12 +3,13 @@ import type { ConversationUIState } from '../types/chat';
 
 /**
  * Auto-open the right-side Preview Panel when the pipeline transitions
- * into `awaiting_push_confirm`. Extracted to a hook so the layout-level
- * effect is testable in isolation (T3 of preview-unify plan).
+ * into `awaiting_push_confirm` or `awaiting_critic_resolution`.
+ * Extracted to a hook so the layout-level effect is testable in
+ * isolation (T3 of preview-unify plan).
  *
  * Behaviour:
  * - Fires `setShowPreview(true)` only when state *transitions* into
- *   `awaiting_push_confirm`. If the user manually closes the panel
+ *   one of the gate states. If the user manually closes the panel
  *   while still at the gate, we do not reopen it on every render.
  * - Other transitions (gate → proto_building → gate again after iterate)
  *   trigger a fresh auto-open: each entry into the gate is treated as a
@@ -27,10 +28,17 @@ export function useAutoOpenPreview(
     const prev = prevStateRef.current;
     prevStateRef.current = uiState;
 
-    // Only act on the transition INTO awaiting_push_confirm — not on every
-    // render while we're already at the gate. This lets the user close the
-    // panel manually without it bouncing back on the next render.
-    if (uiState === 'awaiting_push_confirm' && prev !== 'awaiting_push_confirm' && !showPreview) {
+    // Only act on the transition INTO a gate state — not on every render
+    // while we're already at the gate. This lets the user close the panel
+    // manually without it bouncing back on the next render.
+    // #636: also auto-open at `awaiting_critic_resolution` so users can see
+    // the generated code while deciding whether to override critic findings.
+    const isEnteringPushGate =
+      uiState === 'awaiting_push_confirm' && prev !== 'awaiting_push_confirm';
+    const isEnteringCriticGate =
+      uiState === 'awaiting_critic_resolution' && prev !== 'awaiting_critic_resolution';
+
+    if ((isEnteringPushGate || isEnteringCriticGate) && !showPreview) {
       setShowPreview(true);
     }
     // Note: showPreview is intentionally excluded from deps — we don't want
