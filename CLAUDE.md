@@ -54,7 +54,12 @@ pnpm -C frontend generate:types    # regen OpenAPI types from http://localhost:3
 
 ## Backend architecture notes
 
-`backend/src/pipeline/` is the orchestrator coordinating the full Scribe→Proto→Trace pipeline as a state machine. Has its own `adapters/`, `agents/`, `api/`, `db/`, `services/`, `templates/`. Pipeline-level changes go here. The legacy single-agent system (`agents/`, `core/`) was removed — only the pipeline remains.
+`backend/src/pipeline/` is the orchestrator coordinating the full Scribe→Proto→Trace pipeline as a state machine. Has its own `adapters/`, `agents/`, `api/`, `db/`, `services/`, `templates/`. Pipeline-level changes go here.
+
+The orchestrator (`pipeline/core/orchestrator/PipelineOrchestrator.ts`) is decomposed into:
+- `helpers/` — 6 modules (state, activity, reasoning, metrics, jira, critic) with pure/near-pure functions
+- `stages/` — 2 modules (retryHandlers, iterateDispatchers) with deps-injected stage logic
+- The main file retains lifecycle methods (approve, reject, retry, cancel) and stage runners (runProtoAndTrace, runTrace)
 
 `backend/src/api/` is the public HTTP surface (Fastify routes registered in `index.ts`). Anything user-facing — auth, conversations, agent-configs, billing webhooks, dashboard-metrics, etc. — is wired here. `server.ts` boots, `server.app.ts` builds the app (testable via Fastify `inject`).
 
@@ -86,7 +91,7 @@ Frontend: Vitest for components/hooks, Playwright for e2e. Playwright assumes ba
 
 Per-stage reasoning is the user-visible side of `pipeline/core/explainability/`. Two pieces work together:
 
-- **Backend factories** (`pipeline/core/explainability/reasoningFactory.ts`) — pure builders that turn `ScribeOutput` / `ProtoOutput` / `TraceOutput` / `CriticReviewOutput` into `AgentReasoning`. Orchestrator's private helpers (`recordScribeReasoning`, `recordProtoReasoning`, `recordTraceReasoning`) just delegate; testable in isolation.
+- **Backend factories** (`pipeline/core/explainability/reasoningFactory.ts`) — pure builders that turn `ScribeOutput` / `ProtoOutput` / `TraceOutput` / `CriticReviewOutput` into `AgentReasoning`. Reasoning helpers (`orchestrator/helpers/reasoningHelpers.ts`) delegate to these factories; testable in isolation.
 - **Frontend rail** (`frontend/src/components/pipeline/PipelineDetailRail.tsx`) — collapsible tab between ChatHeader and messages. Auto-expands at active/awaiting_approval, shows `PipelineCinema` (4-column) on the Akış tab and `ExplanationPanel` (per-stage reasoning cards) on the Açıklama tab. Compact + manual collapse supported.
 
 When you add a new agent (or a new stage of an existing one), the wiring is:
