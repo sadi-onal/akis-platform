@@ -162,7 +162,8 @@ export async function evaluateTraceIterateLoop(
 export async function evaluateCriticIterateLoop(
   pipelineId: string,
   criticResult: CriticReviewOutput,
-  store: PipelineStore
+  store: PipelineStore,
+  spec?: StructuredSpec
 ): Promise<{
   shouldIterate: boolean;
   nextRetry: number;
@@ -213,9 +214,20 @@ export async function evaluateCriticIterateLoop(
       (f, idx) =>
         `${idx + 1}. ${f.description}\n   Öneri: ${f.suggestion}${f.location ? `\n   Konum: ${f.location}` : ''}`
     ),
-    '',
-    'Lütfen bu bulguları çözen güncellenmiş kodu üret.',
   ];
+  // Append AC context from spec so Proto knows which acceptance criteria to satisfy
+  const acList = spec?.acceptanceCriteria;
+  if (acList && acList.length > 0) {
+    feedbackLines.push(
+      '',
+      'İlgili kabul kriterleri (spec\'ten):',
+      ...acList.map((ac) => `- ${ac.id}: ${ac.given} → ${ac.when} → ${ac.then}`),
+    );
+  }
+  feedbackLines.push(
+    '',
+    'Lütfen yukarıdaki bulguları VE listelenen kabul kriterlerini karşılayan kodu üret.',
+  );
   const feedback = feedbackLines.join('\n');
   return {
     shouldIterate: true,

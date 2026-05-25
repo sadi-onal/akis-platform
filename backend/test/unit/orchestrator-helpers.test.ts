@@ -1095,5 +1095,156 @@ describe('criticHelpers', () => {
       assert.equal(result.shouldIterate, true);
       assert.equal(result.criticalCount, 2);
     });
+
+    it('includes AC mapping in feedback when spec is provided', async () => {
+      const pipeline = makePipelineState({
+        intermediateState: { criticIterateRetryCount: 0 },
+      });
+      const store = makeMockStore(pipeline);
+      const criticResult = {
+        findings: [
+          {
+            description: 'QR kod güncellemesi eksik',
+            severity: 'critical' as const,
+            suggestion: 'QR kodu doğru URL ile üret',
+            location: 'qr-handler.ts:15',
+          },
+        ],
+      };
+      const spec = {
+        title: 'Test Project',
+        problemStatement: 'test',
+        userStories: [],
+        acceptanceCriteria: [
+          { id: 'AC-1', given: 'Kullanıcı giriş yapmış', when: 'QR kodu tarar', then: 'Doğru URL açılır' },
+          { id: 'AC-2', given: 'Kullanıcı ana sayfada', when: 'Butona tıklar', then: 'Modal açılır' },
+        ],
+        technicalConstraints: {},
+        outOfScope: [],
+      };
+
+      const result = await evaluateCriticIterateLoop(
+        'pipe-1',
+        criticResult as any,
+        store as any,
+        spec as any
+      );
+      assert.equal(result.shouldIterate, true);
+      // Feedback should contain the finding description
+      assert.ok(result.feedback.includes('QR kod güncellemesi eksik'));
+      // Feedback should contain the AC section header
+      assert.ok(result.feedback.includes('İlgili kabul kriterleri'));
+      // Feedback should contain specific AC entries
+      assert.ok(result.feedback.includes('AC-1'));
+      assert.ok(result.feedback.includes('AC-2'));
+      assert.ok(result.feedback.includes('QR kodu tarar'));
+      assert.ok(result.feedback.includes('Modal açılır'));
+      // Feedback should end with the new closing instruction
+      assert.ok(result.feedback.includes('kabul kriterlerini karşılayan kodu üret'));
+    });
+
+    it('omits AC section when spec is not provided', async () => {
+      const pipeline = makePipelineState({
+        intermediateState: { criticIterateRetryCount: 0 },
+      });
+      const store = makeMockStore(pipeline);
+      const criticResult = {
+        findings: [
+          {
+            description: 'Missing error handling',
+            severity: 'critical' as const,
+            suggestion: 'Add try-catch',
+          },
+        ],
+      };
+
+      const result = await evaluateCriticIterateLoop(
+        'pipe-1',
+        criticResult as any,
+        store as any
+      );
+      assert.equal(result.shouldIterate, true);
+      assert.ok(result.feedback.includes('Missing error handling'));
+      // Should NOT contain the AC section header when no spec is provided
+      assert.ok(!result.feedback.includes('İlgili kabul kriterleri'));
+      // But should still contain the closing instruction
+      assert.ok(result.feedback.includes('kabul kriterlerini karşılayan kodu üret'));
+    });
+
+    it('omits AC section when spec has empty acceptanceCriteria', async () => {
+      const pipeline = makePipelineState({
+        intermediateState: { criticIterateRetryCount: 0 },
+      });
+      const store = makeMockStore(pipeline);
+      const criticResult = {
+        findings: [
+          {
+            description: 'Security risk',
+            severity: 'critical' as const,
+            suggestion: 'Sanitize input',
+          },
+        ],
+      };
+      const spec = {
+        title: 'Empty AC',
+        problemStatement: 'test',
+        userStories: [],
+        acceptanceCriteria: [],
+        technicalConstraints: {},
+        outOfScope: [],
+      };
+
+      const result = await evaluateCriticIterateLoop(
+        'pipe-1',
+        criticResult as any,
+        store as any,
+        spec as any
+      );
+      assert.equal(result.shouldIterate, true);
+      assert.ok(!result.feedback.includes('İlgili kabul kriterleri'));
+    });
+
+    it('includes location in feedback for findings with location', async () => {
+      const pipeline = makePipelineState({
+        intermediateState: { criticIterateRetryCount: 0 },
+      });
+      const store = makeMockStore(pipeline);
+      const criticResult = {
+        findings: [
+          {
+            description: 'Buffer overflow',
+            severity: 'critical' as const,
+            suggestion: 'Bounds check',
+            location: 'parser.ts:99',
+          },
+          {
+            description: 'No auth check',
+            severity: 'critical' as const,
+            suggestion: 'Add auth middleware',
+          },
+        ],
+      };
+      const spec = {
+        title: 'Auth Project',
+        problemStatement: 'test',
+        userStories: [],
+        acceptanceCriteria: [
+          { id: 'AC-1', given: 'Unauthenticated user', when: 'accesses API', then: '401 returned' },
+        ],
+        technicalConstraints: {},
+        outOfScope: [],
+      };
+
+      const result = await evaluateCriticIterateLoop(
+        'pipe-1',
+        criticResult as any,
+        store as any,
+        spec as any
+      );
+      assert.equal(result.shouldIterate, true);
+      assert.ok(result.feedback.includes('parser.ts:99'));
+      assert.ok(result.feedback.includes('AC-1'));
+      assert.ok(result.feedback.includes('401 returned'));
+    });
   });
 });

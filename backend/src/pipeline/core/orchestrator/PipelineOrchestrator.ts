@@ -1554,8 +1554,16 @@ export class PipelineOrchestrator {
     // Proto regenerates the scaffold honoring it. Block is intentionally
     // first + visually distinct so the AI gives it primary weight.
     if (feedbackContext && feedbackContext.trim().length > 0) {
+      // Detect critic auto-feedback vs user-supplied correction by checking
+      // for the distinctive Turkish opening line that evaluateCriticIterateLoop produces.
+      const isCriticFeedback = feedbackContext.trimStart().startsWith(
+        'Aşağıdaki kritik bulgular önceki Proto çıktısında tespit edildi'
+      );
+      const header = isCriticFeedback
+        ? '## KRİTİK BULGU DÜZELTMESİ (Otomatik Değerlendirme)'
+        : '## KULLANICI DÜZELTME İSTEĞİ';
       const feedbackBlock = [
-        '## KULLANICI DÜZELTME İSTEĞİ',
+        header,
         'Aşağıdaki düzeltme isteğini kodu üretirken **birinci öncelik** olarak dikkate al:',
         '',
         feedbackContext.trim(),
@@ -1936,7 +1944,8 @@ export class PipelineOrchestrator {
         // Pattern Trace iterate-loop ile birebir aynı.
         const criticIterateDecision = await this.evaluateCriticIterateLoop(
           pipelineId,
-          criticResult
+          criticResult,
+          spec
         );
 
         // 5. Critic iterate — re-iterate Proto with critical findings
@@ -4020,7 +4029,8 @@ export class PipelineOrchestrator {
    */
   private async evaluateCriticIterateLoop(
     pipelineId: string,
-    criticResult: CriticReviewOutput
+    criticResult: CriticReviewOutput,
+    spec?: StructuredSpec
   ): Promise<{
     shouldIterate: boolean;
     nextRetry: number;
@@ -4028,7 +4038,7 @@ export class PipelineOrchestrator {
     criticalCount: number;
     feedback: string;
   }> {
-    return evaluateCriticIterateLoopHelper(pipelineId, criticResult, this.store);
+    return evaluateCriticIterateLoopHelper(pipelineId, criticResult, this.store, spec);
   }
 
   /**
