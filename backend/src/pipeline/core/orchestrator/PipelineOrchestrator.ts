@@ -112,6 +112,12 @@ import {
   retryScribe as retryScribeStage,
 } from './stages/retryHandlers.js';
 
+// ─── Extracted outcomes (Kademe 3) ───────────────
+import type { ProtoTraceOutcome, HandleProtoTraceOutcomeDeps } from './outcomes/ProtoTraceOutcome.js';
+import { handleProtoTraceOutcome } from './outcomes/ProtoTraceOutcome.js';
+import type { TraceOutcome, HandleTraceOutcomeDeps } from './outcomes/TraceOutcome.js';
+import { handleTraceOutcome } from './outcomes/TraceOutcome.js';
+
 // ─── Timeout Guard ───────────────────────────────
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -1435,6 +1441,69 @@ export class PipelineOrchestrator {
     return agent.fetchContext({ owner, repo, branch });
   }
 
+  // ─── Kademe 3: Outcome deps builder ─────────
+
+  private buildProtoTraceOutcomeDeps(): HandleProtoTraceOutcomeDeps {
+    return {
+      store: this.store,
+      emitEvent: (pid, type, stage, data) => this.emitEvent(pid, type, stage, data),
+      emitStageCompleted: (pid, stage, summary) => this.emitStageCompleted(pid, stage, summary),
+      emitProtoCompletedForIteration: (pid, iter, output) =>
+        this.emitProtoCompletedForIteration(pid, iter, output),
+      persistReasoning: (pid, reasoning) => this.persistReasoning(pid, reasoning),
+      recordProtoReasoning: (pid, output, scribe) =>
+        this.recordProtoReasoning(pid, output, scribe),
+      persistAcCoverage: (pid, proto, scribe) =>
+        this.persistAcCoverage(pid, proto, scribe),
+      maybeInvalidateGitHubTokenOnAuthError: (pid, code) =>
+        this.maybeInvalidateGitHubTokenOnAuthError(pid, code),
+      emitActivity: (activity) => emitActivity(activity),
+      dispatchCriticIterate: (pid, feedback) =>
+        this.dispatchCriticIterate(pid, feedback),
+      runJiraProtoComment: (userId, epicKey, result) =>
+        this.runJiraProtoComment(userId, epicKey, result),
+    };
+  }
+
+  private buildTraceOutcomeDeps(): HandleTraceOutcomeDeps {
+    return {
+      store: this.store,
+      emitEvent: (pid, type, stage, data) => this.emitEvent(pid, type, stage, data),
+      emitStageCompleted: (pid, stage, summary) => this.emitStageCompleted(pid, stage, summary),
+      emitActivity: (activity) => emitActivity(activity),
+      appendTraceCompleted: (pid, iter, output, subSteps) =>
+        this.appendTraceCompleted(pid, iter, output, subSteps),
+      recordTraceReasoning: (pid, output) => this.recordTraceReasoning(pid, output),
+      persistAcCoverage: (pid, proto, scribe, trace) =>
+        this.persistAcCoverage(pid, proto, scribe, trace),
+      dispatchTraceIterate: (pid, feedback) => this.dispatchTraceIterate(pid, feedback),
+      runJiraTraceComment: (userId, epicKey, result) =>
+        this.runJiraTraceComment(userId, epicKey, result),
+      learningService: this.learningService,
+      buildSubStepsForStage: (pipeline, stage) => this.buildSubStepsForStage(pipeline, stage),
+      logActivity: (pid, agent, action, data) => this.logActivity(pid, agent, action, data),
+      ingestPipelineResults: (pipeline, traceData) => {
+        new PipelineKnowledgeIngester()
+          .ingestPipelineResults({
+            pipelineId: pipeline.id,
+            userId: pipeline.userId,
+            spec: pipeline.scribeOutput?.spec,
+            specMarkdown: pipeline.scribeOutput?.rawMarkdown,
+            protoFiles: pipeline.protoOutput?.files,
+            repoName: pipeline.protoConfig?.repoName as string | undefined,
+            repoOwner: pipeline.protoOutput?.repo?.split('/')[0],
+            branch: pipeline.protoOutput?.branch,
+            traceTestSummary: traceData.testSummary,
+            traceCoverageMatrix: traceData.coverageMatrix,
+          })
+          .catch((err) =>
+            logger.warn({ err, pipelineId: pipeline.id }, '[Pipeline] Knowledge ingestion failed (non-fatal)')
+          );
+      },
+      getPipeline: (id) => this.getPipeline(id),
+    };
+  }
+
   // ─── Background Proto + Trace Runner ────────
 
   private async runProtoAndTrace(
@@ -1540,18 +1609,30 @@ export class PipelineOrchestrator {
       }
     );
 
-    // Abort if pipeline was cancelled during Proto execution
-    if (await this.isCancelled(pipelineId)) return;
+    // ─── Kademe 3: Outcome determination phase ────────────────────
+    // All setup, agent execution, and mid-flight state writes happen here.
+    // The 8 inline return paths are replaced by outcome construction; the
+    // handler (`handleProtoTraceOutcome`) executes the side-effects.
 
+    // 1. Cancelled during Proto execution
+    if (await this.isCancelled(pipelineId)) {
+      const outcome: ProtoTraceOutcome = { type: 'cancelled' };
+      await handleProtoTraceOutcome(pipelineId, outcome, this.buildProtoTraceOutcomeDeps());
+      return;
+    }
+
+    // 2. Proto error
     if (protoResult.type === 'error') {
-      // PR-V-github-401-graceful — clear stale token row when Proto's
-      // GitHub call surfaced a 401-derived error.
-      await this.maybeInvalidateGitHubTokenOnAuthError(pipelineId, protoResult.error.code);
-      await this.store.update(pipelineId, {
-        stage: 'failed',
+      logger.warn(
+        { pipelineId, errorCode: protoResult.error.code },
+        '[Pipeline] Proto returned error'
+      );
+      const outcome: ProtoTraceOutcome = {
+        type: 'proto_error',
         error: protoResult.error,
-      });
-      this.emitEvent(pipelineId, 'error', 'failed', protoResult.error);
+        errorCode: protoResult.error.code,
+      };
+      await handleProtoTraceOutcome(pipelineId, outcome, this.buildProtoTraceOutcomeDeps());
       return;
     }
 
@@ -1571,8 +1652,7 @@ export class PipelineOrchestrator {
     // event is emitted AFTER the Validator + Critic-code block runs so
     // sub-steps reflect those agents' findings for THIS iteration (AC-2,
     // spec 2026-05-23-chat-agent-narrator-pattern-a-design.md §5). See the
-    // three `emitProtoCompletedForThisIteration` call sites below — iterate-
-    // retry return, hard-block return, and the happy path.
+    // outcome handler which calls `emitProtoCompletedForIteration`.
 
     const pipeline = await this.getPipeline(pipelineId);
 
@@ -1583,26 +1663,15 @@ export class PipelineOrchestrator {
     // {@link applyArtifactInjection}.
     protoResult.data = this.applyArtifactInjection(protoResult.data, pipeline.scribeOutput);
 
+    // 3. Trace disabled
     if (!pipeline.traceEnabled) {
-      // PR-V5: explicit Proto completion signal — Trace is disabled so the
-      // pipeline jumps straight to `completed`. Emit before the transition
-      // so SSE consumers see Proto close cleanly.
-      this.emitStageCompleted(pipelineId, 'proto');
-      // User explicitly disabled Trace — skip and mark completed.
-      await this.store.update(pipelineId, {
+      const outcome: ProtoTraceOutcome = {
+        type: 'trace_disabled',
         protoOutput: protoResult.data,
-        stage: 'completed',
-        metrics: {
-          ...protoCompletedMetrics,
-          traceCompletedAt: new Date(),
-          totalDurationMs: Date.now() - toEpoch(protoCompletedMetrics.startedAt),
-        },
-      });
-      // Chat narrator: emit proto_completed before returning. Validator +
-      // Critic-code haven't run on the no-Trace fast path, so sub-steps will
-      // contain only the agent-sourced rows (files written / iskelet üretildi).
-      await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
-      this.emitEvent(pipelineId, 'stage_change', 'completed');
+        metrics: protoCompletedMetrics,
+        protoIteration,
+      };
+      await handleProtoTraceOutcome(pipelineId, outcome, this.buildProtoTraceOutcomeDeps());
       return;
     }
 
@@ -1677,7 +1746,7 @@ export class PipelineOrchestrator {
         '[Pipeline] Level 4: Deterministic validation completed'
       );
 
-      // Store validation result
+      // Store validation result (mid-flight intermediateState write)
       const currentStateForValidation = await this.store.getById(pipelineId);
       await this.store.update(pipelineId, {
         intermediateState: {
@@ -1690,7 +1759,7 @@ export class PipelineOrchestrator {
         },
       });
 
-      // Add explainability reasoning
+      // Add explainability reasoning for ALL paths (mid-flight, not outcome-specific)
       this.persistReasoning(pipelineId, {
         agentName: 'validator',
         timestamp: new Date(),
@@ -1703,28 +1772,33 @@ export class PipelineOrchestrator {
         confidence: { score: validationResult.score, factors: validationResult.summary.checksRun },
       });
 
-      // If validator found errors → fail early (save LLM tokens)
+      // 4. Validation failed → fail early (save LLM tokens)
       if (!validationResult.passed && validationResult.summary.errors > 0) {
         logger.warn(
           { pipelineId, score: validationResult.score },
           '[Pipeline] Validator caught errors — failing before Critic'
         );
-        await this.store.update(pipelineId, {
-          stage: 'failed',
+        const outcome: ProtoTraceOutcome = {
+          type: 'validation_failed',
           protoOutput: protoResult.data,
-          error: {
-            code: 'VALIDATION_FAILED',
-            message: `Deterministic validation failed: ${validationResult.summary.errors} error(s) found (score: ${validationResult.score}/100)`,
-            retryable: true,
-            recoveryAction: 'retry',
+          validationReasoning: {
+            agentName: 'validator',
+            timestamp: new Date(),
+            decision: 'Kod doğrulama başarısız',
+            reasoning: [
+              `Skor: ${validationResult.score}/100`,
+              `${validationResult.summary.errors} hata, ${validationResult.summary.warnings} uyarı`,
+            ],
+            assumptions: ['Deterministic kontroller yeterli'],
+            confidence: {
+              score: validationResult.score,
+              factors: validationResult.summary.checksRun,
+            },
           },
-        });
-        // Chat narrator: emit proto_completed for the iteration that the
-        // validator rejected. validationResult is already persisted to
-        // intermediateState (line above), so the sub-step row will show
-        // the validator error count.
-        await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
-        this.emitEvent(pipelineId, 'error', 'failed');
+          validationErrorMessage: `${validationResult.summary.errors} error(s) found (score: ${validationResult.score}/100)`,
+          protoIteration,
+        };
+        await handleProtoTraceOutcome(pipelineId, outcome, this.buildProtoTraceOutcomeDeps());
         return;
       }
     }
@@ -1853,12 +1927,6 @@ export class PipelineOrchestrator {
       // üzerinden tetiklenir. Bkz. memory: coverage_metric_research_findings.
       const hasCritical = criticResult?.hasCriticalFinding === true;
       if (criticResult && hasCritical) {
-        this.recordProtoReasoning(pipelineId, protoResult.data, pipeline.scribeOutput);
-        // PR-D: persist AC coverage even when Critic blocks — the user
-        // still wants to see which kabul kriteri the (rejected) scaffold
-        // does/doesn't address while deciding to iterate vs override.
-        await this.persistAcCoverage(pipelineId, protoResult.data, pipeline.scribeOutput);
-
         // ─── PR-F3: Critic critical-finding iterate-loop ──────────────
         // Mimari karar (2026-05-19): Kullanıcıyı hard-block etmeden önce
         // Proto'yu kritik bulgular feedback olarak verilerek otomatik
@@ -1870,6 +1938,8 @@ export class PipelineOrchestrator {
           pipelineId,
           criticResult
         );
+
+        // 5. Critic iterate — re-iterate Proto with critical findings
         if (criticIterateDecision.shouldIterate) {
           logger.info(
             {
@@ -1880,92 +1950,24 @@ export class PipelineOrchestrator {
             },
             '[Pipeline] PR-F3 Critic iterate-loop — re-iterating Proto with critical findings'
           );
-          // Persist criticCodeOutput so the UI sees the failing snapshot
-          // until the next retry overwrites it.
-          const stateBeforeDispatch = await this.store.getById(pipelineId);
-          const intermediateBeforeDispatch = (stateBeforeDispatch?.intermediateState ??
-            {}) as Record<string, unknown>;
-          await this.store.update(pipelineId, {
+          const outcome: ProtoTraceOutcome = {
+            type: 'critic_iterate',
             protoOutput: protoResult.data,
+            scribeOutput: pipeline.scribeOutput,
             metrics: protoCompletedMetrics,
-            intermediateState: {
-              ...intermediateBeforeDispatch,
-              criticCodeOutput: criticResult,
+            protoIteration,
+            criticResult,
+            iterateDecision: {
+              nextRetry: criticIterateDecision.nextRetry,
+              maxRetries: criticIterateDecision.maxRetries,
+              feedback: criticIterateDecision.feedback,
             },
-          });
-          // Chat narrator: emit proto_completed for THIS rejected iteration
-          // before dispatching the retry. The next iteration's
-          // `runProtoAndTrace` will append its own pair of proto events.
-          await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
-          // Activity emit — Critic retry-trigger surfaces on Proto column
-          // ("Critic düzeltiyor (n/max)" badge).
-          const criticIterateEmit = createActivityEmitter(pipelineId, 'critic', {
-            criticPhase: 'code',
-          });
-          criticIterateEmit(
-            'retry-trigger',
-            // T5: display-only rename — Critic → Değerlendirme
-            `Değerlendirme kritik bulgu raporladı — Proto yeniden çalışıyor (${criticIterateDecision.nextRetry}/${criticIterateDecision.maxRetries})`,
-            80,
-            criticIterateDecision.feedback,
-            criticIterateDecision.nextRetry,
-            'pipeline.critic.iterate.retry'
-          );
-          // Fire-and-forget dispatch. Critic review yine kendi içinde
-          // sarmalanır; sonraki run da kritik bulgu raporlarsa loop devam
-          // eder. Max retry sonrası fallback hard-block tetiklenir.
-          void this.dispatchCriticIterate(pipelineId, criticIterateDecision.feedback).catch(
-            (err) => {
-              logger.error(
-                { err, pipelineId },
-                '[Pipeline] PR-F3 Critic iterate-loop dispatch failed'
-              );
-            }
-          );
+          };
+          await handleProtoTraceOutcome(pipelineId, outcome, this.buildProtoTraceOutcomeDeps());
           return;
         }
 
-        const currentStateForBlock = await this.store.getById(pipelineId);
-        const existingIntermediateBlock = (currentStateForBlock?.intermediateState ?? {}) as Record<
-          string,
-          unknown
-        >;
-        await this.store.update(pipelineId, {
-          protoOutput: protoResult.data,
-          stage: 'awaiting_critic_resolution',
-          metrics: protoCompletedMetrics,
-          intermediateState: {
-            ...existingIntermediateBlock,
-            criticCodeOutput: criticResult,
-            criticBlock: {
-              blockedAt: new Date().toISOString(),
-              overallScore: criticResult.overallScore,
-              findingsCount: criticResult.findings?.length ?? 0,
-              maxSeverity: criticResult.maxSeverity,
-              manuallyOverridden: false,
-            },
-          },
-        });
-        // Chat narrator: emit proto_completed for the iteration that
-        // triggered the hard-block so the user sees the gate-causing
-        // Proto bubble with critic findings as sub-steps.
-        await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
-        // Proto is effectively done (max iterate retries exhausted) — emit
-        // the explicit completion signal so the cinema column flips to
-        // 'complete' during live SSE, not just on DB replay.
-        this.emitStageCompleted(pipelineId, 'proto');
-        this.emitEvent(pipelineId, 'stage_change', 'awaiting_critic_resolution');
-        // PR-T3 S1: aynı `gate_open` pattern'i — frontend SSE üzerinden
-        // bu transition'ı kaçırmasın diye sentetik bir activity yayınla.
-        emitActivity({
-          pipelineId,
-          stage: 'critic',
-          step: 'gate_open',
-          // T5: display-only rename — Critic → Değerlendirme
-          message: 'Değerlendirme kritik bulgu raporladı — kullanıcı kararı bekleniyor',
-          progress: 100,
-          timestamp: new Date().toISOString(),
-        });
+        // 6. Critic hard-block — max iterate retries exhausted
         logger.info(
           {
             pipelineId,
@@ -1975,6 +1977,15 @@ export class PipelineOrchestrator {
           },
           '[Pipeline] PR-F critic hard-block — severity=critical, pipeline halted at awaiting_critic_resolution'
         );
+        const outcome: ProtoTraceOutcome = {
+          type: 'critic_hard_block',
+          protoOutput: protoResult.data,
+          scribeOutput: pipeline.scribeOutput,
+          metrics: protoCompletedMetrics,
+          protoIteration,
+          criticResult,
+        };
+        await handleProtoTraceOutcome(pipelineId, outcome, this.buildProtoTraceOutcomeDeps());
         return;
       }
       // Critic guardrail: findings intermediateState'te zaten yazıldı
@@ -1982,69 +1993,28 @@ export class PipelineOrchestrator {
       // doğal olarak Trace / push-gate'e devam eder.
     }
 
-    // Chat narrator (2026-05-23): emit proto_completed AFTER validator +
-    // critic-code have written their results to intermediateState, so the
-    // sub-step rows on the Proto bubble reflect THIS iteration's findings
-    // (AC-2). For early-return paths (Trace disabled, validator hard-fail,
-    // critic iterate-retry, critic hard-block) the emit happens at the
-    // dedicated site before each `return` instead.
-    await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
+    // 7+8. Ready for trace (preview-gate and auto-push share the same outcome)
+    const outcome: ProtoTraceOutcome = {
+      type: 'ready_for_trace',
+      protoOutput: protoResult.data,
+      scribeOutput: pipeline.scribeOutput,
+      metrics: protoCompletedMetrics,
+      protoIteration,
+      previewGateEnabled,
+      jiraContext: pipeline.jiraConfig?.epicKey
+        ? { userId: pipeline.userId, epicKey: pipeline.jiraConfig.epicKey }
+        : undefined,
+    };
+    await handleProtoTraceOutcome(pipelineId, outcome, this.buildProtoTraceOutcomeDeps());
 
-    // Level 4: Explainability — record Proto reasoning
-    this.recordProtoReasoning(pipelineId, protoResult.data, pipeline.scribeOutput);
-    // PR-D: AC coverage report — per-AC binary checklist surfaced in
-    // intermediateState.acCoverage for the explanation rail to render.
-    await this.persistAcCoverage(pipelineId, protoResult.data, pipeline.scribeOutput);
+    // ─── Post-handler: Trace execution ───────────────────────────
+    if (await this.isCancelled(pipelineId)) return;
 
-    // PR-F2 (2026-05-19): preview-confirm gate flow — Trace BEFORE push gate.
-    //
-    // Önceki davranış (PR-F öncesi): preview gate ON ise pipeline direkt
-    // `awaiting_push_confirm`'a düşer, Trace ancak `confirmPush` sonrası
-    // çalışır. Bu sırada Trace fail olursa kullanıcı zaten push yapmış olur
-    // — iterate-loop dışında değişen bir şey yok ama "test sonucunu görmeden
-    // GitHub'a kod gönderdim" hissi yaratıyordu. Manuel test (2026-05-19)
-    // log'unda da:
-    //   Critic code approved (88) → B4 gate
-    //   ← Trace hiç çalışmadı.
-    //
-    // Yeni davranış: Proto'nun dryRun çıktısını TraceAgent'e `inputFiles`
-    // olarak besle, GitHub fetch olmadan testler + AC coverage hesaplansın.
-    // Trace iterate-loop (uncovered AC veya test fail → Proto re-iterate)
-    // bu noktada zaten çalışır; retry tükenince push gate'e devredilir.
     if (previewGateEnabled) {
-      // PR-V5: explicit Proto completion signal — preview-gate path hands
-      // off to Trace dryRun. Emit before the transition so SSE consumers
-      // see Proto close cleanly (the first Trace activity otherwise tips
-      // the frontend into "Proto done" via stale lastIdx heuristic).
-      this.emitStageCompleted(pipelineId, 'proto');
-      // Persist Proto output + transition to trace_testing so the UI cinema
-      // column lights up. We deliberately stay short of the gate until Trace
-      // is done.
-      await this.store.update(pipelineId, {
-        protoOutput: protoResult.data,
-        stage: 'trace_testing',
-        metrics: protoCompletedMetrics,
-      });
-      this.emitEvent(pipelineId, 'stage_change', 'trace_testing');
-
-      // Jira hook: comment Proto result (non-blocking) — same wiring as the
-      // non-preview branch.
-      if (pipeline.jiraConfig?.epicKey) {
-        this.runJiraProtoComment(pipeline.userId, pipeline.jiraConfig.epicKey, {
-          branch: protoResult.data.branch,
-          repo: protoResult.data.repo,
-          prUrl: protoResult.data.prUrl,
-          filesCreated: protoResult.data.metadata.filesCreated,
-        }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
-      }
-
-      if (await this.isCancelled(pipelineId)) return;
-
       logger.info(
         { pipelineId, fileCount: protoResult.data.files.length },
         '[Pipeline] PR-F2 Trace dryRun starting before push gate'
       );
-
       await this.runTrace(
         pipelineId,
         metrics,
@@ -2053,9 +2023,6 @@ export class PipelineOrchestrator {
         protoResult.data.branch,
         spec,
         model,
-        // PR-F2: post-Trace handoff → awaiting_push_confirm instead of completed,
-        // and feed Proto's in-memory files to Trace so it doesn't try to read
-        // a branch that doesn't exist yet.
         {
           dryRun: true,
           inputFiles: protoResult.data.files.map((f) => ({
@@ -2065,55 +2032,31 @@ export class PipelineOrchestrator {
           postSuccess: 'awaiting_push_confirm',
         }
       );
-      return;
-    }
-
-    // PR-V5: explicit Proto completion signal (legacy auto-push path).
-    this.emitStageCompleted(pipelineId, 'proto');
-    // Proto succeeded → transition to trace_testing
-    await this.store.update(pipelineId, {
-      protoOutput: protoResult.data,
-      stage: 'trace_testing',
-      metrics: protoCompletedMetrics,
-    });
-    this.emitEvent(pipelineId, 'stage_change', 'trace_testing');
-
-    // Jira hook: comment Proto result (non-blocking)
-    if (pipeline.jiraConfig?.epicKey) {
-      this.runJiraProtoComment(pipeline.userId, pipeline.jiraConfig.epicKey, {
-        branch: protoResult.data.branch,
-        repo: protoResult.data.repo,
-        prUrl: protoResult.data.prUrl,
-        filesCreated: protoResult.data.metadata.filesCreated,
-      }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
-    }
-
-    // Abort if pipeline was cancelled before Trace starts
-    if (await this.isCancelled(pipelineId)) return;
-
-    // PR-V-duplicate-repo (2026-05-20): the legacy auto-push path actually
-    // creates the repo inside Proto.execute, so a suffix conflict here is
-    // realized on GitHub. `protoResult.data.repo` carries the resolved
-    // "<owner>/<name>" — pull the name half and feed it to Trace, otherwise
-    // Trace would read from a stale `repoName` that no longer exists.
-    const resolvedRepoName = protoResult.data.repo.split('/').pop() ?? repoName;
-    if (resolvedRepoName !== repoName) {
-      const pipelineForConfig = await this.getPipeline(pipelineId);
-      if (pipelineForConfig.protoConfig) {
-        await this.store.update(pipelineId, {
-          protoConfig: { ...pipelineForConfig.protoConfig, repoName: resolvedRepoName },
-        });
+    } else {
+      // PR-V-duplicate-repo (2026-05-20): the legacy auto-push path actually
+      // creates the repo inside Proto.execute, so a suffix conflict here is
+      // realized on GitHub. `protoResult.data.repo` carries the resolved
+      // "<owner>/<name>" — pull the name half and feed it to Trace, otherwise
+      // Trace would read from a stale `repoName` that no longer exists.
+      const resolvedRepoName = protoResult.data.repo.split('/').pop() ?? repoName;
+      if (resolvedRepoName !== repoName) {
+        const pipelineForConfig = await this.getPipeline(pipelineId);
+        if (pipelineForConfig.protoConfig) {
+          await this.store.update(pipelineId, {
+            protoConfig: { ...pipelineForConfig.protoConfig, repoName: resolvedRepoName },
+          });
+        }
       }
+      await this.runTrace(
+        pipelineId,
+        metrics,
+        owner,
+        resolvedRepoName,
+        protoResult.data.branch,
+        spec,
+        model
+      );
     }
-    await this.runTrace(
-      pipelineId,
-      metrics,
-      owner,
-      resolvedRepoName,
-      protoResult.data.branch,
-      spec,
-      model
-    );
   }
 
   // ─── Reject Spec ─────────────────────────────
@@ -3349,14 +3292,17 @@ export class PipelineOrchestrator {
       }
     );
 
+    // ── Kademe 3: Determine outcome, then delegate side-effects to
+    // handleTraceOutcome (declarative, testable, exhaustive). ──
+
     if (traceResult.type === 'error') {
       const isAiTimeout = traceResult.error.code === 'TRACE_AI_CALL_TIMEOUT';
       // PR-V-github-401-graceful — auth failure surfaced from the adapter.
       // Clear the stale token row (best-effort) and skip FixLoop entirely;
       // retrying with the same dead credential will just 401 again.
       const isGitHubAuthError = traceResult.error.code === 'GITHUB_TOKEN_INVALID';
+      // Mid-flight ops: token invalidation + chat log + error activity — stay here
       await this.maybeInvalidateGitHubTokenOnAuthError(pipelineId, traceResult.error.code);
-      // Chat event-log (Task 3): persist failure before any stage transition.
       await this.appendTraceFailed(
         pipelineId,
         traceIteration,
@@ -3374,23 +3320,13 @@ export class PipelineOrchestrator {
         0
       );
 
-      // PR-F2: pre-push-gate dryRun mode — skip FixLoop (which would push to
-      // GitHub before the user has confirmed). Hand off to push gate so the
-      // user can still inspect/push the un-tested scaffold or cancel.
+      // ── Return path 1: dryRun failure → push-gate handoff ──
       if (traceDryRun && postSuccessStage === 'awaiting_push_confirm') {
-        // PR-U3 M3: previously the push gate showed nothing distinct on a
-        // dryRun failure — the button was enabled, the user could push
-        // "tested" code that never had tests. Persist a flag in
-        // intermediateState so the frontend can render a warning + force
-        // an explicit override checkbox before the push button enables.
+        // Mid-flight store.update with dryRun flags stays in determination
         const pipelineNow = await this.store.getById(pipelineId);
         const intermediate = (pipelineNow?.intermediateState ?? {}) as Record<string, unknown>;
-        // PR-V (2026-05-20) Bug 1 — TraceAgent embeds a head+tail snippet of
-        // the raw AI response in `technicalDetail` when all parse attempts
-        // fail. Persist it on `intermediateState.lastFailedTraceResponse`
-        // for post-mortem debugging without bloating pino logs.
         const rawSnippet = traceResult.error.technicalDetail ?? null;
-        const updated = await this.store.update(pipelineId, {
+        await this.store.update(pipelineId, {
           stage: 'awaiting_push_confirm',
           metrics: {
             ...metrics,
@@ -3403,54 +3339,21 @@ export class PipelineOrchestrator {
             traceDryRunErrorAt: new Date().toISOString(),
             ...(rawSnippet ? { lastFailedTraceResponse: rawSnippet } : {}),
           },
-          // We intentionally do NOT persist the error onto the pipeline — it's
-          // a soft failure for the dryRun pass. The flag above tells the UI.
-        });
-        this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
-        // PR-V (2026-05-20) Bug 2 — UI stale state on Trace fallback. Before
-        // emitting the gate_open activity, emit an explicit
-        // `step: 'stage_completed'` with `status: 'completed'` for the Trace
-        // stage so the cinema:
-        //   - marks Trace as "complete" via the explicit-completion Set
-        //   - the retry badge / "Playwright testleri oluşturuluyor (deneme 3)"
-        //     shimmer is cleared (retry-trigger meta superseded)
-        //   - the column shows the final neutral message
-        // The cinema utility (PR-V) also clears retry meta when a
-        // `stage_completed` activity arrives for trace.
-        emitActivity({
-          pipelineId,
-          stage: 'trace',
-          step: 'stage_completed',
-          status: 'completed',
-          message: 'Test üretilemedi (devam ediliyor)',
-          progress: 100,
-          timestamp: new Date().toISOString(),
-        });
-        // PR-T3 S1 + PR-U3: explicit gate_open activity so SSE-driven
-        // refresh on the frontend catches the transition.
-        emitActivity({
-          pipelineId,
-          stage: 'trace',
-          step: 'gate_open',
-          message:
-            'Gönderim onayı bekleniyor — Trace üretimi başarısız oldu, yine de göndermek için onay verin',
-          progress: 100,
-          timestamp: new Date().toISOString(),
         });
         logger.warn(
           { pipelineId, errorCode: traceResult.error.code },
           '[Pipeline] PR-F2 Trace dryRun failed — handing off to push gate without tests'
         );
-        return updated;
+        const outcome: TraceOutcome = { type: 'dry_run_failure' };
+        await handleTraceOutcome(pipelineId, outcome, this.buildTraceOutcomeDeps());
+        return (await this.store.getById(pipelineId)) as PipelineState;
       }
 
       // ─── Level 3: FixLoop auto-trigger on Trace failure ───
       const currentPipelineForFix = await this.store.getById(pipelineId);
       const protoOutput = currentPipelineForFix?.protoOutput;
-      // PR-V-github-401-graceful — auth failures cannot be fixed by
-      // regenerating code. Skip FixLoop and go straight to completed_partial
-      // so the user sees the actionable reconnect-github banner.
       if (protoOutput && spec && !isAiTimeout && !isGitHubAuthError) {
+        // Mid-flight: FixLoop execution stays in determination
         logger.info({ pipelineId }, '[Pipeline] Trace failed — triggering FixLoop');
         await this.store.update(pipelineId, { stage: 'fix_loop_iteration' });
         this.emitEvent(pipelineId, 'stage_change', 'fix_loop_iteration');
@@ -3466,9 +3369,6 @@ export class PipelineOrchestrator {
               ? `\n--- FIX LOOP FEEDBACK ---\n${feedback}\n--- END FEEDBACK ---\n`
               : '';
             const merged = [baseCtx, fb].filter(Boolean).join('\n');
-            // Issue #464 BUG-C: forward user-uploaded screenshots to FixLoop
-            // Proto retries so the regenerated scaffold stays aligned with
-            // the original mockup intent.
             const fixProtoImages = readPipelineImageBlocks(pl.intermediateState);
             const protoRes = await fixAgents.proto.execute({
               spec,
@@ -3483,7 +3383,6 @@ export class PipelineOrchestrator {
             return protoRes.data;
           },
           async (protoOut) => {
-            // SecurityGate regression check before trace
             const secScan = this.securityGate.scan(
               protoOut.files.map((f) => ({ path: f.filePath, content: f.content }))
             );
@@ -3504,15 +3403,9 @@ export class PipelineOrchestrator {
             const fixAgents = this.getAgents(model, pipelineId);
             const plTrace = await this.getPipeline(pipelineId);
             const traceKb = buildUnifiedAgentKnowledgeContext(plTrace, { role: 'trace' });
-            // Issue #397: preserve the chat-level Cucumber/BDD toggle across
-            // FixLoop retries so the user's preference is not silently
-            // dropped when the first Trace attempt fails.
             const fixCucumberEnabled =
               (plTrace.intermediateState as Record<string, unknown> | undefined)
                 ?.cucumberEnabled === true;
-            // Issue #464 BUG-C: forward user-uploaded screenshots to Trace
-            // during FixLoop retries too, so selector generation stays
-            // visually anchored even after a failure bounce.
             const fixTraceImages = readPipelineImageBlocks(plTrace.intermediateState);
             const traceRes = await fixAgents.trace.execute({
               repoOwner: owner,
@@ -3534,26 +3427,16 @@ export class PipelineOrchestrator {
           terminationReason: fixResult.terminationReason,
         });
 
+        // ── Return path 2: FixLoop success ──
         if (fixResult.success && fixResult.finalTraceOutput) {
-          const updated = await this.store.update(pipelineId, {
-            stage: 'completed',
+          const outcome: TraceOutcome = {
+            type: 'fix_loop_success',
             protoOutput: fixResult.finalProtoOutput ?? protoOutput,
             traceOutput: fixResult.finalTraceOutput,
-            metrics: {
-              ...metrics,
-              protoCompletedAt: metrics.protoCompletedAt ?? new Date(),
-              traceCompletedAt: new Date(),
-              totalDurationMs: Date.now() - toEpoch(metrics.startedAt),
-            },
-          });
-          this.emitEvent(pipelineId, 'completed', 'completed');
-          // Record learning
-          this.learningService.recordOutcome(pipelineId, 'fix_loop', {
-            success: true,
-            duration: Date.now() - toEpoch(metrics.startedAt),
-            score: fixResult.totalIterations,
-          });
-          return updated;
+            metrics,
+          };
+          await handleTraceOutcome(pipelineId, outcome, this.buildTraceOutcomeDeps());
+          return (await this.store.getById(pipelineId)) as PipelineState;
         }
         logger.info(
           { pipelineId, reason: fixResult.terminationReason },
@@ -3561,38 +3444,24 @@ export class PipelineOrchestrator {
         );
       }
 
-      // Graceful degradation — completed_partial (keep error visible for UI)
-      const updated = await this.store.update(pipelineId, {
-        stage: 'completed_partial',
+      // ── Return path 3: Trace error / FixLoop failure → completed_partial ──
+      const outcome: TraceOutcome = {
+        type: 'trace_error',
         error: traceResult.error,
-        metrics: {
-          ...metrics,
-          protoCompletedAt: metrics.protoCompletedAt ?? new Date(),
-          totalDurationMs: Date.now() - toEpoch(metrics.startedAt),
-        },
-      });
-      this.emitEvent(pipelineId, 'completed', 'completed_partial');
-      // Record learning for failed trace
-      this.learningService.recordOutcome(pipelineId, 'trace', {
-        success: false,
-        errorType: traceResult.error.code,
-        duration: Date.now() - toEpoch(metrics.startedAt),
-      });
-      return updated;
+        metrics,
+      };
+      await handleTraceOutcome(pipelineId, outcome, this.buildTraceOutcomeDeps());
+      return (await this.store.getById(pipelineId)) as PipelineState;
     }
 
-    // ─── PR-F: Trace iterate-loop ──────────────────
-    // Mimari refactor (2026-05-19): Trace başarılı dönse bile uncovered AC
-    // veya test failure varsa Proto'yu otomatik re-iterate eder. Max retry
-    // sayısı TRACE_MAX_ITERATE_RETRIES env var ile parametrik (default 3).
-    // Retry tükenince pipeline awaiting_push_confirm'e geçer (preview gate
-    // varsa) ya da completed'a düşer; kullanıcı kararı verebilir.
-    // ATDD/TDD literatürüyle uyumlu: Scribe→Proto→Trace→Proto→Trace döngüsü.
+    // ─── PR-F: Trace iterate-loop (mid-flight: evaluation stays here) ──
     const iterateLoopDecision = await this.evaluateTraceIterateLoop(
       pipelineId,
       traceResult.data,
       spec
     );
+
+    // ── Return path 4: Iterate retry ──
     if (iterateLoopDecision.shouldIterate) {
       logger.info(
         {
@@ -3603,203 +3472,33 @@ export class PipelineOrchestrator {
         },
         '[Pipeline] PR-F Trace iterate-loop — re-iterating Proto'
       );
-      // Persist intermediate state + activity emit; the actual Proto+Trace
-      // re-run is dispatched (fire-and-forget) so the orchestrator's
-      // current `runTrace` call returns cleanly.
-      const traceEmit = createActivityEmitter(pipelineId, 'trace');
-      traceEmit(
-        'retry-trigger',
-        `Test eksik kaldı (${iterateLoopDecision.uncoveredCount}/${iterateLoopDecision.totalCount} kabul kriteri) — Proto yeniden çalışıyor (${iterateLoopDecision.nextRetry}/${iterateLoopDecision.maxRetries})`,
-        80,
-        iterateLoopDecision.feedback,
-        iterateLoopDecision.nextRetry,
-        'pipeline.trace.iterate.retry'
-      );
-      // Persist coverage + reasoning before re-running so the UI shows the
-      // failing snapshot until the next retry overwrites it.
-      this.recordTraceReasoning(pipelineId, traceResult.data);
-      {
-        const pipelineAfterTrace = await this.store.getById(pipelineId);
-        if (pipelineAfterTrace?.protoOutput) {
-          await this.persistAcCoverage(
-            pipelineId,
-            pipelineAfterTrace.protoOutput,
-            pipelineAfterTrace.scribeOutput,
-            traceResult.data
-          );
-        }
-      }
-      // Dispatch re-iterate and return — async re-run will land on
-      // awaiting_push_confirm / completed when the loop terminates.
-      void this.dispatchTraceIterate(pipelineId, iterateLoopDecision.feedback).catch((err) => {
-        logger.error({ err, pipelineId }, '[Pipeline] PR-F Trace iterate-loop dispatch failed');
-      });
-      // We return the current pipeline state; the user-facing transition
-      // (proto_building) lands inside dispatchTraceIterate.
+      const pipelineAfterTrace = (await this.store.getById(pipelineId)) as PipelineState;
+      const outcome: TraceOutcome = {
+        type: 'iterate_retry',
+        traceOutput: traceResult.data,
+        iterateDecision: iterateLoopDecision,
+        pipelineAfterTrace,
+      };
+      await handleTraceOutcome(pipelineId, outcome, this.buildTraceOutcomeDeps());
       return (await this.store.getById(pipelineId)) as PipelineState;
     }
 
-    // PR-F2: post-Trace handoff target. Default flow → `completed`; preview
-    // gate flow (Trace dryRun before push) → `awaiting_push_confirm` so the
-    // user reviews scaffold + coverage matrix before pushing to GitHub.
-    // PR-U3 M3: mirror the failure-path flag in the success branch so the
-    // frontend can render the gate in `success` mode without inferring from
-    // the absence of `traceDryRunStatus`.
+    // ── Return path 5: Success ──
     const pipelineForFlag = traceDryRun ? await this.store.getById(pipelineId) : undefined;
     const intermediateForFlag = traceDryRun
       ? ((pipelineForFlag?.intermediateState ?? {}) as Record<string, unknown>)
       : undefined;
-    // PR-V5: explicit Trace completion signal — emit BEFORE the pipeline
-    // moves to its terminal/gate stage so SSE consumers receive the close
-    // event on the same Trace stream they have been listening to. Both
-    // `awaiting_push_confirm` and `completed` are valid terminals here.
-    this.emitStageCompleted(pipelineId, 'trace');
-    const updated = await this.store.update(pipelineId, {
-      stage: postSuccessStage,
+    const outcome: TraceOutcome = {
+      type: 'success',
       traceOutput: traceResult.data,
-      metrics: {
-        ...metrics,
-        protoCompletedAt: metrics.protoCompletedAt ?? new Date(),
-        // Trace completion timestamp only when this is the terminal Trace pass
-        // (post-push). On a pre-push dryRun we'll re-stamp once Trace re-runs
-        // post-push — but currently confirmPush doesn't re-run Trace, so we
-        // stamp here regardless; coverage data is already final.
-        traceCompletedAt: new Date(),
-        totalDurationMs:
-          postSuccessStage === 'completed'
-            ? Date.now() - toEpoch(metrics.startedAt)
-            : metrics.totalDurationMs,
-      },
-      ...(traceDryRun
-        ? {
-            intermediateState: {
-              ...(intermediateForFlag ?? {}),
-              traceDryRunStatus: 'success' as const,
-              traceDryRunCompletedAt: new Date().toISOString(),
-            },
-          }
-        : {}),
-    });
-    // Chat event-log (Task 3): append after traceOutput is persisted (data-consistency).
-    // Chat narrator (2026-05-23): build trace sub-steps from the persisted
-    // traceOutput so the chat baloncuğu shows test/coverage counts.
-    const tracePipelineForSubSteps = await this.getPipeline(pipelineId);
-    const traceSubSteps = this.buildSubStepsForStage(
-      { ...tracePipelineForSubSteps, traceOutput: traceResult.data } as PipelineState,
-      'trace'
-    );
-    await this.appendTraceCompleted(
-      pipelineId,
+      metrics,
+      postSuccessStage,
+      traceDryRun,
+      intermediateForFlag,
       traceIteration,
-      traceResult.data,
-      traceSubSteps.length > 0 ? traceSubSteps : undefined
-    );
-    if (postSuccessStage === 'awaiting_push_confirm') {
-      this.emitEvent(pipelineId, 'stage_change', 'awaiting_push_confirm');
-      // PR-T3 S1: state desync fix — `emitEvent` yalnızca dahili event-bus'a
-      // gider, SSE stream'e gitmez. SSE yalnızca `pipelineBus` üzerindeki
-      // PipelineActivity event'lerini iletiyor. Push gate geçişinde
-      // frontend'in açık SSE bağlantısı varken bir activity görmesi
-      // gerekiyor — yoksa uiState `critic_running`/`trace_running` placeholder
-      // metninde kilitleniyor (manuel testte gözlemlenen bug). Net bir
-      // `gate_open` activity'i yayınlayarak ChatPage'in
-      // `stageChanged`/`isTerminal` detection'ı kesin tetiklensin.
-      emitActivity({
-        pipelineId,
-        stage: 'trace',
-        step: 'gate_open',
-        message: 'Gönderim onayı bekleniyor — inceleyin ve onaylayın',
-        progress: 100,
-        timestamp: new Date().toISOString(),
-      });
-      logger.info(
-        {
-          pipelineId,
-          fileCount: traceResult.data.testFiles?.length ?? 0,
-          coverage: traceResult.data.testSummary?.coveragePercentage,
-        },
-        '[Pipeline] PR-F2 Trace dryRun completed — handing off to push gate'
-      );
-    } else {
-      this.emitEvent(pipelineId, 'completed', 'completed');
-    }
-
-    // Log Trace activity for integrity metrics
-    const ts = traceResult.data.testSummary;
-    this.logActivity(pipelineId, 'trace', 'tests_generated', {
-      testsPassed: ts?.totalTests ?? 0,
-      specCompliance: ts?.coveragePercentage ? ts.coveragePercentage / 100 : 0,
-      confidence: ts?.coveragePercentage ? ts.coveragePercentage / 100 : 0,
-    });
-
-    // Level 4: Explainability — record Trace reasoning
-    this.recordTraceReasoning(pipelineId, traceResult.data);
-    // PR-D: Trace ran successfully — recompute AC coverage with the dynamic
-    // (test ↔ AC) layer filled in. Static layer stays the same (from Proto).
-    {
-      const pipelineAfterTrace = await this.store.getById(pipelineId);
-      if (pipelineAfterTrace?.protoOutput) {
-        await this.persistAcCoverage(
-          pipelineId,
-          pipelineAfterTrace.protoOutput,
-          pipelineAfterTrace.scribeOutput,
-          traceResult.data
-        );
-      }
-    }
-
-    // Record learning for successful pipeline
-    this.learningService.recordOutcome(pipelineId, 'trace', {
-      success: true,
-      duration: Date.now() - toEpoch(metrics.startedAt),
-      score: ts?.coveragePercentage ?? 0,
-    });
-
-    // Jira hook: comment Trace result (non-blocking)
-    const pipelineForJira = await this.store.getById(pipelineId);
-    if (pipelineForJira?.jiraConfig?.epicKey) {
-      this.runJiraTraceComment(pipelineForJira.userId, pipelineForJira.jiraConfig.epicKey, {
-        totalTests: traceResult.data.testSummary.totalTests,
-        coveragePercentage: traceResult.data.testSummary.coveragePercentage,
-        passed: traceResult.data.ok,
-      }).catch((err) => logger.warn({ err }, '[Pipeline] Non-blocking task failed'));
-    }
-
-    // Akış tamamlanma sinyali (PR-U5: "Pipeline" → "Akış" user-visible)
-    emitActivity({
-      pipelineId,
-      stage: 'trace',
-      step: 'pipeline_complete',
-      message: 'Akış başarıyla tamamlandı',
-      progress: 100,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Token usage stays on the pipelines table (`metrics` JSONB) — there is no
-    // longer a separate billing counter to bump.
-    const completedPipeline = await this.store.getById(pipelineId);
-
-    // Auto-ingest pipeline results into knowledge base (non-blocking)
-    if (completedPipeline) {
-      new PipelineKnowledgeIngester()
-        .ingestPipelineResults({
-          pipelineId,
-          userId: completedPipeline.userId,
-          spec: completedPipeline.scribeOutput?.spec,
-          specMarkdown: completedPipeline.scribeOutput?.rawMarkdown,
-          protoFiles: completedPipeline.protoOutput?.files,
-          repoName: completedPipeline.protoConfig?.repoName as string | undefined,
-          repoOwner: completedPipeline.protoOutput?.repo?.split('/')[0],
-          branch: completedPipeline.protoOutput?.branch,
-          traceTestSummary: traceResult.data.testSummary,
-          traceCoverageMatrix: traceResult.data.coverageMatrix,
-        })
-        .catch((err) =>
-          logger.warn({ err, pipelineId }, '[Pipeline] Knowledge ingestion failed (non-fatal)')
-        );
-    }
-
-    return updated;
+    };
+    await handleTraceOutcome(pipelineId, outcome, this.buildTraceOutcomeDeps());
+    return (await this.store.getById(pipelineId)) as PipelineState;
   }
 
   // ─── Private: Retry Helpers ──────────────────
