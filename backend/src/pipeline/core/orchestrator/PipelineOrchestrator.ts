@@ -11,19 +11,10 @@ import type {
   TraceOutput,
   SubStep,
 } from '../contracts/PipelineTypes.js';
-import { JiraMCPService } from '../../../services/mcp/adapters/JiraMCPService.js';
-import { getConnectionStatus as getAtlassianStatus } from '../../../services/atlassian/AtlassianMcpClient.js';
-import {
-  createJiraEpicFromSpec,
-  commentJiraWithProtoResult,
-  commentJiraWithTraceResult,
-  commentJiraWithFailure,
-} from '../../integrations/jiraIntegration.js';
 import {
   RETRY_CONFIG,
   createPipelineError,
   PipelineErrorCode,
-  PipelineNotFoundError,
   InvalidStageError,
 } from '../contracts/PipelineErrors.js';
 import {
@@ -37,9 +28,8 @@ import { logger } from '../../../lib/logger.js';
 import { PipelineKnowledgeIngester } from '../../../services/knowledge/ingestion/PipelineKnowledgeIngester.js';
 import type { ScribeAgent, ScribeState, ScribeResult } from '../../agents/scribe/ScribeAgent.js';
 import type { ProtoAgent } from '../../agents/proto/ProtoAgent.js';
-import { injectArtifacts } from '../../agents/proto/artifactInjector.js';
 import type { TraceAgent } from '../../agents/trace/TraceAgent.js';
-import type { CriticAgent, CriticResult } from '../../agents/critic/CriticAgent.js';
+import type { CriticAgent } from '../../agents/critic/CriticAgent.js';
 import type { CriticReviewOutput } from '../../agents/critic/CriticTypes.js';
 import { FixLoopService } from '../fix-loop/FixLoopService.js';
 import { PipelineMetricsService } from '../metrics/PipelineMetricsService.js';
@@ -51,13 +41,7 @@ import { ExplainabilityService } from '../explainability/ExplainabilityService.j
 import { RegressionService } from '../regression/RegressionService.js';
 import { AiCallsService } from '../ai-calls/AiCallsService.js';
 import { pipelineCallContext } from '../ai-calls/pipelineCallContext.js';
-import {
-  buildScribeReasoning,
-  buildProtoReasoning,
-  buildTraceReasoning,
-  buildCriticReasoning,
-} from '../explainability/reasoningFactory.js';
-import { buildAcCoverage } from '../explainability/acCoverage.js';
+import { buildCriticReasoning } from '../explainability/reasoningFactory.js';
 import { LearningService } from '../learning/LearningService.js';
 import { buildUnifiedAgentKnowledgeContext } from '../unifiedPipelineContext.js';
 import {
@@ -65,6 +49,68 @@ import {
   type ChatMemoryContextService,
 } from '../../../services/knowledge/ChatMemoryContextService.js';
 import { getEnv } from '../../../config/env.js';
+
+// ─── Extracted helpers (Kademe 1) ────────────────
+import {
+  isTerminalStage,
+  deriveRepoName,
+  assertStage,
+  reconstructScribeState,
+  getPipeline as getPipelineHelper,
+  isCancelled as isCancelledHelper,
+  validateGitHubAccess as validateGitHubAccessHelper,
+} from './helpers/stateHelpers.js';
+import {
+  createTokenCallback as createTokenCallbackHelper,
+  flushTokenUsage as flushTokenUsageHelper,
+  getLiveTokenUsage as getLiveTokenUsageHelper,
+  markStageStarted as markStageStartedHelper,
+  getStageDurationMs as getStageDurationMsHelper,
+  clearStageStarts as clearStageStartsHelper,
+} from './helpers/metricsHelpers.js';
+import {
+  countPriorEvents as countPriorEventsHelper,
+  buildSubStepsForStage as buildSubStepsForStageHelper,
+  buildScribeCompletedEvent as buildScribeCompletedEventHelper,
+  emitStageCompleted as emitStageCompletedHelper,
+  appendProtoStarted as appendProtoStartedHelper,
+  appendProtoCompleted as appendProtoCompletedHelper,
+  emitProtoCompletedForIteration as emitProtoCompletedForIterationHelper,
+  appendTraceStarted as appendTraceStartedHelper,
+  appendTraceCompleted as appendTraceCompletedHelper,
+  appendTraceFailed as appendTraceFailedHelper,
+} from './helpers/activityHelpers.js';
+import {
+  persistReasoning as persistReasoningHelper,
+  recordScribeReasoning as recordScribeReasoningHelper,
+  recordProtoReasoning as recordProtoReasoningHelper,
+  recordTraceReasoning as recordTraceReasoningHelper,
+  persistAcCoverage as persistAcCoverageHelper,
+  applyArtifactInjection as applyArtifactInjectionHelper,
+} from './helpers/reasoningHelpers.js';
+import {
+  runJiraEpicCreation as runJiraEpicCreationHelper,
+  postJiraFailureComment as postJiraFailureCommentHelper,
+  runJiraProtoComment as runJiraProtoCommentHelper,
+  runJiraTraceComment as runJiraTraceCommentHelper,
+} from './helpers/jiraHelpers.js';
+import {
+  runCriticSpecReview as runCriticSpecReviewHelper,
+  runCriticCodeReview as runCriticCodeReviewHelper,
+  evaluateTraceIterateLoop as evaluateTraceIterateLoopHelper,
+  evaluateCriticIterateLoop as evaluateCriticIterateLoopHelper,
+} from './helpers/criticHelpers.js';
+
+// ─── Extracted stages (Kademe 2) ─────────────────
+import {
+  dispatchTraceIterate as dispatchTraceIterateStage,
+  dispatchCriticIterate as dispatchCriticIterateStage,
+} from './stages/iterateDispatchers.js';
+import {
+  retryTrace as retryTraceStage,
+  retryProto as retryProtoStage,
+  retryScribe as retryScribeStage,
+} from './stages/retryHandlers.js';
 
 // ─── Timeout Guard ───────────────────────────────
 
@@ -209,54 +255,12 @@ export class PipelineOrchestrator {
 
   /** Create a callback that accumulates token + cost usage for a specific pipeline. */
   createTokenCallback(pipelineId: string): import('../pipeline-factory.js').TokenUsageCallback {
-    return (usage) => {
-      const acc = this.tokenAccumulators.get(pipelineId) ?? {
-        inputTokens: 0,
-        outputTokens: 0,
-        estimatedCostUsd: 0,
-        hasCost: false,
-      };
-      acc.inputTokens += usage.inputTokens;
-      acc.outputTokens += usage.outputTokens;
-      if (typeof usage.estimatedCostUsd === 'number' && Number.isFinite(usage.estimatedCostUsd)) {
-        acc.estimatedCostUsd += usage.estimatedCostUsd;
-        acc.hasCost = true;
-      }
-      this.tokenAccumulators.set(pipelineId, acc);
-    };
+    return createTokenCallbackHelper(pipelineId, this.tokenAccumulators);
   }
 
   /** Flush accumulated token usage to the pipeline's metrics in the DB. */
   private async flushTokenUsage(pipelineId: string): Promise<void> {
-    const acc = this.tokenAccumulators.get(pipelineId);
-    if (!acc || (acc.inputTokens === 0 && acc.outputTokens === 0)) return;
-
-    try {
-      const pipeline = await this.store.getById(pipelineId);
-      if (!pipeline) return;
-      const metrics = pipeline.metrics;
-      // Build the updated metrics blob. `estimatedCost` is only added when at
-      // least one real per-call cost was reported in this run — keeps the
-      // JSONB field absent for mock-provider pipelines so the usage endpoint's
-      // per-token fallback still kicks in instead of pinning the value to 0.
-      const updatedMetrics: PipelineMetrics = {
-        ...metrics,
-        inputTokens: (metrics.inputTokens ?? 0) + acc.inputTokens,
-        outputTokens: (metrics.outputTokens ?? 0) + acc.outputTokens,
-        totalTokens: (metrics.totalTokens ?? 0) + acc.inputTokens + acc.outputTokens,
-      };
-      const persistedCost = metrics.estimatedCost ?? 0;
-      if (acc.hasCost || persistedCost > 0) {
-        const sum = persistedCost + acc.estimatedCostUsd;
-        // 6-decimal rounding matches `pricing.estimateCostUsd` and the
-        // numeric(12,6) column on `job_ai_calls` so reads/writes stay stable.
-        updatedMetrics.estimatedCost = Number(sum.toFixed(6));
-      }
-      await this.store.update(pipelineId, { metrics: updatedMetrics });
-      this.tokenAccumulators.delete(pipelineId);
-    } catch (err) {
-      logger.warn({ err, pipelineId }, '[Pipeline] Token usage flush failed (non-fatal)');
-    }
+    return flushTokenUsageHelper(pipelineId, this.tokenAccumulators, this.store);
   }
 
   /**
@@ -270,17 +274,7 @@ export class PipelineOrchestrator {
     pipelineId: string,
     persistedMetrics?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }
   ): { inputTokens: number; outputTokens: number; totalTokens: number } {
-    const persisted = persistedMetrics ?? {};
-    const acc = this.tokenAccumulators.get(pipelineId);
-    const accInput = acc?.inputTokens ?? 0;
-    const accOutput = acc?.outputTokens ?? 0;
-    const inputTokens = (persisted.inputTokens ?? 0) + accInput;
-    const outputTokens = (persisted.outputTokens ?? 0) + accOutput;
-    return {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-    };
+    return getLiveTokenUsageHelper(pipelineId, this.tokenAccumulators, persistedMetrics);
   }
 
   // ─── Level 3 Services ───────────────────────────
@@ -536,15 +530,7 @@ export class PipelineOrchestrator {
     stage: 'scribe' | 'proto' | 'trace',
     summary?: string
   ): void {
-    emitActivity({
-      pipelineId,
-      stage,
-      step: 'stage_completed',
-      message: summary ?? `${stage} aşaması tamamlandı`,
-      progress: 100,
-      status: 'completed',
-      timestamp: new Date().toISOString(),
-    });
+    emitStageCompletedHelper(pipelineId, stage, summary);
   }
 
   /**
@@ -568,40 +554,7 @@ export class PipelineOrchestrator {
     pipelineId: string,
     reasoning: import('../explainability/ExplainabilityTypes.js').AgentReasoning
   ): void {
-    const attempt = async (n: number): Promise<void> => {
-      try {
-        await this.explainability.addReasoning(pipelineId, reasoning);
-      } catch (err) {
-        if (n < 3) {
-          const delay = 50 * 4 ** n; // 50, 200, 800 — caps under 1s for the 3rd retry
-          await new Promise((r) => setTimeout(r, delay));
-          return attempt(n + 1);
-        }
-        logger.warn(
-          { err, pipelineId, agent: reasoning.agentName, retries: n },
-          '[Pipeline] PR-U3 M7: failed to persist reasoning after retries; flagging pipeline as explainability-degraded'
-        );
-        // Best-effort flag so the UI can show a banner. Same error
-        // tolerance — we never fail the pipeline on an explainability issue.
-        try {
-          const pipeline = await this.store.getById(pipelineId);
-          const intermediate = (pipeline?.intermediateState ?? {}) as Record<string, unknown>;
-          await this.store.update(pipelineId, {
-            intermediateState: {
-              ...intermediate,
-              explainabilityDegraded: true,
-              explainabilityDegradedAt: new Date().toISOString(),
-            },
-          });
-        } catch (flagErr) {
-          logger.warn(
-            { flagErr, pipelineId },
-            '[Pipeline] PR-U3 M7: also failed to set explainabilityDegraded flag — UI will see empty Açıklama'
-          );
-        }
-      }
-    };
-    void attempt(0);
+    persistReasoningHelper(pipelineId, reasoning, this.explainability, this.store);
   }
 
   /** Level 4: Explainability — Scribe reasoning after spec generation. */
@@ -610,7 +563,7 @@ export class PipelineOrchestrator {
     output: import('../contracts/PipelineTypes.js').ScribeOutput,
     regenerated: boolean
   ): void {
-    this.persistReasoning(pipelineId, buildScribeReasoning(output, { regenerated }));
+    recordScribeReasoningHelper(pipelineId, output, regenerated, this.explainability, this.store);
   }
 
   /** Level 4: Explainability — Proto reasoning after scaffold push. */
@@ -619,7 +572,7 @@ export class PipelineOrchestrator {
     output: import('../contracts/PipelineTypes.js').ProtoOutput,
     scribeOutput?: import('../contracts/PipelineTypes.js').ScribeOutput
   ): void {
-    this.persistReasoning(pipelineId, buildProtoReasoning(output, { scribeOutput }));
+    recordProtoReasoningHelper(pipelineId, output, this.explainability, this.store, scribeOutput);
   }
 
   /**
@@ -641,26 +594,7 @@ export class PipelineOrchestrator {
     protoOutput: import('../contracts/PipelineTypes.js').ProtoOutput,
     scribeOutput?: import('../contracts/PipelineTypes.js').ScribeOutput
   ): import('../contracts/PipelineTypes.js').ProtoOutput {
-    try {
-      const result = injectArtifacts({
-        files: protoOutput.files,
-        scribeOutput,
-      });
-      if (result.added.length === 0) return protoOutput;
-      const totalLOC = result.files.reduce((sum, f) => sum + (f.linesOfCode ?? 0), 0);
-      return {
-        ...protoOutput,
-        files: result.files,
-        metadata: {
-          ...protoOutput.metadata,
-          filesCreated: result.files.length,
-          totalLinesOfCode: totalLOC,
-        },
-      };
-    } catch (err) {
-      logger.warn({ err }, '[Pipeline] applyArtifactInjection failed — using original files');
-      return protoOutput;
-    }
+    return applyArtifactInjectionHelper(protoOutput, scribeOutput);
   }
 
   /**
@@ -676,17 +610,7 @@ export class PipelineOrchestrator {
     scribeOutput: import('../contracts/PipelineTypes.js').ScribeOutput | undefined,
     traceOutput?: import('../contracts/PipelineTypes.js').TraceOutput
   ): Promise<void> {
-    try {
-      const report = buildAcCoverage(scribeOutput, protoOutput, traceOutput);
-      if (report.totalAcs === 0) return; // nothing to persist if spec had no AC
-      const current = await this.store.getById(pipelineId);
-      const existing = (current?.intermediateState ?? {}) as Record<string, unknown>;
-      await this.store.update(pipelineId, {
-        intermediateState: { ...existing, acCoverage: report },
-      });
-    } catch (err) {
-      logger.warn({ err, pipelineId }, '[Pipeline] Failed to persist acCoverage');
-    }
+    return persistAcCoverageHelper(pipelineId, protoOutput, scribeOutput, this.store, traceOutput);
   }
 
   /** Level 4: Explainability — Trace reasoning after test generation. */
@@ -694,7 +618,7 @@ export class PipelineOrchestrator {
     pipelineId: string,
     output: import('../contracts/PipelineTypes.js').TraceOutput
   ): void {
-    this.persistReasoning(pipelineId, buildTraceReasoning(output));
+    recordTraceReasoningHelper(pipelineId, output, this.explainability, this.store);
   }
 
   /**
@@ -3877,225 +3801,54 @@ export class PipelineOrchestrator {
   // ─── Private: Retry Helpers ──────────────────
 
   private async retryTrace(pipelineId: string, pipeline: PipelineState): Promise<PipelineState> {
-    let owner: string;
-    try {
-      const gh = await this.validateGitHubAccess(pipeline.userId);
-      owner = gh.owner;
-    } catch (err) {
-      const error = createPipelineError(
-        PipelineErrorCode.GITHUB_NOT_CONNECTED,
-        `GitHub owner çözümlenemedi: ${err instanceof Error ? err.message : String(err)}`
-      );
-      const failed = await this.store.update(pipelineId, { stage: 'failed', error });
-      this.emitEvent(pipelineId, 'error', 'failed', error);
-      return failed;
-    }
-
-    const p = await this.getPipeline(pipelineId);
-
-    // Clear stale traceDryRun status from the previous failed attempt
-    const existingTraceState = (p.intermediateState ?? {}) as Record<string, unknown>;
-    const { traceDryRunStatus, traceDryRunErrorCode, traceDryRunErrorAt, ...cleanTraceState } =
-      existingTraceState;
-    if (traceDryRunStatus || traceDryRunErrorCode || traceDryRunErrorAt) {
-      await this.store.update(pipelineId, { intermediateState: cleanTraceState });
-    }
-
-    await this.store.update(
-      pipelineId,
-      { stage: 'trace_testing' },
-      { expectedStageVersion: p.stageVersion }
-    );
-    this.emitEvent(pipelineId, 'stage_change', 'trace_testing');
-
-    if (!pipeline.protoOutput) {
-      throw new Error('Cannot retry Trace: protoOutput is missing');
-    }
-    const repo =
-      pipeline.protoConfig?.repoName ??
-      pipeline.protoOutput.repo.split('/')[1] ??
-      pipeline.protoOutput.repo;
-
-    return this.runTrace(
-      pipelineId,
-      pipeline.metrics,
-      owner,
-      repo,
-      pipeline.protoOutput.branch,
-      pipeline.approvedSpec,
-      pipeline.model
-    );
+    return retryTraceStage(pipelineId, pipeline, {
+      store: this.store,
+      validateGitHubAccess: (userId) => this.validateGitHubAccess(userId),
+      getPipeline: (id) => this.getPipeline(id),
+      emitEvent: (pid, type, stage, data) =>
+        this.emitEvent(pid, type, stage as PipelineStage, data),
+      runTrace: (pid, metrics, owner, repo, branch, spec, model, options) =>
+        this.runTrace(pid, metrics, owner, repo, branch, spec, model, options),
+    });
   }
 
   private async retryProto(pipelineId: string, pipeline: PipelineState): Promise<PipelineState> {
-    let owner: string;
-    let userGitHubToken: string;
-    try {
-      const gh = await this.validateGitHubAccess(pipeline.userId);
-      userGitHubToken = gh.token;
-      owner = gh.owner;
-    } catch (err) {
-      const error = createPipelineError(
-        PipelineErrorCode.GITHUB_NOT_CONNECTED,
-        `GitHub owner çözümlenemedi: ${err instanceof Error ? err.message : String(err)}`
-      );
-      const failed = await this.store.update(pipelineId, { stage: 'failed', error });
-      this.emitEvent(pipelineId, 'error', 'failed', error);
-      return failed;
-    }
-    if (!pipeline.approvedSpec) {
-      throw new Error('Cannot retry Proto: approvedSpec is missing');
-    }
-    const repoName =
-      pipeline.protoConfig?.repoName ?? this.deriveRepoName(pipeline.approvedSpec.title);
-    const repoVisibility = pipeline.protoConfig?.repoVisibility ?? 'private';
-
-    const current = await this.getPipeline(pipelineId);
-    await this.store.update(
-      pipelineId,
-      { stage: 'proto_building' },
-      { expectedStageVersion: current.stageVersion }
-    );
-    this.emitEvent(pipelineId, 'stage_change', 'proto_building');
-
-    // Per-user GitHub adapter for retry
-    const userGithubService = this.createGitHubService(userGitHubToken);
-    const agents =
-      this.createAgentsForModel?.(pipeline.model ?? '', userGithubService) ??
-      this.getAgents(pipeline.model, pipelineId);
-    const retryProtoKbRaw = buildUnifiedAgentKnowledgeContext(pipeline, { role: 'proto' });
-    const retryProtoKb = retryProtoKbRaw.trim() ? retryProtoKbRaw : undefined;
-    // M-4: Respect preview gate on retry — same logic as the normal Proto path
-    const retryPreviewGateEnabled = process.env.AUTO_PUSH_AFTER_PROTO !== 'true';
-    const result = await withTimeout(
-      agents.proto.execute({
-        spec: pipeline.approvedSpec,
-        repoName,
-        repoVisibility,
-        owner,
-        pipelineId,
-        knowledgeContext: retryProtoKb,
-        dryRun: retryPreviewGateEnabled,
-      }),
-      STAGE_TIMEOUT,
-      'Proto'
-    );
-
-    if (result.type === 'error') {
-      const updated = await this.store.update(pipelineId, { stage: 'failed', error: result.error });
-      this.emitEvent(pipelineId, 'error', 'failed', result.error);
-      return updated;
-    }
-
-    await this.store.update(pipelineId, {
-      protoOutput: result.data,
-      stage: 'trace_testing',
-      metrics: { ...pipeline.metrics, protoCompletedAt: new Date() },
+    return retryProtoStage(pipelineId, pipeline, {
+      store: this.store,
+      validateGitHubAccess: (userId) => this.validateGitHubAccess(userId),
+      getPipeline: (id) => this.getPipeline(id),
+      emitEvent: (pid, type, stage, data) =>
+        this.emitEvent(pid, type, stage as PipelineStage, data),
+      createAgentsForModel: this.createAgentsForModel,
+      getAgents: (model, pid) => this.getAgents(model, pid),
+      createGitHubService: (token) => this.createGitHubService(token),
+      runTrace: (pid, metrics, owner, repo, branch, spec, model, options) =>
+        this.runTrace(pid, metrics, owner, repo, branch, spec, model, options),
     });
-    this.emitEvent(pipelineId, 'stage_change', 'trace_testing');
-
-    if (retryPreviewGateEnabled) {
-      // Preview gate enabled: run Trace in dryRun mode, then hand off to push gate
-      return this.runTrace(
-        pipelineId,
-        pipeline.metrics,
-        owner,
-        repoName,
-        result.data.branch,
-        pipeline.approvedSpec,
-        pipeline.model,
-        {
-          dryRun: true,
-          inputFiles: result.data.files.map((f) => ({
-            filePath: f.filePath,
-            content: f.content,
-          })),
-          postSuccess: 'awaiting_push_confirm',
-        }
-      );
-    }
-
-    return this.runTrace(
-      pipelineId,
-      pipeline.metrics,
-      owner,
-      repoName,
-      result.data.branch,
-      pipeline.approvedSpec,
-      pipeline.model
-    );
   }
 
   private async retryScribe(pipelineId: string, pipeline: PipelineState): Promise<PipelineState> {
-    const agents = this.getAgents(pipeline.model, pipelineId);
-    const scribeState = this.reconstructScribeState(pipeline);
-    scribeState.pipelineId = pipelineId;
-    const current = await this.getPipeline(pipelineId);
-    await this.store.update(
-      pipelineId,
-      { stage: 'scribe_clarifying' },
-      { expectedStageVersion: current.stageVersion }
-    );
-    this.emitEvent(pipelineId, 'stage_change', 'scribe_clarifying');
-
-    const result = await withTimeout(
-      agents.scribe.analyzIdea(scribeState),
-      STAGE_TIMEOUT,
-      'Scribe'
-    );
-    return this.handleScribeResult(
-      pipelineId,
-      pipeline.metrics,
-      [...pipeline.scribeConversation],
-      result
-    );
+    return retryScribeStage(pipelineId, pipeline, {
+      store: this.store,
+      getPipeline: (id) => this.getPipeline(id),
+      emitEvent: (pid, type, stage, data) =>
+        this.emitEvent(pid, type, stage as PipelineStage, data),
+      getAgents: (model, pid) => this.getAgents(model, pid),
+      reconstructScribeState: (p) => this.reconstructScribeState(p),
+      handleScribeResult: (pid, metrics, conv, result, round) =>
+        this.handleScribeResult(pid, metrics, conv, result, round),
+    });
   }
 
   // ─── Private: Utilities ──────────────────────
 
   /** Validate GitHub token + resolve owner. Reusable by approveSpec and retry methods. */
   private async validateGitHubAccess(userId: string): Promise<{ token: string; owner: string }> {
-    // DOGFOOD_MODE: token-free + GitHub-free local exercise. Skip every real
-    // GitHub touch — token decrypt, /user pre-validation, owner resolution —
-    // and return deterministic stubs so the pipeline can advance to the
-    // push-confirm gate without an OAuth setup. The `ghp_mock` prefix is
-    // load-bearing: the pre-validation block below short-circuits on it.
-    //
-    // Two layers of safety:
-    //   1. env.ts superRefine rejects DOGFOOD_MODE=true when
-    //      NODE_ENV=production at boot — the server will not start.
-    //   2. This runtime guard belt-and-braces the same check at the call
-    //      site so a misconfigured deploy still cannot disable GitHub
-    //      validation. Reads `process.env` directly so this hot path is
-    //      not bottlenecked by the env-schema cache.
-    if (process.env.DOGFOOD_MODE === 'true' && process.env.NODE_ENV !== 'production') {
-      return { token: 'ghp_mock_dogfood', owner: 'dogfood-owner' };
-    }
-    const token = await this.getGitHubToken(userId);
-    if (!token) {
-      throw new Error(
-        'GitHub bağlantısı bulunamadı. Ayarlar sayfasından GitHub hesabınızı bağlayın.'
-      );
-    }
-    // Pre-validate token (skip in test/mock mode)
-    if (!token.startsWith('ghp_mock')) {
-      const ghRes = await fetch('https://api.github.com/user', {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
-      }).catch(() => null);
-      if (ghRes && !ghRes.ok) {
-        throw new Error(
-          `GitHub token geçersiz (HTTP ${ghRes.status}). Ayarlar → GitHub bölümünden yeniden bağlayın.`
-        );
-      }
-    }
-    const owner = await this.getGitHubOwner(userId);
-    return { token, owner };
+    return validateGitHubAccessHelper(userId, this.getGitHubToken, this.getGitHubOwner);
   }
 
   private async getPipeline(id: string): Promise<PipelineState> {
-    const pipeline = await this.store.getById(id);
-    if (!pipeline) throw new PipelineNotFoundError(id);
-    return pipeline;
+    return getPipelineHelper(id, this.store);
   }
 
   // ─── Chat-event helpers (Task 2: proto events) ───────────────────
@@ -4104,15 +3857,13 @@ export class PipelineOrchestrator {
     conv: ScribeMessageType[],
     type: 'proto_completed' | 'trace_completed' | 'scribe_completed'
   ): number {
-    return conv.filter((m) => m.type === type).length;
+    return countPriorEventsHelper(conv, type);
   }
 
   // ─── Stage start/duration tracking (chat narrator, 2026-05-23) ──
 
   private markStageStarted(pipelineId: string, stage: 'scribe' | 'proto' | 'trace'): number {
-    const now = Date.now();
-    this.stageStartedAt.set(`${pipelineId}:${stage}`, now);
-    return now;
+    return markStageStartedHelper(pipelineId, stage, this.stageStartedAt);
   }
 
   /**
@@ -4125,11 +3876,7 @@ export class PipelineOrchestrator {
     pipelineId: string,
     stage: 'scribe' | 'proto' | 'trace'
   ): number | undefined {
-    const startedAt = this.stageStartedAt.get(`${pipelineId}:${stage}`);
-    if (!startedAt) return undefined;
-    const duration = Date.now() - startedAt;
-    this.stageStartedAt.delete(`${pipelineId}:${stage}`);
-    return duration >= 0 ? duration : undefined;
+    return getStageDurationMsHelper(pipelineId, stage, this.stageStartedAt);
   }
 
   /**
@@ -4142,25 +3889,16 @@ export class PipelineOrchestrator {
    * 2026-05-23.
    */
   private clearStageStarts(pipelineId: string): void {
-    const prefix = `${pipelineId}:`;
-    for (const key of this.stageStartedAt.keys()) {
-      if (key.startsWith(prefix)) {
-        this.stageStartedAt.delete(key);
-      }
-    }
+    clearStageStartsHelper(pipelineId, this.stageStartedAt);
   }
 
   private async appendProtoStarted(pipelineId: string): Promise<number> {
-    const pipeline = await this.getPipeline(pipelineId);
-    const iteration = this.countPriorEvents(pipeline.scribeConversation, 'proto_completed') + 1;
-    this.markStageStarted(pipelineId, 'proto');
-    await this.store.update(pipelineId, {
-      scribeConversation: [
-        ...pipeline.scribeConversation,
-        { type: 'proto_started', content: { iteration }, timestamp: new Date().toISOString() },
-      ],
-    });
-    return iteration;
+    return appendProtoStartedHelper(
+      pipelineId,
+      this.store,
+      (id) => this.getPipeline(id),
+      (pid, stage) => this.markStageStarted(pid, stage)
+    );
   }
 
   /**
@@ -4177,16 +3915,13 @@ export class PipelineOrchestrator {
     iteration: number,
     output: ProtoOutput
   ): Promise<void> {
-    const pipelineSnapshot = await this.getPipeline(pipelineId);
-    const subSteps = this.buildSubStepsForStage(
-      { ...pipelineSnapshot, protoOutput: output } as PipelineState,
-      'proto'
-    );
-    await this.appendProtoCompleted(
+    return emitProtoCompletedForIterationHelper(
       pipelineId,
       iteration,
       output,
-      subSteps.length > 0 ? subSteps : undefined
+      this.store,
+      (id) => this.getPipeline(id),
+      (pid, stage) => this.getStageDurationMs(pid, stage)
     );
   }
 
@@ -4196,45 +3931,26 @@ export class PipelineOrchestrator {
     output: ProtoOutput,
     subSteps?: SubStep[]
   ): Promise<void> {
-    const pipeline = await this.getPipeline(pipelineId);
-    const durationMs = this.getStageDurationMs(pipelineId, 'proto');
-    await this.store.update(pipelineId, {
-      scribeConversation: [
-        ...pipeline.scribeConversation,
-        {
-          type: 'proto_completed',
-          content: {
-            iteration,
-            summary: output.summary ?? 'Proje dosyaları hazır.',
-            filesCreated: output.metadata.filesCreated,
-            totalLines: output.metadata.totalLinesOfCode,
-            branch: output.branch,
-            ...(durationMs !== undefined ? { durationMs } : {}),
-            ...(subSteps && subSteps.length > 0 ? { subSteps } : {}),
-          },
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    });
+    return appendProtoCompletedHelper(
+      pipelineId,
+      iteration,
+      output,
+      this.store,
+      (id) => this.getPipeline(id),
+      (pid, stage) => this.getStageDurationMs(pid, stage),
+      subSteps
+    );
   }
 
   // ─── Chat-event helpers (Task 3: trace events) ───────────────────
 
   private async appendTraceStarted(pipelineId: string): Promise<number> {
-    const pipeline = await this.getPipeline(pipelineId);
-    const iteration = this.countPriorEvents(pipeline.scribeConversation, 'trace_completed') + 1;
-    this.markStageStarted(pipelineId, 'trace');
-    await this.store.update(pipelineId, {
-      scribeConversation: [
-        ...pipeline.scribeConversation,
-        {
-          type: 'trace_started',
-          content: { iteration },
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    });
-    return iteration;
+    return appendTraceStartedHelper(
+      pipelineId,
+      this.store,
+      (id) => this.getPipeline(id),
+      (pid, stage) => this.markStageStarted(pid, stage)
+    );
   }
 
   private async appendTraceCompleted(
@@ -4246,26 +3962,15 @@ export class PipelineOrchestrator {
     },
     subSteps?: SubStep[]
   ): Promise<void> {
-    const pipeline = await this.getPipeline(pipelineId);
-    const durationMs = this.getStageDurationMs(pipelineId, 'trace');
-    await this.store.update(pipelineId, {
-      scribeConversation: [
-        ...pipeline.scribeConversation,
-        {
-          type: 'trace_completed',
-          content: {
-            iteration,
-            totalTests: output.testSummary.totalTests,
-            coverage: output.testSummary.coveragePercentage,
-            passed: true,
-            ...(output.summary ? { summary: output.summary } : {}),
-            ...(durationMs !== undefined ? { durationMs } : {}),
-            ...(subSteps && subSteps.length > 0 ? { subSteps } : {}),
-          },
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    });
+    return appendTraceCompletedHelper(
+      pipelineId,
+      iteration,
+      output,
+      this.store,
+      (id) => this.getPipeline(id),
+      (pid, stage) => this.getStageDurationMs(pid, stage),
+      subSteps
+    );
   }
 
   /**
@@ -4284,96 +3989,7 @@ export class PipelineOrchestrator {
     pipeline: PipelineState,
     stage: 'scribe' | 'proto' | 'trace'
   ): SubStep[] {
-    const steps: SubStep[] = [];
-
-    if (stage === 'scribe') {
-      if (pipeline.scribeOutput) {
-        const storyCount = pipeline.scribeOutput.spec.userStories?.length ?? 0;
-        const acCount = pipeline.scribeOutput.spec.acceptanceCriteria?.length ?? 0;
-        steps.push({
-          label: `${storyCount} user story çıkarıldı`,
-          status: 'done',
-          source: 'agent',
-        });
-        steps.push({
-          label: `${acCount} kabul kriteri yazıldı`,
-          status: 'done',
-          source: 'agent',
-        });
-      }
-      // Critic spec review yansıması — pipeline.intermediateState.criticSpecOutput
-      const criticSpecOutput = pipeline.intermediateState?.criticSpecOutput as
-        | CriticReviewOutput
-        | undefined;
-      if (criticSpecOutput && (criticSpecOutput.findings?.length ?? 0) > 0) {
-        steps.push({
-          label: `Değerlendirme: ${criticSpecOutput.findings.length} eksik nokta tespit edildi`,
-          status: 'done',
-          source: 'critic',
-        });
-      }
-    }
-
-    if (stage === 'proto') {
-      if (pipeline.protoOutput) {
-        steps.push({
-          label: 'Proje iskeleti üretildi',
-          status: 'done',
-          source: 'agent',
-        });
-        steps.push({
-          label: `${pipeline.protoOutput.files.length} dosya yazıldı`,
-          status: 'done',
-          source: 'agent',
-        });
-      }
-      // Validator (statik kontrol) — pipeline.intermediateState.validationResult
-      // (confirmed field name; shape: { passed, score, summary: { errors, warnings, ... } }).
-      const validatorResult = pipeline.intermediateState?.validationResult as
-        | { passed?: boolean; summary?: { errors?: number; warnings?: number } }
-        | undefined;
-      if (validatorResult) {
-        const errorCount = validatorResult.summary?.errors ?? 0;
-        steps.push({
-          label:
-            errorCount === 0
-              ? 'Statik kontrol: temiz'
-              : `Statik kontrol: ${errorCount} hata raporlandı`,
-          status: 'done',
-          source: 'validator',
-        });
-      }
-      // Critic code review yansıması — pipeline.intermediateState.criticCodeOutput
-      const criticCodeOutput = pipeline.intermediateState?.criticCodeOutput as
-        | CriticReviewOutput
-        | undefined;
-      if (criticCodeOutput && (criticCodeOutput.findings?.length ?? 0) > 0) {
-        steps.push({
-          label: `Değerlendirme: ${criticCodeOutput.findings.length} öneri uygulandı`,
-          status: 'done',
-          source: 'critic',
-        });
-      }
-    }
-
-    if (stage === 'trace') {
-      if (pipeline.traceOutput) {
-        steps.push({
-          label: `${pipeline.traceOutput.testSummary?.totalTests ?? 0} test senaryosu yazıldı`,
-          status: 'done',
-          source: 'agent',
-        });
-        if (pipeline.traceOutput.testSummary?.coveragePercentage !== undefined) {
-          steps.push({
-            label: `%${pipeline.traceOutput.testSummary.coveragePercentage} kapsam doğrulandı`,
-            status: 'done',
-            source: 'agent',
-          });
-        }
-      }
-    }
-
-    return steps;
+    return buildSubStepsForStageHelper(pipeline, stage);
   }
 
   /**
@@ -4390,18 +4006,7 @@ export class PipelineOrchestrator {
     subSteps?: SubStep[]
   ): Extract<ScribeMessageType, { type: 'scribe_completed' }> {
     const durationMs = this.getStageDurationMs(pipelineId, 'scribe');
-    return {
-      type: 'scribe_completed',
-      content: {
-        iteration,
-        summary: output.summary ?? 'Plan hazırlandı.',
-        storyCount: output.spec.userStories?.length ?? 0,
-        acCount: output.spec.acceptanceCriteria?.length ?? 0,
-        ...(durationMs !== undefined ? { durationMs } : {}),
-        ...(subSteps && subSteps.length > 0 ? { subSteps } : {}),
-      },
-      timestamp: new Date().toISOString(),
-    };
+    return buildScribeCompletedEventHelper(pipelineId, iteration, output, durationMs, subSteps);
   }
 
   private async appendTraceFailed(
@@ -4411,57 +4016,32 @@ export class PipelineOrchestrator {
     errorMessage: string,
     recoveryAction?: 'retry' | 'skip'
   ): Promise<void> {
-    const pipeline = await this.getPipeline(pipelineId);
-    await this.store.update(pipelineId, {
-      scribeConversation: [
-        ...pipeline.scribeConversation,
-        {
-          type: 'trace_failed',
-          content: { iteration, errorCode, errorMessage, recoveryAction },
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    });
+    return appendTraceFailedHelper(
+      pipelineId,
+      iteration,
+      errorCode,
+      errorMessage,
+      this.store,
+      (id) => this.getPipeline(id),
+      recoveryAction
+    );
   }
 
   private assertStage(pipeline: PipelineState, expected: PipelineStage): void {
-    if (pipeline.stage !== expected) {
-      throw new InvalidStageError(expected, pipeline.stage);
-    }
+    assertStage(pipeline, expected);
   }
 
   private reconstructScribeState(pipeline: PipelineState): ScribeState {
-    const ideaMsg = pipeline.scribeConversation.find((m) => m.type === 'user_idea');
-    const clarificationCount = pipeline.scribeConversation.filter(
-      (m) => m.type === 'clarification'
-    ).length;
-
-    return {
-      idea: typeof ideaMsg?.content === 'string' ? ideaMsg.content : '',
-      conversation: [...pipeline.scribeConversation],
-      clarificationRound: clarificationCount,
-      phase: pipeline.stage === 'awaiting_approval' ? 'done' : 'clarifying',
-      pendingQuestionIds: [],
-      answeredQuestionIds: [],
-    };
+    return reconstructScribeState(pipeline);
   }
 
   private deriveRepoName(title: string): string {
-    return title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 50);
+    return deriveRepoName(title);
   }
 
   /** Check if pipeline was cancelled while background work was running. */
   private async isCancelled(pipelineId: string): Promise<boolean> {
-    try {
-      const p = await this.store.getById(pipelineId);
-      return p?.stage === 'cancelled';
-    } catch {
-      return false;
-    }
+    return isCancelledHelper(pipelineId, this.store);
   }
 
   private async failPipeline(pipelineId: string, label: string, err: unknown): Promise<void> {
@@ -4538,30 +4118,7 @@ export class PipelineOrchestrator {
     label: string,
     error: { code: string; message: string; retryable: boolean }
   ): Promise<void> {
-    let pipeline;
-    try {
-      pipeline = await this.store.getById(pipelineId);
-    } catch {
-      return;
-    }
-    const epicKey = pipeline?.jiraConfig?.epicKey;
-    const userId = pipeline?.userId;
-    if (!epicKey || !userId) return;
-
-    const jira = await JiraMCPService.fromOAuth(userId);
-    if (!jira) return;
-
-    try {
-      await commentJiraWithFailure(jira, epicKey, {
-        stage: label,
-        errorCode: error.code,
-        errorMessage: error.message,
-        retryable: error.retryable,
-        pipelineId,
-      });
-    } finally {
-      await jira.close();
-    }
+    return postJiraFailureCommentHelper(pipelineId, label, error, this.store);
   }
 
   private emitEvent(
@@ -4605,37 +4162,7 @@ export class PipelineOrchestrator {
     projectKey: string,
     spec: StructuredSpec
   ): Promise<void> {
-    const jira = await JiraMCPService.fromOAuth(userId);
-    if (!jira) return;
-    try {
-      const epicKey = await createJiraEpicFromSpec(jira, projectKey, spec);
-      if (epicKey) {
-        // T2: stamp siteUrl alongside the epicKey so the UI can render a
-        // clickable link without an extra round-trip. With MCP authv2,
-        // siteUrl is already cached on the JiraMCPService instance; fall
-        // back to the OAuth row only if instance lacks it.
-        let siteUrl = jira.siteUrl;
-        if (!siteUrl) {
-          try {
-            const status = await getAtlassianStatus(userId);
-            siteUrl = status.siteUrl;
-          } catch (err) {
-            logger.warn(
-              { err, userId },
-              '[Pipeline] Jira siteUrl resolve failed (Epic still linked, link will be missing)'
-            );
-          }
-        }
-        await this.store.update(pipelineId, {
-          jiraConfig: { projectKey, enabled: true, epicKey, siteUrl },
-        });
-        logger.info(`[Pipeline] Jira Epic ${epicKey} linked to pipeline ${pipelineId}`);
-      }
-    } catch (err) {
-      logger.warn({ err }, '[Pipeline] Jira Epic creation failed (non-fatal)');
-    } finally {
-      await jira.close();
-    }
+    return runJiraEpicCreationHelper(pipelineId, userId, projectKey, spec, this.store);
   }
 
   private async runJiraProtoComment(
@@ -4643,15 +4170,7 @@ export class PipelineOrchestrator {
     epicKey: string,
     result: { branch: string; repo: string; prUrl?: string; filesCreated: number }
   ): Promise<void> {
-    const jira = await JiraMCPService.fromOAuth(userId);
-    if (!jira) return;
-    try {
-      await commentJiraWithProtoResult(jira, epicKey, result);
-    } catch (err) {
-      logger.warn({ err }, '[Pipeline] Jira Proto comment failed (non-fatal)');
-    } finally {
-      await jira.close();
-    }
+    return runJiraProtoCommentHelper(userId, epicKey, result);
   }
 
   private async runJiraTraceComment(
@@ -4659,15 +4178,7 @@ export class PipelineOrchestrator {
     epicKey: string,
     result: { totalTests: number; coveragePercentage: number; passed: boolean }
   ): Promise<void> {
-    const jira = await JiraMCPService.fromOAuth(userId);
-    if (!jira) return;
-    try {
-      await commentJiraWithTraceResult(jira, epicKey, result);
-    } catch (err) {
-      logger.warn({ err }, '[Pipeline] Jira Trace comment failed (non-fatal)');
-    } finally {
-      await jira.close();
-    }
+    return runJiraTraceCommentHelper(userId, epicKey, result);
   }
 
   private async writeCheckpoint(
@@ -4705,22 +4216,7 @@ export class PipelineOrchestrator {
     spec: StructuredSpec,
     originalIdea: string
   ): Promise<CriticReviewOutput | null> {
-    if (!this.criticAgent) return null;
-    try {
-      const result: CriticResult = await this.criticAgent.reviewSpec(
-        { reviewType: 'spec_review', artifact: spec, originalIdea },
-        1
-      );
-      if (result.type === 'review') return result.data;
-      logger.warn(
-        { pipelineId, error: result.error },
-        '[Pipeline] Critic spec review returned error'
-      );
-      return null;
-    } catch (err) {
-      logger.warn({ err, pipelineId }, '[Pipeline] Critic spec review failed (non-fatal)');
-      return null;
-    }
+    return runCriticSpecReviewHelper(pipelineId, spec, originalIdea, this.criticAgent);
   }
 
   /**
@@ -4733,22 +4229,7 @@ export class PipelineOrchestrator {
     spec: StructuredSpec,
     originalIdea: string
   ): Promise<CriticReviewOutput | null> {
-    if (!this.criticAgent) return null;
-    try {
-      const result: CriticResult = await this.criticAgent.reviewCode(
-        { reviewType: 'code_review', artifact: protoOutput, originalIdea, referenceSpec: spec },
-        1
-      );
-      if (result.type === 'review') return result.data;
-      logger.warn(
-        { pipelineId, error: result.error },
-        '[Pipeline] Critic code review returned error'
-      );
-      return null;
-    } catch (err) {
-      logger.warn({ err, pipelineId }, '[Pipeline] Critic code review failed (non-fatal)');
-      return null;
-    }
+    return runCriticCodeReviewHelper(pipelineId, protoOutput, spec, originalIdea, this.criticAgent);
   }
 
   // ─── PR-F: Trace iterate-loop helpers ─────────
@@ -4779,72 +4260,7 @@ export class PipelineOrchestrator {
     totalCount: number;
     feedback: string;
   }> {
-    // Read env directly (same rationale as previewGateEnabled — orchestrator
-    // is wired into unit tests that don't boot full zod schema validation).
-    const maxRetriesRaw = parseInt(process.env.TRACE_MAX_ITERATE_RETRIES ?? '3', 10);
-    const maxRetries = Number.isFinite(maxRetriesRaw)
-      ? Math.max(0, Math.min(10, maxRetriesRaw))
-      : 3;
-
-    const pipeline = await this.store.getById(pipelineId);
-    const noopResult = {
-      shouldIterate: false,
-      nextRetry: 0,
-      maxRetries,
-      uncoveredCount: 0,
-      totalCount: 0,
-      feedback: '',
-    };
-    if (!pipeline) return noopResult;
-    // Trace disabled — iterate loop yok.
-    if (pipeline.traceEnabled === false) return noopResult;
-
-    const uncovered = traceOutput.testSummary?.uncoveredCriteria ?? [];
-    const covered = traceOutput.testSummary?.coveredCriteria ?? [];
-    const uncoveredCount = uncovered.length;
-    const traceOk = traceOutput.ok !== false;
-    if (uncoveredCount === 0 && traceOk) return noopResult;
-    // Max retry kontrolü — bu noktada retry hakkı bitmiş olabilir.
-    const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
-    const currentRetry =
-      typeof intermediate.traceIterateRetryCount === 'number'
-        ? (intermediate.traceIterateRetryCount as number)
-        : 0;
-    const totalCount = uncovered.length + covered.length;
-    if (currentRetry >= maxRetries) {
-      logger.info(
-        { pipelineId, currentRetry, maxRetries, uncoveredCount },
-        '[Pipeline] PR-F Trace iterate-loop max retries reached — handing off to push gate'
-      );
-      return { ...noopResult, uncoveredCount, totalCount };
-    }
-
-    const nextRetry = currentRetry + 1;
-    // Feedback metni: hangi AC'ler için test eksik veya başarısız?
-    const acDetails =
-      spec?.acceptanceCriteria
-        ?.filter((ac) => uncovered.includes(ac.id))
-        .map((ac) => `- ${ac.id}: ${ac.given} → ${ac.when} → ${ac.then}`) ?? [];
-    const feedbackLines = [
-      'Trace tamamlandı ama bazı kabul kriterleri test edilmedi.',
-      '',
-      `Eksik kabul kriterleri (${uncoveredCount}/${totalCount}):`,
-      ...(acDetails.length > 0 ? acDetails : uncovered.map((id) => `- ${id}`)),
-      '',
-      'Bu kabul kriterlerini karşılayan ek kod üretmeni veya mevcut kodu güncellemeni istiyorum.',
-    ];
-    if (!traceOk) {
-      feedbackLines.splice(1, 0, 'Bazı testler başarısız oldu, davranışı düzeltmeni istiyorum.');
-    }
-    const feedback = feedbackLines.join('\n');
-    return {
-      shouldIterate: true,
-      nextRetry,
-      maxRetries,
-      uncoveredCount,
-      totalCount,
-      feedback,
-    };
+    return evaluateTraceIterateLoopHelper(pipelineId, traceOutput, this.store, spec);
   }
 
   /**
@@ -4866,78 +4282,17 @@ export class PipelineOrchestrator {
    * fresh state right before the update; bail out if terminal.
    */
   private isTerminalStage(stage: PipelineStage): boolean {
-    return (
-      stage === 'cancelled' ||
-      stage === 'failed' ||
-      stage === 'completed' ||
-      stage === 'completed_partial'
-    );
+    return isTerminalStage(stage);
   }
 
   private async dispatchTraceIterate(pipelineId: string, feedback: string): Promise<void> {
-    pipelineCallContext.enterWith({ pipelineId });
-    const pipeline = await this.store.getById(pipelineId);
-    if (!pipeline) return;
-    if (!pipeline.approvedSpec || !pipeline.protoConfig) {
-      logger.warn(
-        { pipelineId },
-        '[Pipeline] PR-F Trace iterate-loop: missing approvedSpec/protoConfig'
-      );
-      return;
-    }
-    // Owner re-resolve (DOGFOOD_MODE'ta stub döner).
-    let owner: string;
-    try {
-      const gh = await this.validateGitHubAccess(pipeline.userId);
-      owner = gh.owner;
-    } catch (err) {
-      logger.warn({ err, pipelineId }, '[Pipeline] PR-F iterate dispatch: GitHub owner failed');
-      return;
-    }
-    const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
-    const currentRetry =
-      typeof intermediate.traceIterateRetryCount === 'number'
-        ? (intermediate.traceIterateRetryCount as number)
-        : 0;
-    // PR-U1 C4: cancel race guard — re-read state right before the update.
-    // Between the top-of-fn `getById` and here, the user may have clicked
-    // "İptal" and the pipeline transitioned to `cancelled`. We must NOT
-    // overwrite a terminal state and resurrect the pipeline.
-    const fresh = await this.store.getById(pipelineId);
-    if (!fresh || this.isTerminalStage(fresh.stage)) {
-      logger.info(
-        { pipelineId, terminalStage: fresh?.stage },
-        '[Pipeline] PR-U1 Trace iterate-loop: pipeline reached terminal state mid-flight, skipping re-iterate'
-      );
-      return;
-    }
-    // proto_building'a geç + retry counter'ı kaydet.
-    await this.store.update(pipelineId, {
-      stage: 'proto_building',
-      intermediateState: {
-        ...intermediate,
-        traceIterateRetryCount: currentRetry + 1,
-        traceIterateLastFeedback: feedback,
-        traceIterateLastAt: new Date().toISOString(),
-      },
-    });
-    this.emitEvent(pipelineId, 'stage_change', 'proto_building');
-    // Fire-and-forget. Trace fail'de fix-loop yine kendi içinde sarmalanır.
-    this.runProtoAndTrace(
-      pipelineId,
-      pipeline.metrics,
-      pipeline.approvedSpec,
-      pipeline.protoConfig.repoName,
-      pipeline.protoConfig.repoVisibility,
-      owner,
-      pipeline.model,
-      undefined,
-      feedback
-    ).catch((err) => {
-      logger.error(
-        { err, pipelineId },
-        '[Pipeline] PR-F Trace iterate-loop runProtoAndTrace failed'
-      );
+    return dispatchTraceIterateStage(pipelineId, feedback, {
+      store: this.store,
+      validateGitHubAccess: (userId) => this.validateGitHubAccess(userId),
+      emitEvent: (pid, type, stage, data) =>
+        this.emitEvent(pid, type, stage as PipelineStage, data),
+      runProtoAndTrace: (pid, metrics, spec, repoName, repoVis, owner, model, ghSvc, ctx) =>
+        this.runProtoAndTrace(pid, metrics, spec, repoName, repoVis, owner, model, ghSvc, ctx),
     });
   }
 
@@ -4970,65 +4325,7 @@ export class PipelineOrchestrator {
     criticalCount: number;
     feedback: string;
   }> {
-    // Read env directly (same rationale as Trace iterate-loop / preview gate).
-    const maxRetriesRaw = parseInt(process.env.CRITIC_CRITICAL_MAX_ITERATE_RETRIES ?? '3', 10);
-    const maxRetries = Number.isFinite(maxRetriesRaw)
-      ? Math.max(0, Math.min(10, maxRetriesRaw))
-      : 3;
-
-    const pipeline = await this.store.getById(pipelineId);
-    const noopResult = {
-      shouldIterate: false,
-      nextRetry: 0,
-      maxRetries,
-      criticalCount: 0,
-      feedback: '',
-    };
-    if (!pipeline) return noopResult;
-
-    const criticalFindings = (criticResult.findings ?? []).filter((f) => f.severity === 'critical');
-    if (criticalFindings.length === 0) return noopResult;
-
-    const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
-    const currentRetry =
-      typeof intermediate.criticIterateRetryCount === 'number'
-        ? (intermediate.criticIterateRetryCount as number)
-        : 0;
-
-    if (currentRetry >= maxRetries) {
-      logger.info(
-        {
-          pipelineId,
-          currentRetry,
-          maxRetries,
-          criticalCount: criticalFindings.length,
-        },
-        '[Pipeline] PR-F3 Critic iterate-loop max retries reached — handing off to awaiting_critic_resolution'
-      );
-      return { ...noopResult, criticalCount: criticalFindings.length };
-    }
-
-    const nextRetry = currentRetry + 1;
-    // Feedback metni — Proto'ya kritik bulguların `suggestion` (öneri)
-    // alanlarını gönderiyoruz. `description` da bağlam olarak ekleniyor.
-    const feedbackLines = [
-      'Aşağıdaki kritik bulgular önceki Proto çıktısında tespit edildi. Kodu bu doğrultuda düzelt:',
-      '',
-      ...criticalFindings.map(
-        (f, idx) =>
-          `${idx + 1}. ${f.description}\n   Öneri: ${f.suggestion}${f.location ? `\n   Konum: ${f.location}` : ''}`
-      ),
-      '',
-      'Lütfen bu bulguları çözen güncellenmiş kodu üret.',
-    ];
-    const feedback = feedbackLines.join('\n');
-    return {
-      shouldIterate: true,
-      nextRetry,
-      maxRetries,
-      criticalCount: criticalFindings.length,
-      feedback,
-    };
+    return evaluateCriticIterateLoopHelper(pipelineId, criticResult, this.store);
   }
 
   /**
@@ -5040,71 +4337,13 @@ export class PipelineOrchestrator {
    * loop ile birebir aynı.
    */
   private async dispatchCriticIterate(pipelineId: string, feedback: string): Promise<void> {
-    pipelineCallContext.enterWith({ pipelineId });
-    const pipeline = await this.store.getById(pipelineId);
-    if (!pipeline) return;
-    if (!pipeline.approvedSpec || !pipeline.protoConfig) {
-      logger.warn(
-        { pipelineId },
-        '[Pipeline] PR-F3 Critic iterate-loop: missing approvedSpec/protoConfig'
-      );
-      return;
-    }
-    // Owner re-resolve (DOGFOOD_MODE'ta stub döner).
-    let owner: string;
-    try {
-      const gh = await this.validateGitHubAccess(pipeline.userId);
-      owner = gh.owner;
-    } catch (err) {
-      logger.warn(
-        { err, pipelineId },
-        '[Pipeline] PR-F3 Critic iterate dispatch: GitHub owner failed'
-      );
-      return;
-    }
-    const intermediate = (pipeline.intermediateState ?? {}) as Record<string, unknown>;
-    const currentRetry =
-      typeof intermediate.criticIterateRetryCount === 'number'
-        ? (intermediate.criticIterateRetryCount as number)
-        : 0;
-    // PR-U1 C4: cancel race guard — aynı dispatchTraceIterate'deki pattern.
-    // User Critic-iterate'in mid-flight'ında "İptal"e basarsa burada yakala.
-    const fresh = await this.store.getById(pipelineId);
-    if (!fresh || this.isTerminalStage(fresh.stage)) {
-      logger.info(
-        { pipelineId, terminalStage: fresh?.stage },
-        '[Pipeline] PR-U1 Critic iterate-loop: pipeline reached terminal state mid-flight, skipping re-iterate'
-      );
-      return;
-    }
-    // proto_building'a geç + retry counter'ı kaydet.
-    await this.store.update(pipelineId, {
-      stage: 'proto_building',
-      intermediateState: {
-        ...intermediate,
-        criticIterateRetryCount: currentRetry + 1,
-        criticIterateLastFeedback: feedback,
-        criticIterateLastAt: new Date().toISOString(),
-      },
-    });
-    this.emitEvent(pipelineId, 'stage_change', 'proto_building');
-    // Fire-and-forget. Critic review yine kendi içinde sarmalanır; sonraki
-    // run da yine kritik bulgu raporlarsa loop devam eder (maxRetries'a kadar).
-    this.runProtoAndTrace(
-      pipelineId,
-      pipeline.metrics,
-      pipeline.approvedSpec,
-      pipeline.protoConfig.repoName,
-      pipeline.protoConfig.repoVisibility,
-      owner,
-      pipeline.model,
-      undefined,
-      feedback
-    ).catch((err) => {
-      logger.error(
-        { err, pipelineId },
-        '[Pipeline] PR-F3 Critic iterate-loop runProtoAndTrace failed'
-      );
+    return dispatchCriticIterateStage(pipelineId, feedback, {
+      store: this.store,
+      validateGitHubAccess: (userId) => this.validateGitHubAccess(userId),
+      emitEvent: (pid, type, stage, data) =>
+        this.emitEvent(pid, type, stage as PipelineStage, data),
+      runProtoAndTrace: (pid, metrics, spec, repoName, repoVis, owner, model, ghSvc, ctx) =>
+        this.runProtoAndTrace(pid, metrics, spec, repoName, repoVis, owner, model, ghSvc, ctx),
     });
   }
 }
