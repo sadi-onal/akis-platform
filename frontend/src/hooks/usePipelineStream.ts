@@ -97,20 +97,27 @@ export function usePipelineStream(
       }
     };
 
-    // Always hydrate buffered activities for the pipeline — even when
-    // `isActive` is false (e.g. awaiting_approval, completed). The Level-4
-    // rail and any timeline UI need past progress to render correctly
-    // when the user lands on a paused/finished pipeline.
-    fetch(`/api/pipelines/${pipelineId}/activities`, { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !data) return;
-        const list = (data as { activities?: PipelineActivity[] }).activities ?? [];
-        for (const a of list) ingest(a);
-      })
-      .catch(() => {
-        // Non-fatal — the live stream still takes over
-      });
+    // Hydrate buffered activities for the pipeline — even when `isActive`
+    // is false (e.g. awaiting_approval, completed). The Level-4 rail and
+    // any timeline UI need past progress to render correctly when the user
+    // lands on a paused/finished pipeline.
+    //
+    // Also called on SSE reconnect to fill in activities emitted during the
+    // connection gap (iterate-loop activities were lost when SSE dropped
+    // mid-flight and the fetch only ran once at mount).
+    function hydrateActivities() {
+      fetch(`/api/pipelines/${pipelineId}/activities`, { credentials: 'include' })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled || !data) return;
+          const list = (data as { activities?: PipelineActivity[] }).activities ?? [];
+          for (const a of list) ingest(a);
+        })
+        .catch(() => {
+          // Non-fatal — the live stream still takes over
+        });
+    }
+    hydrateActivities();
 
     // PR-T3 S1: previously we'd close the SSE stream whenever `isActive`
     // (a.k.a. `isRunning`) flipped false — which happens the instant the
@@ -130,6 +137,7 @@ export function usePipelineStream(
 
       es.onopen = () => {
         setIsConnected(true);
+        if (retryCount > 0) hydrateActivities();
         retryCount = 0;
       };
 

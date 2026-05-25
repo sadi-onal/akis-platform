@@ -1950,6 +1950,10 @@ export class PipelineOrchestrator {
         // triggered the hard-block so the user sees the gate-causing
         // Proto bubble with critic findings as sub-steps.
         await this.emitProtoCompletedForIteration(pipelineId, protoIteration, protoResult.data);
+        // Proto is effectively done (max iterate retries exhausted) — emit
+        // the explicit completion signal so the cinema column flips to
+        // 'complete' during live SSE, not just on DB replay.
+        this.emitStageCompleted(pipelineId, 'proto');
         this.emitEvent(pipelineId, 'stage_change', 'awaiting_critic_resolution');
         // PR-T3 S1: aynı `gate_open` pattern'i — frontend SSE üzerinden
         // bu transition'ı kaçırmasın diye sentetik bir activity yayınla.

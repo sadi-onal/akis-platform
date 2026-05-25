@@ -128,6 +128,7 @@ export function reduceStageViews(
   const lastFor = new Map<CinemaStage, PipelineActivity>();
   const progressFor = new Map<CinemaStage, number>();
   const reasoningFor = new Map<CinemaStage, PipelineActivity['reasoning']>();
+  const nativeReasoningStages = new Set<CinemaStage>();
   const metaFor = new Map<CinemaStage, StageMeta>();
 
   for (const a of activities) {
@@ -149,14 +150,14 @@ export function reduceStageViews(
     // olmalı. Critic events stage olarak Scribe/Proto'ya katlanıyor ama Critic
     // review-skoru ile Scribe öz-güveni iki ayrı metrik — önceden Critic
     // sonradan gelirse Scribe öz-güvenini yerine geçiyordu (manuel testte
-    // Açıklama %92 ↔ Akış %82 tutarsızlığı). Yeni kural: native (non-critic)
-    // reasoning her zaman kazanır; Critic reasoning sadece native yoksa
-    // yedek olarak girer (DB-replay sırasında criticPhase eksik kalsa bile
-    // overall outcome görünür kalsın diye).
+    // Açıklama %92 ↔ Akış %82 tutarsızlığı). Kural: native (non-critic)
+    // reasoning her zaman kazanır; Critic reasoning native yoksa serbestçe
+    // güncellenir (iterate-loop'ta son iterasyonun skoru görünür).
     if (a.reasoning) {
       if (a.stage !== 'critic') {
         reasoningFor.set(s, a.reasoning);
-      } else if (!reasoningFor.has(s)) {
+        nativeReasoningStages.add(s);
+      } else if (!nativeReasoningStages.has(s)) {
         reasoningFor.set(s, a.reasoning);
       }
     }

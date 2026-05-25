@@ -125,6 +125,7 @@ export function emitActivity(activity: PipelineActivity): void {
       progress: activity.progress ?? null,
       retryCount: activity.retryCount ?? 0,
       reasoningSnippet: activity.reasoning ?? null,
+      criticPhase: activity.criticPhase ?? null,
       emittedAt: new Date(activity.timestamp),
     })
     .catch((err) => {
@@ -176,6 +177,7 @@ export async function getRecentActivities(
       progress: pipelineActivities.progress,
       retryCount: pipelineActivities.retryCount,
       reasoningSnippet: pipelineActivities.reasoningSnippet,
+      criticPhase: pipelineActivities.criticPhase,
       emittedAt: pipelineActivities.emittedAt,
     })
     .from(pipelineActivities)
@@ -200,6 +202,7 @@ interface ActivityRow {
   progress: number | null;
   retryCount: number | null;
   reasoningSnippet: PipelineActivity['reasoning'] | null;
+  criticPhase: string | null;
   emittedAt: Date;
 }
 
@@ -215,6 +218,7 @@ function rowToActivity(r: ActivityRow): PipelineActivity {
   if (r.progress !== null) activity.progress = r.progress;
   if (r.retryCount !== null && r.retryCount > 0) activity.retryCount = r.retryCount;
   if (r.reasoningSnippet) activity.reasoning = r.reasoningSnippet;
+  if (r.criticPhase === 'spec' || r.criticPhase === 'code') activity.criticPhase = r.criticPhase;
   // PR-V5: rehydrate the explicit stage-completed lifecycle signal on
   // replay. We piggyback on `step === 'stage_completed'` because the DB
   // schema has no dedicated status column — keeping the contract
