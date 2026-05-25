@@ -11,6 +11,12 @@ export interface PushGateFooterProps {
   pipelineId: string;
   onResolved?: (action: 'confirm' | 'cancel') => void;
   className?: string;
+  /**
+   * #638 — when `'critic_override'`, Trace was intentionally skipped because
+   * the user overrode the Critic gate. Renders a prominent amber warning so
+   * the user knows they're pushing untested code.
+   */
+  traceSkipReason?: string;
 }
 
 /**
@@ -23,7 +29,12 @@ export interface PushGateFooterProps {
  *
  * Spec: docs/superpowers/specs/2026-05-14-preview-unify-chat-iterate-design.md § T1
  */
-export function PushGateFooter({ pipelineId, onResolved, className }: PushGateFooterProps) {
+export function PushGateFooter({
+  pipelineId,
+  onResolved,
+  className,
+  traceSkipReason,
+}: PushGateFooterProps) {
   const { t } = useI18n();
   const [busy, setBusy] = useState<BusyMode>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +87,19 @@ export function PushGateFooter({ pipelineId, onResolved, className }: PushGateFo
         className,
       )}
     >
+      {/* #638: trace-skipped warning when user overrode Critic gate */}
+      {traceSkipReason === 'critic_override' && (
+        <div
+          role="alert"
+          data-testid="push-gate-footer-trace-warning"
+          className="mb-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-100"
+        >
+          <span aria-hidden="true" className="mt-0.5 flex-shrink-0">
+            &#x26A0;
+          </span>
+          <span>{t('chat.pushGate.traceSkippedWarning')}</span>
+        </div>
+      )}
       {error && (
         <div
           role="alert"

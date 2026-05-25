@@ -718,6 +718,10 @@ export function mapPipelineToWorkflow(
     | string
     | undefined;
 
+  // #638: reason Trace was skipped (e.g. 'critic_override' after user
+  // overrode the Critic gate). Surfaced to PushGateFooter for the warning.
+  const traceSkipReason = pipeline.intermediateState?.traceSkipReason as string | undefined;
+
   // PR-U3 M7: explainability degraded flag — surfaces a banner when the
   // reasoning persistence layer failed after retries.
   const explainabilityDegraded = Boolean(pipeline.intermediateState?.explainabilityDegraded);
@@ -749,6 +753,7 @@ export function mapPipelineToWorkflow(
     acCoverage,
     traceDryRunStatus,
     ...(traceDryRunErrorCode ? { traceDryRunErrorCode } : {}),
+    ...(traceSkipReason ? { traceSkipReason } : {}),
     explainabilityDegraded,
     // T2: jiraConfig (project + epicKey + siteUrl) flows straight from the
     // pipeline record so the rail can render the "Jira Epic: PROJ-123" link

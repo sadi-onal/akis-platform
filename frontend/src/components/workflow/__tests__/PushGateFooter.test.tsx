@@ -151,4 +151,17 @@ describe('PushGateFooter', () => {
       expect(onResolved).toHaveBeenCalledWith('cancel');
     });
   });
+
+  // #638: trace-skipped warning banner after critic override
+  it('renders trace-skipped warning when traceSkipReason is critic_override', () => {
+    render(<PushGateFooter pipelineId="p-1" traceSkipReason="critic_override" />);
+    const warning = screen.getByTestId('push-gate-footer-trace-warning');
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveTextContent('chat.pushGate.traceSkippedWarning');
+  });
+
+  it('does not render trace-skipped warning when traceSkipReason is undefined', () => {
+    render(<PushGateFooter pipelineId="p-1" />);
+    expect(screen.queryByTestId('push-gate-footer-trace-warning')).not.toBeInTheDocument();
+  });
 });

@@ -2808,6 +2808,7 @@ export class PipelineOrchestrator {
           },
           traceDryRunStatus: 'failed',
           traceDryRunErrorCode: 'TRACE_SKIPPED_AFTER_CRITIC_OVERRIDE',
+          traceSkipReason: 'critic_override',
         },
       },
       { expectedStageVersion: pipeline.stageVersion }

@@ -258,6 +258,7 @@
   "chat.pushGate.cancelling": "Cancelling...",
   "chat.pushGate.errorConfirm": "Something went wrong while pushing to GitHub.",
   "chat.pushGate.errorCancel": "Something went wrong while cancelling.",
+  "chat.pushGate.traceSkippedWarning": "Tests were not run — Trace was skipped because evaluator findings were overridden. Code will be pushed without tests.",
   "chat.critic.scoreBar.title": "Code review score",
   "chat.critic.scoreBar.threshold": "Approval threshold: {value}",
   "chat.critic.scoreBar.approved": "Approved",

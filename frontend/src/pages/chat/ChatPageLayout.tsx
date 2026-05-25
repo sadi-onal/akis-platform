@@ -430,6 +430,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                                       void onPushResolved();
                                     }
                                   : undefined,
+                                traceSkipReason: activeWorkflow?.traceSkipReason,
                               }
                             : undefined
                         }

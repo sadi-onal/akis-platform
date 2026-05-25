@@ -271,6 +271,13 @@ export interface Workflow {
   /** Error code from a failed Trace dryRun (only present when status='failed'). */
   traceDryRunErrorCode?: string;
   /**
+   * #638 — reason Trace was skipped. When `'critic_override'`, the user
+   * overrode the Critic gate and Trace was intentionally bypassed. The
+   * PushGateFooter shows a prominent warning so untested code isn't silently
+   * pushed.
+   */
+  traceSkipReason?: string;
+  /**
    * PR-U3 M7 — true when the orchestrator failed to persist explainability
    * reasoning after retries. The Açıklama panel uses this to show a
    * graceful banner instead of an empty card.

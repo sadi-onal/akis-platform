@@ -258,6 +258,7 @@
   "chat.pushGate.cancelling": "İptal ediliyor...",
   "chat.pushGate.errorConfirm": "GitHub'a gönderme sırasında bir sorun oluştu.",
   "chat.pushGate.errorCancel": "İptal etme sırasında bir sorun oluştu.",
+  "chat.pushGate.traceSkippedWarning": "Testler çalıştırılmadı — Değerlendirme bulguları override edildiği için Trace atlandı. Kod test edilmeden gönderilecektir.",
   "chat.critic.scoreBar.title": "Kod inceleme skoru",
   "chat.critic.scoreBar.threshold": "Onay eşiği: {value}",
   "chat.critic.scoreBar.approved": "Onaylandı",
