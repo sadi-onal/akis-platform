@@ -41,6 +41,13 @@ function getCacheMinChars(): number {
   return 4096;
 }
 
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 /**
  * `true` when prompt caching is enabled. Flag-gated so we can disable in an
  * emergency without redeploying. Default: on. Set `ANTHROPIC_PROMPT_CACHING=false`
@@ -1655,19 +1662,48 @@ export function createToolCallingClient(
       ...(systemForBody !== undefined && { system: systemForBody }),
     };
 
-    const MAX_TOOL_RETRIES = 3;
-    const RETRY_DELAY_MS = 1000;
+    const MAX_TOOL_RETRIES = readPositiveIntEnv('AI_TOOL_CALL_MAX_RETRIES', 3);
+    const RETRY_DELAY_MS = readPositiveIntEnv('AI_TOOL_CALL_RETRY_DELAY_MS', 1000);
+    const TOOL_CALL_TIMEOUT_MS = readPositiveIntEnv('AI_TOOL_CALL_TIMEOUT_MS', 120_000);
 
     for (let attempt = 0; attempt <= MAX_TOOL_RETRIES; attempt++) {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': resolvedConfig.apiKey!,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TOOL_CALL_TIMEOUT_MS);
+
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': resolvedConfig.apiKey!,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (attempt < MAX_TOOL_RETRIES) {
+          const delay = Math.round(RETRY_DELAY_MS * Math.pow(2, attempt) * (0.5 + Math.random()));
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.name === 'AbortError'
+              ? `Tool-calling API request timed out after ${TOOL_CALL_TIMEOUT_MS}ms`
+              : error.message
+            : String(error);
+        throw new AIProviderError(
+          'AI_NETWORK_ERROR',
+          `Tool-calling API network error: ${message}`,
+          resolvedConfig.provider
+        );
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (response.ok) {
         return (await response.json()) as AnthropicResponse;
