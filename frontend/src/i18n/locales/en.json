@@ -275,6 +275,7 @@
   "chat.criticFindings.feedbackHeader": "Please apply the following Evaluator suggestions:",
   "chat.criticFindings.applyError": "Could not send the fix.",
   "chat.criticFindings.applySuccess": "New Proto iteration started.",
+  "chat.stageConflict": "Pipeline state has changed. Refreshing...",
   "chat.feedback.optimisticEcho": "Correction sent. Proto is updating...",
   "chat.agentLine.started": "Agent started",
   "chat.agentLine.finished": "Agent finished",

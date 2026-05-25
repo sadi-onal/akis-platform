@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useI18n } from '../../i18n/useI18n';
 import { workflowsApi } from '../../services/api/workflows';
 import type { CriticReviewOutput } from '../../types/pipeline';
+import { isStageConflictError } from '../../utils/errorMessages';
 import { CriticScoreBar } from './CriticScoreBar';
 
 export interface CriticResolutionGateProps {
@@ -60,6 +61,16 @@ export function CriticResolutionGate({
       await workflowsApi.criticOverride(pipelineId);
       onResolved?.();
     } catch (e) {
+      // #637: when the pipeline has already moved to a different stage
+      // (e.g. critic_reviewing_code after an iterate loop), the backend
+      // returns INVALID_STAGE. Show a friendly message and auto-refresh
+      // so the UI catches up instead of surfacing raw backend text.
+      if (isStageConflictError(e)) {
+        setError(t('chat.stageConflict'));
+        setBusy(false);
+        onResolved?.();
+        return;
+      }
       setError(e instanceof Error ? e.message : t('chat.critic.resolution.errorOverride'));
       setBusy(false);
     }

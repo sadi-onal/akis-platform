@@ -25,6 +25,7 @@ const TR_STUBS: Record<string, string> = {
   'chat.critic.resolution.override': 'Yine de devam et',
   'chat.critic.resolution.overriding': 'İlerleniyor...',
   'chat.critic.resolution.errorOverride': 'İlerleme sırasında bir sorun oluştu.',
+  'chat.stageConflict': 'Pipeline durumu değişti. Sayfa güncelleniyor...',
 };
 
 vi.mock('../../../i18n/useI18n', () => ({
@@ -139,6 +140,31 @@ describe('CriticResolutionGate', () => {
     fireEvent.click(screen.getByTestId('critic-resolution-gate-override'));
     await waitFor(() => {
       expect(screen.getByTestId('critic-resolution-gate-error')).toHaveTextContent('boom');
+    });
+  });
+
+  // #637 — stage conflict error shows friendly message + calls onResolved
+  it('shows a friendly message and calls onResolved when INVALID_STAGE error occurs', async () => {
+    const stageErr = Object.assign(
+      new Error('Invalid stage: expected awaiting_critic_resolution, got critic_reviewing_code'),
+      { code: 'INVALID_STAGE', statusCode: 400 },
+    );
+    criticOverride.mockRejectedValueOnce(stageErr);
+    const onResolved = vi.fn();
+    render(
+      <CriticResolutionGate
+        pipelineId="p-1"
+        criticReview={mkReview()}
+        approvalThreshold={75}
+        onResolved={onResolved}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('critic-resolution-gate-override'));
+    await waitFor(() => {
+      expect(screen.getByTestId('critic-resolution-gate-error')).toHaveTextContent(
+        'Pipeline durumu değişti',
+      );
+      expect(onResolved).toHaveBeenCalledOnce();
     });
   });
 });

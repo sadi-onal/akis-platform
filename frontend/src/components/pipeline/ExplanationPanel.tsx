@@ -8,6 +8,7 @@ import type {
 import type { StructuredSpec, Workflow } from '../../types/workflow';
 import { workflowsApi } from '../../services/api/workflows';
 import { useI18n } from '../../i18n/useI18n';
+import { isStageConflictError } from '../../utils/errorMessages';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { AcCoverageChecklist } from './AcCoverageChecklist';
 import { ScribeOutputDisclosures } from './ScribeOutputDisclosures';
@@ -220,12 +221,20 @@ export function CriticFindingsSection({
       });
       onIterationStarted?.();
     } catch (e) {
-      const message = e instanceof Error ? e.message : t('chat.criticFindings.applyError');
-      setError(message);
-      // PR-V4: mirror error to the toast so the failure is just as visible
-      // as the success. Inline `applyError` banner stays for backward-compat
-      // with the existing test + for richer detail (server-provided message).
-      setToast({ kind: 'error', text: t('chat.criticFindings.applyError') });
+      // #637: when the pipeline stage already changed (e.g. the iterate loop
+      // auto-started), the backend returns INVALID_STAGE. Show a friendly
+      // message and trigger a parent refresh instead of raw backend text.
+      if (isStageConflictError(e)) {
+        setToast({ kind: 'error', text: t('chat.stageConflict') });
+        onIterationStarted?.();
+      } else {
+        const message = e instanceof Error ? e.message : t('chat.criticFindings.applyError');
+        setError(message);
+        // PR-V4: mirror error to the toast so the failure is just as visible
+        // as the success. Inline `applyError` banner stays for backward-compat
+        // with the existing test + for richer detail (server-provided message).
+        setToast({ kind: 'error', text: t('chat.criticFindings.applyError') });
+      }
     } finally {
       setBusy(false);
     }

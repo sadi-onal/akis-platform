@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useI18n } from '../../i18n/useI18n';
 import { workflowsApi } from '../../services/api/workflows';
 import { cn } from '../../utils/cn';
+import { isStageConflictError } from '../../utils/errorMessages';
 
 type BusyMode = 'confirm' | 'cancel' | null;
 
@@ -35,6 +36,13 @@ export function PushGateFooter({ pipelineId, onResolved, className }: PushGateFo
       await workflowsApi.confirmPush(pipelineId);
       onResolved?.('confirm');
     } catch (e) {
+      // #637: stage already changed — show friendly message + auto-refresh
+      if (isStageConflictError(e)) {
+        setError(t('chat.stageConflict'));
+        setBusy(null);
+        onResolved?.('confirm');
+        return;
+      }
       setError(e instanceof Error ? e.message : t('chat.pushGate.errorConfirm'));
       setBusy(null);
     }
@@ -48,6 +56,13 @@ export function PushGateFooter({ pipelineId, onResolved, className }: PushGateFo
       await workflowsApi.cancelPush(pipelineId);
       onResolved?.('cancel');
     } catch (e) {
+      // #637: stage already changed — show friendly message + auto-refresh
+      if (isStageConflictError(e)) {
+        setError(t('chat.stageConflict'));
+        setBusy(null);
+        onResolved?.('cancel');
+        return;
+      }
       setError(e instanceof Error ? e.message : t('chat.pushGate.errorCancel'));
       setBusy(null);
     }

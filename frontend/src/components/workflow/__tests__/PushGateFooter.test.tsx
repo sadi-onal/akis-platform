@@ -116,4 +116,39 @@ describe('PushGateFooter', () => {
 
     resolveConfirm({ id: 'p-1' });
   });
+
+  // #637 — stage conflict: show friendly message + call onResolved
+  it('shows friendly message and calls onResolved on INVALID_STAGE confirm error', async () => {
+    const stageErr = Object.assign(
+      new Error('Invalid stage: expected awaiting_push_confirm, got proto_building'),
+      { code: 'INVALID_STAGE', statusCode: 400 },
+    );
+    confirmPush.mockRejectedValue(stageErr);
+    const onResolved = vi.fn();
+    render(<PushGateFooter pipelineId="p-1" onResolved={onResolved} />);
+
+    fireEvent.click(screen.getByTestId('push-gate-footer-confirm'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('chat.stageConflict');
+      expect(onResolved).toHaveBeenCalledWith('confirm');
+    });
+  });
+
+  it('shows friendly message and calls onResolved on INVALID_STAGE cancel error', async () => {
+    const stageErr = Object.assign(
+      new Error('Invalid stage: expected awaiting_push_confirm, got proto_building'),
+      { code: 'INVALID_STAGE', statusCode: 400 },
+    );
+    cancelPush.mockRejectedValue(stageErr);
+    const onResolved = vi.fn();
+    render(<PushGateFooter pipelineId="p-1" onResolved={onResolved} />);
+
+    fireEvent.click(screen.getByTestId('push-gate-footer-cancel'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('chat.stageConflict');
+      expect(onResolved).toHaveBeenCalledWith('cancel');
+    });
+  });
 });

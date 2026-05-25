@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { errorCodeToFriendlyMessage } from '../errorMessages';
+import { errorCodeToFriendlyMessage, isStageConflictError } from '../errorMessages';
 
 describe('errorCodeToFriendlyMessage', () => {
   // ── 1. RATE_LIMITED → "AI sağlayıcısı yoğun" ────────────────────────────
@@ -116,5 +116,39 @@ describe('errorCodeToFriendlyMessage', () => {
 
     expect(friendly.title).toBe('AI anahtarı eksik');
     expect(friendly.matched).toBe(true);
+  });
+});
+
+// ── #637 — isStageConflictError ──────────────────────────────────────────
+describe('isStageConflictError', () => {
+  it('returns true for an ApiError with code INVALID_STAGE', () => {
+    const err = Object.assign(new Error('Invalid stage: expected x, got y'), {
+      code: 'INVALID_STAGE',
+      statusCode: 400,
+    });
+    expect(isStageConflictError(err)).toBe(true);
+  });
+
+  it('returns true for an error whose message starts with "Invalid stage:"', () => {
+    const err = new Error('Invalid stage: expected awaiting_push_confirm, got proto_building');
+    expect(isStageConflictError(err)).toBe(true);
+  });
+
+  it('returns false for a generic error', () => {
+    expect(isStageConflictError(new Error('something else'))).toBe(false);
+  });
+
+  it('returns false for null/undefined', () => {
+    expect(isStageConflictError(null)).toBe(false);
+    expect(isStageConflictError(undefined)).toBe(false);
+  });
+
+  it('returns false for a non-object', () => {
+    expect(isStageConflictError('string')).toBe(false);
+    expect(isStageConflictError(42)).toBe(false);
+  });
+
+  it('returns true for a plain object with code INVALID_STAGE', () => {
+    expect(isStageConflictError({ code: 'INVALID_STAGE' })).toBe(true);
   });
 });

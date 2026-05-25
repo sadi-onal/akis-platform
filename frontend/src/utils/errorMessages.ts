@@ -157,6 +157,25 @@ const QUOTA_MESSAGE: Omit<FriendlyErrorMessage, 'matched'> = {
 };
 
 /**
+ * #637 — Detect the backend's `INVALID_STAGE` error, which surfaces when
+ * the user clicks an action button (e.g. "Yine de devam et", "Seçilenleri
+ * uygula") after the pipeline has already transitioned to the next stage.
+ *
+ * The HttpClient parses the backend envelope `{ error: { code, message } }`
+ * into an `ApiError` with `.code = 'INVALID_STAGE'` and `.statusCode = 400`.
+ * This helper checks for that shape so callers can show a user-friendly
+ * message and auto-refresh instead of surfacing the raw backend text.
+ */
+export function isStageConflictError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const err = e as { code?: string; message?: string };
+  return (
+    err.code === 'INVALID_STAGE' ||
+    (typeof err.message === 'string' && err.message.startsWith('Invalid stage:'))
+  );
+}
+
+/**
  * Tek-yönlü dönüşüm: backend `error.code` ve (varsa) `error.message`
  * ipuçlarından kullanıcı dostu başlık + açıklama üretir. Bilinmeyen kod
  * için fallback olarak ham mesajı `detail` alanına koyar.

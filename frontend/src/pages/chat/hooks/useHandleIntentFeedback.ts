@@ -16,6 +16,7 @@ import { toast } from '../../../components/ui/Toast';
 import { useI18n } from '../../../i18n/useI18n';
 import { workflowsApi } from '../../../services/api/workflows';
 import type { ChatMessage, ConversationUIState } from '../../../types/chat';
+import { isStageConflictError } from '../../../utils/errorMessages';
 
 export interface UseHandleIntentFeedbackOptions {
   /** Current pipeline UI state (from `useConversationState`). */
@@ -79,8 +80,15 @@ export function useHandleIntentFeedback(options: UseHandleIntentFeedbackOptions)
         // (proto_building → … → awaiting_push_confirm) and re-renders
         // the gate with the refreshed protoFiles.
       } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Düzeltme gönderilemedi.';
-        toast(msg, 'error');
+        // #637: when the pipeline has already transitioned (e.g. from
+        // awaiting_critic_resolution to critic_reviewing_code), show a
+        // user-friendly message instead of the raw backend error.
+        if (isStageConflictError(e)) {
+          toast(t('chat.stageConflict'), 'error');
+        } else {
+          const msg = e instanceof Error ? e.message : 'Düzeltme gönderilemedi.';
+          toast(msg, 'error');
+        }
       }
     },
     [uiState, pipelineId, setMessages, fallback, t]
