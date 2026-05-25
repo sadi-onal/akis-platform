@@ -958,6 +958,7 @@ export const MESSAGE_KEYS = [
   'chat.plan.projectPlan',
   'chat.plan.reject',
   'chat.plan.rejected',
+  'chat.plan.reviewing',
   'chat.plan.showDetails',
   'chat.plan.techChoices',
   'chat.plan.testsIncluded',

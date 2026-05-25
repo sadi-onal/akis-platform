@@ -33,7 +33,7 @@ export interface FileChange {
 
 /* ─── Plan Card State ───────────────────────────── */
 
-export type PlanStatus = 'active' | 'edited' | 'approved' | 'rejected' | 'cancelled';
+export type PlanStatus = 'active' | 'edited' | 'reviewing' | 'approved' | 'rejected' | 'cancelled';
 
 export interface PlanCardData {
   id: string;

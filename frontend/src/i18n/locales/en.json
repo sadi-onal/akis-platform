@@ -235,6 +235,7 @@
   "chat.plan.projectPlan": "Project Plan",
   "chat.plan.reject": "Reject",
   "chat.plan.rejected": "Rejected",
+  "chat.plan.reviewing": "Reviewing",
   "chat.plan.showDetails": "Show details",
   "chat.plan.techChoices": "Technical Choices",
   "chat.plan.testsIncluded": "Trace will write tests.",

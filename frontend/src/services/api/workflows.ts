@@ -24,6 +24,7 @@ import type {
   AiCallEntry,
 } from '../../types/pipeline';
 import type { ChatAttachment } from '../../components/chat/ChatInput';
+import type { PlanStatus } from '../../types/plan';
 import { specToUserFriendlyPlan } from '../../utils/conversationToChatMessages';
 
 /**
@@ -335,19 +336,21 @@ function mapConversation(pipeline: Pipeline): ConversationMessage[] {
         const sc = msg.content;
         const scribeSpec = pipeline.approvedSpec ?? pipeline.scribeOutput?.spec ?? null;
         const stage: PipelineStage = (pipeline.stage as PipelineStage) ?? 'idle';
-        let planStatus: 'active' | 'approved' | 'rejected' | 'edited' = 'active';
+        let planStatus: 'active' | 'approved' | 'rejected' | 'edited' | 'reviewing' = 'active';
         if (PRE_APPROVAL_STAGES.indexOf(stage) === -1) {
           planStatus = 'approved';
+        } else if (stage === 'critic_reviewing_spec') {
+          planStatus = 'reviewing';
         } else if (stage !== 'awaiting_approval' && stage !== 'awaiting_critic_resolution') {
-          // Pre-approval but not yet actionable (e.g. critic_reviewing_spec,
-          // scribe_generating). Show the plan card without approval buttons.
+          // Pre-approval but not yet actionable (e.g. scribe_generating).
+          // Show the plan card without approval buttons.
           planStatus = 'edited';
         }
         const embeddedPlan = scribeSpec
           ? {
               plan: specToUserFriendlyPlan(scribeSpec),
               version: 1,
-              status: planStatus as 'active' | 'edited' | 'approved' | 'rejected' | 'cancelled',
+              status: planStatus as PlanStatus,
               spec: scribeSpec,
               assumptions: pipeline.scribeOutput?.assumptions,
             }

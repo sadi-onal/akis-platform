@@ -35,6 +35,7 @@ interface PlanCardProps {
 const STATUS_LABELS: Record<PlanStatus, string> = {
   active: 'Aktif',
   edited: 'Düzenlendi',
+  reviewing: 'İnceleniyor',
   approved: 'Onaylandı',
   rejected: 'Reddedildi',
   cancelled: 'İptal Edildi',
@@ -43,6 +44,7 @@ const STATUS_LABELS: Record<PlanStatus, string> = {
 const STATUS_COLORS: Record<PlanStatus, string> = {
   active: 'bg-ak-primary/10 text-ak-primary',
   edited: 'bg-yellow-500/10 text-yellow-400',
+  reviewing: 'bg-blue-500/10 text-blue-400',
   approved: 'bg-green-500/10 text-green-400',
   rejected: 'bg-red-500/10 text-red-400',
   cancelled: 'bg-ak-surface text-ak-text-tertiary',
@@ -169,7 +171,8 @@ export function PlanCard({
             <span
               className={cn(
                 'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                STATUS_COLORS[status]
+                STATUS_COLORS[status],
+                status === 'reviewing' && 'animate-pulse'
               )}
             >
               {STATUS_LABELS[status]}

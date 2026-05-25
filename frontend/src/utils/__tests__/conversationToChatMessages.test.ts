@@ -41,12 +41,12 @@ describe('conversationToChatMessages — plan status by stage', () => {
     expect(plan && 'status' in plan && plan.status).toBe('edited');
   });
 
-  it("keeps the plan card non-actionable ('edited') while Critic is reviewing the spec", () => {
+  it("shows the plan card as 'reviewing' while Critic is reviewing the spec", () => {
     // Plan is visible but approval buttons are hidden — only awaiting_approval
     // stage enables the buttons. Critic's internal approval ≠ user approval.
     const msgs = conversationToChatMessages([specMsg()], 'critic_reviewing_spec');
     const plan = msgs.find((m) => m.type === 'plan');
-    expect(plan && 'status' in plan && plan.status).toBe('edited');
+    expect(plan && 'status' in plan && plan.status).toBe('reviewing');
   });
 
   it("keeps the plan card 'active' while awaiting_approval", () => {

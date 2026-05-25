@@ -127,7 +127,7 @@ export type ChatMessage =
       type: 'plan';
       plan: UserFriendlyPlan;
       version: number;
-      status: 'active' | 'edited' | 'approved' | 'rejected' | 'cancelled';
+      status: PlanStatus;
       spec?: StructuredSpec;
       /**
        * PR-V6 — Scribe assumptions surfaced alongside the structured spec so
