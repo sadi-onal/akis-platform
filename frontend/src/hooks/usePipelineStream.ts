@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
+/**
+ * Terminal step values that signal the pipeline has finished.
+ * When the last activity carries one of these steps, SSE is closed to free
+ * browser connection slots. Gate states (awaiting_*) are NOT terminal —
+ * the stream stays open so late-arriving events (gate_open etc.) arrive.
+ */
+const TERMINAL_STEPS = new Set<string>(['pipeline_complete', 'pipeline_failed', 'pipeline_cancelled']);
+
 export interface PipelineActivity {
   pipelineId: string;
   /**
@@ -175,15 +183,19 @@ export function usePipelineStream(
     };
   }, [pipelineId]);
 
-  // Close SSE when pipeline becomes inactive (completed/failed/cancelled)
-  // to avoid zombie connections hitting browser connection limits.
+  // Close SSE when pipeline reaches a terminal state to free browser connection slots.
+  // Gate states (awaiting_*) deliberately keep SSE open for late-arriving events.
+  // The backend emits `step: 'pipeline_complete'` as its terminal activity signal;
+  // for failures/cancellation it removes SSE listeners server-side.
   useEffect(() => {
-    if (!_isActive && esRef.current) {
+    const lastStep =
+      activities.length > 0 ? activities[activities.length - 1]?.step : undefined;
+    if (lastStep && TERMINAL_STEPS.has(lastStep) && esRef.current) {
       esRef.current.close();
       esRef.current = null;
       setIsConnected(false);
     }
-  }, [_isActive]);
+  }, [activities]);
 
   const currentStep = activities.length > 0 ? activities[activities.length - 1] : null;
 
