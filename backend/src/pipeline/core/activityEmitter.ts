@@ -71,10 +71,16 @@ export interface PipelineActivity {
 // Ring buffer of recent activities per pipeline — used by the replay endpoint
 // so a client reconnecting mid-pipeline can reconstruct progress state without
 // waiting for the next live emit.
-const ACTIVITY_BUFFER_LIMIT = 50;
+//
+// #628: raised from 50 → 150 to accommodate Critic-Proto iterate loops.
+// With 4 iterations × ~15 activities/iteration = ~60 activities (plus Scribe
+// + Trace), 50 was too small and evicted early-stage activities before the
+// pipeline completed. The DB persist is the source of truth, but a warm cache
+// prevents unnecessary DB round-trips for SSE replay on active pipelines.
+const ACTIVITY_BUFFER_LIMIT = 150;
 /** DB read fan-out limit when the cache is cold. Bigger than the ring buffer
- * so a "fresh page reload" can show more than the last 50 events. */
-const DB_RECENT_LIMIT = 100;
+ * so a "fresh page reload" can show more than the last 150 events. */
+const DB_RECENT_LIMIT = 200;
 const activityBuffers = new Map<string, PipelineActivity[]>();
 
 // ── Persistence wiring ────────────────────────────────────────────────────

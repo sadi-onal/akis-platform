@@ -57,9 +57,9 @@ describe('Activity Emitter — ring buffer', () => {
     assert.equal(buf[0].message, 'test message');
   });
 
-  it('enforces max buffer size of 50 — oldest dropped', () => {
+  it('enforces max buffer size of 150 — oldest dropped (#628: raised from 50)', () => {
     const id = `test-overflow-${Date.now()}`;
-    const LIMIT = 50;
+    const LIMIT = 150; // #628: raised from 50 to accommodate iterate loops
 
     for (let i = 0; i < LIMIT + 10; i++) {
       emitActivity(makeActivity(id, { step: `step-${i}`, message: `msg-${i}` }));
@@ -356,27 +356,42 @@ describe('SSE Stream — backpressure handling', () => {
     assert.equal(drainCallbackRegistered, true, 'should register drain handler');
   });
 
-  it('events are skipped while paused', () => {
+  it('events are queued while paused (#628: queue instead of drop)', () => {
     let paused = true;
     const written: string[] = [];
+    const queue: PipelineActivity[] = [];
 
     const onActivity = (activity: PipelineActivity) => {
-      if (paused) return; // skip — matches plugin behavior
+      if (paused) {
+        // #628: queue instead of dropping
+        queue.push(activity);
+        return;
+      }
       written.push(activity.message);
     };
 
-    // Fire events while paused
-    onActivity(makeActivity('bp-skip', { message: 'dropped-1' }));
-    onActivity(makeActivity('bp-skip', { message: 'dropped-2' }));
+    const flushQueue = () => {
+      while (queue.length > 0 && !paused) {
+        written.push(queue.shift()!.message);
+      }
+    };
 
-    assert.equal(written.length, 0, 'no events should be written while paused');
+    // Fire events while paused — they should be queued, not dropped
+    onActivity(makeActivity('bp-queue', { message: 'queued-1' }));
+    onActivity(makeActivity('bp-queue', { message: 'queued-2' }));
 
-    // Unpause and fire
+    assert.equal(written.length, 0, 'no events written while paused');
+    assert.equal(queue.length, 2, 'events should be queued');
+
+    // Unpause and flush
     paused = false;
-    onActivity(makeActivity('bp-skip', { message: 'delivered' }));
+    flushQueue();
+    onActivity(makeActivity('bp-queue', { message: 'delivered' }));
 
-    assert.equal(written.length, 1);
-    assert.equal(written[0], 'delivered');
+    assert.equal(written.length, 3, 'queued + new events delivered');
+    assert.equal(written[0], 'queued-1');
+    assert.equal(written[1], 'queued-2');
+    assert.equal(written[2], 'delivered');
   });
 });
 

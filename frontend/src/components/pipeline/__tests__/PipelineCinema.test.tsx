@@ -384,6 +384,118 @@ describe('reduceStageViews (pure, 3-column PR-F)', () => {
     expect(views[2]!.state).toBe('pending'); // trace: untouched
   });
 
+  // ─── #628: Critic-Proto iterate loop — cinema columns NOT empty ─────────
+  // After a Critic-Proto iterate loop (3+ iterations) followed by Trace
+  // failure, cinema columns must NOT show as pending/empty. The iterate
+  // loop emits stage_completed for proto mid-loop, then new proto
+  // activities arrive for the next iteration. reduceStageViews must
+  // detect this and "un-complete" the stage so it shows as active.
+
+  it('#628: iterate loop — Proto re-opened after stage_completed stays active when new activities arrive', () => {
+    // Simulate: Proto iteration 1 completes, then iterate loop starts
+    // a new Proto run. Proto should NOT stay as "complete".
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'proto', step: 'start', progress: 5, message: 'Iteration 1 başlıyor' }),
+      mk({ stage: 'proto', progress: 100, message: 'Kod hazır (iter 1)' }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      // Critic rejects → iterate loop starts → new Proto activities
+      mk({
+        stage: 'critic',
+        criticPhase: 'code',
+        step: 'retry-trigger',
+        retryCount: 1,
+        progress: 80,
+        message: 'Değerlendirme kritik bulgu raporladı (1/3)',
+      }),
+      mk({ stage: 'proto', step: 'start', progress: 5, message: 'Iteration 2 başlıyor' }),
+      mk({ stage: 'proto', progress: 40, message: 'Kod yazılıyor (iter 2)' }),
+    ];
+    const views = reduceStageViews(acts, acts[acts.length - 1]!, 'proto_running');
+    // Proto must be ACTIVE (not complete) — it was un-completed by the
+    // new activities that arrived after stage_completed.
+    expect(views[1]!.state).toBe('active');
+    expect(views[1]!.latest?.message).toBe('Kod yazılıyor (iter 2)');
+    // Scribe stays complete (explicit completion, no un-completion).
+    expect(views[0]!.state).toBe('complete');
+    // Trace still pending — hasn't started yet.
+    expect(views[2]!.state).toBe('pending');
+  });
+
+  it('#628: iterate loop — full 4-iteration Critic loop + Trace failure shows correct states', () => {
+    // Full scenario from issue: 4 Proto iterations, Trace fails
+    const acts: PipelineActivity[] = [
+      // Scribe complete
+      mk({ stage: 'scribe', progress: 100, status: 'completed', step: 'stage_completed' }),
+      // Proto iteration 1
+      mk({ stage: 'proto', step: 'start', progress: 5, message: 'Proto başladı' }),
+      mk({ stage: 'proto', progress: 100, message: 'Kod üretildi (iter 1)' }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      // Critic rejects iter 1
+      mk({ stage: 'critic', criticPhase: 'code', step: 'rejected', progress: 100, message: '68%' }),
+      mk({
+        stage: 'critic',
+        criticPhase: 'code',
+        step: 'retry-trigger',
+        retryCount: 1,
+        message: 'Retry (1/3)',
+      }),
+      // Proto iteration 2
+      mk({ stage: 'proto', step: 'start', progress: 5 }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      // Critic rejects iter 2
+      mk({
+        stage: 'critic',
+        criticPhase: 'code',
+        step: 'retry-trigger',
+        retryCount: 2,
+        message: 'Retry (2/3)',
+      }),
+      // Proto iteration 3
+      mk({ stage: 'proto', step: 'start', progress: 5 }),
+      mk({ stage: 'proto', progress: 100, status: 'completed', step: 'stage_completed' }),
+      // Critic passes iter 3
+      mk({ stage: 'critic', criticPhase: 'code', step: 'approved', progress: 100, message: '85%' }),
+      // Proto iteration 4 (final, after critic pass)
+      mk({ stage: 'proto', step: 'start', progress: 5 }),
+      mk({ stage: 'proto', progress: 100, message: '17 dosya, 654 satır' }),
+      mk({
+        stage: 'proto',
+        progress: 100,
+        status: 'completed',
+        step: 'stage_completed',
+        message: 'proto aşaması tamamlandı',
+      }),
+      // Trace starts and fails
+      mk({ stage: 'trace', step: 'start', progress: 5, message: 'Scaffold analiz ediliyor' }),
+      mk({ stage: 'trace', step: 'error', progress: 0, message: 'Test yazımı tamamlanamadı' }),
+    ];
+    // Pipeline is at completed_partial → no active uiState
+    const views = reduceStageViews(acts, acts[acts.length - 1]!);
+    // Scribe: complete (explicit completion, never re-opened)
+    expect(views[0]!.state).toBe('complete');
+    // Proto: complete (final stage_completed, no further re-opening)
+    expect(views[1]!.state).toBe('complete');
+    // latest is the last native (non-critic) proto activity — which is the
+    // stage_completed event (the last proto-native activity chronologically).
+    expect(views[1]!.latest?.message).toBe('proto aşaması tamamlandı');
+    // Trace: has activities → shows as complete (legacy idle fallback)
+    // NOT pending/greyout — this was the #628 bug.
+    expect(views[2]!.state).not.toBe('pending');
+    expect(views[2]!.latest?.message).toBe('Test yazımı tamamlanamadı');
+  });
+
+  it('#628: gate_open after stage_completed does NOT un-complete the stage', () => {
+    // gate_open is a synthetic event emitted right after completion —
+    // it should NOT cause the stage to revert to pending.
+    const acts: PipelineActivity[] = [
+      mk({ stage: 'trace', progress: 100, status: 'completed', step: 'stage_completed' }),
+      mk({ stage: 'trace', step: 'gate_open', progress: 100, message: 'Gönderim bekleniyor' }),
+    ];
+    const views = reduceStageViews(acts, acts[1]!, 'awaiting_push_confirm');
+    expect(views[2]!.state).toBe('complete');
+  });
+
   it('PR-F3: critic retry-trigger WITHOUT criticPhase=code is NOT routed as Critic iterate', () => {
     // Defensive: only `criticPhase: 'code'` activities should drive the
     // Proto-column Critic badge. Spec-phase retry-triggers (currently not

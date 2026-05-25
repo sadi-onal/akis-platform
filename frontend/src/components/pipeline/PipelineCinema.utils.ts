@@ -214,11 +214,31 @@ export function reduceStageViews(
   // next stage and the next stage's first activity arrives before the
   // outgoing stage's actual exit. The explicit signal removes that
   // ambiguity.
+  //
+  // #628 (iterate-loop fix): during a Critic-Proto iterate loop, the
+  // orchestrator emits `stage_completed` for Proto BEFORE dispatching
+  // the next iteration. Then new Proto activities arrive for the next
+  // iteration. If we naively collect all `stage_completed` into a Set,
+  // a stage that got un-completed (new activities arrived after
+  // completion) would still appear as complete. Fix: process activities
+  // chronologically and REMOVE a stage from the completed set when a
+  // non-completed activity for that stage arrives AFTER the last
+  // completion signal. The final state of the Set reflects whether the
+  // LAST activity sequence for a stage ends with a completion signal.
   const completed = new Set<CinemaStage>();
   for (const a of activities) {
-    if (a.status !== 'completed') continue;
     const s = stageOf(a);
-    if (s) completed.add(s);
+    if (!s) continue;
+    if (a.status === 'completed') {
+      completed.add(s);
+    } else if (completed.has(s) && a.step !== 'gate_open') {
+      // A non-completed, non-gate activity arrived after the stage was
+      // marked complete — the iterate loop re-opened this stage.
+      // `gate_open` is excluded because it's a synthetic event emitted
+      // right after completion to signal the push-confirm gate; it
+      // should NOT un-complete the stage.
+      completed.delete(s);
+    }
   }
 
   // Prefer the orchestrator-level uiState over the latest activity's

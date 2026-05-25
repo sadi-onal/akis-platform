@@ -97,7 +97,11 @@ export function usePipelineStream(
       seenTimestamps.add(key);
       setActivities((prev) => {
         const next = [...prev, activity];
-        return next.length > 200 ? next.slice(-200) : next;
+        // #628: raised from 200 → 300 to accommodate Critic-Proto iterate
+        // loops (4+ iterations × ~15 activities/iteration ≈ 60+ activities,
+        // plus Scribe + Trace). 200 was tight when combined with cinema's
+        // need for chronological ordering to detect un-completion cycles.
+        return next.length > 300 ? next.slice(-300) : next;
       });
 
       if (activity.step === 'file_created' && activity.detail) {
