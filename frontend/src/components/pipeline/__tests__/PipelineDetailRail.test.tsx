@@ -945,6 +945,81 @@ describe('PipelineDetailRail — T3 CI pill', () => {
   });
 });
 
+// #639 — spec-approved chip pinned above the cinema on the Akış tab.
+describe('PipelineDetailRail — #639 spec-approved chip', () => {
+  it('renders spec-approved chip on the Akış tab when approve stage is completed', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        workflowStages={{
+          scribe: { status: 'completed' },
+          approve: { status: 'completed' },
+          proto: { status: 'running' },
+          trace: { status: 'idle' },
+        }}
+      />
+    );
+    const chip = screen.getByTestId('spec-approved-chip');
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveTextContent('Spec onaylandı');
+  });
+
+  it('does NOT render the chip when approve stage is not completed', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="scribe_running"
+        activities={[mkActivity('scribe')]}
+        currentStep={mkActivity('scribe')}
+        workflowStages={{
+          scribe: { status: 'running' },
+          approve: { status: 'idle' },
+          proto: { status: 'idle' },
+          trace: { status: 'idle' },
+        }}
+      />
+    );
+    expect(screen.queryByTestId('spec-approved-chip')).toBeNull();
+  });
+
+  it('does NOT render the chip when workflowStages is undefined', () => {
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+      />
+    );
+    expect(screen.queryByTestId('spec-approved-chip')).toBeNull();
+  });
+
+  it('hides the chip on the Açıklama tab', async () => {
+    const fetcher = vi.fn().mockResolvedValue(mkExpl());
+    render(
+      <PipelineDetailRail
+        pipelineId="p-1"
+        uiState="proto_running"
+        activities={[mkActivity('proto')]}
+        currentStep={mkActivity('proto')}
+        explanationFetcher={fetcher}
+        workflowStages={{
+          scribe: { status: 'completed' },
+          approve: { status: 'completed' },
+          proto: { status: 'running' },
+          trace: { status: 'idle' },
+        }}
+      />
+    );
+    expect(screen.getByTestId('spec-approved-chip')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Açıklama' }));
+    expect(screen.queryByTestId('spec-approved-chip')).toBeNull();
+  });
+});
+
 // F-1 (2026-05-22, T9 follow-up) — workflow.stages failure forwarded to
 // PipelineCinema. T9's mapPipelineToWorkflow change sets
 // `stages.<X>.status='failed'` + `.error=<label>` when the Reconciler

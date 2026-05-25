@@ -324,12 +324,17 @@ describe('conversationToChatMessages — message-type coverage', () => {
       timestamp: '2026-05-09T12:05:00Z',
     } as unknown as ConversationMessage;
     const msgs = conversationToChatMessages([specMsg(), reject]);
-    // Order is: plan card, agent_started (started), info bubble.
+    // #639: spec-approved info pill is no longer emitted into the chat timeline;
+    // approval is surfaced as a pinned chip in PipelineDetailRail instead.
+    // Order is: plan card, agent_started (started). No info bubble.
     const started = msgs.find(
       (m) => m.type === 'agent_started' && (m as unknown as { agent: string }).agent === 'proto'
     );
     expect(started).toBeDefined();
     expect((started as unknown as { state: string }).state).toBe('started');
+    // Verify no info bubble for the approval message
+    const info = msgs.find((m) => m.type === 'info');
+    expect(info).toBeUndefined();
   });
 
   it('system approval/rejection messages do nothing when no spec has been seen yet', () => {

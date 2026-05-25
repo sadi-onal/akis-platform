@@ -306,6 +306,11 @@ export function conversationToChatMessages(
           // Scribe → Proto transition marker when user approved the spec.
           if (m.content.includes('onaylandı')) {
             pushAgentStarted('proto', 'started', ts);
+            // #639: spec-approved info pill removed from the scrollable chat
+            // timeline. The approval signal is now rendered as a fixed chip
+            // in PipelineDetailRail (above the chat scroll container) so it
+            // stays visible regardless of how many Proto iterations follow.
+            break;
           }
         }
         msgs.push({ type: 'info', content: m.content, timestamp: ts });

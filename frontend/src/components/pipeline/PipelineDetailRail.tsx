@@ -745,6 +745,19 @@ export function PipelineDetailRail({
               />
             </div>
           )}
+          {/* #639: spec-approved chip — pinned above the cinema so it
+              stays visible regardless of Proto iteration scroll. Only shown
+              on the Akış tab when the approve stage has completed. */}
+          {effectiveTab === 'flow' &&
+            workflowStages?.approve?.status === 'completed' && (
+              <div
+                data-testid="spec-approved-chip"
+                className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
+              >
+                <span aria-hidden="true">✓</span>
+                Spec onaylandı
+              </div>
+            )}
           {effectiveTab === 'flow' && (
             <PipelineCinema
               activities={activities}
