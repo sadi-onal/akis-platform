@@ -93,4 +93,39 @@ describe('usePipelineStream', () => {
     expect(first.close).toHaveBeenCalledTimes(1);
     expect(MockEventSource.instances[1]!.url).toBe('/api/pipelines/p-2/stream');
   });
+
+  it('closes the stream after a terminal-step activity arrives', async () => {
+    const { result } = renderHook(() => usePipelineStream('p-1', false));
+
+    await waitFor(() => {
+      expect(MockEventSource.instances).toHaveLength(1);
+    });
+
+    const es = MockEventSource.instances[0]!;
+
+    act(() => {
+      es.emitOpen();
+      es.emitMessage(makeActivity({ stage: 'trace', step: 'pipeline_complete' }));
+    });
+
+    expect(es.close).toHaveBeenCalledTimes(1);
+    expect(result.current.isConnected).toBe(false);
+  });
+
+  it('does not close the stream for non-terminal steps like gate_open', async () => {
+    renderHook(() => usePipelineStream('p-1', false));
+
+    await waitFor(() => {
+      expect(MockEventSource.instances).toHaveLength(1);
+    });
+
+    const es = MockEventSource.instances[0]!;
+
+    act(() => {
+      es.emitOpen();
+      es.emitMessage(makeActivity({ step: 'gate_open' }));
+    });
+
+    expect(es.close).not.toHaveBeenCalled();
+  });
 });
