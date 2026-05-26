@@ -57,6 +57,7 @@ PDP, mevcut belgelerin yerini almaz; **uygulama disiplini** katmanı ekler.
 | 04 | [`quality.md`](./04-quality.md) | Test piramidi + kabul kriterleri + CI gate'leri | ✍️ Taslak |
 | 05 | [`findings.md`](./05-findings.md) | Gap analizi: mevcut kod vs hedef hâl + yokluk-gap'leri | ✍️ Taslak (revize) |
 | 06 | [`roadmap.md`](./06-roadmap.md) | Sıralanmış uygulama planı (5 wave) | ✍️ Taslak |
+| 07 | [`documentation-inventory.md`](./07-documentation-inventory.md) | Canonical dokümantasyon envanteri + gap matrisi | ✍️ Taslak |
 
 ✍️ Taslak · ⏳ Bekliyor · ✅ Onaylandı
 
@@ -77,8 +78,7 @@ PDP, mevcut belgelerin yerini almaz; **uygulama disiplini** katmanı ekler.
 
 ## Kabul kriterleri (umbrella)
 
-- [ ] PDP'nin 7 dosyası yazılmış ve onaylanmış
+- [ ] PDP'nin ana dosyaları yazılmış ve onaylanmış
 - [ ] Her doc kabul kriterleri içeriyor ve `quality.md` ile çapraz referansı var
 - [ ] `06-roadmap.md` writing-plans skill'inin ürettiği detaylı planı içeriyor
 - [ ] Mevcut belgeler (`THESIS_FOCUS`, `PRODUCT_DIRECTION`, `ARCHITECTURE`, `TESTING`) PDP içeriğiyle çelişmiyor; çelişki varsa ilgili belgeye revizyon notu düşülmüş
-
