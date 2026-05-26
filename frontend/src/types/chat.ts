@@ -180,6 +180,24 @@ export type ChatMessage =
       summary?: string;
       durationMs?: number;
       subSteps?: SubStep[];
+      /**
+       * Real test execution results from TraceAutomationRunner.
+       * When present, the UI renders an additional "Actual Results" section
+       * separate from the AI-estimated figures above.
+       */
+      executedTestResults?: {
+        total: number;
+        passed: number;
+        failed: number;
+        passRate: number;
+        durationMs: number;
+        details: Array<{
+          name: string;
+          status: 'passed' | 'failed' | 'skipped';
+          error?: string;
+          durationMs?: number;
+        }>;
+      };
     }
   | {
       type: 'error';

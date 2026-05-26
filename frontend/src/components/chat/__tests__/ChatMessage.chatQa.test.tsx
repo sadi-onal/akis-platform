@@ -8,6 +8,18 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+// ChatMessage now uses useI18n — mock it so tests render without I18nProvider.
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
+
 import { ChatMessage } from '../ChatMessage';
 import type { ChatMessage as ChatMessageType } from '../../../types/chat';
 

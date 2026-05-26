@@ -249,6 +249,7 @@ export function mapPipelineToChatMessages(pipeline: Pipeline): ChatMessage[] {
       coverageMatrix: to.coverageMatrix,
       coveredCriteria: to.testSummary?.coveredCriteria,
       uncoveredCriteria: to.testSummary?.uncoveredCriteria,
+      ...(to.executedTestResults ? { executedTestResults: to.executedTestResults } : {}),
       timestamp: now,
     });
   }

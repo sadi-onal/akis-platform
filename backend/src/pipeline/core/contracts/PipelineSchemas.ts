@@ -191,6 +191,23 @@ export const TraceOutputSchema = z.object({
   }),
   branch: z.string().optional(),
   prUrl: z.string().url().optional(),
+  executedTestResults: z
+    .object({
+      total: z.number().int().min(0),
+      passed: z.number().int().min(0),
+      failed: z.number().int().min(0),
+      passRate: z.number().min(0).max(100),
+      durationMs: z.number().min(0),
+      details: z.array(
+        z.object({
+          name: z.string(),
+          status: z.enum(['passed', 'failed', 'skipped']),
+          error: z.string().optional(),
+          durationMs: z.number().optional(),
+        })
+      ),
+    })
+    .optional(),
 });
 
 // ─── PIPELINE SCHEMAS ─────────────────────────────

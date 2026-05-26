@@ -1,5 +1,33 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+// ChatMessage now uses useI18n — mock it so tests render without I18nProvider.
+// Keys return their Turkish values to keep existing assertions stable.
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => {
+      const msgs: Record<string, string> = {
+        'chat.message.testPlanAiEstimate': 'Test Planı (AI Tahmini)',
+        'chat.message.testPlanAiEstimateNote':
+          'Bu veriler Trace\'in AI tahminidir, gerçek test koşturma sonucu değildir.',
+        'chat.message.testPlanPassed': 'başarılı',
+        'chat.message.testPlanFailed': 'başarısız',
+        'chat.message.testPlanCoverage': 'kapsam',
+        'chat.message.testHelperFiles': 'Test ve yardımcı dosyalar',
+        'chat.message.testHelperLabel': 'yardımcı',
+        'chat.message.testCriteriaNotCovered': 'kriter kapsanmadı',
+        'chat.message.testSteps': 'adım',
+        'chat.message.testIteration': 'İterasyon',
+      };
+      return msgs[key] ?? key;
+    },
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
+
 import { ChatMessage } from '../ChatMessage';
 import type { ChatMessage as ChatMessageType } from '../../../types/chat';
 import type { UserFriendlyPlan } from '../../../types/plan';
@@ -508,6 +536,59 @@ describe('ChatMessage — test_result (with failures)', () => {
     render(<ChatMessage message={msg} onSkip={onSkip} />);
     fireEvent.click(screen.getByText(/Geç/));
     expect(onSkip).toHaveBeenCalledOnce();
+  });
+});
+
+// ─── 8b. test_result — with executedTestResults ─────────────────────────────
+
+describe('ChatMessage — test_result (with executedTestResults)', () => {
+  const msg: ChatMessageType = {
+    type: 'test_result',
+    passed: 5,
+    failed: 0,
+    total: 5,
+    coverage: '80',
+    timestamp: TS,
+    executedTestResults: {
+      total: 3,
+      passed: 2,
+      failed: 1,
+      passRate: 67,
+      durationMs: 4200,
+      details: [
+        { name: 'login flow', status: 'passed', durationMs: 1200 },
+        { name: 'signup flow', status: 'passed', durationMs: 1800 },
+        { name: 'logout flow', status: 'failed', error: 'Element not found', durationMs: 1200 },
+      ],
+    },
+  };
+
+  it('shows the "Gerçek Test Sonuçları" heading', () => {
+    render(<ChatMessage message={msg} />);
+    // The mock returns the raw key for executedTestResults
+    // because we only populated testPlan* keys in the mock map
+    expect(screen.getByText('chat.message.executedTestResults')).toBeInTheDocument();
+  });
+
+  it('shows real passed count from executedTestResults', () => {
+    render(<ChatMessage message={msg} />);
+    // AI estimate passed=5, real passed=2 — both should be on screen
+    expect(screen.getByText('2')).toBeInTheDocument();
+  });
+
+  it('shows real failed count from executedTestResults', () => {
+    render(<ChatMessage message={msg} />);
+    expect(screen.getByText('1')).toBeInTheDocument();
+  });
+
+  it('shows pass rate from executedTestResults', () => {
+    render(<ChatMessage message={msg} />);
+    expect(screen.getByText('67%')).toBeInTheDocument();
+  });
+
+  it('shows failure error detail in collapsible section', () => {
+    render(<ChatMessage message={msg} />);
+    expect(screen.getByText('Element not found')).toBeInTheDocument();
   });
 });
 

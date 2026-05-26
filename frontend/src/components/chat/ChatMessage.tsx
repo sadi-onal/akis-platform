@@ -6,6 +6,7 @@ import { AgentStartedLine } from './AgentStartedLine';
 import { TraceFailureMessage } from './TraceFailureMessage';
 import { formatDuration } from '../../utils/formatDuration';
 import { useRelativeDuration } from '../../hooks/useRelativeDuration';
+import { useI18n } from '../../i18n/useI18n';
 
 /** Lightweight inline markdown renderer — no external deps, handles code blocks, bold, inline code */
 function SimpleMarkdown({ text }: { text: string }) {
@@ -491,6 +492,7 @@ export function ChatMessage({
   onSkip,
   onSuggestBuild,
 }: ChatMessageProps) {
+  const { t } = useI18n();
   switch (message.type) {
     case 'user':
       return <UserBubble message={message} />;
@@ -563,9 +565,17 @@ export function ChatMessage({
         <div className="rounded-xl border border-ak-trace/20 bg-ak-surface p-4 animate-in fade-in slide-in-from-left-2 duration-200">
           <div className="mb-2 flex items-center gap-2">
             <span className="text-ak-trace">🧪</span>
-            <span className="text-sm font-semibold text-ak-text-primary">Test Sonuçları</span>
+            <span className="text-sm font-semibold text-ak-text-primary">
+              {t('chat.message.testPlanAiEstimate')}
+            </span>
             <JiraBadge epicKey={message.jiraEpicKey} />
           </div>
+          {/* Transparency note: these numbers are AI-generated estimates,
+              not actual test runner output. Shown as a subtle disclaimer
+              so users don't confuse them with real execution results. */}
+          <p className="mb-3 text-xs italic text-ak-text-tertiary">
+            {t('chat.message.testPlanAiEstimateNote')}
+          </p>
           {/* Chat narrator (2026-05-23, Gap-3 fix) — LLM Turkish summary above
               the numeric pass/fail/coverage block. Older pipelines (no summary)
               skip this paragraph and fall through to the existing layout. */}
@@ -577,19 +587,28 @@ export function ChatMessage({
           <div className="flex gap-4 text-xs">
             <div>
               <span className="text-lg font-bold text-green-400">{message.passed}</span>
-              <span className="ml-1 text-ak-text-tertiary"> başarılı</span>
+              <span className="ml-1 text-ak-text-tertiary">
+                {' '}
+                {t('chat.message.testPlanPassed')}
+              </span>
             </div>
             {message.failed > 0 && (
               <div>
                 <span className="text-lg font-bold text-red-400">{message.failed}</span>
-                <span className="ml-1 text-ak-text-tertiary"> başarısız</span>
+                <span className="ml-1 text-ak-text-tertiary">
+                  {' '}
+                  {t('chat.message.testPlanFailed')}
+                </span>
               </div>
             )}
             <div>
               <span className="text-lg font-bold text-ak-text-primary">
                 {String(message.coverage).replace(/%+$/, '')}%
               </span>
-              <span className="ml-1 text-ak-text-tertiary"> kapsam</span>
+              <span className="ml-1 text-ak-text-tertiary">
+                {' '}
+                {t('chat.message.testPlanCoverage')}
+              </span>
             </div>
           </div>
           {message.failures && message.failures.length > 0 && (
@@ -602,11 +621,97 @@ export function ChatMessage({
             </div>
           )}
 
+          {/* Executed test results — real runner output, separate from AI estimates */}
+          {message.executedTestResults && (
+            <div className="mt-4 rounded-lg border border-green-500/30 bg-green-500/5 p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-green-400">✓</span>
+                <span className="text-sm font-semibold text-ak-text-primary">
+                  {t('chat.message.executedTestResults')}
+                </span>
+              </div>
+              <p className="mb-2 text-xs italic text-ak-text-tertiary">
+                {t('chat.message.executedTestResultsNote')}
+              </p>
+              <div className="flex gap-4 text-xs">
+                <div>
+                  <span className="text-lg font-bold text-green-400">
+                    {message.executedTestResults.passed}
+                  </span>
+                  <span className="ml-1 text-ak-text-tertiary">
+                    {' '}
+                    {t('chat.message.testPlanPassed')}
+                  </span>
+                </div>
+                {message.executedTestResults.failed > 0 && (
+                  <div>
+                    <span className="text-lg font-bold text-red-400">
+                      {message.executedTestResults.failed}
+                    </span>
+                    <span className="ml-1 text-ak-text-tertiary">
+                      {' '}
+                      {t('chat.message.testPlanFailed')}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-lg font-bold text-ak-text-primary">
+                    {message.executedTestResults.passRate}%
+                  </span>
+                  <span className="ml-1 text-ak-text-tertiary">
+                    {' '}
+                    {t('chat.message.executedPassRate')}
+                  </span>
+                </div>
+              </div>
+              {/* Per-test detail list — collapsible */}
+              {message.executedTestResults.details.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm font-medium text-ak-text-secondary transition-colors hover:text-ak-text-primary">
+                    {t('chat.message.executedDetails')} (
+                    {message.executedTestResults.details.length})
+                  </summary>
+                  <ul className="mt-2 space-y-1">
+                    {message.executedTestResults.details.map((d) => (
+                      <li
+                        key={d.name}
+                        className="flex items-start gap-2 font-mono text-xs text-ak-text-secondary"
+                      >
+                        <span
+                          className={
+                            d.status === 'passed'
+                              ? 'text-green-500'
+                              : d.status === 'failed'
+                                ? 'text-red-400'
+                                : 'text-ak-text-tertiary'
+                          }
+                        >
+                          {d.status === 'passed' ? '✓' : d.status === 'failed' ? '✗' : '○'}
+                        </span>
+                        <div>
+                          <span>{d.name}</span>
+                          {d.error && (
+                            <p className="mt-0.5 text-red-400/80">{d.error}</p>
+                          )}
+                        </div>
+                        {d.durationMs !== undefined && (
+                          <span className="ml-auto text-ak-text-tertiary">
+                            {formatDuration(d.durationMs)}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
           {/* Uncovered criteria warning — always visible */}
           {message.uncoveredCriteria && message.uncoveredCriteria.length > 0 && (
             <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2">
               <p className="text-xs font-semibold text-red-400">
-                ⚠ {message.uncoveredCriteria.length} kriter kapsanmadı
+                ⚠ {message.uncoveredCriteria.length} {t('chat.message.testCriteriaNotCovered')}
               </p>
               <ul className="mt-1.5 space-y-0.5">
                 {message.uncoveredCriteria.map((c) => (
@@ -627,7 +732,7 @@ export function ChatMessage({
           {message.testFiles && message.testFiles.length > 0 && (
             <details className="mt-3">
               <summary className="cursor-pointer text-sm font-medium text-ak-text-secondary transition-colors hover:text-ak-text-primary">
-                Test ve yardımcı dosyalar ({message.testFiles.length})
+                {t('chat.message.testHelperFiles')} ({message.testFiles.length})
               </summary>
               <ul className="mt-2 space-y-1">
                 {message.testFiles.map((f) => (
@@ -638,7 +743,9 @@ export function ChatMessage({
                     <span className="text-green-500">✓</span>
                     {f.filePath}
                     <span className="text-ak-text-tertiary">
-                      {f.testCount > 0 ? `(${f.testCount} test)` : '(yardımcı)'}
+                      {f.testCount > 0
+                        ? `(${f.testCount} test)`
+                        : `(${t('chat.message.testHelperLabel')})`}
                     </span>
                   </li>
                 ))}
@@ -685,7 +792,7 @@ export function ChatMessage({
           {message.subSteps && message.subSteps.length > 0 && (
             <details className="mt-3 text-xs text-ak-text-tertiary">
               <summary className="cursor-pointer hover:text-ak-text-secondary transition-colors">
-                ▾ {message.subSteps.length} adım
+                ▾ {message.subSteps.length} {t('chat.message.testSteps')}
               </summary>
               <ul className="mt-1 ml-4 space-y-1">
                 {message.subSteps.map((step, i) => (
@@ -709,7 +816,7 @@ export function ChatMessage({
             <div className="mt-2 flex items-center gap-2 text-xs text-ak-text-tertiary">
               {message.iteration !== undefined && message.iteration > 1 ? (
                 <span className="rounded bg-ak-surface-2 px-1.5 py-0.5 text-[10px] font-medium">
-                  İterasyon {message.iteration}
+                  {t('chat.message.testIteration')} {message.iteration}
                 </span>
               ) : null}
               {message.durationMs !== undefined ? (

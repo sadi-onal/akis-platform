@@ -224,6 +224,23 @@ export interface TraceOutput {
   traceability?: TraceabilityEntry[];
   branch?: string;
   prUrl?: string;
+  /**
+   * Real test execution results from TraceAutomationRunner.
+   * When present, these are actual pass/fail data — not AI estimates.
+   */
+  executedTestResults?: {
+    total: number;
+    passed: number;
+    failed: number;
+    passRate: number;
+    durationMs: number;
+    details: Array<{
+      name: string;
+      status: 'passed' | 'failed' | 'skipped';
+      error?: string;
+      durationMs?: number;
+    }>;
+  };
 }
 
 export interface PipelineError {

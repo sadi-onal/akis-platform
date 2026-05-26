@@ -1,5 +1,32 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+
+// ChatMessage now uses useI18n — mock it so tests render without I18nProvider.
+vi.mock('../../../i18n/useI18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => {
+      const msgs: Record<string, string> = {
+        'chat.message.testPlanAiEstimate': 'Test Planı (AI Tahmini)',
+        'chat.message.testPlanAiEstimateNote':
+          'Bu veriler Trace\'in AI tahminidir, gerçek test koşturma sonucu değildir.',
+        'chat.message.testPlanPassed': 'başarılı',
+        'chat.message.testPlanFailed': 'başarısız',
+        'chat.message.testPlanCoverage': 'kapsam',
+        'chat.message.testHelperFiles': 'Test ve yardımcı dosyalar',
+        'chat.message.testHelperLabel': 'yardımcı',
+        'chat.message.testCriteriaNotCovered': 'kriter kapsanmadı',
+        'chat.message.testSteps': 'adım',
+        'chat.message.testIteration': 'İterasyon',
+      };
+      return msgs[key] ?? key;
+    },
+    locale: 'tr',
+    availableLocales: ['tr', 'en'],
+    status: 'ready',
+    setLocale: vi.fn(),
+  }),
+}));
+
 import { ChatMessage } from '../ChatMessage';
 import type { ChatMessage as ChatMessageType } from '../../../types/chat';
 

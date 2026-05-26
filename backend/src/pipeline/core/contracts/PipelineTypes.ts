@@ -313,6 +313,25 @@ export interface TraceOutput {
    * Opsiyonel — eski pipeline'lar bu field olmadan da çalışır.
    */
   summary?: string;
+  /**
+   * When present, holds real test execution results from TraceAutomationRunner.
+   * `testSummary` above is AI-estimated; this field contains actual pass/fail
+   * data from running the generated tests. Optional — populated only when
+   * the runner is integrated into the pipeline.
+   */
+  executedTestResults?: {
+    total: number;
+    passed: number;
+    failed: number;
+    passRate: number;
+    durationMs: number;
+    details: Array<{
+      name: string;
+      status: 'passed' | 'failed' | 'skipped';
+      error?: string;
+      durationMs?: number;
+    }>;
+  };
 }
 
 // ─── PIPELINE ─────────────────────────────────────
