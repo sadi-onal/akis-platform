@@ -29,6 +29,7 @@ const DocsPage = lazy(() => import('./pages/DocsPage'));
 
 // Protected pages
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
 const PageLoader = () => (
   <div className="flex min-h-[200px] items-center justify-center animate-in fade-in duration-200">
@@ -103,6 +104,16 @@ function App() {
             element={
               <ProtectedRoute>
                 <Suspense fallback={<PageLoader />}><SettingsPage /></Suspense>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Analytics — standalone protected page */}
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute>
+                <Suspense fallback={<PageLoader />}><AnalyticsPage /></Suspense>
               </ProtectedRoute>
             }
           />

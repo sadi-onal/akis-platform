@@ -33,6 +33,7 @@ import { chatAttachRoutes } from './api/chats.attach.js';
 import { marketplaceRoutes } from './api/marketplace.js';
 import { ragRoutes } from './api/rag.js';
 import { adminRoutes } from './api/admin.js';
+import { analyticsRoutes } from './api/analytics.js';
 import { githubRoutes, getGitHubToken } from './api/github.js';
 import { invalidateUserGitHubToken } from './services/auth/githubToken.js';
 import { pipelinePlugin } from './pipeline/api/pipeline.plugin.js';
@@ -296,6 +297,7 @@ export async function buildApp() {
   await app.register(marketplaceRoutes);
   await app.register(ragRoutes);
   await app.register(adminRoutes);
+  await app.register(analyticsRoutes);
   await app.register(githubRoutes, { prefix: '/api/github' });
 
   // Pipeline routes (Scribe → Proto → Trace pipeline)
